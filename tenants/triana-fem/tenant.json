@@ -1,0 +1,80 @@
+{
+  "slug": "triana-fem",
+  "club": "Triana BM Vivero Femenino",
+  "team": "Triana Fem",
+  "brand": "#d4202a",
+  "brand2": "#f5c400",
+  "brandInk": "#ffffff",
+  "roster": [
+    {
+      "num": 1,
+      "name": "Portera 1",
+      "pos": "POR"
+    },
+    {
+      "num": 12,
+      "name": "Portera 2",
+      "pos": "POR"
+    },
+    {
+      "num": 2,
+      "name": "Jugadora 2",
+      "pos": "EXT"
+    },
+    {
+      "num": 3,
+      "name": "Jugadora 3",
+      "pos": "EXT"
+    },
+    {
+      "num": 4,
+      "name": "Jugadora 4",
+      "pos": "LAT"
+    },
+    {
+      "num": 5,
+      "name": "Jugadora 5",
+      "pos": "LAT"
+    },
+    {
+      "num": 6,
+      "name": "Jugadora 6",
+      "pos": "CEN"
+    },
+    {
+      "num": 7,
+      "name": "Jugadora 7",
+      "pos": "PIV"
+    },
+    {
+      "num": 8,
+      "name": "Jugadora 8",
+      "pos": "EXT"
+    },
+    {
+      "num": 9,
+      "name": "Jugadora 9",
+      "pos": "LAT"
+    },
+    {
+      "num": 10,
+      "name": "Jugadora 10",
+      "pos": "CEN"
+    },
+    {
+      "num": 11,
+      "name": "Jugadora 11",
+      "pos": "PIV"
+    },
+    {
+      "num": 13,
+      "name": "Jugadora 13",
+      "pos": "LAT"
+    },
+    {
+      "num": 14,
+      "name": "Jugadora 14",
+      "pos": "EXT"
+    }
+  ]
+}
