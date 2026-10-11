@@ -1,0 +1,9 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
+  <!-- Full-bleed background so a maskable crop never shows a transparent edge; the crest is the Triana BM Vivero badge used in the app bar -->
+  <rect width="512" height="512" fill="#151515"/>
+  <g id="crest">
+    <circle cx="256" cy="256" r="176" fill="#f5c400" stroke="#ffffff" stroke-width="12"/>
+    <rect x="96" y="208" width="320" height="96" fill="#d4202a"/>
+    <path d="M132 208h30v96h-30zM194 208h30v96h-30zM256 208h30v96h-30zM318 208h30v96h-30z" fill="#151515" opacity=".85"/>
+  </g>
+</svg>

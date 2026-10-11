@@ -1,0 +1,21 @@
+{
+  "name": "HBStats · Triana BM Vivero",
+  "short_name": "HBStats",
+  "description": "Estadísticas de balonmano en directo para tablet: tiros, portería, acta y plantillas, informes PDF.",
+  "id": "./",
+  "start_url": "./",
+  "scope": "./",
+  "display": "fullscreen",
+  "display_override": ["fullscreen", "standalone"],
+  "orientation": "landscape",
+  "background_color": "#f4f3f0",
+  "theme_color": "#d4202a",
+  "lang": "es",
+  "dir": "ltr",
+  "categories": ["sports", "productivity"],
+  "icons": [
+    { "src": "icons/icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
+    { "src": "icons/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" },
+    { "src": "icons/icon-maskable-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+  ]
+}

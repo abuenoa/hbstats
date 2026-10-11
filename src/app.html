@@ -1,0 +1,2737 @@
+<title>HBStats Directo</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@600;700;800&display=swap">
+<style>
+/* Layout: one landscape screen — glass scoreboard / [bench | court + floating alerts | goalkeeper, lines, live stats] / glass action strip.
+   Triana BM Vivero colours (red, black, gold). Light by default, dark on demand. Shot results share three colours everywhere. */
+:root {
+  color-scheme: light;
+  --bg: #f4f3f0;
+  --glow-red: rgba(212, 32, 42, .10);
+  --glow-gold: rgba(245, 196, 0, .20);
+  --surface: #ffffff;
+  --soft: #f1efec;
+  --btn: rgba(255, 255, 255, .72);
+  --glass: rgba(255, 255, 255, .62);
+  --glass-strong: rgba(255, 255, 255, .84);
+  --glass-edge: rgba(255, 255, 255, .75);
+  --line: rgba(20, 20, 20, .09);
+  --fg: #151515;
+  --muted: #5f5b57;
+  --faint: #a8a39e;
+  --shadow: 0 1px 0 rgba(255, 255, 255, .9) inset, 0 10px 30px rgba(40, 20, 10, .08);
+  --pop-shadow: 0 1px 0 #fff inset, 0 24px 60px rgba(40, 20, 10, .22);
+
+  --red: #d4202a;
+  --red-deep: #a3141c;
+  --gold: #f5c400;
+  --black: #151515;
+  --on-color: #ffffff;
+
+  --court: #e8ecf0;
+  --area: #fde8a3;
+  --court-line: #1d1d1f;
+  --goal-face: #ffffff;
+  --goal-hot: #fff4cc;
+  --goal-sector: #ffd84d;
+  --net: #d5d9de;
+
+  /* Shot results: the same three colours on the court, popups, stats and timeline */
+  --gol: #1f9d55;
+  --parada: #2563eb;
+  --fallo: #8a8f98;
+  /* Other action groups */
+  --ataque: #7c3aed;
+  --defensa: #0e9f9a;
+  --error: #e4572e;
+  --amarilla: #f5c400;
+  --dos: #f08a1c;
+  --desc: #dc2626;
+  --azul: #0ea5e9;
+  /* Turnover groups */
+  --to-ball: #c2410c;
+  --to-rule: #be123c;
+  --to-play: #86198f;
+
+  --ext: #14b8a6;
+  --lat: #8b5cf6;
+  --cen: #ec4899;
+  --piv: #f5b400;
+  --por: #151515;
+
+  --good: #1f9d55;
+  --warn: #c98a00;
+  --bad: #d4202a;
+
+  --font-display: "Barlow Condensed", "Arial Narrow", "Roboto Condensed", sans-serif;
+  --font-body: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  --radius: 18px;
+  --tap: 56px;
+  --spring: cubic-bezier(.2, .9, .25, 1);
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    color-scheme: dark;
+    --bg: #0e0e10; --glow-red: rgba(212, 32, 42, .20); --glow-gold: rgba(245, 196, 0, .08);
+    --surface: #18181b; --soft: #232327; --btn: rgba(255, 255, 255, .07);
+    --glass: rgba(26, 26, 30, .62); --glass-strong: rgba(30, 30, 34, .86); --glass-edge: rgba(255, 255, 255, .09);
+    --line: rgba(255, 255, 255, .10); --fg: #f2f1ef; --muted: #aca6a0; --faint: #6d6863;
+    --shadow: 0 1px 0 rgba(255, 255, 255, .06) inset, 0 10px 30px rgba(0, 0, 0, .4);
+    --pop-shadow: 0 1px 0 rgba(255, 255, 255, .08) inset, 0 24px 60px rgba(0, 0, 0, .6);
+    --black: #f2f1ef; --por: #2a2a2e;
+    --court: #1d242b; --area: #3b3215; --court-line: #e6e6e6; --goal-face: #121417; --goal-hot: #2e2a14; --goal-sector: #7a6412; --net: #2c3238;
+    --parada: #4f8bff; --fallo: #7d838c; --gol: #2fbf71; --ataque: #9461ff;
+  }
+}
+:root[data-theme="dark"] {
+  color-scheme: dark;
+  --bg: #0e0e10; --glow-red: rgba(212, 32, 42, .20); --glow-gold: rgba(245, 196, 0, .08);
+  --surface: #18181b; --soft: #232327; --btn: rgba(255, 255, 255, .07);
+  --glass: rgba(26, 26, 30, .62); --glass-strong: rgba(30, 30, 34, .86); --glass-edge: rgba(255, 255, 255, .09);
+  --line: rgba(255, 255, 255, .10); --fg: #f2f1ef; --muted: #aca6a0; --faint: #6d6863;
+  --shadow: 0 1px 0 rgba(255, 255, 255, .06) inset, 0 10px 30px rgba(0, 0, 0, .4);
+  --pop-shadow: 0 1px 0 rgba(255, 255, 255, .08) inset, 0 24px 60px rgba(0, 0, 0, .6);
+  --black: #f2f1ef; --por: #2a2a2e;
+  --court: #1d242b; --area: #3b3215; --court-line: #e6e6e6; --goal-face: #121417; --goal-hot: #2e2a14; --goal-sector: #7a6412; --net: #2c3238;
+  --parada: #4f8bff; --fallo: #7d838c; --gol: #2fbf71; --ataque: #9461ff;
+}
+
+html, body { height: 100%; }
+body {
+  margin: 0;
+  background:
+    radial-gradient(900px 500px at 8% -10%, var(--glow-red), transparent 60%),
+    radial-gradient(800px 500px at 100% 110%, var(--glow-gold), transparent 60%),
+    var(--bg);
+  color: var(--fg);
+  font: 15px/1.4 var(--font-body);
+  -webkit-user-select: none; user-select: none;
+  -webkit-tap-highlight-color: transparent;
+}
+button { font: inherit; color: inherit; cursor: pointer; -webkit-appearance: none; appearance: none; }
+button:focus-visible { outline: 3px solid var(--parada); outline-offset: 2px; }
+button:disabled { opacity: .35; cursor: default; }
+
+.glass {
+  background: var(--glass);
+  -webkit-backdrop-filter: blur(20px) saturate(180%);
+  backdrop-filter: blur(20px) saturate(180%);
+  border: 1px solid var(--glass-edge);
+  box-shadow: var(--shadow);
+}
+.press { transition: transform 100ms ease-out; }
+.press:active:not(:disabled) { transform: scale(.97); }
+
+.app {
+  height: 100%; box-sizing: border-box; display: grid; grid-template-rows: auto minmax(0, 1fr) auto;
+  gap: 10px; padding-block: 10px; padding-inline: 16px;
+}
+
+/* ---------- Scoreboard ---------- */
+/* Each team's controls on its own side (ours left, rival right); score and clock centred */
+.bar { display: grid; grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr); align-items: center; gap: 12px; border-radius: var(--radius); padding: 8px 12px; }
+.crest { width: 40px; height: 40px; flex: none; }
+.side { display: flex; align-items: center; gap: 8px; min-width: 0; }
+.side.them { justify-content: flex-end; }
+.side .name { font-family: var(--font-display); font-weight: 800; font-size: 21px; text-transform: uppercase; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.side .name.them { color: var(--muted); }
+.center { display: flex; align-items: center; gap: 10px; }
+.score { font-family: var(--font-display); font-weight: 800; font-size: 46px; line-height: 1; font-variant-numeric: tabular-nums; min-width: 2ch; text-align: center; letter-spacing: -.02em; }
+.score.us { color: var(--red); }
+button.score { border: 0; background: transparent; padding: 0 4px; border-radius: 10px; }
+.rex { display: flex; gap: 6px; align-items: center; }
+.rex-chip { font-family: var(--font-display); font-weight: 800; font-size: 17px; padding: 2px 8px; border-radius: 8px; background: var(--dos); color: #fff; font-variant-numeric: tabular-nums; }
+.rex-chip.num { background: var(--soft); color: var(--fg); }
+.rex-chip.num.up { background: var(--good); color: #fff; }
+.rex-chip.num.down { background: var(--bad); color: #fff; }
+.dash { font-family: var(--font-display); font-size: 30px; color: var(--faint); }
+.clock { display: flex; align-items: center; gap: 8px; }
+.clock-face {
+  display: flex; flex-direction: column; align-items: center; justify-content: center; min-width: 116px; min-height: 52px;
+  border-radius: 14px; border: 1px solid var(--line); background: var(--surface); padding: 2px 12px;
+}
+.clock-face .period { font-size: 11px; font-weight: 700; letter-spacing: .14em; color: var(--muted); text-transform: uppercase; }
+.clock-face .time { font-family: var(--font-display); font-weight: 800; font-size: 34px; line-height: 1; font-variant-numeric: tabular-nums; }
+.clock-face .time.paused { color: var(--red); }
+.btn {
+  min-height: 48px; min-width: 48px; padding: 0 14px; border-radius: 14px; border: 1px solid var(--line);
+  background: var(--btn); font-weight: 600; display: inline-flex; align-items: center; justify-content: center; gap: 8px;
+}
+.btn.icon { padding: 0; font-size: 20px; }
+.btn.primary { background: var(--red); color: #fff; border-color: transparent; box-shadow: 0 1px 0 rgba(255, 255, 255, .3) inset, 0 6px 16px rgba(212, 32, 42, .3); }
+.btn.go { background: var(--gol); color: #fff; border-color: transparent; box-shadow: 0 1px 0 rgba(255, 255, 255, .3) inset, 0 6px 16px rgba(31, 157, 85, .3); }
+.btn.play { min-width: 104px; font-weight: 700; }
+.btn.armed { background: var(--red); color: #fff; border-color: transparent; }
+.tm-dots { display: inline-flex; gap: 4px; }
+.tm-dots i { width: 10px; height: 10px; border-radius: 50%; border: 1.5px solid var(--red); display: block; }
+.tm-dots i.used { background: var(--red); }
+
+/* ---------- Columns ---------- */
+.main { display: grid; grid-template-columns: 172px minmax(0, 1fr) 292px; gap: 10px; min-height: 0; }
+.panel { background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius); box-shadow: 0 6px 20px rgba(40, 20, 10, .05); min-height: 0; display: flex; flex-direction: column; }
+.panel h2 { margin: 0; padding: 8px 14px 3px; font-size: 12px; font-weight: 700; letter-spacing: .12em; text-transform: uppercase; color: var(--muted); }
+.scroll { overflow-y: auto; min-height: 0; }
+
+.bench { padding: 2px 8px 10px; display: grid; grid-template-columns: 1fr 1fr; gap: 6px; touch-action: pan-y; }
+.bench > .bench-label, .bench > .empty { grid-column: 1 / -1; }
+.bench.drop { outline: 3px dashed var(--defensa); outline-offset: -4px; border-radius: var(--radius); }
+.bench-label { margin: 6px 6px 0; font-size: 11px; font-weight: 700; letter-spacing: .12em; text-transform: uppercase; color: var(--muted); }
+.bench-player {
+  display: flex; flex-direction: column; align-items: center; gap: 3px; min-width: 0; padding: 6px 4px 4px;
+  background: var(--soft); border: 1px solid var(--line); border-radius: 14px; touch-action: none;
+}
+.bench-player .disc { width: 38px; height: 38px; font-size: 18px; }
+.bench-player .who { width: 100%; text-align: center; }
+.bench-player .who b { font-size: 12px; }
+.disc {
+  width: 44px; height: 44px; flex: none; border-radius: 50%; display: grid; place-items: center;
+  font-family: var(--font-display); font-weight: 800; font-size: 21px; color: #fff; box-shadow: 0 0 0 3px var(--surface), 0 2px 6px rgba(0, 0, 0, .18);
+}
+.disc.light-text { color: #151515; }
+.bench-player.out { opacity: .45; text-decoration: line-through; }
+.bench-player.out .who b { color: var(--desc); }
+.who { min-width: 0; }
+.who b { display: block; font-size: 14px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.who small { color: var(--muted); font-size: 12px; }
+.legend { padding: 8px 12px 10px; display: grid; grid-template-columns: 1fr 1fr; gap: 4px 8px; font-size: 12px; color: var(--muted); border-top: 1px solid var(--line); }
+.legend span { display: flex; align-items: center; gap: 6px; }
+.legend i { width: 10px; height: 10px; border-radius: 50%; display: block; border: 1px solid var(--line); }
+.empty { color: var(--muted); font-size: 13px; padding: 4px 6px; margin: 0; }
+
+.stage { position: relative; padding: 6px; overflow: hidden; transition: border-color .2s ease-out, box-shadow .2s ease-out; }
+.stage[data-phase="DEF"] { border-color: var(--defensa); box-shadow: 0 0 0 2px var(--defensa); }
+.stage[data-phase="ATK"] { border-color: var(--ataque); box-shadow: 0 0 0 2px var(--ataque); }
+.phase { position: absolute; top: 12px; left: 12px; z-index: 7; display: flex; align-items: center; gap: 6px; padding: 4px; border-radius: 18px; }
+.phase .seg-btn {
+  min-height: 48px; min-width: 112px; border: 0; border-radius: 14px; background: transparent;
+  font-family: var(--font-display); font-weight: 800; font-size: 20px; letter-spacing: .02em; color: var(--muted);
+  display: flex; align-items: center; justify-content: center; gap: 6px;
+}
+.phase .seg-btn[data-phase="DEF"][aria-pressed="true"] { background: var(--defensa); color: #fff; }
+.phase .seg-btn[data-phase="ATK"][aria-pressed="true"] { background: var(--ataque); color: #fff; }
+.phase .auto { min-height: 36px; padding: 0 10px; border-radius: 12px; border: 1px solid var(--line); background: transparent; font-size: 12px; font-weight: 700; color: var(--muted); }
+.phase .auto[aria-pressed="true"] { color: var(--fg); background: var(--soft); }
+.stage svg { width: 100%; height: 100%; display: block; touch-action: none; }
+.sample-tag {
+  position: absolute; bottom: 12px; left: 12px; font-size: 11px; font-weight: 700; letter-spacing: .1em; text-transform: uppercase;
+  color: var(--red); border: 1px solid var(--red); border-radius: 8px; padding: 3px 8px; pointer-events: none; background: var(--surface);
+}
+.hint {
+  position: absolute; left: 50%; bottom: 14px; transform: translateX(-50%); z-index: 5;
+  border-radius: 22px; padding: 8px 16px; font-size: 14px; font-weight: 600; pointer-events: none;
+  white-space: nowrap; max-width: 92%; overflow: hidden; text-overflow: ellipsis;
+}
+.armed-bar {
+  position: absolute; left: 50%; top: 12px; transform: translateX(-50%); z-index: 7;
+  display: flex; align-items: center; gap: 10px; border-radius: 30px; padding: 6px 6px 6px 8px;
+  border-color: var(--gol); animation: enter .22s var(--spring);
+}
+.armed-bar .disc { width: 38px; height: 38px; font-size: 18px; }
+.armed-bar b { font-size: 15px; white-space: nowrap; }
+.armed-bar .btn { min-height: 40px; min-width: 40px; border-radius: 20px; padding: 0; }
+
+/* Court SVG */
+.tok { cursor: grab; }
+.tok .body { stroke: var(--surface); stroke-width: 5; filter: drop-shadow(0 3px 4px rgba(0, 0, 0, .25)); }
+.tok .num { font-family: var(--font-display); font-weight: 800; font-size: 34px; fill: #fff; text-anchor: middle; dominant-baseline: central; pointer-events: none; }
+.tok .num.dark { fill: #151515; }
+.tok .nm-bg { fill: var(--surface); stroke: var(--line); opacity: .94; }
+.tok .nm { font-family: var(--font-body); font-weight: 600; font-size: 19px; fill: var(--fg); text-anchor: middle; dominant-baseline: central; pointer-events: none; }
+.tok.excluded { opacity: .45; }
+.tok .ex-bg { fill: var(--dos); }
+.tok .ex-t { font-family: var(--font-display); font-weight: 800; font-size: 21px; fill: #fff; text-anchor: middle; dominant-baseline: central; }
+.tok.gk .body { stroke: var(--gold); }
+/* The drawn shot shows whose it is: ours in attack, the rival's in defence */
+#stage[data-phase="ATK"] #draw-line { stroke: var(--gol); } #stage[data-phase="ATK"] #draw-origin { fill: var(--gol); }
+#stage[data-phase="DEF"] #draw-line { stroke: var(--red); } #stage[data-phase="DEF"] #draw-origin { fill: var(--red); }
+.tok.shooter .body { stroke: var(--gol); stroke-width: 8; }
+.court-label { font-family: var(--font-display); font-weight: 700; font-size: 21px; fill: var(--court-line); opacity: .4; }
+.tally-label { font-family: var(--font-display); font-weight: 700; font-size: 17px; letter-spacing: .08em; fill: var(--muted); text-anchor: end; }
+.tally-owner { font-family: var(--font-display); font-weight: 800; font-size: 18px; letter-spacing: .1em; fill: var(--red); text-anchor: end; }
+.tally-num { font-family: var(--font-display); font-weight: 800; font-size: 52px; text-anchor: end; }
+.goal-face { transition: fill 120ms ease-out; }
+.goal-face.hot { fill: var(--goal-hot); }
+/* While aiming: the whole goal lights up, the third under the pen a stronger yellow, the frame gold when the shot would hit it */
+.goal-sector { fill: var(--goal-sector); pointer-events: none; }
+.goal-frame-hot { fill: none; stroke: var(--gold); stroke-width: 22; stroke-linejoin: round; pointer-events: none; filter: drop-shadow(0 0 6px var(--gold)); }
+.zone-tag { font-family: var(--font-display); font-weight: 800; font-size: 38px; fill: var(--fg); stroke: var(--surface); stroke-width: 8; paint-order: stroke; text-anchor: middle; }
+
+/* Floating alerts */
+.alerts { position: absolute; top: 10px; right: 10px; width: min(300px, calc(100% - 20px)); display: flex; flex-direction: column; gap: 8px; z-index: 6; max-height: calc(100% - 20px); overflow-y: auto; }
+.alert { border-radius: 16px; padding: 12px; display: flex; flex-direction: column; gap: 8px; border-left: 6px solid var(--parada); animation: enter .26s var(--spring); }
+.alert.k-exclusion { border-left-color: var(--dos); }
+.alert.k-period, .alert.k-timeout { border-left-color: var(--gold); }
+.alert.k-desc { border-left-color: var(--desc); }
+.alert.ringing { animation: enter .26s var(--spring), ring .9s ease-in-out .3s 3; }
+.alert .t { font-family: var(--font-display); font-weight: 800; font-size: 20px; line-height: 1.1; }
+.alert p { margin: 0; font-size: 13px; color: var(--muted); }
+.alert .row { display: flex; gap: 6px; align-items: center; flex-wrap: wrap; }
+.alert .btn { min-height: 44px; flex: 1; }
+.stepper { display: flex; align-items: center; gap: 6px; width: 100%; }
+.stepper small { flex: 1; font-size: 13px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.stepper button { width: 44px; height: 44px; border-radius: 12px; border: 1px solid var(--line); background: var(--surface); font-size: 22px; font-weight: 700; }
+.stepper output { font-family: var(--font-display); font-weight: 800; font-size: 30px; min-width: 2ch; text-align: center; font-variant-numeric: tabular-nums; }
+
+/* ---------- Right column ---------- */
+.gk-card { margin: 8px 10px 0; width: calc(100% - 20px); box-sizing: border-box; display: flex; align-items: center; gap: 10px; padding: 6px 10px 6px 6px; border-radius: 14px; border: 1px solid var(--line); background: var(--soft); text-align: left; }
+.gk-card .disc { background: var(--por); color: #fff; box-shadow: 0 0 0 3px var(--gold); }
+.gk-card .pct { margin-left: auto; text-align: right; }
+.gk-card .disc { width: 38px; height: 38px; font-size: 18px; }
+.gk-card .pct strong { display: block; font-family: var(--font-display); font-weight: 800; font-size: 28px; line-height: 1; font-variant-numeric: tabular-nums; }
+.gk-card .pct small { font-size: 11px; color: var(--muted); }
+.seg { display: flex; margin: 6px 10px 0; padding: 3px; gap: 3px; background: var(--soft); border-radius: 12px; }
+.seg button { flex: 1; min-height: 40px; border: 0; border-radius: 9px; background: transparent; font-size: 13px; font-weight: 700; color: var(--muted); }
+.seg button[aria-pressed="true"] { background: var(--surface); color: var(--fg); box-shadow: 0 1px 4px rgba(0, 0, 0, .12); }
+.team-seg button { min-height: 42px; padding: 0 6px; min-width: 0; }
+.team-seg b { display: block; font-family: var(--font-display); font-weight: 800; font-size: 18px; text-transform: uppercase; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.team-seg [data-source="US"][aria-pressed="true"] { background: var(--red); color: #fff; }
+.team-seg [data-source="GK"][aria-pressed="true"] { background: var(--fg); color: var(--bg); }
+.lines { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; margin: 0 10px 8px; }
+.line-chip { min-height: 40px; border-radius: 12px; border: 2px solid var(--line); background: transparent; font-weight: 700; font-size: 13px; display: flex; align-items: center; justify-content: center; gap: 6px; }
+.line-chip i { width: 18px; height: 4px; border-radius: 2px; display: block; }
+.line-chip[aria-pressed="true"] { border-color: currentColor; background: var(--soft); }
+.kpis { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; padding: 0 10px; }
+.kpi { background: var(--soft); border-radius: 12px; padding: 6px 4px; text-align: center; min-width: 0; }
+.kpi strong { display: block; font-family: var(--font-display); font-weight: 800; font-size: 24px; line-height: 1.05; font-variant-numeric: tabular-nums; }
+.kpi span { display: block; font-size: 11px; font-weight: 700; color: var(--muted); text-transform: uppercase; letter-spacing: .05em; }
+.kpi small { display: block; font-size: 11px; color: var(--faint); font-variant-numeric: tabular-nums; }
+.r-good { color: var(--good); } .r-warn { color: var(--warn); } .r-bad { color: var(--bad); } .r-none { color: var(--faint); }
+.zones { padding: 0 12px 2px; display: grid; gap: 4px; }
+.zone { display: grid; grid-template-columns: 50px 1fr 34px 42px; gap: 8px; align-items: center; font-size: 13px; }
+.zone .n { text-align: right; color: var(--muted); font-size: 12px; font-variant-numeric: tabular-nums; }
+.zone b { font-family: var(--font-display); font-weight: 800; font-size: 17px; }
+.zone .track { height: 12px; border-radius: 6px; background: var(--soft); overflow: hidden; display: flex; }
+.zone .track span { height: 100%; transition: width .4s var(--spring); }
+.zone .val { text-align: right; font-variant-numeric: tabular-nums; font-weight: 800; }
+.facts { padding: 4px 10px 8px; display: grid; grid-template-columns: 1fr 1fr; gap: 4px 10px; font-size: 12px; }
+.fact { display: flex; justify-content: space-between; align-items: baseline; gap: 6px; padding: 4px 2px; border-bottom: 1px solid var(--line); min-width: 0; }
+.fact b { white-space: nowrap; }
+.fact span { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.fact span { color: var(--muted); }
+.fact b { font-variant-numeric: tabular-nums; }
+
+/* ---------- Action strip ---------- */
+.strip { display: flex; gap: 10px; align-items: stretch; min-width: 0; border-radius: var(--radius); padding: 8px; }
+.events { flex: 1; min-width: 0; display: flex; gap: 8px; overflow-x: auto; }
+.ev {
+  flex: none; display: flex; align-items: center; gap: 8px; min-height: 44px; padding: 0 12px 0 10px; border-radius: 12px;
+  background: var(--surface); border: 1px solid var(--line); font-size: 13px; white-space: nowrap;
+}
+.ev i { width: 10px; height: 10px; border-radius: 50%; display: block; flex: none; }
+.ev time { font-family: var(--font-display); font-weight: 700; font-size: 16px; color: var(--muted); font-variant-numeric: tabular-nums; }
+.ev.fresh { animation: flash 1.4s ease-out; }
+.strip-actions { display: flex; gap: 8px; flex: none; }
+@keyframes flash { from { box-shadow: 0 0 0 3px var(--gold); } to { box-shadow: 0 0 0 0 transparent; } }
+@keyframes enter { from { transform: scale(.95); opacity: 0; filter: blur(6px); } to { transform: none; opacity: 1; filter: none; } }
+@keyframes ring { 0%, 100% { transform: none; } 25% { transform: translateX(-4px); } 75% { transform: translateX(4px); } }
+
+/* ---------- Popups ---------- */
+.scrim { position: fixed; inset: 0; z-index: 20; background: rgba(0, 0, 0, .06); }
+.pop {
+  position: fixed; z-index: 21; width: 380px; max-width: calc(100vw - 32px); box-sizing: border-box;
+  border-radius: 22px; padding: 14px; display: flex; flex-direction: column; gap: 10px;
+  background: var(--glass-strong); -webkit-backdrop-filter: blur(30px) saturate(180%); backdrop-filter: blur(30px) saturate(180%);
+  border: 1px solid var(--glass-edge); box-shadow: var(--pop-shadow);
+  animation: enter .22s var(--spring);
+}
+.pop header { display: flex; align-items: center; gap: 10px; }
+.pop header .disc { width: 42px; height: 42px; font-size: 19px; }
+.pop header b { display: block; font-size: 17px; }
+.pop header small { color: var(--muted); font-size: 12px; }
+.pop .zone-big { margin-left: auto; font-family: var(--font-display); font-weight: 800; font-size: 34px; line-height: 1; padding: 4px 12px; border-radius: 12px; background: var(--soft); }
+.pop h3 { margin: 0; font-size: 11px; font-weight: 700; letter-spacing: .12em; text-transform: uppercase; color: var(--muted); }
+.group { display: grid; grid-template-columns: 64px 1fr; gap: 8px; align-items: center; }
+.group > span { font-size: 11px; font-weight: 800; letter-spacing: .08em; text-transform: uppercase; }
+.group .acts { display: grid; grid-template-columns: repeat(2, 1fr); gap: 6px; }
+.group .acts > :last-child:nth-child(odd) { grid-column: 1 / -1; }
+.group .acts.row { grid-template-columns: none; grid-auto-flow: column; grid-auto-columns: 1fr; }
+.act {
+  min-height: var(--tap); border-radius: 14px; border: 0; font-weight: 700; font-size: 15px; line-height: 1.1;
+  display: flex; align-items: center; justify-content: center; gap: 6px; text-align: center; padding: 0 8px; color: #fff;
+  box-shadow: 0 1px 0 rgba(255, 255, 255, .3) inset, 0 2px 6px rgba(0, 0, 0, .12);
+  transition: transform 100ms ease-out;
+}
+.act:active { transform: scale(.96); }
+.act.big { min-height: 64px; font-size: 18px; }
+.c-gol { background: var(--gol); } .c-parada { background: var(--parada); } .c-fallo { background: var(--fallo); }
+.c-ataque { background: var(--ataque); } .c-defensa { background: var(--defensa); } .c-error { background: var(--error); }
+.c-amarilla { background: var(--amarilla); color: #151515; } .c-dos { background: var(--dos); } .c-desc { background: var(--desc); } .c-azul { background: var(--azul); }
+/* Sanctions: a card-shaped icon in the card's colour so each one reads at a glance */
+.act.card-btn { background: var(--surface); color: var(--fg); border: 1px solid var(--line); box-shadow: none; flex-direction: column; gap: 3px; min-height: 66px; font-size: 12px; padding: 4px; }
+.card-ico { width: 24px; height: 32px; border-radius: 4px; display: grid; place-items: center; font-family: var(--font-display); font-weight: 800; font-size: 15px; font-style: normal; color: #fff; transform: rotate(-8deg); box-shadow: 0 2px 5px rgba(0, 0, 0, .25); }
+.card-ico.dark-text { color: #151515; }
+.note { color: var(--muted); font-size: 12px; margin: 0; }
+.c-to-ball { background: var(--to-ball); } .c-to-rule { background: var(--to-rule); } .c-to-play { background: var(--to-play); }
+.t-to-ball { color: var(--to-ball); } .t-to-rule { color: var(--to-rule); } .t-to-play { color: var(--to-play); }
+.c-neutral { background: var(--surface); color: var(--fg); border: 1px solid var(--line); box-shadow: none; }
+.c-dark { background: #151515; }
+.t-gol { color: var(--gol); } .t-parada { color: var(--parada); } .t-fallo { color: var(--fallo); }
+.t-ataque { color: var(--ataque); } .t-defensa { color: var(--defensa); } .t-error { color: var(--error); } .t-sancion { color: var(--dos); }
+.act-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; }
+.act-grid.two { grid-template-columns: repeat(2, 1fr); }
+.act-grid.four { grid-template-columns: repeat(4, 1fr); }
+.chip { min-height: 40px; padding: 0 14px; border-radius: 20px; border: 1px solid var(--line); background: var(--surface); font-weight: 700; font-size: 13px; }
+.chip[aria-pressed="true"] { background: var(--fg); color: var(--bg); border-color: var(--fg); }
+.pop.wide { width: 560px; }
+.rival-picks { display: grid; grid-template-columns: repeat(auto-fill, minmax(52px, 1fr)); gap: 6px; }
+.rival-picks.named { grid-template-columns: repeat(auto-fill, minmax(118px, 1fr)); }
+.rpick { display: flex; align-items: center; justify-content: center; gap: 6px; min-height: 48px; min-width: 0; padding: 0 6px; border-radius: 12px; border: 1px solid var(--line); background: var(--surface); color: var(--fg); }
+.rival-picks.named .rpick { justify-content: flex-start; }
+.rpick .disc { width: 34px; height: 34px; font-size: 16px; }
+.rpick span { font-size: 13px; font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.rpick[aria-pressed="true"] { border-color: var(--fg); box-shadow: 0 0 0 3px var(--fg); }
+/* Shooter picker: court players first (bigger), bench on the right */
+.picker { display: grid; grid-template-columns: 3fr 2fr; gap: 10px; }
+.picker > div { display: grid; gap: 6px; align-content: start; min-width: 0; }
+.picker .picks { display: grid; grid-template-columns: repeat(2, 1fr); gap: 6px; }
+.pick { display: flex; align-items: center; gap: 8px; min-height: 48px; min-width: 0; padding: 0 10px 0 6px; border-radius: 14px; border: 1px solid var(--line); background: var(--surface); color: var(--fg); font-weight: 600; font-size: 14px; text-align: left; }
+.pick span:last-child { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.pick[aria-pressed="true"] { border-color: var(--gol); box-shadow: 0 0 0 3px var(--gol); }
+.picker .bench-picks .pick { min-height: 40px; font-size: 12px; }
+.picker .bench-picks .disc { width: 28px; height: 28px; font-size: 13px; }
+.act:disabled { opacity: .35; }
+.back { align-self: flex-start; min-height: 40px; border: 0; background: transparent; color: var(--muted); font-weight: 700; padding: 0 4px; }
+.big-time { font-family: var(--font-display); font-weight: 800; font-size: 56px; text-align: center; line-height: 1; font-variant-numeric: tabular-nums; }
+
+/* ---------- Sheet ---------- */
+.sheet { position: fixed; inset: 0; z-index: 30; background: var(--bg); overflow: auto; padding-block: 16px; padding-inline: 16px; }
+.sheet-head { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; margin-bottom: 12px; }
+.sheet-head h2 { margin: 0; font-family: var(--font-display); font-weight: 800; font-size: 30px; text-wrap: balance; }
+.sheet-head .btn { margin-left: auto; }
+.table-wrap { overflow-x: auto; background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius); }
+table { border-collapse: collapse; width: 100%; font-size: 14px; font-variant-numeric: tabular-nums; }
+th, td { padding: 8px; border-bottom: 1px solid var(--line); text-align: center; white-space: nowrap; }
+th { font-size: 12px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; color: var(--muted); background: var(--soft); }
+td.name { text-align: left; font-weight: 600; }
+td.name span { display: inline-block; width: 10px; height: 10px; border-radius: 50%; margin-right: 8px; }
+td.zero { color: var(--faint); }
+.sheet-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 12px; margin-top: 12px; }
+.sheet-card { background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius); padding: 14px; min-width: 0; }
+.sheet-card h3 { margin: 0 0 8px; font-size: 12px; letter-spacing: .1em; text-transform: uppercase; color: var(--muted); }
+.sheet-card ul { margin: 0; padding: 0; list-style: none; display: grid; gap: 4px; font-size: 14px; }
+.sheet-card li { display: flex; justify-content: space-between; gap: 8px; }
+/* Sheet tabs, summaries, roster editor, goal grids */
+.tabs { display: flex; gap: 6px; flex-wrap: wrap; }
+.tabs button { min-height: 44px; padding: 0 16px; border-radius: 12px; border: 1px solid var(--line); background: var(--surface); font-weight: 700; }
+.tabs button[aria-pressed="true"] { background: var(--fg); color: var(--bg); border-color: var(--fg); }
+.sheet-body { display: grid; gap: 12px; }
+.chips { display: flex; gap: 6px; flex-wrap: wrap; }
+.summary { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 8px; }
+.sum { background: var(--surface); border: 1px solid var(--line); border-radius: 14px; padding: 10px; min-width: 0; }
+.sum strong { display: block; font-family: var(--font-display); font-weight: 800; font-size: 30px; line-height: 1.05; font-variant-numeric: tabular-nums; }
+.sum span { display: block; font-size: 11px; font-weight: 700; color: var(--muted); text-transform: uppercase; letter-spacing: .06em; }
+.sum small { display: block; font-size: 12px; color: var(--faint); }
+.sheet input { -webkit-user-select: text; user-select: text; }
+.in { font: inherit; min-height: 44px; box-sizing: border-box; border-radius: 10px; border: 1px solid var(--line); background: var(--surface); color: var(--fg); padding: 0 10px; width: 100%; min-width: 0; }
+.in.num { width: 72px; text-align: center; font-variant-numeric: tabular-nums; }
+.acta-teams { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 10px; }
+.acta-teams label { display: grid; gap: 4px; font-size: 12px; font-weight: 700; color: var(--muted); text-transform: uppercase; letter-spacing: .06em; }
+.row-actions { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+.acta-h { margin: 18px 0 8px; font-size: 13px; letter-spacing: .1em; text-transform: uppercase; color: var(--muted); }
+.acta-h:first-child { margin-top: 4px; }
+.acta-rosters { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 20px; align-items: start; }
+.acta-rosters .table-wrap { margin-top: 8px; }
+.in.dorsals { width: 150px; }
+@media (max-width: 1000px) { .acta-rosters { grid-template-columns: 1fr; } }
+.pos-pick { display: flex; gap: 4px; }
+.pos-btn { min-width: 48px; min-height: 40px; border-radius: 10px; border: 2px solid transparent; background: var(--soft); color: var(--muted); font-weight: 800; font-size: 12px; }
+.pos-btn[aria-pressed="true"] { background: var(--c); color: #fff; }
+.pos-btn.dark[aria-pressed="true"] { color: #151515; }
+.analysis { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 20px; align-items: start; }
+.analysis-col { display: grid; gap: 12px; min-width: 0; }
+.analysis-col .acta-h { margin: 4px 0 0; }
+.keypoints { margin: 0; padding: 0; list-style: none; display: grid; gap: 6px; }
+.keypoints li { padding: 8px 10px 8px 12px; border-radius: 10px; background: var(--surface); border: 1px solid var(--line); border-left: 5px solid var(--faint); font-size: 14px; }
+.keypoints .kp-bad { border-left-color: var(--bad); }
+.keypoints .kp-good { border-left-color: var(--good); }
+@media (max-width: 1000px) { .analysis { grid-template-columns: 1fr; } }
+.goal-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 4px; padding: 4px; border: 6px solid var(--red); border-bottom: 0; aspect-ratio: 3 / 2; width: 100%; max-width: 420px; box-sizing: border-box; }
+.goal-grid div { position: relative; display: grid; place-items: center; border-radius: 6px; background: var(--soft); overflow: hidden; }
+.goal-grid div::before { content: ""; position: absolute; inset: 0; background: var(--c); opacity: var(--a); }
+.goal-grid b { position: relative; font-family: var(--font-display); font-weight: 800; font-size: 26px; font-variant-numeric: tabular-nums; }
+.ghost { position: fixed; z-index: 40; pointer-events: none; margin: -22px 0 0 -22px; }
+
+@media (max-width: 1000px) {
+  .app { height: auto; min-height: 100%; }
+  .main { grid-template-columns: 1fr; }
+  .stage { order: -1; }
+  .stage svg { height: auto; }
+  .bench { grid-template-columns: repeat(auto-fill, minmax(84px, 1fr)); }
+  .bar { grid-template-columns: 1fr 1fr; }
+  .bar .center { grid-column: 1 / -1; order: -1; justify-content: center; }
+  .strip { flex-wrap: wrap; }
+  .alerts { position: static; width: auto; padding: 8px 0 0; }
+}
+@media (max-height: 680px) and (min-width: 1001px) {
+  .legend { display: none; }
+  .panel h2.opt { display: none; }
+  .kpi small { display: none; }
+  .zones { margin-top: 8px; }
+  .gk-card { padding-block: 4px; }
+  .team-seg button { min-height: 38px; }
+  .line-chip { min-height: 36px; }
+  .bench-player { padding-block: 4px 3px; }
+  .bench-player .disc { width: 34px; height: 34px; font-size: 16px; }
+}
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { animation: none !important; transition: none !important; }
+}
+@media (prefers-reduced-transparency: reduce) {
+  .glass, .pop { background: var(--surface); -webkit-backdrop-filter: none; backdrop-filter: none; }
+}
+</style>
+
+<div class="app">
+  <header class="bar glass" aria-label="Marcador">
+    <div class="side us">
+      <svg class="crest" viewBox="0 0 40 40" aria-hidden="true">
+        <circle cx="20" cy="20" r="19" fill="#f5c400" stroke="#151515" stroke-width="2"/>
+        <rect x="4" y="15" width="32" height="10" fill="#d4202a"/>
+        <path d="M8 15h3v10H8zM14 15h3v10h-3zM20 15h3v10h-3zM26 15h3v10h-3z" fill="#151515" opacity=".85"/>
+      </svg>
+      <span class="name" id="name-us">Triana</span>
+      <button class="btn press" id="btn-tm-us" type="button" aria-label="Tiempo muerto nuestro">TM <span class="tm-dots" id="tm-dots-us"></span></button>
+      <button class="btn press" id="btn-us-2m" type="button" aria-label="Exclusión de 2 minutos a un jugador nuestro">2'</button>
+    </div>
+    <div class="center">
+      <button class="score us press" id="score-us" type="button" aria-label="Corregir marcador">0</button>
+      <span class="dash">–</span>
+      <button class="score press" id="score-them" type="button" aria-label="Corregir marcador">0</button>
+      <div class="clock">
+        <button class="clock-face press" id="clock-face" type="button" aria-label="Reloj: parar, ajustar o cambiar de parte">
+          <span class="period" id="period">1ª parte</span>
+          <span class="time paused" id="clock">00:00</span>
+        </button>
+        <button class="btn play go press" id="btn-play" type="button">▶ Iniciar</button>
+      </div>
+    </div>
+    <div class="side them">
+      <span class="rex" id="rex" aria-live="polite"></span>
+      <button class="btn press" id="btn-rival-2m" type="button" aria-label="Exclusión de 2 minutos al rival">2'</button>
+      <button class="btn press" id="btn-tm-them" type="button" aria-label="Tiempo muerto del rival">TM <span class="tm-dots" id="tm-dots-them"></span></button>
+      <span class="name them" id="name-them">Rival</span>
+    </div>
+  </header>
+
+  <div class="main">
+    <aside class="panel" aria-label="Banquillo">
+      <h2>Banquillo</h2>
+      <div class="scroll"><div class="bench" id="bench"></div></div>
+      <div class="legend">
+        <span><i style="background:var(--ext)"></i>Extremo</span>
+        <span><i style="background:var(--lat)"></i>Lateral</span>
+        <span><i style="background:var(--cen)"></i>Central</span>
+        <span><i style="background:var(--piv)"></i>Pivote</span>
+      </div>
+    </aside>
+
+    <section class="panel stage" id="stage" aria-label="Pista">
+      <svg id="court" viewBox="0 0 1000 810" preserveAspectRatio="xMidYMid meet" role="application" aria-label="Media pista: arrastra hasta la portería para registrar un lanzamiento">
+        <defs><clipPath id="court-clip"><rect x="0" y="260" width="1000" height="550"/></clipPath></defs>
+        <rect x="0" y="260" width="1000" height="550" fill="var(--court)" rx="10"/>
+        <g clip-path="url(#court-clip)">
+          <path d="M 125 260 A 300 300 0 0 0 425 560 L 575 560 A 300 300 0 0 0 875 260 Z" fill="var(--area)" stroke="var(--court-line)" stroke-width="4"/>
+          <path d="M -25 260 A 450 450 0 0 0 425 710 L 575 710 A 450 450 0 0 0 1025 260" fill="none" stroke="var(--court-line)" stroke-width="3" stroke-dasharray="18 14"/>
+        </g>
+        <line x1="0" y1="260" x2="1000" y2="260" stroke="var(--court-line)" stroke-width="4"/>
+        <line x1="475" y1="610" x2="525" y2="610" stroke="var(--court-line)" stroke-width="6"/>
+        <text class="court-label" x="600" y="590">6 m</text>
+        <text class="court-label" x="535" y="617">7 m</text>
+        <text class="court-label" x="600" y="745">9 m</text>
+        <rect id="goal-face" class="goal-face" x="320" y="20" width="360" height="240" fill="var(--goal-face)"/>
+        <rect id="goal-sector" class="goal-sector" width="120" height="80" visibility="hidden"/>
+        <g stroke="var(--net)" stroke-width="2" stroke-dasharray="6 6">
+          <line x1="440" y1="20" x2="440" y2="260"/><line x1="560" y1="20" x2="560" y2="260"/>
+          <line x1="320" y1="100" x2="680" y2="100"/><line x1="320" y1="180" x2="680" y2="180"/>
+        </g>
+        <path id="goal-frame-hot" class="goal-frame-hot" d="M 320 260 L 320 20 L 680 20 L 680 260" visibility="hidden"/>
+        <path d="M 320 260 L 320 20 L 680 20 L 680 260" fill="none" stroke="#d4202a" stroke-width="12" stroke-linejoin="round"/>
+        <g id="tallies"></g>
+        <g id="shots-layer" pointer-events="none"></g>
+        <g id="tokens-layer"></g>
+        <g id="draw-layer" pointer-events="none">
+          <line id="draw-line" stroke="var(--fg)" stroke-width="5" stroke-linecap="round" visibility="hidden"/>
+          <circle id="draw-origin" r="11" fill="var(--fg)" visibility="hidden"/>
+          <circle id="draw-end" r="10" fill="none" stroke="var(--fg)" stroke-width="4" visibility="hidden"/>
+          <text id="draw-zone" class="zone-tag" visibility="hidden"></text>
+        </g>
+      </svg>
+      <div class="phase glass" role="group" aria-label="Alineación en pista">
+        <button class="seg-btn press" type="button" data-phase="DEF" aria-pressed="true">🛡 Defensa</button>
+        <button class="seg-btn press" type="button" data-phase="ATK" aria-pressed="false">⚔ Ataque</button>
+        <button class="auto press" type="button" id="btn-auto" aria-pressed="true" title="Cambia sola tras cada posesión">Auto</button>
+      </div>
+      <span class="sample-tag" id="sample-tag">Ejemplo</span>
+      <div class="armed-bar glass" id="armed-bar" hidden></div>
+      <div class="alerts" id="alerts" aria-live="polite"></div>
+      <div class="hint glass" id="hint" hidden></div>
+    </section>
+
+    <aside class="panel" aria-label="Portero, líneas de tiro y estadísticas">
+      <div class="scroll">
+        <button class="gk-card press" id="gk-card" type="button" aria-label="Cambiar portero"></button>
+        <div class="seg team-seg" id="team-seg" role="group" aria-label="Equipo cuyos lanzamientos y estadísticas se ven">
+          <button type="button" data-source="US" aria-pressed="false"><b id="seg-us">Triana</b></button>
+          <button type="button" data-source="GK" aria-pressed="true"><b id="seg-them">Rival</b></button>
+        </div>
+        <h2 class="opt">Líneas</h2>
+        <div class="lines" role="group" aria-label="Resultados que se dibujan">
+          <button class="line-chip t-parada press" type="button" data-show="PARADA" aria-pressed="false"><i style="background:var(--parada)"></i>Parada</button>
+          <button class="line-chip t-gol press" type="button" data-show="GOL" aria-pressed="false"><i style="background:var(--gol)"></i>Gol</button>
+          <button class="line-chip t-fallo press" type="button" data-show="FALLO" aria-pressed="false"><i style="background:var(--fallo)"></i>Fallo</button>
+        </div>
+        <div id="live"></div>
+      </div>
+    </aside>
+  </div>
+
+  <footer class="strip glass">
+    <div class="events" id="events" aria-label="Últimas acciones (toca una para borrarla)"></div>
+    <div class="strip-actions">
+      <button class="btn press" id="btn-undo" type="button" aria-label="Deshacer">↶</button>
+      <button class="btn press" id="btn-redo" type="button" aria-label="Rehacer">↷</button>
+      <button class="btn primary press" id="btn-stop" type="button">⏸ Parar</button>
+      <button class="btn press" id="btn-sheet" type="button">Hoja</button>
+      <button class="btn press" id="btn-new" type="button">Nuevo</button>
+      <button class="btn icon press" id="btn-theme" type="button" aria-label="Cambiar a modo oscuro">☾</button>
+    </div>
+  </footer>
+</div>
+
+<div class="scrim" id="scrim" hidden></div>
+<div class="pop" id="pop" role="dialog" aria-modal="false" hidden></div>
+<div class="sheet" id="sheet" role="dialog" aria-label="Hoja del partido" hidden></div>
+<input type="file" id="roster-file" accept=".json,application/json" hidden>
+
+<script>
+(() => {
+  'use strict';
+
+  // ===================== Configuration (coach-editable later) =====================
+  const CONFIG = {
+    halfSeconds: 30 * 60,
+    scoreIntervalSeconds: 5 * 60,
+    exclusionSeconds: 2 * 60,
+    exclusionsToDisqualify: 3,
+    timeoutSeconds: 60,
+    timeoutsPerTeam: 3,
+    maxFieldPlayers: 6,
+    momentumWindowSeconds: 5 * 60,
+    historyLimit: 300,
+    tickMs: 250,
+    hintMs: 2600,
+    dragThresholdPx: 10,
+    minShotLengthUnits: 40,
+    swapRadiusUnits: 70,
+    palmGuardMs: 600,
+    clockSteps: [-10, -1, 1, 10],
+    // Turnover types grouped by what went wrong, one colour per group (coach-editable later)
+    turnoverGroups: [
+      { label: 'Balón', cls: 'c-to-ball', types: ['Pase', 'Recepción', 'Bote'] },
+      { label: 'Regla', cls: 'c-to-rule', types: ['Pasos', 'Dobles', 'Área', 'Pasivo'] },
+      { label: 'Juego', cls: 'c-to-play', types: ['Falta ataque', 'Salida fallada'] }
+    ],
+    defFaultGroups: [
+      { label: 'Regla', cls: 'c-to-rule', actions: ['FALTA', 'PEN7C'] },
+      { label: 'Táctico', cls: 'c-error', actions: ['BEATEN', 'NOATK', 'BADEXIT', 'LATE', 'HELP'] }
+    ],
+    positions: {
+      EXT: { label: 'Extremo', color: 'var(--ext)', darkText: false },
+      LAT: { label: 'Lateral', color: 'var(--lat)', darkText: false },
+      CEN: { label: 'Central', color: 'var(--cen)', darkText: false },
+      PIV: { label: 'Pivote', color: 'var(--piv)', darkText: true },
+      POR: { label: 'Portero', color: 'var(--por)', darkText: false }
+    },
+    // Reference values for a senior regional team: [good from, poor below]; 'lower' = lower is better.
+    targets: {
+      shooting: [60, 50], '6M': [70, 55], '9M': [45, 35], CONTRA: [80, 65], '7M': [75, 60],
+      attack: [50, 40], turnovers: [12, 20, 'lower'], gk: [33, 25], defense: [55, 45]
+    },
+    // Key points only speak from a minimum of evidence.
+    insights: { minShots: 3, minGoals: 2, penetrationShare: 50, minBlocked: 3, minRepeats: 2 }
+  };
+  const STORAGE_KEY = 'hbstats-directo:v4';
+  const PHASES = { DEF: 'Defensa', ATK: 'Ataque' };
+  const DEFAULT_PHASE = 'DEF';
+  const THEME_KEY = 'hbstats-directo:theme';
+
+  // ===================== Court geometry (SVG units, 50 per metre) =====================
+  const UNITS_PER_M = 50;
+  const GOAL_LINE_Y = 260;
+  const CENTER_X = 500;
+  const POST_HALF_M = 1.5;
+  const NINE_M = 9;
+  const COURT = { minX: 30, maxX: 970, minY: GOAL_LINE_Y + 30, maxY: 780 };
+  const GOAL_FACE = { x: 320, y: 20, w: 360, h: 240 };
+  const GOAL_MARGIN = 60;
+  const GOAL_GRID = 3;
+  const FRAME_BAND = 14;
+  const GK_SPOT = { x: CENTER_X, y: GOAL_LINE_Y + 1.3 * UNITS_PER_M };
+  const SEVEN_M = { dy: 7, toleranceX: 1, toleranceY: 0.7 };
+  const ZONE_TAG_OFFSET = 56;
+
+  const ZONES = { '6M': '6 m', '9M': '9 m', '7M': '7 m', CONTRA: 'Contra' };
+  const SHEET_ZONES = ['6M', '9M', 'CONTRA', '7M'];
+  // Shot results and the three colour groups they belong to
+  const RESULTS = {
+    GOL: { label: 'Gol', group: 'GOL' },
+    PARADA: { label: 'Parada', group: 'PARADA' },
+    FUERA: { label: 'Fuera', group: 'FALLO' },
+    PALO: { label: 'Palo', group: 'FALLO' },
+    BLOCADO: { label: 'Bloqueado', group: 'FALLO' }
+  };
+  const GROUP_COLOR = { GOL: 'var(--gol)', PARADA: 'var(--parada)', FALLO: 'var(--fallo)' };
+  const GROUP_CLASS = { GOL: 'c-gol', PARADA: 'c-parada', FALLO: 'c-fallo' };
+  const ACTIONS = {
+    ASIST: { label: 'Pase de gol', group: 'ataque' },
+    PROV7: { label: 'Provoca 7 m', group: 'ataque' },
+    RECUP: { label: 'Recuperación', group: 'defensa' },
+    BLOC: { label: 'Blocaje', group: 'defensa' },
+    FALTA: { label: 'Falta regl.', group: 'error' },
+    PEN7C: { label: '7 m cometido', group: 'error' },
+    BEATEN: { label: 'Superado 1x1', group: 'error' },
+    NOATK: { label: 'No ataca', group: 'error' },
+    BADEXIT: { label: 'Salida fallida', group: 'error' },
+    LATE: { label: 'Llega tarde', group: 'error' },
+    HELP: { label: 'Ayuda innec.', group: 'error' }
+  };
+  const DEFENSIVE_FAULTS = CONFIG.defFaultGroups.flatMap((g) => g.actions);
+  const TACTICAL_FAULTS = CONFIG.defFaultGroups.find((g) => g.label === 'Táctico').actions;
+  const SANCTIONS = {
+    A: { label: 'Amarilla', name: 'Amarilla', short: 'A', color: 'var(--amarilla)', darkText: true },
+    '2M': { label: "Exclusión 2'", name: '2 min', short: "2'", color: 'var(--dos)' },
+    D: { label: 'Descalificación', name: 'Roja', short: 'D', color: 'var(--desc)' },
+    AZ: { label: 'Tarjeta azul', name: 'Azul', short: 'Az', color: 'var(--azul)' }
+  };
+
+  // ===================== Helpers =====================
+  const $ = (id) => document.getElementById(id);
+  const esc = (s) => String(s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+  const clamp = (v, lo, hi) => Math.min(hi, Math.max(lo, v));
+  const mmss = (sec) => `${String(Math.floor(sec / 60)).padStart(2, '0')}:${String(sec % 60).padStart(2, '0')}`;
+  const pct = (a, b) => (b ? Math.round((a * 100) / b) : null);
+  const pctText = (v) => (v == null ? '–' : `${v}%`);
+  let idSeq = 0;
+  const newId = (p) => `${p}${Date.now().toString(36)}${(idSeq++).toString(36)}`;
+  const m = (dx, dy) => ({ x: CENTER_X + dx * UNITS_PER_M, y: GOAL_LINE_Y + dy * UNITS_PER_M });
+  const gf = (gx, gy) => ({ x: GOAL_FACE.x + gx * GOAL_FACE.w, y: GOAL_FACE.y + gy * GOAL_FACE.h });
+  const inGoalFace = (pt) => pt.x >= GOAL_FACE.x && pt.x <= GOAL_FACE.x + GOAL_FACE.w && pt.y >= GOAL_FACE.y && pt.y <= GOAL_FACE.y + GOAL_FACE.h;
+  // Posts and crossbar: a band around the red frame. Released there, the shot is "Palo" straight away.
+  function onGoalFrame(pt) {
+    const left = GOAL_FACE.x, right = GOAL_FACE.x + GOAL_FACE.w, top = GOAL_FACE.y;
+    const nearPost = (x) => Math.abs(pt.x - x) <= FRAME_BAND && pt.y >= top - FRAME_BAND && pt.y <= GOAL_LINE_Y;
+    const nearBar = Math.abs(pt.y - top) <= FRAME_BAND && pt.x >= left - FRAME_BAND && pt.x <= right + FRAME_BAND;
+    return nearPost(left) || nearPost(right) || nearBar;
+  }
+  // Goal split in thirds both ways (the dashed net lines): [row, col] of the sector a point falls in.
+  function goalCell(pt) {
+    const col = clamp(Math.floor(((pt.x - GOAL_FACE.x) / GOAL_FACE.w) * GOAL_GRID), 0, GOAL_GRID - 1);
+    const row = clamp(Math.floor(((pt.y - GOAL_FACE.y) / GOAL_FACE.h) * GOAL_GRID), 0, GOAL_GRID - 1);
+    return [row, col];
+  }
+  const groupOf = (result) => RESULTS[result].group;
+
+  // Zone from where the shot starts: penalty mark = 7 m, beyond the dashed 9 m line = 9 m, otherwise 6 m.
+  function zoneFrom(pt) {
+    const dx = (pt.x - CENTER_X) / UNITS_PER_M;
+    const dy = (pt.y - GOAL_LINE_Y) / UNITS_PER_M;
+    if (Math.abs(dx) <= SEVEN_M.toleranceX && Math.abs(dy - SEVEN_M.dy) <= SEVEN_M.toleranceY) return '7M';
+    const dist = Math.hypot(dx - clamp(dx, -POST_HALF_M, POST_HALF_M), dy);
+    return dist > NINE_M ? '9M' : '6M';
+  }
+  function rate(value, key) {
+    if (value == null) return 'r-none';
+    const [good, poor, dir] = CONFIG.targets[key];
+    if (dir === 'lower') return value <= good ? 'r-good' : value >= poor ? 'r-bad' : 'r-warn';
+    return value >= good ? 'r-good' : value < poor ? 'r-bad' : 'r-warn';
+  }
+
+  // ===================== Theme =====================
+  function currentTheme() {
+    const set = document.documentElement.getAttribute('data-theme');
+    if (set === 'dark' || set === 'light') return set;
+    return window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
+  }
+  function applyTheme(theme) {
+    document.documentElement.setAttribute('data-theme', theme);
+    const b = $('btn-theme');
+    b.textContent = theme === 'dark' ? '☀' : '☾';
+    b.setAttribute('aria-label', theme === 'dark' ? 'Cambiar a modo claro' : 'Cambiar a modo oscuro');
+  }
+  function initTheme() {
+    let saved = null;
+    try { saved = localStorage.getItem(THEME_KEY); } catch (err) { saved = null; }
+    applyTheme(saved === 'dark' || saved === 'light' ? saved : currentTheme());
+  }
+  $('btn-theme').addEventListener('click', () => {
+    const next = currentTheme() === 'dark' ? 'light' : 'dark';
+    applyTheme(next);
+    try { localStorage.setItem(THEME_KEY, next); } catch (err) { /* preference not stored on this device */ }
+  });
+
+  // ===================== State =====================
+  let state = loadState() || sampleState();
+  const ui = {
+    source: 'GK', sourcePhase: null, show: new Set(), popView: null, hintTimer: null, drag: null,
+    lastPenTs: 0, newArmTimer: null, shooter: null, sheetTab: 'stats', sheetGk: null, rosterSide: 'us'
+  };
+
+  function todayIso() { return new Date().toISOString().slice(0, 10); }
+  function sampleState() {
+    const P = (id, num, name, pos) => ({ id, num, name, pos });
+    // The rival is often known only by dorsal; a name is optional.
+    const R = (num, name, pos) => ({ id: `r${num}`, num, name, pos });
+    const rivals = [R(4, '', 'EXT'), R(7, 'Pérez', 'LAT'), R(9, 'Lolo', 'CEN'), R(10, '', 'LAT'), R(15, '', 'PIV'), R(23, '', null)];
+    const players = [
+      P('p1', 1, 'Jose', 'POR'), P('p12', 12, 'Verdugo', 'POR'),
+      P('p22', 22, 'Diego', 'EXT'), P('p25', 25, 'Nacho', 'EXT'), P('p3', 3, 'Raulito', 'EXT'), P('p17', 17, 'Jenny', 'EXT'),
+      P('p8', 8, 'Alex', 'LAT'), P('p5', 5, 'Marcos', 'LAT'), P('p77', 77, 'Sergio', 'LAT'), P('p18', 18, 'Iker', 'LAT'), P('p21', 21, 'Jaime', 'LAT'),
+      P('p11', 11, 'Bokiki', 'CEN'), P('p19', 19, 'Gonzalo', 'CEN'),
+      P('p10', 10, 'Juni', 'PIV'), P('p13', 13, 'Kike', 'PIV'), P('p14', 14, 'Achi', 'PIV')
+    ];
+    // Attack: 3-3 with pivot. Defence: 6-0 on the 6 m line with defensive specialists (Marcos, Achi) in for Alex and Kike.
+    const lineups = {
+      ATK: { p22: m(-8.4, 1.6), p17: m(8.4, 1.6), p8: m(-5.6, 8.3), p18: m(5.6, 8.3), p19: m(0, 9.7), p13: m(-1.6, 6.7) },
+      DEF: { p22: m(-7.6, 2.2), p5: m(-5, 5.2), p14: m(-1.8, 6.6), p18: m(1.8, 6.6), p19: m(5, 5.2), p17: m(7.6, 2.2) }
+    };
+    const E = [];
+    const ev = (abs, kind, data) => E.push(Object.assign({ id: newId('e'), abs, kind }, data));
+    const shot = (abs, playerId, o, t, result, contra) => {
+      const origin = m(o[0], o[1]);
+      const zone = zoneFrom(origin);
+      ev(abs, 'SHOT', { playerId, origin, target: gf(t[0], t[1]), from: zone, zone: contra ? 'CONTRA' : zone, result });
+    };
+    const rival = (abs, o, t, result, contra) => {
+      const origin = m(o[0], o[1]);
+      ev(abs, 'RIVAL_SHOT', { gkId: 'p1', origin, target: gf(t[0], t[1]), zone: zoneFrom(origin), result, contra: Boolean(contra) });
+    };
+    rival(45, [0.5, 9.6], [0.82, 0.25], 'GOL');
+    shot(80, 'p8', [-4.5, 9.8], [0.15, 0.2], 'GOL');
+    shot(130, 'p17', [7.2, 2.4], [0.8, 0.8], 'PARADA');
+    rival(160, [-7.6, 1.6], [0.2, 0.7], 'PARADA');
+    shot(190, 'p18', [4.8, 9.6], [0.85, 0.15], 'GOL');
+    rival(230, [0.6, 6.4], [0.15, 0.85], 'GOL');
+    ev(320, 'TURNOVER', { playerId: 'p5', subtype: 'Pasos' });
+    rival(350, [-1.2, 10.2], [0.7, 0.8], 'GOL', true);
+    ev(400, 'ACTION', { playerId: 'p19', action: 'ASIST' });
+    shot(401, 'p21', [0.8, 6.8], [0.2, 0.85], 'GOL', true);
+    rival(450, [5.2, 9.4], [0.25, 0.3], 'PARADA');
+    ev(470, 'ACTION', { playerId: 'p10', action: 'RECUP' });
+    shot(480, 'p22', [-1.4, 6.6], [0.75, 0.75], 'GOL', true);
+    rival(540, [0, 7], [0.88, 0.15], 'GOL');
+    shot(590, 'p77', [0, 7], [0.1, 0.12], 'GOL');
+    rival(630, [-3.4, 6.2], [0.5, 0.55], 'PARADA');
+    ev(650, 'TURNOVER', { playerId: 'p8', subtype: 'Salida fallada' });
+    rival(670, [-4.2, 9.5], [1.08, 0.4], 'FUERA');
+    shot(690, 'p8', [-3.8, 10], [1.1, 0.3], 'FUERA');
+    ev(700, 'SANCTION', { playerId: 'p13', card: '2M' });
+    rival(720, [3.6, 6.3], [0.1, 0.2], 'GOL');
+    ev(735, 'ACTION', { playerId: 'p18', action: 'BLOC' });
+    shot(745, 'p17', [7.4, 2.2], [0.9, 0.2], 'GOL');
+    E.filter((e) => e.kind === 'RIVAL_SHOT').forEach((e, i) => { e.rivalId = rivals[i % rivals.length].id; });
+    return {
+      sample: true, us: 'Triana', them: 'Rival', venue: 'Pabellón Vivero', date: todayIso(), players, rivals, lineups, phase: DEFAULT_PHASE, autoPhase: true, gkId: 'p1',
+      clock: { period: 1, elapsedMs: 760 * 1000, runningSince: null },
+      timeoutsUsed: 0, timeoutsUsedThem: 0, timeout: null, events: E, fired: [], alerts: [],
+      history: E.map((e) => ({ added: [e], removed: [] })), future: []
+    };
+  }
+  function loadState() {
+    try {
+      const raw = localStorage.getItem(STORAGE_KEY);
+      if (!raw) return null;
+      const s = JSON.parse(raw);
+      if (!s || !Array.isArray(s.players) || !Array.isArray(s.events) || !Array.isArray(s.history)) return null;
+      s.clock.runningSince = null; // never resume the clock on its own after a reload
+      return Object.assign({ rivals: [], venue: '', date: todayIso() }, s);
+    } catch (err) {
+      console.warn('Saved match could not be read, starting from the sample.', err);
+      return null;
+    }
+  }
+  function save() {
+    try { localStorage.setItem(STORAGE_KEY, JSON.stringify(state)); }
+    catch (err) { console.warn('Match could not be saved on this device.', err); }
+  }
+
+  // ===================== Derived data (everything comes from the event log) =====================
+  const playerById = (id) => state.players.find((p) => p.id === id);
+  const lineup = () => state.lineups[state.phase];
+  const posOf = (p) => CONFIG.positions[p.pos] || CONFIG.positions.CEN;
+  // Rival players may have no position yet: shown in neutral grey until one is set.
+  const UNKNOWN_POSITION = { label: 'Sin puesto', color: 'var(--fallo)', darkText: false };
+  const rivalPos = (r) => CONFIG.positions[r.pos] || UNKNOWN_POSITION;
+  // Pickers group players by position (extremos, laterales, centrales, pivotes…; no position last), then by dorsal.
+  const POSITION_ORDER = Object.keys(CONFIG.positions);
+  const positionRank = (p) => (POSITION_ORDER.includes(p.pos) ? POSITION_ORDER.indexOf(p.pos) : POSITION_ORDER.length);
+  const byPosition = (a, b) => positionRank(a) - positionRank(b) || a.num - b.num;
+  function periodElapsedMs() {
+    const c = state.clock;
+    return clamp(c.elapsedMs + (c.runningSince ? Date.now() - c.runningSince : 0), 0, CONFIG.halfSeconds * 1000);
+  }
+  const periodSeconds = () => Math.floor(periodElapsedMs() / 1000);
+  const absSeconds = () => (state.clock.period - 1) * CONFIG.halfSeconds + periodSeconds();
+  const absToClock = (abs) => mmss(abs >= CONFIG.halfSeconds ? abs - CONFIG.halfSeconds : abs);
+  const isRunning = () => Boolean(state.clock.runningSince);
+
+  function score(events = state.events) {
+    let us = 0, them = 0;
+    events.forEach((e) => {
+      if (e.kind === 'SHOT' && e.result === 'GOL') us++;
+      if (e.kind === 'RIVAL_SHOT' && e.result === 'GOL') them++;
+      if (e.kind === 'SCORE_FIX') { if (e.team === 'us') us += e.delta; else them += e.delta; }
+    });
+    return { us, them };
+  }
+  // A red or blue card, or the third 2', sends the player off for good; a red or blue card also leaves the team 2' short.
+  const DISQUALIFYING_CARDS = ['D', 'AZ'];
+  function disqualifications() {
+    const twos = {}, out = new Map();
+    state.events.forEach((e) => {
+      if (e.kind !== 'SANCTION' || out.has(e.playerId)) return;
+      if (e.card === '2M') {
+        twos[e.playerId] = (twos[e.playerId] || 0) + 1;
+        if (twos[e.playerId] === CONFIG.exclusionsToDisqualify) out.set(e.playerId, e);
+      } else if (DISQUALIFYING_CARDS.includes(e.card)) out.set(e.playerId, e);
+    });
+    return out;
+  }
+  const isDisqualified = (id) => disqualifications().has(id);
+  function exclusionEvents() {
+    const out = disqualifications();
+    return state.events.filter((e) => e.kind === 'SANCTION' && (e.card === '2M' || (DISQUALIFYING_CARDS.includes(e.card) && out.get(e.playerId) === e)));
+  }
+  const rivalExclusionEvents = () => state.events.filter((e) => e.kind === 'RIVAL_SANCTION' && e.card === '2M');
+  function runningExclusions(events) {
+    const now = absSeconds();
+    return events.filter((e) => now < e.abs + CONFIG.exclusionSeconds)
+      .map((e) => ({ event: e, remaining: e.abs + CONFIG.exclusionSeconds - now }));
+  }
+  const activeExclusions = () => runningExclusions(exclusionEvents());
+  const activeRivalExclusions = () => runningExclusions(rivalExclusionEvents());
+  function clockText() {
+    if (!state.clockDown) return mmss(periodSeconds());
+    return mmss(Math.ceil((CONFIG.halfSeconds * 1000 - periodElapsedMs()) / 1000));
+  }
+  const ourShots = () => state.events.filter((e) => e.kind === 'SHOT');
+  const rivalShots = () => state.events.filter((e) => e.kind === 'RIVAL_SHOT');
+  const gkShots = (gkId) => rivalShots().filter((e) => e.gkId === gkId);
+  const countGroups = (shots) => {
+    const c = { GOL: 0, PARADA: 0, FALLO: 0 };
+    shots.forEach((e) => { c[groupOf(e.result)]++; });
+    return c;
+  };
+  function playerStats(id) {
+    const s = { shots: {}, goals: {}, blocked: 0, TURNOVER: 0 };
+    Object.keys(ACTIONS).forEach((k) => { s[k] = 0; });
+    Object.keys(SANCTIONS).forEach((k) => { s[k] = 0; });
+    SHEET_ZONES.forEach((z) => { s.shots[z] = 0; s.goals[z] = 0; });
+    state.events.forEach((e) => {
+      if (e.playerId !== id) return;
+      if (e.kind === 'SHOT') { s.shots[e.zone]++; if (e.result === 'GOL') s.goals[e.zone]++; if (e.result === 'BLOCADO') s.blocked++; }
+      if (e.kind === 'ACTION') s[e.action]++;
+      if (e.kind === 'TURNOVER') s.TURNOVER++;
+      if (e.kind === 'SANCTION') s[e.card]++;
+    });
+    return s;
+  }
+  // The same figures for both teams, each from its own side: shots, possessions, zones, saves suffered, 2' splits.
+  function liveStats() {
+    const ev = state.events;
+    const turnovers = ev.filter((e) => e.kind === 'TURNOVER').length;
+    const recov = ev.filter((e) => e.kind === 'ACTION' && e.action === 'RECUP').length;
+    const blocks = ev.filter((e) => e.kind === 'ACTION' && e.action === 'BLOC').length;
+    const defFaults = ev.filter((e) => e.kind === 'ACTION' && DEFENSIVE_FAULTS.includes(e.action)).length;
+    const now = absSeconds();
+    const inWindow = (e) => e.abs > now - CONFIG.momentumWindowSeconds && e.abs <= now;
+    const during = (events) => (e) => events.some((x) => e.abs >= x.abs && e.abs < x.abs + CONFIG.exclusionSeconds);
+    const usShort = during(exclusionEvents());
+    const themShort = during(rivalExclusionEvents());
+    const goalsOf = (shots) => shots.filter((e) => e.result === 'GOL');
+    const usGoals = goalsOf(ourShots()), themGoals = goalsOf(rivalShots());
+    const split = (mine, theirs, when) => `${mine.filter(when).length}–${theirs.filter(when).length}`;
+    // Our attacks end in a shot or a turnover; the rival's in a shot or our recovery.
+    function side(shots, lost, zoneOf, goals, against, ownShort, otherShort) {
+      const c = countGroups(shots);
+      const possessions = shots.length + lost;
+      return {
+        shots: shots.length, goals: goals.length, possessions, turnovers: lost,
+        shooting: pct(goals.length, shots.length), attack: pct(goals.length, possessions), turnoverPct: pct(lost, possessions),
+        saved: c.PARADA, onTarget: c.GOL + c.PARADA, savedPct: pct(c.PARADA, c.GOL + c.PARADA),
+        blocked: shots.filter((e) => e.result === 'BLOCADO').length,
+        zones: SHEET_ZONES.map((z) => {
+          const inZone = shots.filter((e) => zoneOf(e) === z);
+          const g = countGroups(inZone);
+          return { id: z, att: inZone.length, ...g, pct: pct(g.GOL, inZone.length) };
+        }),
+        momentum: split(goals, against, inWindow),
+        superiority: split(goals, against, otherShort),
+        inferiority: split(goals, against, ownShort)
+      };
+    }
+    const us = side(ourShots(), turnovers, (e) => e.zone, usGoals, themGoals, usShort, themShort);
+    const them = side(rivalShots(), recov, (e) => (e.contra ? 'CONTRA' : e.zone), themGoals, usGoals, themShort, usShort);
+    const byScorer = {};
+    usGoals.forEach((e) => { byScorer[e.playerId] = (byScorer[e.playerId] || 0) + 1; });
+    const top = Object.entries(byScorer).sort((a, b) => b[1] - a[1])[0];
+    return {
+      us, them, recov, blocks, defFaults,
+      defense: pct(them.possessions - them.goals, them.possessions),
+      top: top ? { p: playerById(top[0]), n: top[1] } : null
+    };
+  }
+
+  const rivalById = (id) => (state.rivals || []).find((r) => r.id === id) || null;
+  const rivalLabel = (r) => (r.name ? `#${r.num} ${r.name}` : `#${r.num}`);
+  const sortedRivals = () => state.rivals.slice().sort((a, b) => a.num - b.num);
+  function describe(e) {
+    const p = e.playerId ? playerById(e.playerId) : null;
+    const who = p ? ` #${p.num} ${p.name}` : '';
+    switch (e.kind) {
+      case 'SHOT': return `${RESULTS[e.result].label} ${ZONES[e.zone]} ·${who}`;
+      case 'ACTION': return `${ACTIONS[e.action].label} ·${who}`;
+      case 'TURNOVER': return `Pérdida ${e.subtype.toLowerCase()} ·${who}`;
+      case 'SANCTION': return `${SANCTIONS[e.card].label} ·${who}`;
+      case 'RIVAL_SANCTION': return `${state.them}: ${SANCTIONS[e.card].label}`;
+      case 'RIVAL_SHOT': {
+        const gk = playerById(e.gkId);
+        const r = rivalById(e.rivalId);
+        return `Rival${r ? ` ${rivalLabel(r)}` : ''}: ${RESULTS[e.result].label.toLowerCase()} ${ZONES[e.zone]}${e.contra ? ' contra' : ''} · ${gk ? gk.name : ''}`;
+      }
+      case 'SCORE_FIX': return `Ajuste ${e.team === 'us' ? state.us : state.them} ${e.delta > 0 ? '+1' : '−1'}`;
+      default: return e.kind;
+    }
+  }
+  function eventColor(e) {
+    switch (e.kind) {
+      case 'SHOT': return MAP_VIEWS.US.colors[groupOf(e.result)];
+      case 'RIVAL_SHOT': return MAP_VIEWS.GK.colors[groupOf(e.result)];
+      case 'ACTION': return `var(--${ACTIONS[e.action].group})`;
+      case 'TURNOVER': return 'var(--error)';
+      case 'SANCTION': case 'RIVAL_SANCTION': return SANCTIONS[e.card].color;
+      default: return 'var(--red)';
+    }
+  }
+
+  // Possession change implied by an event (used when "Auto" is on): our shot or turnover → we defend; rival shot or our recovery → we attack.
+  function phaseAfter(e) {
+    if (e.kind === 'SHOT' || e.kind === 'TURNOVER') return 'DEF';
+    if (e.kind === 'RIVAL_SHOT' || (e.kind === 'ACTION' && e.action === 'RECUP')) return 'ATK';
+    return null;
+  }
+
+  // ===================== History: every change is an undoable operation =====================
+  function applyOp(op) {
+    const removeIds = new Set(op.removed.map((r) => r.event.id));
+    state.events = state.events.filter((e) => !removeIds.has(e.id));
+    state.events.push(...op.added);
+    if (op.phase) state.phase = op.phase.after;
+  }
+  function revertOp(op) {
+    const addIds = new Set(op.added.map((e) => e.id));
+    state.events = state.events.filter((e) => !addIds.has(e.id));
+    op.removed.slice().sort((a, b) => a.index - b.index).forEach((r) => state.events.splice(r.index, 0, r.event));
+    if (op.phase) state.phase = op.phase.before;
+  }
+  const lastAdded = (op) => (op.added.length ? op.added[op.added.length - 1].id : null);
+  function record(op, label) {
+    state.sample = false;
+    applyOp(op);
+    state.history.push(op);
+    if (state.history.length > CONFIG.historyLimit) state.history.shift();
+    state.future = [];
+    commit({ freshId: lastAdded(op) });
+    if (label) hint(label);
+  }
+  const makeEvent = (kind, data) => Object.assign({ id: newId('e'), abs: absSeconds(), kind }, data);
+  function addEvent(kind, data) {
+    const e = makeEvent(kind, data);
+    const op = { added: [e], removed: [] };
+    const next = state.autoPhase ? phaseAfter(e) : null;
+    if (next && next !== state.phase) op.phase = { before: state.phase, after: next };
+    record(op);
+  }
+  function setPhase(phase) {
+    if (state.phase === phase) return;
+    state.phase = phase;
+    disarm();
+    commit();
+  }
+  function deleteEvent(id) {
+    const index = state.events.findIndex((e) => e.id === id);
+    if (index < 0) return;
+    const event = state.events[index];
+    record({ added: [], removed: [{ event, index }] }, `Borrado: ${describe(event)}`);
+  }
+  const opLabel = (op) => (op.added.length ? describe(op.added[op.added.length - 1]) : `borrar ${describe(op.removed[0].event)}`);
+  function undo() {
+    const op = state.history.pop();
+    if (!op) return;
+    revertOp(op);
+    state.future.push(op);
+    commit();
+    hint(`↶ ${opLabel(op)}`);
+  }
+  function redo() {
+    const op = state.future.pop();
+    if (!op) return;
+    applyOp(op);
+    state.history.push(op);
+    commit({ freshId: lastAdded(op) });
+    hint(`↷ ${opLabel(op)}`);
+  }
+  function commit(opts) { save(); renderAll(opts); }
+
+  // ===================== Audio, vibration, wake lock =====================
+  let audioCtx = null;
+  let wakeLock = null;
+  function ensureAudio() {
+    if (!audioCtx) {
+      const Ctx = window.AudioContext || window.webkitAudioContext;
+      if (Ctx) audioCtx = new Ctx();
+    }
+    if (audioCtx && audioCtx.state === 'suspended') audioCtx.resume().catch(() => {});
+  }
+  function beep(tones) {
+    if (!audioCtx) return;
+    let t = audioCtx.currentTime;
+    tones.forEach(([freq, dur]) => {
+      const osc = audioCtx.createOscillator();
+      const gain = audioCtx.createGain();
+      osc.type = 'square';
+      osc.frequency.value = freq;
+      gain.gain.setValueAtTime(0.16, t);
+      gain.gain.exponentialRampToValueAtTime(0.001, t + dur);
+      osc.connect(gain).connect(audioCtx.destination);
+      osc.start(t);
+      osc.stop(t + dur);
+      t += dur + 0.08;
+    });
+  }
+  const SOUND_ALARM = { tones: [[988, 0.25], [740, 0.25], [988, 0.25], [740, 0.4]], vibrate: [300, 120, 300, 120, 500] };
+  function alarm(sound) {
+    beep(sound.tones);
+    try { if (navigator.vibrate) navigator.vibrate(sound.vibrate); } catch (err) { /* vibration unsupported */ }
+  }
+  async function keepScreenOn(on) {
+    try {
+      if (on && !wakeLock && navigator.wakeLock) wakeLock = await navigator.wakeLock.request('screen');
+      if (!on && wakeLock) { await wakeLock.release(); wakeLock = null; }
+    } catch (err) { wakeLock = null; }
+  }
+  document.addEventListener('pointerdown', ensureAudio, { capture: true });
+
+  // ===================== Clock and timed alerts =====================
+  function pauseClock() {
+    if (!isRunning()) return;
+    state.clock.elapsedMs = periodElapsedMs();
+    state.clock.runningSince = null;
+    keepScreenOn(false);
+  }
+  function toggleClock() {
+    if (isRunning()) pauseClock();
+    else {
+      if (state.clock.elapsedMs >= CONFIG.halfSeconds * 1000) { hint('Parte terminada: empieza la siguiente desde el aviso.'); return; }
+      state.clock.runningSince = Date.now();
+      keepScreenOn(true);
+    }
+    commit();
+  }
+  function adjustClock(deltaSec) {
+    state.clock.elapsedMs = clamp(periodElapsedMs() + deltaSec * 1000, 0, CONFIG.halfSeconds * 1000);
+    if (isRunning()) state.clock.runningSince = Date.now();
+    commit();
+  }
+  function startPeriod(n) { state.clock = { period: n, elapsedMs: 0, runningSince: null }; commit(); }
+  const TIMEOUT_KEYS = { us: 'timeoutsUsed', them: 'timeoutsUsedThem' };
+  const timeoutsUsed = (team) => state[TIMEOUT_KEYS[team]] || 0;
+  function startTimeout(team) {
+    if (timeoutsUsed(team) >= CONFIG.timeoutsPerTeam) { hint(`${team === 'us' ? state.us : state.them}: sin tiempos muertos disponibles.`); return; }
+    state[TIMEOUT_KEYS[team]] = timeoutsUsed(team) + 1;
+    pauseClock();
+    state.alerts = state.alerts.filter((a) => a.live !== 'timeout');
+    state.timeout = { team, endsAt: Date.now() + CONFIG.timeoutSeconds * 1000 };
+    pushAlert({ id: newId('tm'), kind: 'timeout', title: `Tiempo muerto ${team === 'us' ? state.us : state.them}`, live: 'timeout' });
+    commit();
+  }
+  function pushAlert(a, sound) { state.alerts.unshift(a); if (sound) alarm(sound); }
+  function dismissAlert(id) { state.alerts = state.alerts.filter((a) => a.id !== id); commit(); }
+
+  function checkTimers() {
+    const abs = absSeconds();
+    let changed = false;
+    const fire = (key, alertObj, sound) => {
+      if (state.fired.includes(key)) return;
+      state.fired.push(key);
+      pushAlert(alertObj, sound);
+      changed = true;
+    };
+    exclusionEvents().forEach((e) => {
+      if (abs < e.abs + CONFIG.exclusionSeconds) return;
+      const p = playerById(e.playerId);
+      const title = disqualifications().get(p.id) === e ? `Puede entrar otro por #${p.num} ${p.name}` : `#${p.num} ${p.name} puede volver`;
+      fire(`ex-${e.id}`, { id: `ex-${e.id}`, kind: 'exclusion', title, body: "Fin de los 2'" }, SOUND_ALARM);
+    });
+    rivalExclusionEvents().forEach((e) => {
+      if (abs < e.abs + CONFIG.exclusionSeconds) return;
+      fire(`rex-${e.id}`, { id: `rex-${e.id}`, kind: 'exclusion', title: `${state.them} vuelve a estar completo`, body: "Fin de su 2'" }, SOUND_ALARM);
+    });
+    if (isRunning() && periodElapsedMs() >= CONFIG.halfSeconds * 1000) {
+      pauseClock();
+      const n = state.clock.period;
+      fire(`period-${n}`, { id: `period-${n}`, kind: 'period', period: n, title: n === 1 ? 'Descanso' : 'Fin del partido' }, SOUND_ALARM);
+    }
+    if (state.timeout && Date.now() >= state.timeout.endsAt) {
+      state.alerts = state.alerts.filter((a) => a.live !== 'timeout');
+      pushAlert({ id: newId('tme'), kind: 'timeout', title: 'Fin del tiempo muerto', resume: true }, SOUND_ALARM);
+      state.timeout = null;
+      changed = true;
+    }
+    if (changed) commit();
+  }
+  function tick() { renderClock(); updateLiveBits(); checkTimers(); }
+
+  // ===================== Rendering =====================
+  function renderAll(opts) {
+    syncSourceToPhase();
+    renderBar(); renderClock(); renderBench(); renderTokens(); renderShots();
+    renderGk(); renderLive(); renderAlerts(); renderArmed(); renderPhase(); renderEvents(opts && opts.freshId);
+    $('sample-tag').hidden = !state.sample;
+    $('btn-undo').disabled = !state.history.length;
+    $('btn-redo').disabled = !state.future.length;
+  }
+  function renderBar() {
+    const s = score();
+    $('name-us').textContent = state.us;
+    $('name-them').textContent = state.them;
+    $('score-us').textContent = s.us;
+    $('score-them').textContent = s.them;
+    $('period').textContent = `${state.clock.period === 1 ? '1ª parte' : '2ª parte'} ${state.clockDown ? '↓' : '↑'}`;
+    renderRivalExclusions();
+    Object.keys(TIMEOUT_KEYS).forEach((team) => {
+      $(`tm-dots-${team}`).innerHTML = Array.from({ length: CONFIG.timeoutsPerTeam }, (_, i) => `<i class="${i < timeoutsUsed(team) ? 'used' : ''}"></i>`).join('');
+    });
+  }
+  // Field players on court for each side, e.g. 6×5 while the rival serves a 2'.
+  function renderRivalExclusions() {
+    const theirs = activeRivalExclusions();
+    const ours = activeExclusions().length;
+    const field = (n) => CONFIG.maxFieldPlayers - n;
+    const diff = theirs.length - ours;
+    const strength = theirs.length || ours ? `<span class="rex-chip num${diff > 0 ? ' up' : diff < 0 ? ' down' : ''}">${field(ours)}×${field(theirs.length)}</span>` : '';
+    $('rex').innerHTML = theirs.map((x) => `<span class="rex-chip" data-rex="${x.event.id}">2' ${mmss(x.remaining).slice(1)}</span>`).join('') + strength;
+  }
+  function renderClock() {
+    const running = isRunning();
+    const t = $('clock');
+    t.textContent = clockText();
+    t.classList.toggle('paused', !running);
+    const play = $('btn-play');
+    play.classList.toggle('go', !running);
+    play.textContent = running ? '⏸ Pausa' : (state.clock.elapsedMs > 0 ? '▶ Seguir' : '▶ Iniciar');
+    const stop = $('btn-stop');
+    stop.textContent = running ? '⏸ Parar' : '▶ Seguir';
+    stop.classList.toggle('primary', running);
+    stop.classList.toggle('go', !running);
+    const big = $('pop-clock');
+    if (big) big.textContent = clockText();
+  }
+  function discHtml(p, pos = posOf(p)) {
+    return `<span class="disc${pos.darkText ? ' light-text' : ''}" style="background:${pos.color}">${p.num}</span>`;
+  }
+  function renderPhase() {
+    $('stage').dataset.phase = state.phase;
+    document.querySelectorAll('.phase [data-phase]').forEach((b) => b.setAttribute('aria-pressed', String(b.dataset.phase === state.phase)));
+    $('btn-auto').setAttribute('aria-pressed', String(state.autoPhase));
+  }
+  function renderBench() {
+    const onCourt = new Set(Object.keys(lineup()));
+    const field = state.players.filter((p) => p.pos !== 'POR' && !onCourt.has(p.id));
+    const gks = state.players.filter((p) => p.pos === 'POR' && p.id !== state.gkId);
+    const out = disqualifications();
+    const item = (p) => `<button class="bench-player press${out.has(p.id) ? ' out' : ''}" type="button" data-id="${p.id}" aria-label="#${p.num} ${esc(p.name)}, ${out.has(p.id) ? 'descalificado' : posOf(p).label}">${discHtml(p)}<span class="who"><b>${esc(p.name)}</b></span></button>`;
+    $('bench').innerHTML = (field.length ? field.map(item).join('') : '<p class="empty">Todos en pista.</p>')
+      + (gks.length ? `<p class="bench-label">Porteros</p>${gks.map(item).join('')}` : '');
+  }
+  function tokenMarkup(p, pos, exRemaining, extraCls) {
+    const posInfo = posOf(p);
+    const ex = exRemaining != null;
+    return `<g class="tok${ex ? ' excluded' : ''}${extraCls}" data-id="${p.id}" transform="translate(${pos.x} ${pos.y})">
+      <circle r="40" class="body" fill="${posInfo.color}"/>
+      <text class="num${posInfo.darkText ? ' dark' : ''}">${p.num}</text>
+      <rect class="nm-bg" x="-60" y="45" width="120" height="30" rx="15"/>
+      <text class="nm" y="60">${esc(p.name)}</text>
+      ${ex ? `<rect class="ex-bg" x="16" y="-60" width="66" height="30" rx="9"/><text class="ex-t" x="49" y="-45" data-ex="${p.id}">${mmss(exRemaining).slice(1)}</text>` : ''}
+    </g>`;
+  }
+  function renderTokens() {
+    const ex = new Map(activeExclusions().map((x) => [x.event.playerId, x.remaining]));
+    const gk = playerById(state.gkId);
+    const exOf = (id) => (ex.has(id) ? ex.get(id) : null);
+    $('tokens-layer').innerHTML = tokenMarkup(gk, GK_SPOT, exOf(gk.id), ' gk')
+      + Object.entries(lineup()).map(([id, pos]) => {
+        const p = playerById(id);
+        return p ? tokenMarkup(p, pos, exOf(id), id === ui.shooter ? ' shooter' : '') : '';
+      }).join('');
+  }
+  // The shot map follows the phase (defence → our goalkeeper, attack → our shooters); the manual toggle holds until the next phase change.
+  const PHASE_SOURCE = { DEF: 'GK', ATK: 'US' };
+  function syncSourceToPhase() {
+    if (ui.sourcePhase === state.phase) return;
+    ui.sourcePhase = state.phase;
+    ui.source = PHASE_SOURCE[state.phase];
+  }
+  function mapShots() { return ui.source === 'GK' ? rivalShots() : ourShots(); }
+  // Shot-map colours: saves blue and misses grey for both; a goal is red against our goalkeeper and green against theirs.
+  // Both goalkeepers read the same way (same rows, same names); only the colour of the goals changes.
+  const TALLY_ORDER = ['PARADA', 'GOL', 'FALLO'];
+  const TALLY_LABELS = { PARADA: 'DETENIDOS', GOL: 'GOLES ENCAJADOS', FALLO: 'FALLOS' };
+  const MAP_VIEWS = {
+    GK: { owner: 'NUESTRO PORTERO', colors: { GOL: 'var(--red)', PARADA: 'var(--parada)', FALLO: 'var(--fallo)' } },
+    US: { owner: 'SU PORTERO', colors: GROUP_COLOR }
+  };
+  const TALLY_ROW_Y = [64, 132, 200];
+  function renderShots() {
+    const shots = mapShots();
+    const shown = shots.filter((e) => ui.show.has(groupOf(e.result)));
+    const view = MAP_VIEWS[ui.source];
+    $('shots-layer').innerHTML = shown.map((e) => {
+      const g = groupOf(e.result);
+      const color = view.colors[g];
+      const dash = g === 'GOL' ? '' : g === 'PARADA' ? ' stroke-dasharray="14 8"' : ' stroke-dasharray="4 8"';
+      return `<line x1="${e.origin.x}" y1="${e.origin.y}" x2="${e.target.x}" y2="${e.target.y}" stroke="${color}" stroke-width="4.5" stroke-linecap="round" opacity=".9"${dash}/>
+        <circle cx="${e.origin.x}" cy="${e.origin.y}" r="9" fill="${color}"/>
+        <circle cx="${e.target.x}" cy="${e.target.y}" r="8" fill="var(--surface)" stroke="${color}" stroke-width="4"/>`;
+    }).join('');
+    const c = countGroups(shots);
+    $('tallies').innerHTML = `<text class="tally-owner" x="976" y="30">${view.owner}</text>`
+      + TALLY_ORDER.map((g, i) => [g, TALLY_ROW_Y[i]]).map(([g, y]) => `<text class="tally-label" x="976" y="${y}">${TALLY_LABELS[g]}</text><text class="tally-num" x="976" y="${y + 50}" fill="${view.colors[g]}">${c[g]}</text>`).join('');
+  }
+  function renderGk() {
+    const gk = playerById(state.gkId);
+    const c = countGroups(gkShots(state.gkId));
+    const onTarget = c.GOL + c.PARADA;
+    const p = pct(c.PARADA, onTarget);
+    $('gk-card').innerHTML = `<span class="disc">${gk.num}</span><span class="who"><b>${esc(gk.name)}</b><small>Portero ›</small></span>
+      <span class="pct"><strong class="${rate(p, 'gk')}">${pctText(p)}</strong><small>${c.PARADA}/${onTarget} paradas</small></span>`;
+    document.querySelectorAll('[data-source]').forEach((b) => b.setAttribute('aria-pressed', String(b.dataset.source === ui.source)));
+    $('seg-us').textContent = state.us;
+    $('seg-them').textContent = state.them;
+    const colors = MAP_VIEWS[ui.source].colors;
+    document.querySelectorAll('[data-show]').forEach((b) => {
+      b.setAttribute('aria-pressed', String(ui.show.has(b.dataset.show)));
+      b.style.color = colors[b.dataset.show];
+      b.querySelector('i').style.background = colors[b.dataset.show];
+    });
+  }
+  // Ratings always read from our side: a high rival shooting % is bad news, so it shows red.
+  const RATE_FOR_RIVAL = { 'r-good': 'r-bad', 'r-bad': 'r-good' };
+  const rateSide = (value, key, ours) => { const r = rate(value, key); return ours ? r : RATE_FOR_RIVAL[r] || r; };
+  function renderLive() {
+    const ours = ui.source === 'US';
+    const t = liveStats()[ours ? 'us' : 'them'];
+    const colors = MAP_VIEWS[ui.source].colors;
+    const kpi = (label, value, key, sub) => `<div class="kpi"><strong class="${rateSide(value, key, ours)}">${pctText(value)}</strong><span>${label}</span><small>${sub}</small></div>`;
+    const fact = (label, value) => `<div class="fact"><span>${label}</span><b>${value}</b></div>`;
+    const zones = t.zones.map((z) => {
+      const w = (n) => (z.att ? (n * 100) / z.att : 0);
+      return `<div class="zone"><b>${ZONES[z.id]}</b>
+        <span class="track" aria-hidden="true">${TALLY_ORDER.map((g) => `<span style="width:${w(z[g])}%;background:${colors[g]}"></span>`).join('')}</span>
+        <span class="n">${z.GOL}/${z.att}</span><span class="val ${rateSide(z.pct, z.id, ours)}">${pctText(z.pct)}</span></div>`;
+    }).join('');
+    $('live').innerHTML = `
+      <div class="kpis">
+        ${kpi('Tiro', t.shooting, 'shooting', `${t.goals}/${t.shots}`)}
+        ${kpi('Ataque', t.attack, 'attack', `${t.goals}/${t.possessions} pos.`)}
+        ${kpi('Pérdidas', t.turnoverPct, 'turnovers', `${t.turnovers}/${t.possessions}`)}
+      </div>
+      <h2 class="opt">Por zona</h2>
+      <div class="zones">${zones}</div>
+      <div class="facts">
+        ${fact('Le paran', `${t.saved}/${t.onTarget}`)}
+        ${fact('Bloqueados', t.blocked)}
+        ${fact("Parcial 5'", t.momentum)}
+        ${fact('Posesiones', t.possessions)}
+        ${fact("2' a favor", t.superiority)}
+        ${fact("2' en contra", t.inferiority)}
+      </div>`;
+  }
+  const remainingTimeout = () => (state.timeout ? Math.max(0, Math.ceil((state.timeout.endsAt - Date.now()) / 1000)) : 0);
+  function renderAlerts() {
+    $('alerts').innerHTML = state.alerts.map((a) => {
+      const extra = a.kind === 'period' && a.period === 1
+        ? `<button class="btn go press" type="button" data-period2="${a.id}">▶ 2ª parte</button>`
+        : a.resume ? `<button class="btn go press" type="button" data-resume="${a.id}">▶ Reloj</button>` : '';
+      const body = a.live === 'timeout' ? `<p data-live-timeout>${remainingTimeout()} s</p>` : (a.body ? `<p>${esc(a.body)}</p>` : '');
+      return `<div class="alert glass k-${a.kind}${a.kind === 'exclusion' ? ' ringing' : ''}" data-alert="${a.id}">
+        <span class="t">${esc(a.title)}</span>${body}<div class="row">${extra}<button class="btn press" type="button" data-dismiss="${a.id}">OK</button></div></div>`;
+    }).join('');
+  }
+  function renderArmed() {
+    const bar = $('armed-bar');
+    const p = ui.shooter ? playerById(ui.shooter) : null;
+    bar.hidden = !p;
+    if (p) bar.innerHTML = `${discHtml(p)}<b>Dibuja el tiro</b><button class="btn press" type="button" data-unarm aria-label="Cancelar lanzamiento">✕</button>`;
+  }
+  function updateLiveBits() {
+    const t = document.querySelector('[data-live-timeout]');
+    if (t) t.textContent = `${remainingTimeout()} s`;
+    const ex = new Map(activeExclusions().map((x) => [x.event.playerId, x.remaining]));
+    const badges = document.querySelectorAll('[data-ex]');
+    badges.forEach((el) => { const r = ex.get(el.dataset.ex); if (r != null) el.textContent = mmss(r).slice(1); });
+    const visible = new Set([state.gkId, ...Object.keys(lineup())]);
+    const expected = [...ex.keys()].filter((id) => visible.has(id)).length;
+    if (badges.length !== expected && !ui.drag) renderTokens();
+    const rivalEx = new Map(activeRivalExclusions().map((x) => [x.event.id, x.remaining]));
+    const chips = document.querySelectorAll('[data-rex]');
+    chips.forEach((el) => { const r = rivalEx.get(el.dataset.rex); if (r != null) el.textContent = `2' ${mmss(r).slice(1)}`; });
+    if (chips.length !== rivalEx.size || (activeExclusions().length === 0 && rivalEx.size === 0 && $('rex').childElementCount)) renderRivalExclusions();
+  }
+  function renderEvents(freshId) {
+    const list = state.events.slice().reverse();
+    $('events').innerHTML = list.length ? list.map((e) => `
+      <button class="ev press${e.id === freshId ? ' fresh' : ''}" type="button" data-ev="${e.id}">
+        <i style="background:${eventColor(e)}"></i><time>${absToClock(e.abs)}</time><span>${esc(describe(e))}</span>
+      </button>`).join('') : '<span class="empty">Toca un jugador o arrastra hasta la portería.</span>';
+    $('events').scrollLeft = 0;
+  }
+  function hint(text) {
+    const el = $('hint');
+    el.textContent = text;
+    el.hidden = false;
+    clearTimeout(ui.hintTimer);
+    ui.hintTimer = setTimeout(() => { el.hidden = true; }, CONFIG.hintMs);
+  }
+
+  // ===================== Popups =====================
+  function openPop(html, anchor, wide = false) {
+    const pop = $('pop');
+    pop.innerHTML = html;
+    pop.classList.toggle('wide', wide);
+    pop.hidden = false;
+    $('scrim').hidden = false;
+    const w = pop.offsetWidth, h = pop.offsetHeight;
+    const vw = window.innerWidth, vh = window.innerHeight;
+    const gap = 24, margin = 16;
+    let left = anchor.x + gap;                       // right of the finger, so the hand does not cover it
+    if (left + w > vw - margin) left = anchor.x - gap - w;
+    pop.style.left = `${clamp(left, margin, vw - w - margin)}px`;
+    pop.style.top = `${clamp(anchor.y - h / 2, margin, vh - h - margin)}px`;
+  }
+  function closePop() { $('pop').hidden = true; $('scrim').hidden = true; ui.popView = null; }
+  const popHead = (p, sub, right) => `<header>${discHtml(p)}<div><b>${esc(p.name)}</b><small>${esc(sub)}</small></div>${right || ''}</header>`;
+  const group = (label, cls, buttons, layout = '') => `<div class="group"><span class="${cls}">${label}</span><div class="acts ${layout}">${buttons}</div></div>`;
+  const cardIcon = (s) => `<i class="card-ico${s.darkText ? ' dark-text' : ''}" style="background:${s.color}">${s.short}</i>`;
+  const sanctionGroup = () => group('Sanción', 't-sancion', Object.entries(SANCTIONS).map(([k, s]) => `<button class="act card-btn" type="button" data-sanction="${k}" aria-label="${s.label}">${cardIcon(s)}<span>${s.name}</span></button>`).join(''), 'row');
+
+  function playerPopHtml(p, view) {
+    const head = popHead(p, posOf(p).label);
+    if (view.sub === 'TURNOVER') {
+      return `${head}<button class="back" type="button" data-back>‹ Pérdida</button>
+        ${CONFIG.turnoverGroups.map((g) => group(g.label, `t-${g.cls.slice(2)}`,
+          g.types.map((t) => `<button class="act big ${g.cls}" type="button" data-turnover="${esc(t)}">${esc(t)}</button>`).join(''))).join('')}`;
+    }
+    const actBtn = (k) => `<button class="act c-${ACTIONS[k].group}" type="button" data-action="${k}">${ACTIONS[k].label}</button>`;
+    // The popup only offers what can happen in the current phase.
+    if (state.phase === 'DEF') {
+      return `${head}
+        ${group('Bien', 't-defensa', actBtn('RECUP') + actBtn('BLOC'))}
+        ${CONFIG.defFaultGroups.map((g) => group(g.label, `t-${g.cls.slice(2)}`,
+          g.actions.map((k) => `<button class="act ${g.cls}" type="button" data-action="${k}">${ACTIONS[k].label}</button>`).join(''))).join('')}
+        ${sanctionGroup()}`;
+    }
+    return `${head}
+      <button class="act big c-gol" type="button" data-arm>Lanzamiento</button>
+      ${group('Ataque', 't-ataque', actBtn('ASIST') + actBtn('PROV7'))}
+      ${group('Error', 't-error', '<button class="act c-error" type="button" data-sub="TURNOVER">Pérdida ›</button>')}
+      ${sanctionGroup()}`;
+  }
+  function openPlayerPop(playerId, anchor) {
+    const p = playerById(playerId);
+    if (p.pos === 'POR') { openGkPop(anchor, playerId); return; }
+    ui.popView = { type: 'player', playerId, anchor, sub: null };
+    openPop(playerPopHtml(p, ui.popView), anchor);
+  }
+  // Last player of ours who shot: preselected when a shot is drawn from empty court in attack.
+  function lastShooterId() {
+    const last = ourShots().at(-1);
+    return last && playerById(last.playerId) ? last.playerId : null;
+  }
+  // Players on court first, bench on the right; goalkeepers only when they are in `onCourt`.
+  function playerPickerHtml(view, onCourt) {
+    const out = disqualifications();
+    const field = state.players.filter((p) => (p.pos !== 'POR' || onCourt.has(p.id)) && !out.has(p.id)).sort(byPosition);
+    const pick = (p) => `<button class="pick press" type="button" data-pick="${p.id}" aria-pressed="${p.id === view.playerId}">${discHtml(p)}<span>${esc(p.name)}</span></button>`;
+    const column = (title, players, cls) => `<div><h3>${title}</h3><div class="picks ${cls}">${players.length ? players.map(pick).join('') : '<p class="note">Nadie</p>'}</div></div>`;
+    return `<div class="picker">${column('En pista', field.filter((p) => onCourt.has(p.id)), '')}${column('Banquillo', field.filter((p) => !onCourt.has(p.id)), 'bench-picks')}</div>`;
+  }
+  const shooterPickerHtml = (view) => playerPickerHtml(view, new Set(Object.keys(state.lineups.ATK)));
+  function openSanctionPick(card, anchor) {
+    ui.popView = { type: 'sanctionPick', card, playerId: null };
+    const s = SANCTIONS[card];
+    openPop(`<header>${cardIcon(s)}<div><b>${s.label}</b><small>¿A quién?</small></div></header>
+      ${playerPickerHtml(ui.popView, new Set([...Object.keys(lineup()), state.gkId]))}`, anchor, true);
+  }
+  // Optional rival shooter: dorsal chips (with the name when the roster has one).
+  function rivalPickerHtml(view) {
+    const named = state.rivals.some((r) => r.name);
+    return `<h3>Lanzador rival</h3><div class="rival-picks${named ? ' named' : ''}">${state.rivals.slice().sort(byPosition).map((r) => `<button class="rpick press" type="button" data-rival="${r.id}" aria-pressed="${r.id === view.rivalId}" aria-label="${rivalLabel(r)}, ${rivalPos(r).label}">${discHtml(r, rivalPos(r))}${r.name ? `<span>${esc(r.name)}</span>` : ''}</button>`).join('')}</div>`;
+  }
+  const rivalPickWide = () => state.rivals.some((r) => r.name);
+  function shotPopHtml(view) {
+    const ours = view.type === 'ourShot';
+    const zone = `<span class="zone-big">${ZONES[view.zone]}</span>`;
+    if (view.preset && !ours) {
+      return `<header><div><b>${RESULTS[view.preset].label} rival</b><small>¿Quién?</small></div>${zone}</header>${rivalPickerHtml(view)}
+        <button class="act c-neutral" type="button" data-rival="">Sin dorsal</button>`;
+    }
+    if (view.preset) {
+      return `<header><div><b>¿Quién lanza?</b><small>${RESULTS[view.preset].label}</small></div>${zone}</header>${shooterPickerHtml(view)}`;
+    }
+    const p = ours ? (view.playerId && playerById(view.playerId)) : playerById(state.gkId);
+    const head = p ? popHead(p, ours ? 'Lanzamiento' : 'Tiro rival', zone) : `<header><div><b>¿Quién lanza?</b><small>Jugador y resultado</small></div>${zone}</header>`;
+    // Only reached when the shot ends inside the goal, so "Fuera" is not offered (frame drops are already "Palo").
+    const results = ['GOL', 'PARADA', 'PALO', 'BLOCADO'];
+    return `${head}${view.pick ? shooterPickerHtml(view) : ''}${view.rivalPick ? rivalPickerHtml(view) : ''}
+      <div class="act-grid two">${results.map((r) => `<button class="act ${r === 'GOL' || r === 'PARADA' ? 'big ' : ''}${GROUP_CLASS[groupOf(r)]}" style="background:${MAP_VIEWS[ours ? 'US' : 'GK'].colors[groupOf(r)]}" type="button" data-result="${r}" ${p ? '' : 'disabled'}>${RESULTS[r].label}</button>`).join('')}
+        <button class="chip" type="button" data-contra aria-pressed="${view.contra}">Contraataque</button></div>`;
+  }
+  function commitShot(view, result) {
+    if (view.type === 'ourShot') {
+      disarm();
+      addEvent('SHOT', { playerId: view.playerId, origin: view.origin, target: view.target, from: view.zone, zone: view.contra ? 'CONTRA' : view.zone, result });
+    } else {
+      addEvent('RIVAL_SHOT', { gkId: state.gkId, rivalId: view.rivalId || null, origin: view.origin, target: view.target, zone: view.zone, result, contra: view.contra });
+    }
+  }
+  function commitDirectShot(view, result) {
+    commitShot(view, result);
+    hint(`${RESULTS[result].label} ${ZONES[view.zone]} · ↶ deshacer`);
+  }
+  function openShotPop(view, anchor) {
+    Object.assign(view, { zone: zoneFrom(view.origin), contra: false, anchor });
+    // Released on a post or the crossbar, or outside the goal: no result question, only "who" if we do not know it yet.
+    const direct = onGoalFrame(view.target) ? 'PALO' : (inGoalFace(view.target) ? null : 'FUERA');
+    view.rivalPick = view.type === 'rivalShot' && state.rivals.length > 0;
+    if (direct && !view.pick && !view.rivalPick) { commitDirectShot(view, direct); return; }
+    view.preset = direct;
+    ui.popView = view;
+    openPop(shotPopHtml(view), anchor, Boolean(view.pick) || (view.rivalPick && rivalPickWide()));
+  }
+  function openGkPop(anchor, focusId) {
+    const gk = playerById(focusId || state.gkId);
+    const gks = state.players.filter((p) => p.pos === 'POR');
+    ui.popView = { type: 'gk', playerId: gk.id };
+    openPop(`${popHead(gk, gk.id === state.gkId ? 'En portería' : 'Banquillo')}
+      <h3>En portería</h3>
+      <div class="act-grid two">${gks.map((g) => `<button class="act big ${g.id === state.gkId ? 'c-dark' : 'c-neutral'}" type="button" data-gk="${g.id}">#${g.num} ${esc(g.name)}</button>`).join('')}</div>
+      ${sanctionGroup()}`, anchor);
+  }
+  function openClockPop(anchor) {
+    ui.popView = { type: 'clock', anchor };
+    const running = isRunning();
+    const mode = (down, label) => `<button type="button" data-clock-mode="${down ? 'down' : 'up'}" aria-pressed="${Boolean(state.clockDown) === down}">${label}</button>`;
+    openPop(`<h3>${state.clock.period === 1 ? '1ª' : '2ª'} parte</h3>
+      <div class="big-time" id="pop-clock">${clockText()}</div>
+      <div class="seg" role="group" aria-label="Sentido del reloj">${mode(false, '↑ Ascendente')}${mode(true, '↓ Descendente')}</div>
+      <button class="act big ${running ? 'c-error' : 'c-gol'}" type="button" data-clock="toggle">${running ? '⏸ Parar' : '▶ Seguir'}</button>
+      <div class="act-grid four">${CONFIG.clockSteps.map((s) => `<button class="act c-neutral" type="button" data-adjust="${s}">${s > 0 ? '+' : '−'}${Math.abs(s)}s</button>`).join('')}</div>
+      <button class="act c-neutral" type="button" data-clock="period">${state.clock.period === 1 ? 'Ir a 2ª parte' : 'Volver a 1ª parte'}</button>`, anchor);
+  }
+  function openScorePop(anchor) {
+    ui.popView = { type: 'score', anchor };
+    const s = score();
+    const row = (team, name) => `<div class="stepper"><small>${esc(name)}</small>
+      <button class="press" type="button" data-fix="${team}:-1" aria-label="Restar un gol a ${esc(name)}" ${s[team] ? '' : 'disabled'}>−</button><output>${s[team]}</output>
+      <button class="press" type="button" data-fix="${team}:1" aria-label="Sumar un gol a ${esc(name)}">+</button></div>`;
+    openPop(`<h3>Corregir marcador</h3>${row('us', state.us)}${row('them', state.them)}
+      <p class="note">No cuenta como tiro de nadie.</p>`, anchor);
+  }
+  function openEventPop(id, anchor) {
+    const e = state.events.find((x) => x.id === id);
+    if (!e) return;
+    ui.popView = { type: 'event' };
+    openPop(`<h3>${absToClock(e.abs)}</h3><b style="font-size:17px">${esc(describe(e))}</b>
+      <div class="act-grid two"><button class="act c-error" type="button" data-delete="${id}">Borrar</button><button class="act c-neutral" type="button" data-close>Cancelar</button></div>`, anchor);
+  }
+  function addSanction(playerId, card) {
+    const p = playerById(playerId);
+    const wasOut = isDisqualified(p.id);
+    addEvent('SANCTION', { playerId: p.id, card });
+    hint(`${SANCTIONS[card].name} a #${p.num} ${p.name} · ↶ deshacer`);
+    if (!wasOut && isDisqualified(p.id)) sendOff(p, card);
+  }
+  // Off the court in both lineups (and out of goal); the bench keeps them locked while the card stands.
+  function sendOff(p, card) {
+    Object.values(state.lineups).forEach((team) => { delete team[p.id]; });
+    if (ui.shooter === p.id) disarm();
+    let body = card === '2M' ? "3ª exclusión" : `${SANCTIONS[card].name} · 2' con uno menos`;
+    if (state.gkId === p.id) {
+      const spare = goalkeepers().find((g) => g.id !== p.id && !isDisqualified(g.id));
+      if (spare) { state.gkId = spare.id; body += ` · entra #${spare.num} ${spare.name}`; }
+    }
+    pushAlert({ id: newId('d'), kind: 'desc', title: `Descalificado: #${p.num} ${p.name}`, body: `${body} · no vuelve` }, SOUND_ALARM);
+    commit();
+  }
+  function armShooter(playerId) {
+    ui.shooter = playerId;
+    renderTokens();
+    renderArmed();
+  }
+  function disarm() {
+    if (!ui.shooter) return;
+    ui.shooter = null;
+    renderTokens();
+    renderArmed();
+  }
+
+  $('pop').addEventListener('click', (ev) => {
+    const b = ev.target.closest('button');
+    if (!b || !ui.popView) return;
+    const v = ui.popView;
+    if (b.hasAttribute('data-close')) { closePop(); return; }
+    if (b.hasAttribute('data-back')) { v.sub = null; openPop(playerPopHtml(playerById(v.playerId), v), v.anchor); return; }
+    if (b.dataset.sub) { v.sub = b.dataset.sub; openPop(playerPopHtml(playerById(v.playerId), v), v.anchor); return; }
+    if (b.hasAttribute('data-arm')) { closePop(); armShooter(v.playerId); return; }
+    if (b.dataset.action) { closePop(); addEvent('ACTION', { playerId: v.playerId, action: b.dataset.action }); return; }
+    if (b.dataset.turnover) { closePop(); addEvent('TURNOVER', { playerId: v.playerId, subtype: b.dataset.turnover }); return; }
+    if (b.dataset.sanction) { closePop(); addSanction(v.playerId, b.dataset.sanction); return; }
+    if (b.dataset.rival != null) {
+      if (v.preset) { closePop(); v.rivalId = b.dataset.rival || null; commitDirectShot(v, v.preset); return; }
+      v.rivalId = v.rivalId === b.dataset.rival ? null : b.dataset.rival;
+      openPop(shotPopHtml(v), v.anchor, rivalPickWide());
+      return;
+    }
+    if (b.dataset.pick && v.type === 'sanctionPick') { closePop(); addSanction(b.dataset.pick, v.card); return; }
+    if (b.dataset.pick) {
+      v.playerId = b.dataset.pick;
+      if (v.preset) { closePop(); commitDirectShot(v, v.preset); return; }
+      openPop(shotPopHtml(v), v.anchor, true);
+      return;
+    }
+    if (b.hasAttribute('data-contra')) { v.contra = !v.contra; b.setAttribute('aria-pressed', String(v.contra)); return; }
+    if (b.dataset.result) { closePop(); commitShot(v, b.dataset.result); return; }
+    if (b.dataset.gk && isDisqualified(b.dataset.gk)) { hint('Ese portero está descalificado'); return; }
+    if (b.dataset.gk) { const g = playerById(b.dataset.gk); state.gkId = g.id; closePop(); commit(); hint(`Portero: #${g.num} ${g.name}`); return; }
+    if (b.dataset.clock === 'toggle') { closePop(); toggleClock(); return; }
+    if (b.dataset.clock === 'period') { closePop(); startPeriod(state.clock.period === 1 ? 2 : 1); return; }
+    if (b.dataset.adjust) { adjustClock(Number(b.dataset.adjust)); return; }
+    if (b.dataset.clockMode) { state.clockDown = b.dataset.clockMode === 'down'; commit(); openClockPop(v.anchor); return; }
+    if (b.dataset.fix) {
+      const [team, delta] = b.dataset.fix.split(':');
+      addEvent('SCORE_FIX', { team, delta: Number(delta) });
+      openScorePop(v.anchor);
+      return;
+    }
+    if (b.dataset.delete) { closePop(); deleteEvent(b.dataset.delete); }
+  });
+  $('scrim').addEventListener('pointerdown', (ev) => { ev.preventDefault(); closePop(); });
+  $('armed-bar').addEventListener('click', (ev) => { if (ev.target.closest('[data-unarm]')) disarm(); });
+  document.addEventListener('keydown', (ev) => {
+    if (ev.key !== 'Escape') return;
+    if (!$('pop').hidden) closePop();
+    else if (!$('sheet').hidden) $('sheet').hidden = true;
+    else disarm();
+  });
+
+  // ===================== Court gestures (finger and pen) =====================
+  // Empty court → goal: in defence a rival shot; in attack always our shot (armed player, else pick one; the last shooter is preselected).
+  // Player token → goal: that player's shot from where the token stands. Player token → court: move it.
+  const svg = $('court');
+  function svgPoint(x, y) {
+    const pt = svg.createSVGPoint();
+    pt.x = x; pt.y = y;
+    return pt.matrixTransform(svg.getScreenCTM().inverse());
+  }
+  function isPalm(ev) {
+    if (ev.pointerType === 'pen') { ui.lastPenTs = Date.now(); return false; }
+    return ev.pointerType === 'touch' && Date.now() - ui.lastPenTs < CONFIG.palmGuardMs;
+  }
+  const insideRect = (el, x, y) => { const r = el.getBoundingClientRect(); return x >= r.left && x <= r.right && y >= r.top && y <= r.bottom; };
+  const setAttrs = (el, attrs) => Object.entries(attrs).forEach(([k, v]) => el.setAttribute(k, v));
+  const clampCourt = (pt) => ({ x: clamp(pt.x, COURT.minX, COURT.maxX), y: clamp(pt.y, COURT.minY, COURT.maxY) });
+  const DRAW_IDS = ['draw-line', 'draw-origin', 'draw-end', 'draw-zone'];
+  const setDraw = (on) => DRAW_IDS.forEach((id) => $(id).setAttribute('visibility', on ? 'visible' : 'hidden'));
+  function startDraw(origin) {
+    setAttrs($('draw-origin'), { cx: origin.x, cy: origin.y });
+    setAttrs($('draw-line'), { x1: origin.x, y1: origin.y, x2: origin.x, y2: origin.y });
+    const tag = $('draw-zone');
+    setAttrs(tag, { x: origin.x, y: Math.min(origin.y + ZONE_TAG_OFFSET + 12, COURT.maxY + 20) });
+    tag.textContent = ZONES[zoneFrom(origin)];
+  }
+  function moveDraw(pt) {
+    setDraw(true);
+    setAttrs($('draw-line'), { x2: pt.x, y2: pt.y });
+    setAttrs($('draw-end'), { cx: pt.x, cy: pt.y });
+    highlightGoal(pt);
+  }
+  function highlightGoal(pt) {
+    const frame = Boolean(pt) && onGoalFrame(pt);
+    const face = Boolean(pt) && !frame && inGoalFace(pt);
+    $('goal-face').classList.toggle('hot', face || frame);
+    $('goal-frame-hot').setAttribute('visibility', frame ? 'visible' : 'hidden');
+    const sector = $('goal-sector');
+    sector.setAttribute('visibility', face ? 'visible' : 'hidden');
+    if (!face) return;
+    const [row, col] = goalCell(pt);
+    setAttrs(sector, { x: GOAL_FACE.x + (col * GOAL_FACE.w) / GOAL_GRID, y: GOAL_FACE.y + (row * GOAL_FACE.h) / GOAL_GRID, width: GOAL_FACE.w / GOAL_GRID, height: GOAL_FACE.h / GOAL_GRID });
+  }
+  function stopDraw() { setDraw(false); highlightGoal(null); }
+  const goalTarget = (pt) => ({ x: clamp(pt.x, GOAL_FACE.x - GOAL_MARGIN, GOAL_FACE.x + GOAL_FACE.w + GOAL_MARGIN), y: clamp(pt.y, 0, GOAL_LINE_Y) });
+
+  svg.addEventListener('pointerdown', (ev) => {
+    if (isPalm(ev) || ui.drag) return;
+    const tok = ev.target.closest('.tok');
+    const pt = svgPoint(ev.clientX, ev.clientY);
+    if (tok) {
+      const id = tok.dataset.id;
+      const isGk = tok.classList.contains('gk');
+      const start = isGk ? GK_SPOT : lineup()[id];
+      ui.drag = { type: 'token', id, el: tok, isGk, start, grab: { x: pt.x, y: pt.y }, startX: ev.clientX, startY: ev.clientY, moved: false, toGoal: false, pointerId: ev.pointerId };
+    } else if (pt.y > GOAL_LINE_Y) {
+      ui.drag = { type: 'shot', origin: { x: pt.x, y: pt.y }, pointerId: ev.pointerId };
+      startDraw(ui.drag.origin);
+    } else return;
+    svg.setPointerCapture(ev.pointerId);
+    ev.preventDefault();
+  });
+  svg.addEventListener('pointermove', (ev) => {
+    const d = ui.drag;
+    if (!d || ev.pointerId !== d.pointerId || isPalm(ev)) return;
+    const pt = svgPoint(ev.clientX, ev.clientY);
+    if (d.type === 'shot') { moveDraw(pt); return; }
+    if (d.isGk) return; // the goalkeeper stays in goal; change it from its popup or from the bench
+    if (!d.moved && Math.hypot(ev.clientX - d.startX, ev.clientY - d.startY) < CONFIG.dragThresholdPx) return;
+    if (!d.moved) { d.moved = true; startDraw(state.phase === 'DEF' ? d.grab : d.start); }
+    d.toGoal = pt.y < GOAL_LINE_Y;
+    if (d.toGoal) {
+      d.el.setAttribute('transform', `translate(${d.start.x} ${d.start.y})`);
+      moveDraw(pt);
+    } else {
+      stopDraw();
+      const c = clampCourt(pt);
+      d.el.setAttribute('transform', `translate(${c.x} ${c.y})`);
+      $('bench').classList.toggle('drop', insideRect($('bench'), ev.clientX, ev.clientY));
+    }
+  });
+  function endCourtDrag(ev, cancelled) {
+    const d = ui.drag;
+    if (!d || ev.pointerId !== d.pointerId) return;
+    ui.drag = null;
+    $('bench').classList.remove('drop');
+    stopDraw();
+    if (cancelled) { renderTokens(); return; }
+    const pt = svgPoint(ev.clientX, ev.clientY);
+    const anchor = { x: ev.clientX, y: ev.clientY };
+    if (d.type === 'token') {
+      if (!d.moved) { if (d.isGk) openGkPop(anchor); else openPlayerPop(d.id, anchor); return; }
+      if (d.toGoal) {
+        renderTokens();
+        // Defending, a drag through one of our defenders is the rival's shot from that spot; attacking, it is that player's shot.
+        const view = state.phase === 'DEF'
+          ? { type: 'rivalShot', origin: d.grab, target: goalTarget(pt) }
+          : { type: 'ourShot', playerId: d.id, origin: d.start, target: goalTarget(pt) };
+        openShotPop(view, anchor);
+        return;
+      }
+      const p = playerById(d.id);
+      if (insideRect($('bench'), ev.clientX, ev.clientY)) { delete lineup()[d.id]; hint(`#${p.num} ${p.name} al banquillo (${PHASES[state.phase].toLowerCase()})`); }
+      else lineup()[d.id] = clampCourt(pt);
+      commit();
+      return;
+    }
+    const len = Math.hypot(pt.x - d.origin.x, pt.y - d.origin.y);
+    if (len < CONFIG.minShotLengthUnits || pt.y > GOAL_LINE_Y) { hint('Arrastra hasta la portería'); return; }
+    const target = goalTarget(pt);
+    const view = ui.shooter || state.phase === 'ATK'
+      ? { type: 'ourShot', playerId: ui.shooter || lastShooterId(), pick: !ui.shooter, origin: d.origin, target }
+      : { type: 'rivalShot', origin: d.origin, target };
+    openShotPop(view, anchor);
+  }
+  svg.addEventListener('pointerup', (ev) => endCourtDrag(ev, false));
+  svg.addEventListener('pointercancel', (ev) => endCourtDrag(ev, true));
+
+  // Bench: drag onto the court (onto a teammate = substitution; a goalkeeper replaces the goalkeeper)
+  const benchEl = $('bench');
+  benchEl.addEventListener('pointerdown', (ev) => {
+    const b = ev.target.closest('.bench-player');
+    if (!b || ui.drag || isPalm(ev)) return;
+    ui.drag = { type: 'bench', id: b.dataset.id, startX: ev.clientX, startY: ev.clientY, moved: false, pointerId: ev.pointerId, ghost: null };
+    b.setPointerCapture(ev.pointerId);
+  });
+  benchEl.addEventListener('pointermove', (ev) => {
+    const d = ui.drag;
+    if (!d || d.type !== 'bench' || ev.pointerId !== d.pointerId) return;
+    if (!d.moved && Math.hypot(ev.clientX - d.startX, ev.clientY - d.startY) < CONFIG.dragThresholdPx) return;
+    if (!d.moved) {
+      d.moved = true;
+      const wrap = document.createElement('div');
+      wrap.className = 'ghost';
+      wrap.innerHTML = discHtml(playerById(d.id));
+      document.body.appendChild(wrap);
+      d.ghost = wrap;
+    }
+    d.ghost.style.left = `${ev.clientX}px`;
+    d.ghost.style.top = `${ev.clientY}px`;
+  });
+  function endBenchDrag(ev, cancelled) {
+    const d = ui.drag;
+    if (!d || d.type !== 'bench' || ev.pointerId !== d.pointerId) return;
+    ui.drag = null;
+    if (d.ghost) d.ghost.remove();
+    if (cancelled) return;
+    if (!d.moved) { openPlayerPop(d.id, { x: ev.clientX, y: ev.clientY }); return; }
+    if (!insideRect(svg, ev.clientX, ev.clientY)) return;
+    const incoming = playerById(d.id);
+    if (isDisqualified(incoming.id)) { hint(`#${incoming.num} ${incoming.name} está descalificado`); return; }
+    if (incoming.pos === 'POR') { state.gkId = incoming.id; commit(); hint(`Portero: #${incoming.num} ${incoming.name}`); return; }
+    const pt = svgPoint(ev.clientX, ev.clientY);
+    const team = lineup();
+    const phaseName = PHASES[state.phase].toLowerCase();
+    let nearest = null, best = CONFIG.swapRadiusUnits;
+    Object.entries(team).forEach(([id, pos]) => {
+      const dist = Math.hypot(pos.x - pt.x, pos.y - pt.y);
+      if (dist < best) { best = dist; nearest = id; }
+    });
+    if (nearest) {
+      const out = playerById(nearest);
+      team[d.id] = team[nearest];
+      delete team[nearest];
+      if (ui.shooter === nearest) ui.shooter = null;
+      hint(`⇄ ${phaseName}: entra #${incoming.num}, sale #${out.num}`);
+    } else if (Object.keys(team).length < CONFIG.maxFieldPlayers) {
+      team[d.id] = clampCourt(pt);
+      hint(`Entra #${incoming.num} en ${phaseName}`);
+    } else {
+      hint('Pista llena: suéltalo encima de quien sale');
+      return;
+    }
+    commit();
+  }
+  benchEl.addEventListener('pointerup', (ev) => endBenchDrag(ev, false));
+  benchEl.addEventListener('pointercancel', (ev) => endBenchDrag(ev, true));
+
+  // ===================== Wiring =====================
+  $('gk-card').addEventListener('click', (ev) => { const r = ev.currentTarget.getBoundingClientRect(); openGkPop({ x: r.left - 30, y: r.top + r.height / 2 }); });
+  $('clock-face').addEventListener('click', (ev) => { const r = ev.currentTarget.getBoundingClientRect(); openClockPop({ x: r.left + r.width / 2, y: r.bottom + 140 }); });
+  $('team-seg').addEventListener('click', (ev) => {
+    const b = ev.target.closest('[data-source]');
+    if (!b) return;
+    ui.source = b.dataset.source;
+    renderShots(); renderGk(); renderLive();
+  });
+  document.querySelector('.lines').addEventListener('click', (ev) => {
+    const b = ev.target.closest('[data-show]');
+    if (!b) return;
+    const g = b.dataset.show;
+    if (ui.show.has(g)) ui.show.delete(g); else ui.show.add(g);
+    renderShots(); renderGk();
+  });
+  $('events').addEventListener('click', (ev) => {
+    const b = ev.target.closest('[data-ev]');
+    if (!b) return;
+    const r = b.getBoundingClientRect();
+    openEventPop(b.dataset.ev, { x: r.left, y: r.top - 70 });
+  });
+  $('alerts').addEventListener('click', (ev) => {
+    const b = ev.target.closest('button');
+    if (!b) return;
+    if (b.dataset.dismiss) { dismissAlert(b.dataset.dismiss); return; }
+    if (b.dataset.period2) { state.alerts = state.alerts.filter((x) => x.id !== b.dataset.period2); startPeriod(2); return; }
+    if (b.dataset.resume) { state.alerts = state.alerts.filter((x) => x.id !== b.dataset.resume); if (!isRunning()) toggleClock(); else commit(); }
+  });
+  document.querySelector('.phase').addEventListener('click', (ev) => {
+    const b = ev.target.closest('button');
+    if (!b) return;
+    if (b.dataset.phase) { setPhase(b.dataset.phase); return; }
+    state.autoPhase = !state.autoPhase;
+    commit();
+    hint(state.autoPhase ? 'Auto: cambia sola tras cada posesión' : 'Auto desactivado: cambia tú la fase');
+  });
+  $('btn-play').addEventListener('click', toggleClock);
+  $('btn-stop').addEventListener('click', toggleClock);
+  $('btn-undo').addEventListener('click', undo);
+  $('btn-redo').addEventListener('click', redo);
+  $('btn-tm-us').addEventListener('click', () => startTimeout('us'));
+  $('btn-tm-them').addEventListener('click', () => startTimeout('them'));
+  $('btn-us-2m').addEventListener('click', (ev) => {
+    const r = ev.currentTarget.getBoundingClientRect();
+    openSanctionPick('2M', { x: r.left, y: r.bottom + 160 });
+  });
+  $('btn-rival-2m').addEventListener('click', () => {
+    addEvent('RIVAL_SANCTION', { card: '2M' });
+    hint(`2' a ${state.them} · ↶ deshacer`);
+  });
+  ['score-us', 'score-them'].forEach((id) => $(id).addEventListener('click', (ev) => {
+    const r = ev.currentTarget.getBoundingClientRect();
+    openScorePop({ x: r.left + r.width / 2, y: r.bottom + 120 });
+  }));
+  const NEW_MATCH_ARM_MS = 3000;
+  $('btn-new').addEventListener('click', (ev) => {
+    const b = ev.currentTarget;
+    if (!b.classList.contains('armed')) {
+      b.classList.add('armed');
+      b.textContent = '¿Seguro?';
+      ui.newArmTimer = setTimeout(() => { b.classList.remove('armed'); b.textContent = 'Nuevo'; }, NEW_MATCH_ARM_MS);
+      return;
+    }
+    clearTimeout(ui.newArmTimer);
+    b.classList.remove('armed');
+    b.textContent = 'Nuevo';
+    const keep = { players: state.players, lineups: state.lineups, gkId: state.gkId, us: state.us, autoPhase: state.autoPhase, clockDown: state.clockDown };
+    const fresh = { sample: false, them: 'Rival', rivals: [], venue: '', date: todayIso(), phase: DEFAULT_PHASE, clock: { period: 1, elapsedMs: 0, runningSince: null }, timeoutsUsed: 0, timeoutsUsedThem: 0, timeout: null, events: [], fired: [], alerts: [], history: [], future: [] };
+    state = Object.assign(fresh, keep);
+    ui.shooter = null;
+    keepScreenOn(false);
+    commit();
+    // Before the throw-off: teams, venue and both rosters.
+    ui.sheetTab = 'acta';
+    renderSheet();
+    $('sheet').hidden = false;
+    sheetStatus('roster-status', 'Partido nuevo: revisa equipos, lugar y plantillas.');
+  });
+
+  // ===================== Match sheet: statistics, goalkeeper, roster, PDF reports =====================
+  const SHEET_TABS = { stats: 'Estadísticas', analysis: 'Análisis', gk: 'Portero', acta: 'Acta y plantilla', reports: 'Informes PDF' };
+  const MAX_ROSTER = 16;
+  const MAX_NAME_LENGTH = 24;
+  const DORSAL_RANGE = [1, 99];
+  const ROSTER_FORMAT = 'hbstats-plantilla';
+  const MAX_VENUE_LENGTH = 40;
+  const PLAYER_HEAD = ['Nº', 'Jugador', '6 m', '9 m', 'Contra', '7 m', 'T. bloq.', 'Bloc.', 'Recup.', 'Pase gol', 'Pérdida', 'Prov. 7 m', 'Falta', '7 m com.', 'F. táctico', 'A', "2'", 'D', 'Az'];
+  const SHOT_ZONE_HEAD = ['Zona', 'Lanz.', 'Goles', 'Parados', 'Fallados', '% gol'];
+  const GK_ZONE_HEAD = ['Zona', 'Recibidos', 'A puerta', 'Detenidos', 'Encajados', '% paradas'];
+  const fieldPlayers = () => state.players.filter((p) => p.pos !== 'POR').sort((a, b) => a.num - b.num);
+  const goalkeepers = () => state.players.filter((p) => p.pos === 'POR').sort((a, b) => a.num - b.num);
+
+  // ---- Shared figures (the same numbers feed the screen and the PDF) ----
+  function countBy(events, keyOf) {
+    const out = {};
+    events.forEach((e) => { const k = keyOf(e); out[k] = (out[k] || 0) + 1; });
+    return out;
+  }
+  const turnoverCounts = (events) => countBy(events.filter((e) => e.kind === 'TURNOVER'), (e) => e.subtype);
+  const defFaultCounts = (events) => countBy(events.filter((e) => e.kind === 'ACTION' && DEFENSIVE_FAULTS.includes(e.action)), (e) => ACTIONS[e.action].label);
+  const eventsOf = (id) => state.events.filter((e) => e.playerId === id);
+  function playerRow(p) {
+    const s = playerStats(p.id);
+    const tactical = TACTICAL_FAULTS.reduce((n, k) => n + s[k], 0);
+    return [p.num, p.name, ...SHEET_ZONES.map((z) => `${s.shots[z]}/${s.goals[z]}`), s.blocked, s.BLOC, s.RECUP, s.ASIST, s.TURNOVER, s.PROV7, s.FALTA, s.PEN7C, tactical, s.A, s['2M'], s.D, s.AZ];
+  }
+  function shotZoneRows(shots) {
+    const row = (label, list) => { const c = countGroups(list); return [label, list.length, c.GOL, c.PARADA, c.FALLO, pctText(pct(c.GOL, list.length))]; };
+    return [...SHEET_ZONES.map((z) => row(ZONES[z], shots.filter((e) => e.zone === z))), row('Total', shots)];
+  }
+  const gkZoneOf = (e) => (e.contra ? 'CONTRA' : e.zone);
+  function gkZoneRows(shots) {
+    const row = (label, list) => { const c = countGroups(list); const on = c.GOL + c.PARADA; return [label, list.length, on, c.PARADA, c.GOL, pctText(pct(c.PARADA, on))]; };
+    return [...SHEET_ZONES.map((z) => row(ZONES[z], shots.filter((e) => gkZoneOf(e) === z))), row('Total', shots)];
+  }
+  const gkPool = (gkId) => (gkId ? gkShots(gkId) : rivalShots());
+  function goalGrid(shots, group) {
+    const grid = Array.from({ length: GOAL_GRID }, () => Array(GOAL_GRID).fill(0));
+    shots.filter((e) => groupOf(e.result) === group && inGoalFace(e.target)).forEach((e) => {
+      const [row, col] = goalCell(e.target);
+      grid[row][col]++;
+    });
+    return grid;
+  }
+  // ---- Attack analysis, the same for both teams: lanes, depth, shooters, goal sectors and key points ----
+  // Lanes from the attacker's view, by the angle from the goal centre: centre up to 15°, back court up to 55°, wing beyond.
+  const LANES = [
+    { id: 'EXT_I', label: 'Extremo izq.' }, { id: 'LAT_I', label: 'Lateral izq.' }, { id: 'CEN', label: 'Centro' },
+    { id: 'LAT_D', label: 'Lateral der.' }, { id: 'EXT_D', label: 'Extremo der.' }
+  ];
+  const LANE_EDGES_DEG = [15, 55];
+  function laneOf(origin) {
+    const deg = (Math.atan2(origin.x - CENTER_X, Math.max(origin.y - GOAL_LINE_Y, 1)) * 180) / Math.PI;
+    const a = Math.abs(deg);
+    if (a <= LANE_EDGES_DEG[0]) return 'CEN';
+    return `${a <= LANE_EDGES_DEG[1] ? 'LAT' : 'EXT'}_${deg < 0 ? 'I' : 'D'}`;
+  }
+  const laneLabel = (id) => LANES.find((l) => l.id === id).label;
+  const GOAL_ROWS = ['arriba', 'a media altura', 'abajo'];
+  const GOAL_COLS = ['izquierda', 'centro', 'derecha'];
+  const sectorName = ([row, col]) => `${GOAL_ROWS[row]} ${GOAL_COLS[col]}`;
+  const LANE_HEAD = ['Carril', '6 m', '9 m', 'Total', '% gol'];
+  const SHOOTER_HEAD = ['Jugador', 'Tiros', 'Goles', '% gol'];
+  const plural = (n, one, many) => `${n} ${n === 1 ? one : many}`;
+  const goalsIn = (list) => list.filter((e) => e.result === 'GOL').length;
+  const gt = (list) => `${goalsIn(list)}/${list.length}`;
+  function topCell(grid) {
+    let best = null;
+    grid.forEach((cols, row) => cols.forEach((n, col) => { if (n && (!best || n > best.n)) best = { n, cell: [row, col] }; }));
+    return best;
+  }
+  function attackAnalysis(team) {
+    const ours = team === 'us';
+    const shots = ours ? ourShots() : rivalShots();
+    const depthOf = (e) => (ours ? e.from : e.zone);
+    const field = shots.filter((e) => depthOf(e) !== '7M');
+    const lanes = LANES.map((l) => {
+      const inLane = field.filter((e) => laneOf(e.origin) === l.id);
+      return { ...l, list: inLane, near: inLane.filter((e) => depthOf(e) === '6M'), far: inLane.filter((e) => depthOf(e) === '9M') };
+    });
+    const shooterOf = (e) => (ours ? e.playerId : e.rivalId);
+    const labelOf = (id) => { if (ours) { const p = playerById(id); return p ? `#${p.num} ${p.name}` : 'Sin jugador'; } const r = rivalById(id); return r ? rivalLabel(r) : 'Sin dorsal'; };
+    const byShooter = {};
+    shots.forEach((e) => { const id = shooterOf(e); if (!id || !labelOf(id).startsWith('#')) return; (byShooter[id] = byShooter[id] || []).push(e); });
+    const shooters = Object.entries(byShooter).map(([id, list]) => ({ label: labelOf(id), shots: list.length, goals: goalsIn(list) }))
+      .sort((a, b) => b.shots - a.shots || b.goals - a.goals);
+    const topScorer = shooters.slice().sort((a, b) => b.goals - a.goals || a.shots - b.shots)[0] || null;
+    const near = field.filter((e) => depthOf(e) === '6M'), far = field.filter((e) => depthOf(e) === '9M');
+    const isContra = (e) => (ours ? e.zone === 'CONTRA' : e.contra);
+    return {
+      ours, shots, field, lanes, shooters, topShooter: shooters[0] || null, topScorer: topScorer && topScorer.goals ? topScorer : null,
+      near, far, penetrationShare: pct(near.length, field.length), penalties: shots.filter((e) => depthOf(e) === '7M'),
+      contraGoals: goalsIn(shots.filter(isContra)), blocked: shots.filter((e) => e.result === 'BLOCADO').length,
+      goalSector: topCell(goalGrid(shots, 'GOL')), saveSector: topCell(goalGrid(shots, 'PARADA'))
+    };
+  }
+  const laneRows = (a) => a.lanes.map((l) => [l.label, gt(l.near), gt(l.far), gt(l.list), pctText(pct(goalsIn(l.list), l.list.length))]);
+  const shooterRows = (a) => a.shooters.map((x) => [x.label, x.shots, x.goals, pctText(pct(x.goals, x.shots))]);
+  const bestLane = (a, minGoals) => a.lanes.filter((l) => goalsIn(l.list) >= minGoals).sort((x, y) => goalsIn(y.list) - goalsIn(x.list) || x.list.length - y.list.length)[0] || null;
+  // Key points as { tone: 'bad' | 'good', text }: what the rival does to us, and how our attack goes.
+  function keyPoints() {
+    const k = CONFIG.insights;
+    const live = liveStats();
+    const them = attackAnalysis('them'), us = attackAnalysis('us');
+    const defence = [], attack = [];
+    const bad = (list, text) => list.push({ tone: 'bad', text });
+    const good = (list, text) => list.push({ tone: 'good', text });
+    const hurt = bestLane(them, k.minGoals);
+    if (hurt) bad(defence, `Más goles encajados por ${hurt.label.toLowerCase()}: ${gt(hurt.list)}.`);
+    if (them.field.length >= k.minShots && them.penetrationShare >= k.penetrationShare) bad(defence, `Os penetran: el ${them.penetrationShare}% de sus tiros llega desde 6 m (${gt(them.near)}).`);
+    else if (goalsIn(them.far) >= k.minGoals && goalsIn(them.far) >= goalsIn(them.near)) bad(defence, `Os hacen daño desde 9 m (${gt(them.far)}): salir más a sus lanzadores.`);
+    if (them.topScorer && them.topScorer.goals >= k.minGoals) bad(defence, `Vigilar a ${them.topScorer.label}: ${plural(them.topScorer.goals, 'gol', 'goles')} en ${plural(them.topScorer.shots, 'tiro', 'tiros')}.`);
+    if (them.goalSector && them.goalSector.n >= k.minGoals) bad(defence, `Encajáis sobre todo ${sectorName(them.goalSector.cell)} (${them.goalSector.n} goles).`);
+    if (them.contraGoals >= k.minGoals) bad(defence, `${them.contraGoals} goles encajados a la contra: mejorar el repliegue.`);
+    if (them.penalties.length >= k.minRepeats) bad(defence, `${them.penalties.length} penaltis en contra (marcan ${goalsIn(them.penalties)}).`);
+    const faults = Object.entries(defFaultCounts(state.events)).sort((a, b) => b[1] - a[1])[0];
+    if (faults && faults[1] >= k.minRepeats) bad(defence, `Fallo defensivo más repetido: ${faults[0].toLowerCase()} (${faults[1]}).`);
+    const gkRate = rate(live.them.savedPct, 'gk');
+    if (gkRate === 'r-bad') bad(defence, `Pocas paradas: ${live.them.savedPct}% (objetivo ${CONFIG.targets.gk[0]}%).`);
+    if (gkRate === 'r-good') good(defence, `Buen nivel en portería: ${live.them.savedPct}% de paradas.`);
+
+    if (rate(live.us.shooting, 'shooting') === 'r-bad') bad(attack, `Acierto bajo en el tiro: ${live.us.shooting}% (${live.us.goals}/${live.us.shots}).`);
+    const weakZone = live.us.zones.filter((z) => z.att >= k.minShots && rate(z.pct, z.id) === 'r-bad').sort((a, b) => a.pct - b.pct)[0];
+    if (weakZone) bad(attack, `Poco acierto desde ${ZONES[weakZone.id]}: ${weakZone.GOL}/${weakZone.att}.`);
+    if (rate(live.us.turnoverPct, 'turnovers') === 'r-bad') {
+      const top = Object.entries(turnoverCounts(state.events)).sort((a, b) => b[1] - a[1])[0];
+      bad(attack, `Demasiadas pérdidas: ${live.us.turnoverPct}% de las posesiones${top ? `; la más repetida, ${top[0].toLowerCase()} (${top[1]})` : ''}.`);
+    }
+    if (us.blocked >= k.minBlocked) bad(attack, `${us.blocked} tiros bloqueados: buscar mejores posiciones de lanzamiento.`);
+    if (us.saveSector && us.saveSector.n >= k.minRepeats) bad(attack, `Su portero os para sobre todo ${sectorName(us.saveSector.cell)} (${us.saveSector.n}).`);
+    const works = bestLane(us, k.minGoals);
+    if (works) good(attack, `Funciona el ataque por ${works.label.toLowerCase()}: ${gt(works.list)}.`);
+    if (us.topScorer && us.topScorer.goals >= k.minGoals) good(attack, `Máximo goleador: ${us.topScorer.label}, ${us.topScorer.goals} de ${us.topScorer.shots}.`);
+    return { defence, attack };
+  }
+  function gkFigures(shots) {
+    const c = countGroups(shots);
+    const on = c.GOL + c.PARADA;
+    const pens = countGroups(shots.filter((e) => e.zone === '7M'));
+    return [
+      ['Paradas', pctText(pct(c.PARADA, on)), `${c.PARADA}/${on} a puerta`],
+      ['Detenidos', c.PARADA, ''],
+      ['Encajados', c.GOL, ''],
+      ['Fuera · palo · bloq.', c.FALLO, 'sin ir a puerta'],
+      ['7 m parados', `${pens.PARADA}/${pens.GOL + pens.PARADA}`, '']
+    ];
+  }
+  function teamFigures() {
+    const s = liveStats();
+    const { us, them } = s;
+    return [
+      ['Tiro', pctText(us.shooting), `${us.goals}/${us.shots} lanzamientos`],
+      ['Ataque', pctText(us.attack), `${us.goals}/${us.possessions} posesiones`],
+      ['Pérdidas', pctText(us.turnoverPct), `${us.turnovers}/${us.possessions} posesiones`],
+      ['Paradas', pctText(them.savedPct), `${them.saved}/${them.onTarget} a puerta`],
+      ['Defensa', pctText(s.defense), 'ataques rivales sin gol'],
+      ['Recuperaciones', s.recov, ''],
+      ['Blocajes', s.blocks, `nos bloquean ${us.blocked}`],
+      ['Fallos defensivos', s.defFaults, ''],
+      ["Exclusiones 2'", `${exclusionEvents().length} – ${rivalExclusionEvents().length}`, `${state.us} – ${state.them}`]
+    ];
+  }
+  function playerFigures(p) {
+    const s = playerStats(p.id);
+    const shots = ourShots().filter((e) => e.playerId === p.id);
+    const c = countGroups(shots);
+    const faults = DEFENSIVE_FAULTS.reduce((n, k) => n + s[k], 0);
+    const cards = Object.entries(SANCTIONS).filter(([k]) => s[k]).map(([k, v]) => `${s[k]} ${v.short}`).join(' · ') || '–';
+    return [
+      ['Goles', `${c.GOL}/${shots.length}`, `${pctText(pct(c.GOL, shots.length))} de acierto`],
+      ['Parados', c.PARADA, 'por el portero rival'],
+      ['Fallados', c.FALLO, 'fuera · palo · bloqueado'],
+      ['Pases de gol', s.ASIST, ''],
+      ['Provoca 7 m', s.PROV7, ''],
+      ['Recuperaciones', s.RECUP, ''],
+      ['Blocajes', s.BLOC, ''],
+      ['Pérdidas', s.TURNOVER, ''],
+      ['Fallos defensivos', faults, ''],
+      ['Sanciones', cards, '']
+    ];
+  }
+  const sanctionRows = () => state.events.filter((e) => e.kind === 'SANCTION' || e.kind === 'RIVAL_SANCTION')
+    .map((e) => [absToClock(e.abs), e.kind === 'SANCTION' ? `#${playerById(e.playerId).num} ${playerById(e.playerId).name}` : state.them, SANCTIONS[e.card].label]);
+  // Score at the end of every 5' block played so far, from the goal times (no manual note needed).
+  function scoreCheckRows() {
+    const blocks = Math.floor(absSeconds() / CONFIG.scoreIntervalSeconds);
+    return Array.from({ length: blocks }, (_, i) => {
+      const until = (i + 1) * CONFIG.scoreIntervalSeconds;
+      const s = score(state.events.filter((e) => e.abs <= until));
+      return [`Min ${until / 60}`, `${s.us}–${s.them}`];
+    });
+  }
+
+  // ---- Screen rendering ----
+  const isZero = (v) => v === 0 || v === '0/0';
+  const td = (v) => `<td class="${isZero(v) ? 'zero' : ''}">${esc(v)}</td>`;
+  const tableHtml = (head, rows) => `<div class="table-wrap"><table><thead><tr>${head.map((h) => `<th>${esc(h)}</th>`).join('')}</tr></thead>
+    <tbody>${rows.map((r) => `<tr>${r.map(td).join('')}</tr>`).join('')}</tbody></table></div>`;
+  const figuresHtml = (figures) => `<div class="summary">${figures.map(([label, value, sub]) => `<div class="sum"><strong>${esc(value)}</strong><span>${esc(label)}</span><small>${esc(sub)}</small></div>`).join('')}</div>`;
+  const countListHtml = (counts, empty) => (Object.keys(counts).length ? Object.entries(counts).map(([k, v]) => `<li><span>${esc(k)}</span><b>${v}</b></li>`).join('') : `<li>${empty}</li>`);
+  const card = (title, inner) => `<div class="sheet-card"><h3>${title}</h3>${inner}</div>`;
+
+  function sheetStatsHtml() {
+    const rows = fieldPlayers().map((p) => {
+      const [num, name, ...rest] = playerRow(p);
+      return `<tr><td>${num}</td><td class="name"><span style="background:${posOf(p).color}"></span>${esc(name)}</td>${rest.map(td).join('')}</tr>`;
+    }).join('');
+    const checks = scoreCheckRows();
+    return `${figuresHtml(teamFigures())}
+      <div class="table-wrap"><table><thead><tr>${PLAYER_HEAD.map((h, i) => `<th${i === 1 ? ' style="text-align:left"' : ''}>${esc(h)}</th>`).join('')}</tr></thead><tbody>${rows}</tbody></table></div>
+      <div class="sheet-grid">
+        ${card("Marcador cada 5'", `<ul>${checks.length ? checks.map(([m, r]) => `<li><span>${m}</span><b>${r}</b></li>`).join('') : '<li>Sin apuntes.</li>'}</ul>`)}
+        ${card('Pérdidas por tipo', `<ul>${countListHtml(turnoverCounts(state.events), 'Sin pérdidas.')}</ul>`)}
+        ${card('Fallos defensivos', `<ul>${countListHtml(defFaultCounts(state.events), 'Sin fallos.')}</ul>`)}
+        ${card('Sanciones', `<ul>${sanctionRows().map(([t, who, what]) => `<li><span>${t} · ${esc(who)}</span><b>${esc(what)}</b></li>`).join('') || '<li>Sin sanciones.</li>'}</ul>`)}
+      </div>`;
+  }
+  function goalGridHtml(shots, group, title, viewKey = 'GK') {
+    const grid = goalGrid(shots, group);
+    const max = Math.max(1, ...grid.flat());
+    const color = MAP_VIEWS[viewKey].colors[group];
+    return card(title, `<div class="goal-grid">${grid.flat().map((n) => `<div style="--c:${color};--a:${((n / max) * 0.8).toFixed(2)}"><b>${n}</b></div>`).join('')}</div><p class="note">Portería vista desde el lanzador.</p>`);
+  }
+  const RIVAL_SHOOTER_HEAD = ['Nº', 'Jugador', 'Tiros', 'Goles', 'Parados', 'Fallados', '% gol'];
+  // Rival shooters against our goalkeepers; shots logged without a dorsal go in their own row.
+  function rivalShooterRows(shots) {
+    const row = (label, name, list) => { const c = countGroups(list); return [label, name, list.length, c.GOL, c.PARADA, c.FALLO, pctText(pct(c.GOL, list.length))]; };
+    const rows = sortedRivals().map((r) => [r, shots.filter((e) => e.rivalId === r.id)]).filter(([, list]) => list.length).map(([r, list]) => row(r.num, r.name || '–', list));
+    const unknown = shots.filter((e) => !rivalById(e.rivalId));
+    return unknown.length ? [...rows, row('–', 'Sin dorsal', unknown)] : rows;
+  }
+  function sheetGkHtml() {
+    const options = [['', 'Total'], ...goalkeepers().map((g) => [g.id, `#${g.num} ${g.name}`])];
+    const shots = gkPool(ui.sheetGk);
+    return `<div class="chips">${options.map(([id, label]) => `<button class="chip press" type="button" data-sheet-gk="${id}" aria-pressed="${(ui.sheetGk || '') === id}">${esc(label)}</button>`).join('')}</div>
+      ${figuresHtml(gkFigures(shots))}
+      ${tableHtml(GK_ZONE_HEAD, gkZoneRows(shots))}
+      <div class="sheet-grid">${goalGridHtml(shots, 'PARADA', 'Detenidos por zona de portería')}${goalGridHtml(shots, 'GOL', 'Encajados por zona de portería')}</div>
+      ${state.rivals.length ? `<h3 class="acta-h">Lanzadores de ${esc(state.them)}</h3>${tableHtml(RIVAL_SHOOTER_HEAD, rivalShooterRows(shots))}` : ''}`;
+  }
+  function rosterLock(p) {
+    if (p.id === state.gkId) return 'En portería';
+    if (state.events.some((e) => e.playerId === p.id || e.gkId === p.id)) return 'Con acciones';
+    return '';
+  }
+  function sheetActaHtml() {
+    const players = state.players.slice().sort((a, b) => a.num - b.num);
+    const posButtons = (p, attr = 'data-roster-pos') => Object.entries(CONFIG.positions).map(([k, info]) => `<button class="pos-btn press${info.darkText ? ' dark' : ''}" type="button" style="--c:${info.color}" ${attr}="${p.id}:${k}" aria-pressed="${p.pos === k}" aria-label="${info.label}">${k}</button>`).join('');
+    const rows = players.map((p) => {
+      const lock = rosterLock(p);
+      return `<tr>
+        <td><input class="in num" type="number" inputmode="numeric" min="${DORSAL_RANGE[0]}" max="${DORSAL_RANGE[1]}" value="${p.num}" data-roster-num="${p.id}" aria-label="Dorsal de ${esc(p.name)}"></td>
+        <td><input class="in" type="text" maxlength="${MAX_NAME_LENGTH}" value="${esc(p.name)}" data-roster-name="${p.id}" aria-label="Nombre del dorsal ${p.num}"></td>
+        <td><div class="pos-pick">${posButtons(p)}</div></td>
+        <td>${lock ? `<small class="note">${lock}</small>` : `<button class="btn press" type="button" data-roster-del="${p.id}" aria-label="Quitar a ${esc(p.name)} del acta">✕</button>`}</td></tr>`;
+    }).join('');
+    const rivalRows = sortedRivals().map((r) => {
+      const locked = rivalLock(r);
+      return `<tr>
+        <td><input class="in num" type="number" inputmode="numeric" min="${DORSAL_RANGE[0]}" max="${DORSAL_RANGE[1]}" value="${r.num}" data-rival-num="${r.id}" aria-label="Dorsal rival ${r.num}"></td>
+        <td><input class="in" type="text" maxlength="${MAX_NAME_LENGTH}" value="${esc(r.name)}" placeholder="Opcional" data-rival-name="${r.id}" aria-label="Nombre del dorsal rival ${r.num}"></td>
+        <td><div class="pos-pick">${posButtons(r, 'data-rival-pos')}</div></td>
+        <td>${locked ? '<small class="note">Con tiros</small>' : `<button class="btn press" type="button" data-rival-del="${r.id}" aria-label="Quitar el dorsal rival ${r.num}">✕</button>`}</td></tr>`;
+    }).join('');
+    const field = (label, attrs) => `<label>${label}<input class="in" ${attrs}></label>`;
+    const rosterButtons = (side) => `<button class="btn press" type="button" data-roster-export="${side}">Guardar</button><button class="btn press" type="button" data-roster-import="${side}">Cargar</button>`;
+    return `<h3 class="acta-h">Partido</h3>
+      <div class="acta-teams">
+        ${field('Nuestro equipo', `type="text" maxlength="${MAX_NAME_LENGTH}" value="${esc(state.us)}" data-team="us"`)}
+        ${field('Rival', `type="text" maxlength="${MAX_NAME_LENGTH}" value="${esc(state.them)}" data-team="them"`)}
+        ${field('Lugar', `type="text" maxlength="${MAX_VENUE_LENGTH}" value="${esc(state.venue)}" placeholder="Pabellón, ciudad" data-match="venue"`)}
+        ${field('Fecha', `type="date" value="${esc(state.date)}" data-match="date"`)}
+      </div>
+      <div class="acta-rosters">
+        <section>
+          <h3 class="acta-h">Plantilla · ${esc(state.us)}</h3>
+          <div class="row-actions">
+            <b>${state.players.length}/${MAX_ROSTER}</b>
+            <button class="btn primary press" type="button" data-roster-add ${state.players.length >= MAX_ROSTER ? 'disabled' : ''}>+ Jugador</button>
+            ${rosterButtons('us')}
+          </div>
+          <p class="note" id="roster-status" aria-live="polite"></p>
+          <div class="table-wrap"><table><thead><tr><th>Dorsal</th><th style="text-align:left">Jugador</th><th style="text-align:left">Puesto</th><th></th></tr></thead><tbody>${rows}</tbody></table></div>
+          <p class="note">EXT extremo · LAT lateral · CEN central · PIV pivote · POR portero. No se quita a quien tiene acciones o está en portería.</p>
+        </section>
+        <section>
+          <h3 class="acta-h">Plantilla · ${esc(state.them)}</h3>
+          <div class="row-actions">
+            <b>${state.rivals.length}/${MAX_ROSTER}</b>
+            <input class="in dorsals" type="text" inputmode="numeric" placeholder="Dorsales: 4 7 9…" id="rival-dorsals" aria-label="Dorsales rivales separados por espacios">
+            <button class="btn primary press" type="button" data-rival-add>Añadir</button>
+            ${rosterButtons('them')}
+          </div>
+          <p class="note" id="rival-status" aria-live="polite"></p>
+          ${state.rivals.length ? `<div class="table-wrap"><table><thead><tr><th>Dorsal</th><th style="text-align:left">Nombre</th><th style="text-align:left">Puesto</th><th></th></tr></thead><tbody>${rivalRows}</tbody></table></div>` : '<p class="note">Sin plantilla: los tiros rivales se apuntan sin dorsal.</p>'}
+        </section>
+      </div>`;
+  }
+  function sheetReportsHtml() {
+    const rows = [...fieldPlayers(), ...goalkeepers()].map((p) => {
+      const isGk = p.pos === 'POR';
+      const c = countGroups(isGk ? gkShots(p.id) : ourShots().filter((e) => e.playerId === p.id));
+      const line = isGk ? `${c.PARADA} detenidos · ${c.GOL} encajados` : `${c.GOL} goles · ${c.GOL + c.PARADA + c.FALLO} lanzamientos`;
+      return `<tr><td>${p.num}</td><td class="name"><span style="background:${posOf(p).color}"></span>${esc(p.name)}</td><td style="text-align:left">${line}</td>
+        <td><button class="btn press" type="button" data-pdf="${p.id}">PDF</button></td></tr>`;
+    }).join('');
+    return `<div class="sheet-grid">
+        ${card('Partido', `<p class="note">Resumen del equipo, tabla de jugadores, puntos clave (por dónde nos atacan, quién lanza y marca, qué mejorar), portería con mapa de tiros y zonas, ataque por zonas, marcador cada 5', pérdidas, fallos defensivos y sanciones.</p><div class="row-actions" style="margin-top:10px"><button class="btn primary press" type="button" data-pdf="match">Informe del partido</button></div>`)}
+        ${card('Jugadores', `<p class="note">Una página por jugador con su mapa de lanzamientos, zonas, acciones y cronología. Los porteros, con sus paradas.</p><div class="row-actions" style="margin-top:10px"><button class="btn primary press" type="button" data-pdf="players">Todos los jugadores</button></div>`)}
+      </div>
+      <p class="note" id="pdf-status" aria-live="polite"></p>
+      <div class="table-wrap"><table><thead><tr><th>Nº</th><th style="text-align:left">Jugador</th><th style="text-align:left">En el partido</th><th>Informe</th></tr></thead><tbody>${rows}</tbody></table></div>`;
+  }
+  const keyPointsHtml = (items) => `<ul class="keypoints">${items.length ? items.map((i) => `<li class="kp-${i.tone}">${esc(i.text)}</li>`).join('') : '<li class="kp-none">Sin puntos destacados con los datos actuales.</li>'}</ul>`;
+  // Both teams side by side with the same blocks: key points, top shooter and scorer, lanes, goal sectors, shooters.
+  function analysisColumnHtml(a, title, points) {
+    const who = (x, unit) => (x ? `${esc(x.label)} · ${unit(x)}` : '–');
+    return `<section class="analysis-col">
+      <h3 class="acta-h">${esc(title)}</h3>
+      ${keyPointsHtml(points)}
+      <div class="summary">
+        <div class="sum"><strong>${a.topShooter ? a.topShooter.shots : '–'}</strong><span>Más lanza</span><small>${who(a.topShooter, (x) => plural(x.goals, 'gol', 'goles'))}</small></div>
+        <div class="sum"><strong>${a.topScorer ? a.topScorer.goals : '–'}</strong><span>Más marca</span><small>${who(a.topScorer, (x) => plural(x.shots, 'tiro', 'tiros'))}</small></div>
+        <div class="sum"><strong>${pctText(a.penetrationShare)}</strong><span>Desde 6 m</span><small>${gt(a.near)} cerca · ${gt(a.far)} lejos</small></div>
+      </div>
+      ${tableHtml(LANE_HEAD, laneRows(a))}
+      <div class="sheet-grid">${goalGridHtml(a.shots, 'GOL', 'Dónde marcan', a.ours ? 'US' : 'GK')}
+        ${card('Lanzadores', a.shooters.length ? `<ul>${a.shooters.map((x) => `<li><span>${esc(x.label)}</span><b>${x.goals}/${x.shots}</b></li>`).join('')}</ul>` : '<p class="note">Sin lanzadores identificados.</p>')}</div>
+    </section>`;
+  }
+  function sheetAnalysisHtml() {
+    const k = keyPoints();
+    return `<div class="analysis">${analysisColumnHtml(attackAnalysis('them'), `Ataque de ${state.them} · nuestra defensa`, k.defence)}${analysisColumnHtml(attackAnalysis('us'), `Ataque de ${state.us}`, k.attack)}</div>
+      <p class="note">Carriles vistos desde el atacante. 6 m = penetración; 9 m = lanzamiento exterior; los 7 m van aparte.</p>`;
+  }
+  const SHEET_RENDERERS = { stats: sheetStatsHtml, analysis: sheetAnalysisHtml, gk: sheetGkHtml, acta: sheetActaHtml, reports: sheetReportsHtml };
+  function renderSheet() {
+    const s = score();
+    $('sheet').innerHTML = `<div class="sheet-head"><h2>${esc(state.us)} ${s.us} – ${s.them} ${esc(state.them)}</h2>
+        <div class="tabs" role="group" aria-label="Secciones">${Object.entries(SHEET_TABS).map(([k, label]) => `<button class="press" type="button" data-tab="${k}" aria-pressed="${k === ui.sheetTab}">${label}</button>`).join('')}</div>
+        <button class="btn primary press" type="button" data-close-sheet>Volver</button></div>
+      <div class="sheet-body">${SHEET_RENDERERS[ui.sheetTab]()}</div>`;
+  }
+  const sheetStatus = (id, text) => { const el = $(id); if (el) el.textContent = text; };
+
+  // ---- Roster edits (configuration, saved at once; not part of the match undo history) ----
+  const ROSTER_STATUS = { us: 'roster-status', them: 'rival-status' };
+  function rosterError(text, side = 'us') { renderSheet(); sheetStatus(ROSTER_STATUS[side], text); }
+  // Returns why `num` cannot be used in `list` (by anyone but `selfId`), or '' when it can.
+  function dorsalProblem(list, num, selfId) {
+    if (!Number.isInteger(num) || num < DORSAL_RANGE[0] || num > DORSAL_RANGE[1]) return `Dorsal entre ${DORSAL_RANGE[0]} y ${DORSAL_RANGE[1]}.`;
+    const owner = list.find((x) => x.num === num && x.id !== selfId);
+    return owner ? `El ${num} ya está${owner.name ? ` (${owner.name})` : ''}.` : '';
+  }
+  function setDorsal(p, raw) {
+    const problem = dorsalProblem(state.players, Number(raw), p.id);
+    if (problem) { rosterError(problem); return; }
+    p.num = Number(raw);
+    commit();
+    renderSheet();
+  }
+  const rivalLock = (r) => state.events.some((e) => e.rivalId === r.id);
+  function setRivalDorsal(r, raw) {
+    const problem = dorsalProblem(state.rivals, Number(raw), r.id);
+    if (problem) { rosterError(problem, 'them'); return; }
+    r.num = Number(raw);
+    commit();
+    renderSheet();
+  }
+  // Tapping the current position again clears it (rival positions are optional).
+  function setRivalPosition(r, pos) {
+    r.pos = r.pos === pos ? null : pos;
+    commit();
+    renderSheet();
+  }
+  function setRivalName(r, raw) {
+    r.name = raw.trim().slice(0, MAX_NAME_LENGTH);
+    commit();
+    renderSheet();
+  }
+  // "4 7, 9" → adds dorsals 4, 7 and 9; reports any that were skipped and why.
+  function addRivalDorsals(raw) {
+    const nums = raw.split(/[^0-9]+/).filter(Boolean).map(Number);
+    if (!nums.length) { rosterError('Escribe uno o más dorsales separados por espacios.', 'them'); return; }
+    const skipped = [];
+    nums.forEach((num) => {
+      const problem = state.rivals.length >= MAX_ROSTER ? `máximo ${MAX_ROSTER}` : dorsalProblem(state.rivals, num, null);
+      if (problem) skipped.push(`${num}: ${problem}`);
+      else state.rivals.push({ id: newId('r'), num, name: '', pos: null });
+    });
+    commit();
+    renderSheet();
+    sheetStatus('rival-status', skipped.length ? `No añadidos · ${skipped.join(' · ')}` : `Añadidos: ${nums.join(', ')}`);
+  }
+  function removeRival(r) {
+    if (rivalLock(r)) return;
+    state.rivals = state.rivals.filter((x) => x.id !== r.id);
+    commit();
+    renderSheet();
+  }
+  function setMatchField(key, raw) {
+    state[key] = key === 'venue' ? raw.trim().slice(0, MAX_VENUE_LENGTH) : raw;
+    commit();
+  }
+  function setName(p, raw) {
+    const name = raw.trim().slice(0, MAX_NAME_LENGTH);
+    if (!name) { rosterError('El nombre no puede quedar vacío.'); return; }
+    p.name = name;
+    commit();
+    renderSheet();
+  }
+  function setPosition(p, pos) {
+    if (p.pos === pos) return;
+    if (p.id === state.gkId) { rosterError(`${p.name} está en portería: pon antes a otro portero.`); return; }
+    if (pos === 'POR') Object.values(state.lineups).forEach((team) => { delete team[p.id]; });
+    if (p.id === ui.shooter) ui.shooter = null;
+    p.pos = pos;
+    commit();
+    renderSheet();
+  }
+  function addPlayer() {
+    if (state.players.length >= MAX_ROSTER) return;
+    const used = new Set(state.players.map((p) => p.num));
+    let num = DORSAL_RANGE[0];
+    while (used.has(num) && num < DORSAL_RANGE[1]) num++;
+    state.players.push({ id: newId('p'), num, name: 'Nuevo', pos: 'LAT' });
+    commit();
+    renderSheet();
+    sheetStatus('roster-status', `Añadido el ${num}: escribe su nombre y elige el puesto.`);
+  }
+  function removePlayer(p) {
+    if (rosterLock(p)) return;
+    Object.values(state.lineups).forEach((team) => { delete team[p.id]; });
+    state.players = state.players.filter((x) => x.id !== p.id);
+    commit();
+    renderSheet();
+    sheetStatus('roster-status', `${p.name} fuera del acta.`);
+  }
+  function setTeamName(team, raw) {
+    const name = raw.trim().slice(0, MAX_NAME_LENGTH);
+    if (!name) { rosterError('El nombre del equipo no puede quedar vacío.'); return; }
+    state[team] = name;
+    commit();
+    renderSheet();
+  }
+  const matchDateText = () => (state.date ? new Date(`${state.date}T12:00:00`).toLocaleDateString('es-ES') : '');
+  const slug = (s) => s.normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '') || 'equipo';
+  async function exportRoster(side) {
+    const ours = side === 'us';
+    const team = ours ? state.us : state.them;
+    const players = ours ? state.players.map(({ num, name, pos }) => ({ num, name, pos })) : sortedRivals().map(({ num, name, pos }) => ({ num, name, pos }));
+    const filename = `plantilla-${slug(team)}.json`;
+    try {
+      await offerFile(filename, new Blob([JSON.stringify({ format: ROSTER_FORMAT, version: 1, team, players }, null, 2)], { type: 'application/json' }));
+      sheetStatus(ROSTER_STATUS[side], `Plantilla guardada: ${filename}`);
+    } catch (err) {
+      sheetStatus(ROSTER_STATUS[side], fileErrorText(err));
+    }
+  }
+  // Validates an imported roster file; returns the players or throws an Error explaining what is wrong.
+  // Our roster needs names, positions and a goalkeeper; the rival's only dorsals (names and positions optional).
+  function parseRoster(text, side = 'us') {
+    const ours = side === 'us';
+    let data;
+    try { data = JSON.parse(text); } catch (err) { throw new Error('el archivo no es una plantilla (JSON no válido)'); }
+    if (!data || data.format !== ROSTER_FORMAT || !Array.isArray(data.players)) throw new Error('el archivo no es una plantilla de HBStats');
+    if (!data.players.length || data.players.length > MAX_ROSTER) throw new Error(`debe tener entre 1 y ${MAX_ROSTER} jugadores`);
+    const seen = new Set();
+    const players = data.players.map((x, i) => {
+      const num = Number(x && x.num);
+      const name = typeof (x && x.name) === 'string' ? x.name.trim().slice(0, MAX_NAME_LENGTH) : '';
+      if (!Number.isInteger(num) || num < DORSAL_RANGE[0] || num > DORSAL_RANGE[1]) throw new Error(`dorsal no válido en la fila ${i + 1}`);
+      if (seen.has(num)) throw new Error(`el dorsal ${num} está repetido`);
+      seen.add(num);
+      if (!ours) {
+        if (x.pos != null && !CONFIG.positions[x.pos]) throw new Error(`puesto desconocido para el dorsal ${num}`);
+        return { id: newId('r'), num, name, pos: x.pos || null };
+      }
+      if (!name) throw new Error(`falta el nombre del dorsal ${num}`);
+      if (!CONFIG.positions[x.pos]) throw new Error(`puesto desconocido para ${name}`);
+      return { id: newId('p'), num, name, pos: x.pos };
+    });
+    if (ours && !players.some((p) => p.pos === 'POR')) throw new Error('hace falta al menos un portero');
+    const fallback = ours ? state.us : state.them;
+    return { team: typeof data.team === 'string' && data.team.trim() ? data.team.trim().slice(0, MAX_NAME_LENGTH) : fallback, players };
+  }
+  async function importRoster(file, side) {
+    if (side === 'them') {
+      if (state.rivals.some(rivalLock)) { sheetStatus('rival-status', 'Ya hay tiros con dorsal rival: pulsa «Nuevo» antes de cargar otra plantilla.'); return; }
+      try {
+        const { team, players } = parseRoster(await file.text(), 'them');
+        state.rivals = players;
+        state.them = team;
+        commit();
+        renderSheet();
+        sheetStatus('rival-status', `Plantilla rival cargada: ${players.length} dorsales.`);
+      } catch (err) {
+        sheetStatus('rival-status', `No se pudo cargar: ${err.message}.`);
+      }
+      return;
+    }
+    if (state.events.length) { sheetStatus('roster-status', 'Hay acciones en este partido: pulsa «Nuevo» antes de cargar otra plantilla.'); return; }
+    try {
+      const { team, players } = parseRoster(await file.text());
+      state.players = players;
+      state.us = team;
+      state.lineups = { ATK: {}, DEF: {} };
+      state.gkId = players.find((p) => p.pos === 'POR').id;
+      state.sample = false;
+      ui.shooter = null;
+      commit();
+      renderSheet();
+      sheetStatus('roster-status', `Plantilla cargada: ${players.length} jugadores. Arrástralos a la pista desde el banquillo.`);
+    } catch (err) {
+      sheetStatus('roster-status', `No se pudo cargar: ${err.message}.`);
+    }
+  }
+
+  // ---- Files: the artifact viewer's save dialog when available, a normal download otherwise ----
+  async function offerFile(filename, blob) {
+    const downloads = window.claude && typeof window.claude.use === 'function' ? await window.claude.use('downloads') : null;
+    if (downloads) { await downloads.save({ filename, data: blob }); return; }
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = filename;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 1000);
+  }
+  function fileErrorText(err) {
+    if (err && err.code === 'declined') return 'Guardado cancelado.';
+    if (err && err.code === 'rate_limited') return 'Ya hay un guardado pendiente: espera un momento.';
+    return `No se pudo guardar el archivo (${(err && (err.message || err.code)) || 'error desconocido'}).`;
+  }
+
+  // ---- PDF reports (jsPDF + AutoTable, loaded only when a report is requested) ----
+  const PDF_LIBS = [
+    'https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js',
+    'https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.5.31/jspdf.plugin.autotable.min.js'
+  ];
+  // PDFs are always printed light, so they use fixed colours rather than the screen theme tokens.
+  const PDF_RGB = { ink: [21, 21, 21], muted: [95, 91, 87], soft: [241, 239, 236], court: [232, 236, 240], line: [60, 60, 60], net: [200, 204, 210], red: [212, 32, 42], gold: [245, 196, 0], gol: [31, 157, 85], parada: [37, 99, 235], fallo: [138, 143, 152] };
+  const PDF_VIEWS = {
+    US: { colors: { GOL: PDF_RGB.gol, PARADA: PDF_RGB.parada, FALLO: PDF_RGB.fallo } },
+    GK: { colors: { GOL: PDF_RGB.red, PARADA: PDF_RGB.parada, FALLO: PDF_RGB.fallo } }
+  };
+  const PDF_DASH = { GOL: [], PARADA: [1.6, 1], FALLO: [0.5, 1] };
+  const PDF_PAGE = { w: 297, h: 210, margin: 12, top: 26, chartW: 120, rightX: 140 };
+  // Plain-text dashes: the built-in PDF fonts lack some typographic characters.
+  const pdfText = (v) => String(v).replace(/[–—]/g, '-').replace(/[↑↓↶↷›]/g, '');
+  let pdfLibsPromise = null;
+  function loadScript(src) {
+    return new Promise((resolve, reject) => {
+      const el = document.createElement('script');
+      el.src = src;
+      el.onload = resolve;
+      el.onerror = () => reject(new Error(`no se pudo descargar ${src.split('/').pop()} (¿sin conexión?)`));
+      document.head.appendChild(el);
+    });
+  }
+  function loadPdfLibs() {
+    if (window.jspdf && window.jspdf.jsPDF && window.jspdf.jsPDF.API.autoTable) return Promise.resolve();
+    if (!pdfLibsPromise) {
+      pdfLibsPromise = PDF_LIBS.reduce((chain, src) => chain.then(() => loadScript(src)), Promise.resolve())
+        .catch((err) => { pdfLibsPromise = null; throw err; });
+    }
+    return pdfLibsPromise;
+  }
+  function pdfNewDoc() {
+    const { jsPDF } = window.jspdf;
+    return new jsPDF({ orientation: 'landscape', unit: 'mm', format: 'a4' });
+  }
+  function pdfHeader(doc, title, subtitle) {
+    const s = score();
+    doc.setFillColor(...PDF_RGB.red);
+    doc.rect(0, 0, PDF_PAGE.w, 15, 'F');
+    doc.setFillColor(...PDF_RGB.gold);
+    doc.rect(0, 15, PDF_PAGE.w, 1.2, 'F');
+    doc.setTextColor(255, 255, 255);
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(14);
+    doc.text(pdfText(title), PDF_PAGE.margin, 10);
+    doc.setFontSize(12);
+    doc.text(pdfText(`${state.us} ${s.us} - ${s.them} ${state.them}`), PDF_PAGE.w - PDF_PAGE.margin, 10, { align: 'right' });
+    doc.setTextColor(...PDF_RGB.muted);
+    doc.setFont('helvetica', 'normal');
+    doc.setFontSize(9);
+    doc.text(pdfText([subtitle, state.venue, matchDateText()].filter(Boolean).join(' · ')), PDF_PAGE.margin, 22);
+  }
+  function pdfTable(doc, { title, head, body, startY, left = PDF_PAGE.margin, width }) {
+    let y = startY;
+    if (title) {
+      doc.setTextColor(...PDF_RGB.ink);
+      doc.setFont('helvetica', 'bold');
+      doc.setFontSize(10);
+      doc.text(pdfText(title), left, y);
+      y += 2;
+    }
+    doc.autoTable({
+      head: [head.map(pdfText)], body: body.map((r) => r.map(pdfText)), startY: y, theme: 'grid',
+      margin: { left, right: width ? PDF_PAGE.w - left - width : PDF_PAGE.margin }, tableWidth: width || 'auto',
+      styles: { fontSize: 7.5, cellPadding: 1.2, halign: 'center', lineColor: [220, 220, 220], textColor: PDF_RGB.ink },
+      headStyles: { fillColor: PDF_RGB.ink, textColor: 255, fontStyle: 'bold' },
+      alternateRowStyles: { fillColor: PDF_RGB.soft }
+    });
+    return doc.lastAutoTable.finalY + 6;
+  }
+  const figuresTable = (doc, figures, startY, left, width) => pdfTable(doc, { head: ['Dato', 'Valor', ''], body: figures, startY, left, width });
+  // A titled list of key points with a coloured mark per tone; returns the y below it.
+  function pdfKeyPoints(doc, title, points, x, y, w) {
+    doc.setTextColor(...PDF_RGB.ink);
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(10);
+    doc.text(pdfText(title), x, y);
+    y += 5;
+    doc.setFont('helvetica', 'normal');
+    doc.setFontSize(8.5);
+    const items = points.length ? points : [{ tone: 'none', text: 'Sin puntos destacados con los datos actuales.' }];
+    items.forEach((p) => {
+      const lines = doc.splitTextToSize(pdfText(p.text), w - 5);
+      doc.setFillColor(...(p.tone === 'bad' ? PDF_RGB.red : p.tone === 'good' ? PDF_RGB.gol : PDF_RGB.fallo));
+      doc.rect(x, y - 2.6, 1.6, lines.length * 3.8, 'F');
+      doc.setTextColor(...PDF_RGB.ink);
+      doc.text(lines, x + 4, y);
+      y += lines.length * 3.8 + 2;
+    });
+    return y + 4;
+  }
+  const countRows = (counts) => (Object.keys(counts).length ? Object.entries(counts) : [['Ninguno', 0]]);
+  // Points at a fixed distance from the goal segment (the 6 m and 9 m lines), in court units.
+  function areaLine(metres) {
+    const r = metres * UNITS_PER_M;
+    const half = POST_HALF_M * UNITS_PER_M;
+    const steps = 18;
+    const pts = [];
+    for (let i = 0; i <= steps; i++) { const a = (i / steps) * (Math.PI / 2); pts.push({ x: CENTER_X - half - r * Math.cos(a), y: GOAL_LINE_Y + r * Math.sin(a) }); }
+    for (let i = steps; i >= 0; i--) { const a = (i / steps) * (Math.PI / 2); pts.push({ x: CENTER_X + half + r * Math.cos(a), y: GOAL_LINE_Y + r * Math.sin(a) }); }
+    return pts.filter((p) => p.x >= 0 && p.x <= 1000);
+  }
+  function pdfShotChart(doc, x, y, w, shots, viewKey) {
+    const view = PDF_VIEWS[viewKey];
+    const k = w / 1000;
+    const P = (pt) => [x + pt.x * k, y + pt.y * k];
+    const polyline = (pts) => pts.slice(1).forEach((pt, i) => doc.line(...P(pts[i]), ...P(pt)));
+    doc.setFillColor(...PDF_RGB.court);
+    doc.rect(x, y + GOAL_LINE_Y * k, w, (810 - GOAL_LINE_Y) * k, 'F');
+    doc.setFillColor(255, 255, 255);
+    doc.rect(...P(GOAL_FACE), GOAL_FACE.w * k, GOAL_FACE.h * k, 'F');
+    doc.setDrawColor(...PDF_RGB.net);
+    doc.setLineWidth(0.2);
+    doc.setLineDashPattern([0.8, 0.8], 0);
+    for (let i = 1; i < GOAL_GRID; i++) {
+      doc.line(...P(gf(i / GOAL_GRID, 0)), ...P(gf(i / GOAL_GRID, 1)));
+      doc.line(...P(gf(0, i / GOAL_GRID)), ...P(gf(1, i / GOAL_GRID)));
+    }
+    doc.setDrawColor(...PDF_RGB.line);
+    doc.setLineWidth(0.35);
+    doc.setLineDashPattern([], 0);
+    doc.line(...P({ x: 0, y: GOAL_LINE_Y }), ...P({ x: 1000, y: GOAL_LINE_Y }));
+    polyline(areaLine(6));
+    doc.setLineDashPattern([1.5, 1.2], 0);
+    polyline(areaLine(NINE_M));
+    doc.setLineDashPattern([], 0);
+    doc.setLineWidth(0.7);
+    doc.line(...P(m(-0.5, SEVEN_M.dy)), ...P(m(0.5, SEVEN_M.dy)));
+    doc.setDrawColor(...PDF_RGB.red);
+    doc.setLineWidth(1.2);
+    polyline([{ x: GOAL_FACE.x, y: GOAL_LINE_Y }, { x: GOAL_FACE.x, y: GOAL_FACE.y }, { x: GOAL_FACE.x + GOAL_FACE.w, y: GOAL_FACE.y }, { x: GOAL_FACE.x + GOAL_FACE.w, y: GOAL_LINE_Y }]);
+    shots.forEach((e) => {
+      const g = groupOf(e.result);
+      const color = view.colors[g];
+      doc.setDrawColor(...color);
+      doc.setFillColor(...color);
+      doc.setLineWidth(0.45);
+      doc.setLineDashPattern(PDF_DASH[g], 0);
+      doc.line(...P(e.origin), ...P(e.target));
+      doc.setLineDashPattern([], 0);
+      doc.circle(...P(e.origin), 0.9, 'F');
+      doc.setFillColor(255, 255, 255);
+      doc.circle(...P(e.target), 0.8, 'FD');
+    });
+    const c = countGroups(shots);
+    let lx = x;
+    const ly = y + 810 * k + 6;
+    doc.setFontSize(8);
+    TALLY_ORDER.forEach((g) => {
+      doc.setFillColor(...view.colors[g]);
+      doc.rect(lx, ly - 2.6, 3, 3, 'F');
+      doc.setTextColor(...PDF_RGB.ink);
+      const label = `${TALLY_LABELS[g].toLowerCase()} ${c[g]}`;
+      doc.text(pdfText(label), lx + 4.5, ly);
+      lx += doc.getTextWidth(label) + 12;
+    });
+    return ly + 6;
+  }
+  const gridRows = (grid) => grid.map((r, i) => [['Arriba', 'Medio', 'Abajo'][i], ...r]);
+  const GRID_HEAD = ['', 'Izq.', 'Centro', 'Der.'];
+  function pdfGkBlock(doc, shots, startY) {
+    let y = pdfTable(doc, { title: 'Por zona de lanzamiento', head: GK_ZONE_HEAD, body: gkZoneRows(shots), startY, left: PDF_PAGE.rightX });
+    const half = (PDF_PAGE.w - PDF_PAGE.rightX - PDF_PAGE.margin - 6) / 2;
+    const yA = pdfTable(doc, { title: 'Detenidos (vista del lanzador)', head: GRID_HEAD, body: gridRows(goalGrid(shots, 'PARADA')), startY: y, left: PDF_PAGE.rightX, width: half });
+    const yB = pdfTable(doc, { title: 'Encajados (vista del lanzador)', head: GRID_HEAD, body: gridRows(goalGrid(shots, 'GOL')), startY: y, left: PDF_PAGE.rightX + half + 6, width: half });
+    y = Math.max(yA, yB);
+    return y;
+  }
+  function pdfMatch(doc) {
+    pdfHeader(doc, 'Informe del partido', `${state.clock.period === 1 ? '1ª' : '2ª'} parte · ${absToClock(absSeconds())}`);
+    const figures = teamFigures();
+    let y = pdfTable(doc, { title: 'Resumen del equipo', head: figures.map((f) => f[0]), body: [figures.map((f) => f[1]), figures.map((f) => f[2])], startY: PDF_PAGE.top + 4 });
+    pdfTable(doc, { title: 'Jugadores (lanz./gol por zona)', head: PLAYER_HEAD, body: fieldPlayers().map(playerRow), startY: y });
+
+    doc.addPage();
+    pdfHeader(doc, 'Puntos clave', 'Por dónde nos atacan y cómo atacamos');
+    const k = keyPoints();
+    const colW = (PDF_PAGE.w - 2 * PDF_PAGE.margin - 10) / 2;
+    [[attackAnalysis('them'), `Ataque de ${state.them} · nuestra defensa`, k.defence], [attackAnalysis('us'), `Ataque de ${state.us}`, k.attack]].forEach(([a, title, points], i) => {
+      const x = PDF_PAGE.margin + i * (colW + 10);
+      let yy = pdfKeyPoints(doc, title, points, x, PDF_PAGE.top + 4, colW);
+      yy = pdfTable(doc, { title: 'Por carril (goles/tiros)', head: LANE_HEAD, body: laneRows(a), startY: yy, left: x, width: colW });
+      pdfTable(doc, { title: 'Lanzadores', head: SHOOTER_HEAD, body: a.shooters.length ? shooterRows(a) : [['Sin identificar', '-', '-', '-']], startY: yy, left: x, width: colW });
+    });
+
+    doc.addPage();
+    pdfHeader(doc, 'Portería', 'Tiros del rival a nuestros porteros');
+    pdfShotChart(doc, PDF_PAGE.margin, PDF_PAGE.top, PDF_PAGE.chartW, rivalShots(), 'GK');
+    y = figuresTable(doc, gkFigures(rivalShots()), PDF_PAGE.top + 4, PDF_PAGE.rightX, 70);
+    const perGk = goalkeepers().map((g) => { const f = gkFigures(gkShots(g.id)); return [`#${g.num} ${g.name}`, f[0][1], f[0][2], f[2][1], f[4][1]]; });
+    pdfTable(doc, { title: 'Por portero', head: ['Portero', 'Paradas', 'A puerta', 'Encajados', '7 m'], body: perGk, startY: PDF_PAGE.top + 4, left: PDF_PAGE.rightX + 76 });
+    pdfGkBlock(doc, rivalShots(), y);
+
+    if (state.rivals.length) {
+      doc.addPage();
+      pdfHeader(doc, `Lanzadores de ${state.them}`, 'Tiros a nuestros porteros por dorsal');
+      pdfTable(doc, { head: RIVAL_SHOOTER_HEAD, body: rivalShooterRows(rivalShots()), startY: PDF_PAGE.top + 4 });
+    }
+
+    doc.addPage();
+    pdfHeader(doc, 'Ataque', 'Nuestros lanzamientos');
+    pdfShotChart(doc, PDF_PAGE.margin, PDF_PAGE.top, PDF_PAGE.chartW, ourShots(), 'US');
+    let right = pdfTable(doc, { title: 'Por zona', head: SHOT_ZONE_HEAD, body: shotZoneRows(ourShots()), startY: PDF_PAGE.top + 4, left: PDF_PAGE.rightX });
+    const third = (PDF_PAGE.w - PDF_PAGE.rightX - PDF_PAGE.margin - 12) / 3;
+    const cols = [
+      { title: "Marcador cada 5'", head: ['Min', 'Res.'], body: scoreCheckRows().length ? scoreCheckRows() : [['-', '-']] },
+      { title: 'Pérdidas por tipo', head: ['Tipo', 'N'], body: countRows(turnoverCounts(state.events)) },
+      { title: 'Fallos defensivos', head: ['Tipo', 'N'], body: countRows(defFaultCounts(state.events)) }
+    ];
+    right = Math.max(...cols.map((c, i) => pdfTable(doc, { ...c, startY: right, left: PDF_PAGE.rightX + i * (third + 6), width: third })));
+    const sanctions = sanctionRows();
+    pdfTable(doc, { title: 'Sanciones', head: ['Min', 'Quién', 'Sanción'], body: sanctions.length ? sanctions : [['-', '-', 'Sin sanciones']], startY: right, left: PDF_PAGE.rightX });
+  }
+  function pdfPlayer(doc, p) {
+    const isGk = p.pos === 'POR';
+    pdfHeader(doc, `#${p.num} ${p.name}`, posOf(p).label);
+    if (isGk) {
+      const shots = gkShots(p.id);
+      pdfShotChart(doc, PDF_PAGE.margin, PDF_PAGE.top, PDF_PAGE.chartW, shots, 'GK');
+      const y = figuresTable(doc, gkFigures(shots), PDF_PAGE.top + 4, PDF_PAGE.rightX);
+      pdfGkBlock(doc, shots, y);
+      return;
+    }
+    const mine = eventsOf(p.id);
+    pdfShotChart(doc, PDF_PAGE.margin, PDF_PAGE.top, PDF_PAGE.chartW, ourShots().filter((e) => e.playerId === p.id), 'US');
+    const half = (PDF_PAGE.w - PDF_PAGE.rightX - PDF_PAGE.margin - 6) / 2;
+    const yFig = figuresTable(doc, playerFigures(p), PDF_PAGE.top + 4, PDF_PAGE.rightX, half);
+    const yZone = pdfTable(doc, { title: 'Por zona', head: SHOT_ZONE_HEAD, body: shotZoneRows(ourShots().filter((e) => e.playerId === p.id)), startY: PDF_PAGE.top + 4, left: PDF_PAGE.rightX + half + 6, width: half });
+    let y = Math.max(yFig, yZone);
+    const yT = pdfTable(doc, { title: 'Pérdidas por tipo', head: ['Tipo', 'N'], body: countRows(turnoverCounts(mine)), startY: y, left: PDF_PAGE.rightX, width: half });
+    const yD = pdfTable(doc, { title: 'Fallos defensivos', head: ['Tipo', 'N'], body: countRows(defFaultCounts(mine)), startY: y, left: PDF_PAGE.rightX + half + 6, width: half });
+    y = Math.max(yT, yD);
+    const timeline = mine.slice().sort((a, b) => a.abs - b.abs).map((e) => [absToClock(e.abs), describe(e).split(' ·')[0]]);
+    pdfTable(doc, { title: 'Cronología', head: ['Min', 'Acción'], body: timeline.length ? timeline : [['-', 'Sin acciones']], startY: y, left: PDF_PAGE.rightX });
+  }
+  function buildPdf(kind) {
+    const doc = pdfNewDoc();
+    const match = `${slug(state.us)}-${slug(state.them)}`;
+    if (kind === 'match') { pdfMatch(doc); return { doc, filename: `informe-${match}.pdf` }; }
+    if (kind === 'players') {
+      [...fieldPlayers(), ...goalkeepers()].forEach((p, i) => { if (i) doc.addPage(); pdfPlayer(doc, p); });
+      return { doc, filename: `jugadores-${match}.pdf` };
+    }
+    const p = playerById(kind);
+    if (!p) throw new Error('jugador no encontrado');
+    pdfPlayer(doc, p);
+    return { doc, filename: `${p.num}-${slug(p.name)}-${match}.pdf` };
+  }
+  async function exportPdf(kind) {
+    sheetStatus('pdf-status', 'Preparando el PDF…');
+    try {
+      await loadPdfLibs();
+      const { doc, filename } = buildPdf(kind);
+      await offerFile(filename, doc.output('blob'));
+      sheetStatus('pdf-status', `Listo: ${filename}`);
+    } catch (err) {
+      console.error('PDF report failed', err);
+      sheetStatus('pdf-status', err instanceof Error ? `No se pudo generar el PDF: ${err.message}.` : fileErrorText(err));
+    }
+  }
+
+  // ---- Sheet wiring ----
+  $('btn-sheet').addEventListener('click', () => { renderSheet(); $('sheet').hidden = false; });
+  $('sheet').addEventListener('click', (ev) => {
+    const b = ev.target.closest('button');
+    if (!b) return;
+    if (b.hasAttribute('data-close-sheet')) { $('sheet').hidden = true; return; }
+    if (b.dataset.tab) { ui.sheetTab = b.dataset.tab; renderSheet(); return; }
+    if (b.dataset.sheetGk != null) { ui.sheetGk = b.dataset.sheetGk || null; renderSheet(); return; }
+    if (b.dataset.rosterPos) { const [id, pos] = b.dataset.rosterPos.split(':'); setPosition(playerById(id), pos); return; }
+    if (b.dataset.rosterDel) { removePlayer(playerById(b.dataset.rosterDel)); return; }
+    if (b.hasAttribute('data-roster-add')) { addPlayer(); return; }
+    if (b.dataset.rosterExport) { exportRoster(b.dataset.rosterExport); return; }
+    if (b.dataset.rosterImport) { ui.rosterSide = b.dataset.rosterImport; $('roster-file').click(); return; }
+    if (b.hasAttribute('data-rival-add')) { addRivalDorsals($('rival-dorsals').value); return; }
+    if (b.dataset.rivalPos) { const [id, pos] = b.dataset.rivalPos.split(':'); setRivalPosition(rivalById(id), pos); return; }
+    if (b.dataset.rivalDel) { removeRival(rivalById(b.dataset.rivalDel)); return; }
+    if (b.dataset.pdf) exportPdf(b.dataset.pdf);
+  });
+  $('sheet').addEventListener('change', (ev) => {
+    const el = ev.target;
+    if (el.dataset.rosterNum) setDorsal(playerById(el.dataset.rosterNum), el.value);
+    else if (el.dataset.rosterName) setName(playerById(el.dataset.rosterName), el.value);
+    else if (el.dataset.team) setTeamName(el.dataset.team, el.value);
+    else if (el.dataset.rivalNum) setRivalDorsal(rivalById(el.dataset.rivalNum), el.value);
+    else if (el.dataset.rivalName) setRivalName(rivalById(el.dataset.rivalName), el.value);
+    else if (el.dataset.match) setMatchField(el.dataset.match, el.value);
+  });
+  $('sheet').addEventListener('keydown', (ev) => { if (ev.key === 'Enter' && ev.target.id === 'rival-dorsals') addRivalDorsals(ev.target.value); });
+  $('roster-file').addEventListener('change', (ev) => {
+    const file = ev.target.files && ev.target.files[0];
+    ev.target.value = '';
+    if (file) importRoster(file, ui.rosterSide);
+  });
+
+  // ===================== Boot =====================
+  window.addEventListener('pagehide', save);
+  document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'hidden') save(); });
+  initTheme();
+  renderAll();
+  setInterval(tick, CONFIG.tickMs);
+})();
+</script>
