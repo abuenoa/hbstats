@@ -1,6 +1,7 @@
 # HBStats
 
-Live handball statistics for a landscape tablet, used with finger or stylus (Triana BM Vivero).
+Live handball statistics for a landscape tablet, used with finger or stylus. Multi-club: each club gets its own
+installable app (name, crest, brand colours, separate data) at `https://abuenoa.github.io/hbstats/<club>/`.
 One screen: draggable players on court, shot trajectories drawn in one gesture, goalkeeper and rival tracking,
 match sheet (acta) with both rosters, analysis with key points, and PDF reports.
 
@@ -13,9 +14,9 @@ installs from the browser ("Add to home screen") on Android and iPad.
 |---|---|
 | `src/app.html` | The whole app (markup, styles, script). Single source of truth; also publishable as a Claude artifact, so it has no `<html>`/`<head>` of its own. |
 | `src/sw.js` | Service worker (offline). `__BUILD__` is replaced at build time. |
-| `src/manifest.webmanifest` | App name, icons, landscape, fullscreen. |
-| `src/escudo.jpg` | Club crest: source of the app icons and the scoreboard crest. |
-| `docs/` | Generated site that gets published (GitHub Pages serves this folder). Do not edit by hand. |
+| `tenants/<club>/tenant.json` | Club settings: name, team, brand colours, optional roster (fields in `tools/tenants.py`). |
+| `tenants/<club>/escudo.jpg` | Club crest; `icons/` next to it is generated from it. |
+| `docs/` | Generated site (GitHub Pages serves this folder): `docs/<club>/` per club plus a club list at the root. Do not edit by hand. |
 | `tests/inject.js` | In-page test suite (runs inside the app's scope). |
 | `tools/` | Build, icon and test scripts (Python 3 standard library + a headless Chrome). |
 
@@ -24,11 +25,21 @@ installs from the browser ("Add to home screen") on Android and iPad.
 ```sh
 python3 tools/run_tests.py    # run the test suite against src/app.html
 python3 tools/build_site.py   # regenerate docs/ from src/
-python3 tools/make_icons.py   # regenerate docs/icons/ and the inline scoreboard crest from src/escudo.jpg
+python3 tools/make_icons.py [club]   # regenerate a club's icons from its crest (all clubs if none given)
 ```
 
 The scripts find Chrome through the `CHROME` environment variable, a Playwright-installed browser, or
 `google-chrome`/`chromium` on the PATH.
+
+## Adding a club
+
+1. Create `tenants/<club>/` (lowercase, digits, hyphens) with a square `escudo.jpg` and a `tenant.json`
+   (copy `tenants/triana/tenant.json` and change the values; `brandInk` is the text colour on the brand colour).
+2. `python3 tools/make_icons.py <club>`, then `python3 tools/build_site.py`.
+3. Commit and push: the club appears in the list at the site root and installs from `/hbstats/<club>/`.
+
+Semantic colours (goals against in red, saves in blue, misses in grey…) are the same for every club; the brand
+colours only touch primary buttons, our score, the background glow and the PDF header.
 
 ## Release
 

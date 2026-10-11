@@ -3,11 +3,14 @@
  * - Icons and manifest: cache first.
  * - Third-party files (Google Fonts, PDF libraries): cache first; the PDF libraries are fetched at install time
  *   so reports work offline from the first visit.
- * BUILD is stamped by tools/build_site.py with a hash of the page, so every release replaces the old shell cache.
+ * tools/build_site.py stamps CLUB (each club has its own folder, worker and caches, so clubs never clear each other's)
+ * and BUILD (a hash of the page, so every release replaces the old shell cache).
  */
+const CLUB = '__CLUB__';
 const BUILD = '__BUILD__';
-const SHELL_CACHE = `hbstats-shell-${BUILD}`;
-const RUNTIME_CACHE = 'hbstats-runtime-v1';
+const SHELL_PREFIX = `hbstats-${CLUB}-shell-`;
+const SHELL_CACHE = `${SHELL_PREFIX}${BUILD}`;
+const RUNTIME_CACHE = `hbstats-${CLUB}-cdn-v1`;
 
 const SHELL_ASSETS = [
   './',
@@ -58,7 +61,7 @@ self.addEventListener('install', (event) => {
 self.addEventListener('activate', (event) => {
   event.waitUntil((async () => {
     const names = await caches.keys();
-    await Promise.all(names.filter((n) => n.startsWith('hbstats-shell-') && n !== SHELL_CACHE).map((n) => caches.delete(n)));
+    await Promise.all(names.filter((n) => n.startsWith(SHELL_PREFIX) && n !== SHELL_CACHE).map((n) => caches.delete(n)));
     await self.clients.claim();
   })());
 });
