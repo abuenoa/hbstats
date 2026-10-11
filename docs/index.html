@@ -405,13 +405,22 @@ button.score { border: 0; background: transparent; padding: 0 4px; border-radius
 .picker .bench-picks .disc { width: 28px; height: 28px; font-size: 13px; }
 .act:disabled { opacity: .35; }
 .back { align-self: flex-start; min-height: 40px; border: 0; background: transparent; color: var(--muted); font-weight: 700; padding: 0 4px; }
+.clock-set { display: grid; grid-template-columns: 1fr auto; gap: 6px; margin: 0; }
+.time-in { font-family: var(--font-display); font-weight: 800; font-size: 26px; text-align: center; font-variant-numeric: tabular-nums; }
 .big-time { font-family: var(--font-display); font-weight: 800; font-size: 56px; text-align: center; line-height: 1; font-variant-numeric: tabular-nums; }
 
 /* ---------- Sheet ---------- */
 .sheet { position: fixed; inset: 0; z-index: 30; background: var(--bg); overflow: auto; padding-block: 16px; padding-inline: 16px; }
+.final { position: fixed; inset: 0; z-index: 35; display: grid; place-items: center; padding: 16px; background: rgba(0, 0, 0, .35); overflow: auto; }
+.final-card { width: min(640px, 100%); box-sizing: border-box; border-radius: 22px; padding: 18px; display: grid; gap: 12px; background: var(--glass-strong); border: 1px solid var(--glass-edge); box-shadow: var(--pop-shadow); }
+.final-card h2 { margin: 0; font-family: var(--font-display); font-weight: 800; font-size: 28px; text-wrap: balance; }
+.final-card td:first-child { text-align: left; font-weight: 600; }
+.final-mail { display: grid; gap: 4px; font-size: 12px; font-weight: 700; color: var(--muted); text-transform: uppercase; letter-spacing: .06em; }
 .sheet-head { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; margin-bottom: 12px; }
 .sheet-head h2 { margin: 0; font-family: var(--font-display); font-weight: 800; font-size: 30px; text-wrap: balance; }
 .sheet-head .btn { margin-left: auto; }
+.sheet-head .head-actions { margin-left: auto; display: flex; gap: 8px; flex-wrap: wrap; }
+.sheet-head .head-actions .btn { margin-left: 0; }
 .table-wrap { overflow-x: auto; background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius); }
 table { border-collapse: collapse; width: 100%; font-size: 14px; font-variant-numeric: tabular-nums; }
 th, td { padding: 8px; border-bottom: 1px solid var(--line); text-align: center; white-space: nowrap; }
@@ -617,6 +626,7 @@ td.zero { color: var(--faint); }
 <div class="scrim" id="scrim" hidden></div>
 <div class="pop" id="pop" role="dialog" aria-modal="false" hidden></div>
 <div class="sheet" id="sheet" role="dialog" aria-label="Hoja del partido" hidden></div>
+<div class="final" id="final" role="dialog" aria-modal="true" aria-label="Resumen final" hidden></div>
 <input type="file" id="roster-file" accept=".json,application/json" hidden>
 
 <script>
@@ -786,10 +796,21 @@ td.zero { color: var(--faint); }
   });
 
   // ===================== State =====================
-  let state = loadState() || sampleState();
+  // A match ready to prepare: our roster and preferences carried over; opponent, venue, clock and log reset.
+  function freshMatch(from) {
+    return {
+      sample: false, setupDone: false, finished: false,
+      us: from.us, players: from.players, lineups: from.lineups, gkId: from.gkId,
+      autoPhase: from.autoPhase, clockDown: Boolean(from.clockDown), reportEmail: from.reportEmail || '',
+      them: 'Rival', rivals: [], venue: '', date: todayIso(), phase: DEFAULT_PHASE,
+      clock: { period: 1, elapsedMs: 0, runningSince: null }, timeoutsUsed: 0, timeoutsUsedThem: 0, timeout: null,
+      events: [], fired: [], alerts: [], history: [], future: []
+    };
+  }
+  let state = loadState() || freshMatch(sampleState());
   const ui = {
     source: 'GK', sourcePhase: null, show: new Set(), popView: null, hintTimer: null, drag: null,
-    lastPenTs: 0, newArmTimer: null, shooter: null, sheetTab: 'stats', sheetGk: null, rosterSide: 'us'
+    lastPenTs: 0, newArmTimer: null, shooter: null, sheetTab: 'stats', sheetMode: 'sheet', sheetGk: null, rosterSide: 'us'
   };
 
   function todayIso() { return new Date().toISOString().slice(0, 10); }
@@ -846,7 +867,7 @@ td.zero { color: var(--faint); }
     shot(745, 'p17', [7.4, 2.2], [0.9, 0.2], 'GOL');
     E.filter((e) => e.kind === 'RIVAL_SHOT').forEach((e, i) => { e.rivalId = rivals[i % rivals.length].id; });
     return {
-      sample: true, us: 'Triana', them: 'Rival', venue: 'Pabellón Vivero', date: todayIso(), players, rivals, lineups, phase: DEFAULT_PHASE, autoPhase: true, gkId: 'p1',
+      sample: true, setupDone: true, finished: false, reportEmail: '', us: 'Triana', them: 'Rival', venue: 'Pabellón Vivero', date: todayIso(), players, rivals, lineups, phase: DEFAULT_PHASE, autoPhase: true, gkId: 'p1',
       clock: { period: 1, elapsedMs: 760 * 1000, runningSince: null },
       timeoutsUsed: 0, timeoutsUsedThem: 0, timeout: null, events: E, fired: [], alerts: [],
       history: E.map((e) => ({ added: [e], removed: [] })), future: []
@@ -859,9 +880,9 @@ td.zero { color: var(--faint); }
       const s = JSON.parse(raw);
       if (!s || !Array.isArray(s.players) || !Array.isArray(s.events) || !Array.isArray(s.history)) return null;
       s.clock.runningSince = null; // never resume the clock on its own after a reload
-      return Object.assign({ rivals: [], venue: '', date: todayIso() }, s);
+      return Object.assign({ rivals: [], venue: '', date: todayIso(), setupDone: true, finished: false, reportEmail: '' }, s);
     } catch (err) {
-      console.warn('Saved match could not be read, starting from the sample.', err);
+      console.warn('Saved match could not be read, starting a new one.', err);
       return null;
     }
   }
@@ -1062,6 +1083,7 @@ td.zero { color: var(--faint); }
   const makeEvent = (kind, data) => Object.assign({ id: newId('e'), abs: absSeconds(), kind }, data);
   function addEvent(kind, data) {
     const e = makeEvent(kind, data);
+    autoStartClock(kind);
     const op = { added: [e], removed: [] };
     const next = state.autoPhase ? phaseAfter(e) : null;
     if (next && next !== state.phase) op.phase = { before: state.phase, after: next };
@@ -1159,6 +1181,40 @@ td.zero { color: var(--faint); }
     commit();
   }
   function startPeriod(n) { state.clock = { period: n, elapsedMs: 0, runningSince: null }; commit(); }
+  // Logging a play with the clock stopped means the game is on: start it (not for sanctions or score fixes,
+  // which usually come with the clock stopped, nor during a time-out or once the half is over).
+  const CLOCK_STARTING_EVENTS = ['SHOT', 'RIVAL_SHOT', 'ACTION', 'TURNOVER'];
+  function autoStartClock(kind) {
+    if (isRunning() || !CLOCK_STARTING_EVENTS.includes(kind) || state.timeout || state.finished) return;
+    if (periodElapsedMs() >= CONFIG.halfSeconds * 1000) return;
+    state.clock.runningSince = Date.now();
+    keepScreenOn(true);
+  }
+  // "12:40", "1240" or "740" → seconds; null when it is not a time within the half.
+  function parseClockText(raw) {
+    const digits = String(raw).replace(/\D/g, '');
+    if (!digits || digits.length > 4) return null;
+    const [min, sec] = String(raw).includes(':') ? String(raw).split(':').map(Number) : [Math.floor(Number(digits) / 100), Number(digits) % 100];
+    if (!Number.isInteger(min) || !Number.isInteger(sec) || sec > 59) return null;
+    const total = min * 60 + sec;
+    return total <= CONFIG.halfSeconds ? total : null;
+  }
+  // The typed time reads like the clock: elapsed when counting up, remaining when counting down.
+  function setClockText(raw) {
+    const shown = parseClockText(raw);
+    if (shown == null) { hint(`Tiempo no válido: usa mm:ss hasta ${mmss(CONFIG.halfSeconds)}`); return false; }
+    state.clock.elapsedMs = (state.clockDown ? CONFIG.halfSeconds - shown : shown) * 1000;
+    if (isRunning()) state.clock.runningSince = Date.now();
+    commit();
+    return true;
+  }
+  function finishMatch() {
+    pauseClock();
+    state.finished = true;
+    alarm(SOUND_ALARM);
+    commit();
+    openFinal();
+  }
   const TIMEOUT_KEYS = { us: 'timeoutsUsed', them: 'timeoutsUsedThem' };
   const timeoutsUsed = (team) => state[TIMEOUT_KEYS[team]] || 0;
   function startTimeout(team) {
@@ -1194,8 +1250,9 @@ td.zero { color: var(--faint); }
     });
     if (isRunning() && periodElapsedMs() >= CONFIG.halfSeconds * 1000) {
       pauseClock();
-      const n = state.clock.period;
-      fire(`period-${n}`, { id: `period-${n}`, kind: 'period', period: n, title: n === 1 ? 'Descanso' : 'Fin del partido' }, SOUND_ALARM);
+      if (state.clock.period === 1) fire('period-1', { id: 'period-1', kind: 'period', period: 1, title: 'Descanso' }, SOUND_ALARM);
+      else if (!state.finished) { finishMatch(); return; }
+      changed = true;
     }
     if (state.timeout && Date.now() >= state.timeout.endsAt) {
       state.alerts = state.alerts.filter((a) => a.live !== 'timeout');
@@ -1552,7 +1609,9 @@ td.zero { color: var(--faint); }
       <div class="seg" role="group" aria-label="Sentido del reloj">${mode(false, '↑ Ascendente')}${mode(true, '↓ Descendente')}</div>
       <button class="act big ${running ? 'c-error' : 'c-gol'}" type="button" data-clock="toggle">${running ? '⏸ Parar' : '▶ Seguir'}</button>
       <div class="act-grid four">${CONFIG.clockSteps.map((s) => `<button class="act c-neutral" type="button" data-adjust="${s}">${s > 0 ? '+' : '−'}${Math.abs(s)}s</button>`).join('')}</div>
-      <button class="act c-neutral" type="button" data-clock="period">${state.clock.period === 1 ? 'Ir a 2ª parte' : 'Volver a 1ª parte'}</button>`, anchor);
+      <form class="clock-set" id="clock-set"><input class="in time-in" id="clock-input" type="text" inputmode="numeric" maxlength="5" value="${clockText()}" aria-label="Tiempo exacto (mm:ss)"><button class="act c-dark" type="submit">Fijar</button></form>
+      <div class="act-grid two"><button class="act c-neutral" type="button" data-clock="period">${state.clock.period === 1 ? 'Ir a 2ª parte' : 'Volver a 1ª parte'}</button>
+        ${state.clock.period === 2 ? `<button class="act c-dark" type="button" data-clock="finish">${state.finished ? 'Resumen final' : 'Terminar partido'}</button>` : ''}</div>`, anchor);
   }
   function openScorePop(anchor) {
     ui.popView = { type: 'score', anchor };
@@ -1631,6 +1690,7 @@ td.zero { color: var(--faint); }
     if (b.dataset.gk) { const g = playerById(b.dataset.gk); state.gkId = g.id; closePop(); commit(); hint(`Portero: #${g.num} ${g.name}`); return; }
     if (b.dataset.clock === 'toggle') { closePop(); toggleClock(); return; }
     if (b.dataset.clock === 'period') { closePop(); startPeriod(state.clock.period === 1 ? 2 : 1); return; }
+    if (b.dataset.clock === 'finish') { closePop(); if (state.finished) openFinal(); else finishMatch(); return; }
     if (b.dataset.adjust) { adjustClock(Number(b.dataset.adjust)); return; }
     if (b.dataset.clockMode) { state.clockDown = b.dataset.clockMode === 'down'; commit(); openClockPop(v.anchor); return; }
     if (b.dataset.fix) {
@@ -1640,6 +1700,11 @@ td.zero { color: var(--faint); }
       return;
     }
     if (b.dataset.delete) { closePop(); deleteEvent(b.dataset.delete); }
+  });
+  $('pop').addEventListener('submit', (ev) => {
+    if (ev.target.id !== 'clock-set') return;
+    ev.preventDefault();
+    if (setClockText($('clock-input').value)) closePop();
   });
   $('scrim').addEventListener('pointerdown', (ev) => { ev.preventDefault(); closePop(); });
   $('armed-bar').addEventListener('click', (ev) => { if (ev.target.closest('[data-unarm]')) disarm(); });
@@ -1894,17 +1959,12 @@ td.zero { color: var(--faint); }
     clearTimeout(ui.newArmTimer);
     b.classList.remove('armed');
     b.textContent = 'Nuevo';
-    const keep = { players: state.players, lineups: state.lineups, gkId: state.gkId, us: state.us, autoPhase: state.autoPhase, clockDown: state.clockDown };
-    const fresh = { sample: false, them: 'Rival', rivals: [], venue: '', date: todayIso(), phase: DEFAULT_PHASE, clock: { period: 1, elapsedMs: 0, runningSince: null }, timeoutsUsed: 0, timeoutsUsedThem: 0, timeout: null, events: [], fired: [], alerts: [], history: [], future: [] };
-    state = Object.assign(fresh, keep);
+    state = freshMatch(state);
     ui.shooter = null;
     keepScreenOn(false);
+    $('final').hidden = true;
     commit();
-    // Before the throw-off: teams, venue and both rosters.
-    ui.sheetTab = 'acta';
-    renderSheet();
-    $('sheet').hidden = false;
-    sheetStatus('roster-status', 'Partido nuevo: revisa equipos, lugar y plantillas.');
+    openSetup();
   });
 
   // ===================== Match sheet: statistics, goalkeeper, roster, PDF reports =====================
@@ -2245,6 +2305,14 @@ td.zero { color: var(--faint); }
   }
   const SHEET_RENDERERS = { stats: sheetStatsHtml, analysis: sheetAnalysisHtml, gk: sheetGkHtml, acta: sheetActaHtml, reports: sheetReportsHtml };
   function renderSheet() {
+    if (ui.sheetMode === 'setup') {
+      $('sheet').innerHTML = `<div class="sheet-head"><h2>Preparar partido</h2>
+          <div class="head-actions"><button class="btn press" type="button" data-load-sample>Ver partido de ejemplo</button>
+          <button class="btn go play press" type="button" data-start-match>Empezar partido ▶</button></div></div>
+        <p class="note" id="setup-status" aria-live="polite">Pon los equipos, el lugar y las dos plantillas. El reloj no arranca hasta que tú lo inicies.</p>
+        <div class="sheet-body">${sheetActaHtml()}</div>`;
+      return;
+    }
     const s = score();
     $('sheet').innerHTML = `<div class="sheet-head"><h2>${esc(state.us)} ${s.us} – ${s.them} ${esc(state.them)}</h2>
         <div class="tabs" role="group" aria-label="Secciones">${Object.entries(SHEET_TABS).map(([k, label]) => `<button class="press" type="button" data-tab="${k}" aria-pressed="${k === ui.sheetTab}">${label}</button>`).join('')}</div>
@@ -2252,6 +2320,27 @@ td.zero { color: var(--faint); }
       <div class="sheet-body">${SHEET_RENDERERS[ui.sheetTab]()}</div>`;
   }
   const sheetStatus = (id, text) => { const el = $(id); if (el) el.textContent = text; };
+  function openSetup() {
+    ui.sheetMode = 'setup';
+    renderSheet();
+    $('sheet').hidden = false;
+  }
+  function startMatch() {
+    if (!goalkeepers().length) { sheetStatus('setup-status', 'Falta un portero en nuestra plantilla.'); return; }
+    state.setupDone = true;
+    ui.sheetMode = 'sheet';
+    $('sheet').hidden = true;
+    commit();
+    hint('Coloca a los jugadores y pulsa ▶ Iniciar');
+  }
+  function loadSample() {
+    state = sampleState();
+    ui.sheetMode = 'sheet';
+    ui.shooter = null;
+    $('sheet').hidden = true;
+    commit();
+    hint('Partido de ejemplo · «Nuevo» para empezar uno real');
+  }
 
   // ---- Roster edits (configuration, saved at once; not part of the match undo history) ----
   const ROSTER_STATUS = { us: 'roster-status', them: 'rival-status' };
@@ -2708,12 +2797,103 @@ td.zero { color: var(--faint); }
     }
   }
 
+  // ---- Final summary: both teams side by side, and the reports by e-mail or share sheet ----
+  const EMAIL_PATTERN = /^[^\s@,;]+@[^\s@,;]+\.[^\s@,;]+$/;
+  // "a@x.es, b@y.es" → ['a@x.es', 'b@y.es']; null if any address is not valid.
+  function parseEmails(raw) {
+    const list = String(raw).split(/[\s,;]+/).filter(Boolean);
+    return list.length && list.every((a) => EMAIL_PATTERN.test(a)) ? list : null;
+  }
+  function finalRows() {
+    const { us, them } = liveStats();
+    const s = score();
+    const pens = (side) => side.zones.find((z) => z.id === '7M');
+    const scorer = (team) => { const t = attackAnalysis(team).topScorer; return t ? `${t.label} (${t.goals})` : '–'; };
+    return [
+      ['Goles', s.us, s.them],
+      ['Lanzamientos', us.shots, them.shots],
+      ['% de tiro', pctText(us.shooting), pctText(them.shooting)],
+      ['% de ataque', pctText(us.attack), pctText(them.attack)],
+      ['Pérdidas', `${us.turnovers} · ${pctText(us.turnoverPct)}`, `${them.turnovers} · ${pctText(them.turnoverPct)}`],
+      ['Paradas del portero', `${them.saved}/${them.onTarget} · ${pctText(them.savedPct)}`, `${us.saved}/${us.onTarget} · ${pctText(us.savedPct)}`],
+      ['7 m', `${pens(us).GOL}/${pens(us).att}`, `${pens(them).GOL}/${pens(them).att}`],
+      ["Exclusiones 2'", exclusionEvents().length, rivalExclusionEvents().length],
+      ['Máximo goleador', scorer('us'), scorer('them')]
+    ];
+  }
+  const finalTitle = () => { const s = score(); return `${state.us} ${s.us} – ${s.them} ${state.them}`; };
+  function finalText() {
+    const head = [finalTitle(), [state.venue, matchDateText()].filter(Boolean).join(' · ')].filter(Boolean);
+    return [...head, '', ...finalRows().map(([label, a, b]) => `${label}: ${state.us} ${a} · ${state.them} ${b}`)].join('\n');
+  }
+  const mailtoUrl = (emails, attached) => `mailto:${emails.join(',')}?subject=${encodeURIComponent(`Informe ${finalTitle()}`)}&body=${encodeURIComponent(`${finalText()}\n\nAdjunta los PDF descargados en la tablet: ${attached.join(', ')}.`)}`;
+  function openFinal() {
+    const rows = finalRows();
+    $('final').innerHTML = `<div class="final-card glass">
+      <h2>Final · ${esc(finalTitle())}</h2>
+      ${tableHtml(['', state.us, state.them], rows.map((r) => r.map(String)))}
+      <label class="final-mail">Enviar los PDF a<input class="in" id="final-email" type="email" inputmode="email" autocomplete="email" placeholder="entrenador@club.es, otro@club.es" value="${esc(state.reportEmail || '')}"></label>
+      <div class="row-actions">
+        <button class="btn primary press" type="button" data-final-mail>Enviar por correo</button>
+        <button class="btn press" type="button" data-final-share>Compartir PDF</button>
+        <button class="btn press" type="button" data-final-sheet>Ver Hoja</button>
+        <button class="btn press" type="button" data-final-close>Cerrar</button>
+      </div>
+      <p class="note" id="final-status" aria-live="polite">Correo: descarga los PDF y abre el correo con el resumen; adjúntalos desde Descargas. Compartir: envía los PDF ya adjuntos (Gmail, WhatsApp, Drive…).</p>
+    </div>`;
+    $('final').hidden = false;
+  }
+  const finalStatus = (text) => sheetStatus('final-status', text);
+  async function reportFiles() {
+    await loadPdfLibs();
+    return ['match', 'players'].map((kind) => { const { doc, filename } = buildPdf(kind); return { filename, blob: doc.output('blob') }; });
+  }
+  async function sendReportsByMail() {
+    const emails = parseEmails($('final-email').value);
+    if (!emails) { finalStatus('Escribe una o varias direcciones de correo válidas, separadas por comas.'); return; }
+    state.reportEmail = emails.join(', ');
+    save();
+    finalStatus('Preparando los PDF…');
+    try {
+      const files = await reportFiles();
+      for (const f of files) await offerFile(f.filename, f.blob);
+      finalStatus(`Descargados: ${files.map((f) => f.filename).join(', ')}. Abriendo el correo…`);
+      window.location.href = mailtoUrl(emails, files.map((f) => f.filename));
+    } catch (err) {
+      console.error('Report e-mail failed', err);
+      finalStatus(err instanceof Error ? `No se pudieron preparar los PDF: ${err.message}.` : fileErrorText(err));
+    }
+  }
+  async function shareReports() {
+    finalStatus('Preparando los PDF…');
+    try {
+      const files = (await reportFiles()).map((f) => new File([f.blob], f.filename, { type: 'application/pdf' }));
+      if (!navigator.canShare || !navigator.canShare({ files })) { finalStatus('Este dispositivo no permite compartir archivos: usa «Enviar por correo».'); return; }
+      await navigator.share({ files, title: `Informe ${finalTitle()}`, text: finalText() });
+      finalStatus('Compartido.');
+    } catch (err) {
+      if (err && err.name === 'AbortError') { finalStatus('Compartir cancelado.'); return; }
+      console.error('Report share failed', err);
+      finalStatus(`No se pudo compartir: ${(err && err.message) || 'error desconocido'}.`);
+    }
+  }
+  $('final').addEventListener('click', (ev) => {
+    const b = ev.target.closest('button');
+    if (!b) return;
+    if (b.hasAttribute('data-final-close')) { $('final').hidden = true; return; }
+    if (b.hasAttribute('data-final-sheet')) { $('final').hidden = true; ui.sheetMode = 'sheet'; ui.sheetTab = 'stats'; renderSheet(); $('sheet').hidden = false; return; }
+    if (b.hasAttribute('data-final-mail')) { sendReportsByMail(); return; }
+    if (b.hasAttribute('data-final-share')) shareReports();
+  });
+
   // ---- Sheet wiring ----
-  $('btn-sheet').addEventListener('click', () => { renderSheet(); $('sheet').hidden = false; });
+  $('btn-sheet').addEventListener('click', () => { ui.sheetMode = 'sheet'; renderSheet(); $('sheet').hidden = false; });
   $('sheet').addEventListener('click', (ev) => {
     const b = ev.target.closest('button');
     if (!b) return;
     if (b.hasAttribute('data-close-sheet')) { $('sheet').hidden = true; return; }
+    if (b.hasAttribute('data-start-match')) { startMatch(); return; }
+    if (b.hasAttribute('data-load-sample')) { loadSample(); return; }
     if (b.dataset.tab) { ui.sheetTab = b.dataset.tab; renderSheet(); return; }
     if (b.dataset.sheetGk != null) { ui.sheetGk = b.dataset.sheetGk || null; renderSheet(); return; }
     if (b.dataset.rosterPos) { const [id, pos] = b.dataset.rosterPos.split(':'); setPosition(playerById(id), pos); return; }
@@ -2747,6 +2927,8 @@ td.zero { color: var(--faint); }
   document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'hidden') save(); });
   initTheme();
   renderAll();
+  if (!state.setupDone) openSetup();
+  else if (state.finished) openFinal();
   setInterval(tick, CONFIG.tickMs);
 })();
 </script>
