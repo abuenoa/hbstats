@@ -5,7 +5,7 @@
  *   so reports work offline from the first visit.
  * BUILD is stamped by tools/build_site.py with a hash of the page, so every release replaces the old shell cache.
  */
-const BUILD = '5162720d830b';
+const BUILD = '5095090e0180';
 const SHELL_CACHE = `hbstats-shell-${BUILD}`;
 const RUNTIME_CACHE = 'hbstats-runtime-v1';
 

@@ -14,7 +14,7 @@ installs from the browser ("Add to home screen") on Android and iPad.
 | `src/app.html` | The whole app (markup, styles, script). Single source of truth; also publishable as a Claude artifact, so it has no `<html>`/`<head>` of its own. |
 | `src/sw.js` | Service worker (offline). `__BUILD__` is replaced at build time. |
 | `src/manifest.webmanifest` | App name, icons, landscape, fullscreen. |
-| `src/icon.svg` | Icon source. |
+| `src/escudo.jpg` | Club crest: source of the app icons and the scoreboard crest. |
 | `docs/` | Generated site that gets published (GitHub Pages serves this folder). Do not edit by hand. |
 | `tests/inject.js` | In-page test suite (runs inside the app's scope). |
 | `tools/` | Build, icon and test scripts (Python 3 standard library + a headless Chrome). |
@@ -24,7 +24,7 @@ installs from the browser ("Add to home screen") on Android and iPad.
 ```sh
 python3 tools/run_tests.py    # run the test suite against src/app.html
 python3 tools/build_site.py   # regenerate docs/ from src/
-python3 tools/make_icons.py   # regenerate docs/icons/ from src/icon.svg (only when the icon changes)
+python3 tools/make_icons.py   # regenerate docs/icons/ and the inline scoreboard crest from src/escudo.jpg
 ```
 
 The scripts find Chrome through the `CHROME` environment variable, a Playwright-installed browser, or
