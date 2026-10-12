@@ -28,11 +28,10 @@ def find_chrome() -> str:
     raise FileNotFoundError("No headless Chrome found: set the CHROME environment variable to its path")
 
 
-def run_chrome(page: pathlib.Path, *flags: str, timeout: int = 90) -> str:
-    """Load a local page in a throwaway profile and return Chrome's stdout."""
+def run_chrome(page: pathlib.Path, *flags: str, timeout: int = 90) -> subprocess.CompletedProcess:
+    """Load a local page headless in a throwaway profile; returns the finished process (stdout, stderr)."""
     with tempfile.TemporaryDirectory() as profile:
-        result = subprocess.run(
-            [find_chrome(), "--no-sandbox", "--disable-gpu", f"--user-data-dir={profile}", *flags, page.as_uri()],
+        return subprocess.run(
+            [find_chrome(), "--headless", "--no-sandbox", "--disable-gpu", f"--user-data-dir={profile}", *flags, page.as_uri()],
             capture_output=True, text=True, timeout=timeout, check=False,
         )
-    return result.stdout
