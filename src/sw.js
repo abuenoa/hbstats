@@ -1,3 +1,4 @@
+/* HBStats — Copyright (C) 2026 Antonio Bueno Antón. SPDX-License-Identifier: AGPL-3.0-or-later */
 /* HBStats service worker: the app keeps working without a connection (sports halls often have none).
  * - The page itself: network first, so a new version arrives as soon as there is coverage; cached copy otherwise.
  * - Icons and manifest: cache first.

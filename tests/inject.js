@@ -1,3 +1,4 @@
+  // HBStats — Copyright (C) 2026 Antonio Bueno Antón. SPDX-License-Identifier: AGPL-3.0-or-later
   window.__results = [];
   // The app now opens on a fresh match to prepare; the suite runs on the sample match.
   state = sampleState(); ui.sheetMode = 'sheet'; $('sheet').hidden = true; $('final').hidden = true; commit();

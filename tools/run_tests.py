@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+# HBStats — Copyright (C) 2026 Antonio Bueno Antón. SPDX-License-Identifier: AGPL-3.0-or-later
 """Run the in-page test suite (tests/inject.js) against src/app.html in headless Chrome.
 
 The suite runs inside the app's own scope (it calls internal functions directly), so the script is spliced in just

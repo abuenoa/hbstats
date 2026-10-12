@@ -54,3 +54,23 @@ with *Acta → Guardar / Cargar* (JSON files).
 
 External files loaded at runtime (cached for offline use by the service worker): Google Fonts (Barlow Condensed),
 jsPDF 2.5.1 and jsPDF-AutoTable 3.5.31 from cdnjs (only when a PDF is generated).
+
+## Contributing
+
+Issues and pull requests are welcome (in Spanish or English): read [CONTRIBUTING.md](CONTRIBUTING.md). Pull
+requests are accepted under the [Contributor License Agreement](CLA.md), and CI must pass (tests and an
+up-to-date `docs/`).
+
+## Licence
+
+Copyright (C) 2026 Antonio Bueno Antón.
+
+HBStats is free software under the [GNU Affero General Public License v3.0 or later](LICENSE): you may use, study,
+modify and share it, and anyone who offers a modified version to users over a network must publish its source
+under the same licence. The app links to this repository so every user can get the source.
+
+This is the open edition. A commercial edition with premium features may be offered separately by the copyright
+holder; contributions can be included in both under the CLA.
+
+**Club crests and names are not covered by the licence.** `tenants/*/escudo.jpg`, the icons generated from them and
+the club names belong to their clubs; do not reuse them without the club's permission.

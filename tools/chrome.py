@@ -1,3 +1,4 @@
+# HBStats — Copyright (C) 2026 Antonio Bueno Antón. SPDX-License-Identifier: AGPL-3.0-or-later
 """Locate and run a headless Chrome for the test and icon scripts (no browser automation library needed)."""
 import glob
 import os

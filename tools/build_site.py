@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+# HBStats — Copyright (C) 2026 Antonio Bueno Antón. SPDX-License-Identifier: AGPL-3.0-or-later
 """Build the published site in docs/: one installable app per club, plus a club list at the root.
 
 For every club in tenants/<slug>/ (see tools/tenants.py) this writes docs/<slug>/ with:

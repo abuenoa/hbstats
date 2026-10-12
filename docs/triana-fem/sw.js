@@ -1,3 +1,4 @@
+/* HBStats — Copyright (C) 2026 Antonio Bueno Antón. SPDX-License-Identifier: AGPL-3.0-or-later */
 /* HBStats service worker: the app keeps working without a connection (sports halls often have none).
  * - The page itself: network first, so a new version arrives as soon as there is coverage; cached copy otherwise.
  * - Icons and manifest: cache first.
@@ -7,7 +8,7 @@
  * and BUILD (a hash of the page, so every release replaces the old shell cache).
  */
 const CLUB = 'triana-fem';
-const BUILD = '97db406abb75';
+const BUILD = 'e27ccff7cc29';
 const SHELL_PREFIX = `hbstats-${CLUB}-shell-`;
 const SHELL_CACHE = `${SHELL_PREFIX}${BUILD}`;
 const RUNTIME_CACHE = `hbstats-${CLUB}-cdn-v1`;

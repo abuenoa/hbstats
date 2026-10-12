@@ -1,3 +1,4 @@
+# HBStats — Copyright (C) 2026 Antonio Bueno Antón. SPDX-License-Identifier: AGPL-3.0-or-later
 """Club (tenant) configuration: one folder per club in tenants/<slug>/ with tenant.json and escudo.jpg.
 
 tenant.json fields:

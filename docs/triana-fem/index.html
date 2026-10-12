@@ -16,6 +16,7 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@600;700;800&display=swap">
 <style>
+/* HBStats — Copyright (C) 2026 Antonio Bueno Antón. SPDX-License-Identifier: AGPL-3.0-or-later. Source: https://github.com/abuenoa/hbstats */
 /* Layout: one landscape screen — glass scoreboard / [bench | court + floating alerts | goalkeeper, lines, live stats] / glass action strip.
    Triana BM Vivero colours (red, black, gold). Light by default, dark on demand. Shot results share three colours everywhere. */
 :root {
@@ -683,6 +684,9 @@ td.zero { color: var(--faint); }
   /* /TENANT */
   // One saved match per club, so several clubs can share a tablet (and the same web origin).
   const STORAGE_KEY = `hbstats:${TENANT.slug}:v4`;
+  // AGPL-3.0: anyone using the app gets a link to its source code.
+  const SOURCE_URL = 'https://github.com/abuenoa/hbstats';
+  const sourceNoteHtml = () => `<p class="note">HBStats es software libre (AGPL-3.0): <a href="${SOURCE_URL}" target="_blank" rel="noopener">código fuente y contribuciones</a>.</p>`;
   const PHASES = { DEF: 'Defensa', ATK: 'Ataque' };
   const DEFAULT_PHASE = 'DEF';
   const THEME_KEY = 'hbstats-directo:theme';
@@ -2293,6 +2297,7 @@ td.zero { color: var(--faint); }
         ${card('Jugadores', `<p class="note">Una página por jugador con su mapa de lanzamientos, zonas, acciones y cronología. Los porteros, con sus paradas.</p><div class="row-actions" style="margin-top:10px"><button class="btn primary press" type="button" data-pdf="players">Todos los jugadores</button></div>`)}
       </div>
       <p class="note" id="pdf-status" aria-live="polite"></p>
+      ${sourceNoteHtml()}
       <div class="table-wrap"><table><thead><tr><th>Nº</th><th style="text-align:left">Jugador</th><th style="text-align:left">En el partido</th><th>Informe</th></tr></thead><tbody>${rows}</tbody></table></div>`;
   }
   const keyPointsHtml = (items) => `<ul class="keypoints">${items.length ? items.map((i) => `<li class="kp-${i.tone}">${esc(i.text)}</li>`).join('') : '<li class="kp-none">Sin puntos destacados con los datos actuales.</li>'}</ul>`;
@@ -2324,7 +2329,7 @@ td.zero { color: var(--faint); }
           <div class="head-actions"><button class="btn press" type="button" data-load-sample>Ver partido de ejemplo</button>
           <button class="btn go play press" type="button" data-start-match>Empezar partido ▶</button></div></div>
         <p class="note" id="setup-status" aria-live="polite">Pon los equipos, el lugar y las dos plantillas. El reloj no arranca hasta que tú lo inicies.</p>
-        <div class="sheet-body">${sheetActaHtml()}</div>`;
+        <div class="sheet-body">${sheetActaHtml()}${sourceNoteHtml()}</div>`;
       return;
     }
     const s = score();

@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+# HBStats — Copyright (C) 2026 Antonio Bueno Antón. SPDX-License-Identifier: AGPL-3.0-or-later
 """Render each club's icons from its crest (tenants/<slug>/escudo.jpg) with headless Chrome.
 
 Writes tenants/<slug>/icons/: launcher icons ("any" = round crest on transparent background; maskable and Apple
