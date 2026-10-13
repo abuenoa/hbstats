@@ -418,9 +418,22 @@ button.score { border: 0; background: transparent; padding: 0 4px; border-radius
 /* ---------- Sheet ---------- */
 .sheet { position: fixed; inset: 0; z-index: 30; background: var(--bg); overflow: auto; padding-block: 16px; padding-inline: 16px; }
 .final { position: fixed; inset: 0; z-index: 35; display: grid; place-items: center; padding: 16px; background: rgba(0, 0, 0, .35); overflow: auto; }
-.final-card { width: min(640px, 100%); box-sizing: border-box; border-radius: 22px; padding: 18px; display: grid; gap: 12px; background: var(--glass-strong); border: 1px solid var(--glass-edge); box-shadow: var(--pop-shadow); }
+.final-card { width: min(860px, 100%); box-sizing: border-box; border-radius: 22px; padding: 18px; display: grid; gap: 12px; background: var(--glass-strong); border: 1px solid var(--glass-edge); box-shadow: var(--pop-shadow); }
 .final-card h2 { margin: 0; font-family: var(--font-display); font-weight: 800; font-size: 28px; text-wrap: balance; }
 .final-card td:first-child { text-align: left; font-weight: 600; }
+/* Summary KPIs: our value (coloured against theirs) beside the rival's, details folded underneath */
+.kpi-tiles { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; }
+.kpi-tile { background: var(--surface); border: 1px solid var(--line); border-radius: 14px; padding: 10px 12px; min-width: 0; }
+.kpi-tile > span { font-size: 11px; font-weight: 700; color: var(--muted); text-transform: uppercase; letter-spacing: .08em; }
+.kpi-tile .vs { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-top: 2px; }
+.kpi-tile .vs > div { min-width: 0; }
+.kpi-tile strong { display: block; font-family: var(--font-display); font-weight: 800; font-size: 34px; line-height: 1.05; font-variant-numeric: tabular-nums; }
+.kpi-tile .them strong { color: var(--muted); }
+.kpi-tile small { display: block; font-size: 12px; color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.more summary { min-height: 44px; display: flex; align-items: center; font-weight: 700; cursor: pointer; }
+.halftime-points { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+.halftime-points .acta-h { margin-top: 0; }
+@media (max-width: 700px) { .kpi-tiles { grid-template-columns: repeat(2, minmax(0, 1fr)); } .halftime-points { grid-template-columns: 1fr; } }
 .final-mail { display: grid; gap: 4px; font-size: 12px; font-weight: 700; color: var(--muted); text-transform: uppercase; letter-spacing: .06em; }
 .sheet-head { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; margin-bottom: 12px; }
 .sheet-head h2 { margin: 0; font-family: var(--font-display); font-weight: 800; font-size: 30px; text-wrap: balance; }
@@ -452,9 +465,9 @@ td.zero { color: var(--faint); }
 .sum small { display: block; font-size: 12px; color: var(--faint); }
 .sheet input { -webkit-user-select: text; user-select: text; }
 /* Shot map with dorsals and the shooters ranked by damage */
-.map-row { display: grid; grid-template-columns: minmax(0, 3fr) minmax(220px, 2fr); gap: 12px; align-items: start; }
+.map-row { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)) minmax(240px, .9fr); gap: 12px; align-items: start; }
 .shot-map { display: block; width: 100%; height: auto; max-height: 68vh; }
-.map-dorsal { font-family: var(--font-display); font-weight: 800; font-size: 22px; fill: #fff; text-anchor: middle; dominant-baseline: central; }
+.map-dorsal { font-family: var(--font-display); font-weight: 800; font-size: 36px; fill: #fff; text-anchor: middle; dominant-baseline: central; }
 .damage { display: grid; gap: 6px; margin-bottom: 8px; }
 .dmg { display: flex; align-items: center; gap: 10px; min-height: 48px; padding: 0 12px 0 6px; border-radius: 14px; border: 1px solid var(--line); background: var(--surface); color: var(--fg); text-align: left; }
 .dmg .disc { width: 34px; height: 34px; font-size: 16px; }
@@ -462,7 +475,8 @@ td.zero { color: var(--faint); }
 .dmg b { font-family: var(--font-display); font-weight: 800; font-size: 26px; font-variant-numeric: tabular-nums; }
 .dmg small { min-width: 52px; color: var(--muted); font-size: 12px; }
 .dmg[aria-pressed="true"] { border-color: var(--fg); box-shadow: 0 0 0 3px var(--fg); }
-@media (max-width: 760px) { .map-row { grid-template-columns: 1fr; } }
+@media (max-width: 1000px) { .map-row { grid-template-columns: repeat(2, minmax(0, 1fr)); } .map-row > :last-child { grid-column: 1 / -1; } }
+@media (max-width: 600px) { .map-row { grid-template-columns: 1fr; } }
 .in { font: inherit; min-height: 44px; box-sizing: border-box; border-radius: 10px; border: 1px solid var(--line); background: var(--surface); color: var(--fg); padding: 0 10px; width: 100%; min-width: 0; }
 .in.num { width: 72px; text-align: center; font-variant-numeric: tabular-nums; }
 .acta-teams { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 10px; }
@@ -1198,6 +1212,11 @@ td.zero { color: var(--faint); }
     commit();
   }
   function startPeriod(n) { state.clock = { period: n, elapsedMs: 0, runningSince: null }; commit(); }
+  function startSecondHalf() {
+    state.alerts = state.alerts.filter((a) => !(a.kind === 'period' && a.period === 1));
+    $('final').hidden = true;
+    startPeriod(2);
+  }
   // Logging a play with the clock stopped means the game is on: start it (not for sanctions or score fixes,
   // which usually come with the clock stopped, nor during a time-out or once the half is over).
   const CLOCK_STARTING_EVENTS = ['SHOT', 'RIVAL_SHOT', 'ACTION', 'TURNOVER'];
@@ -1267,8 +1286,11 @@ td.zero { color: var(--faint); }
     });
     if (isRunning() && periodElapsedMs() >= CONFIG.halfSeconds * 1000) {
       pauseClock();
-      if (state.clock.period === 1) fire('period-1', { id: 'period-1', kind: 'period', period: 1, title: 'Descanso' }, SOUND_ALARM);
-      else if (!state.finished) { finishMatch(); return; }
+      if (state.clock.period === 1) {
+        const opening = !state.fired.includes('period-1');
+        fire('period-1', { id: 'period-1', kind: 'period', period: 1, title: 'Descanso' }, SOUND_ALARM);
+        if (opening) { commit(); openHalftime(); return; }
+      } else if (!state.finished) { finishMatch(); return; }
       changed = true;
     }
     if (state.timeout && Date.now() >= state.timeout.endsAt) {
@@ -1399,7 +1421,7 @@ td.zero { color: var(--faint); }
     </g>`;
   const GOAL_FRAME_SVG = '<path d="M 320 260 L 320 20 L 680 20 L 680 260" fill="none" stroke="#d4202a" stroke-width="12" stroke-linejoin="round"/>';
   // Solid line for goals, long dashes for saves, dots for misses: readable without colour too.
-  const MAP_DORSAL_R = 19;
+  const MAP_DORSAL_R = 30;
   const MAP_FADED_OPACITY = 0.12;
   const SHOT_DASH = { GOL: '', PARADA: ' stroke-dasharray="14 8"', FALLO: ' stroke-dasharray="4 8"' };
   const shotLineSvg = (e, color) => `<line x1="${e.origin.x}" y1="${e.origin.y}" x2="${e.target.x}" y2="${e.target.y}" stroke="${color}" stroke-width="4.5" stroke-linecap="round" opacity=".9"${SHOT_DASH[groupOf(e.result)]}/>
@@ -1469,7 +1491,7 @@ td.zero { color: var(--faint); }
   function renderAlerts() {
     $('alerts').innerHTML = state.alerts.map((a) => {
       const extra = a.kind === 'period' && a.period === 1
-        ? `<button class="btn go press" type="button" data-period2="${a.id}">▶ 2ª parte</button>`
+        ? `<button class="btn press" type="button" data-halftime>Resumen</button><button class="btn go press" type="button" data-period2>▶ 2ª parte</button>`
         : a.resume ? `<button class="btn go press" type="button" data-resume="${a.id}">▶ Reloj</button>` : '';
       const body = a.live === 'timeout' ? `<p data-live-timeout>${remainingTimeout()} s</p>` : (a.body ? `<p>${esc(a.body)}</p>` : '');
       return `<div class="alert glass k-${a.kind}${a.kind === 'exclusion' ? ' ringing' : ''}" data-alert="${a.id}">
@@ -1647,7 +1669,7 @@ td.zero { color: var(--faint); }
       <div class="act-grid four">${CONFIG.clockSteps.map((s) => `<button class="act c-neutral" type="button" data-adjust="${s}">${s > 0 ? '+' : '−'}${Math.abs(s)}s</button>`).join('')}</div>
       <form class="clock-set" id="clock-set"><input class="in time-in" id="clock-input" type="text" inputmode="numeric" maxlength="5" value="${clockText()}" aria-label="Tiempo exacto (mm:ss)"><button class="act c-dark" type="submit">Fijar</button></form>
       <div class="act-grid two"><button class="act c-neutral" type="button" data-clock="period">${state.clock.period === 1 ? 'Ir a 2ª parte' : 'Volver a 1ª parte'}</button>
-        ${state.clock.period === 2 ? `<button class="act c-dark" type="button" data-clock="finish">${state.finished ? 'Resumen final' : 'Terminar partido'}</button>` : ''}</div>`, anchor);
+        ${state.clock.period === 2 ? `<button class="act c-dark" type="button" data-clock="finish">${state.finished ? 'Resumen final' : 'Terminar partido'}</button>` : '<button class="act c-dark" type="button" data-clock="halftime">Resumen del descanso</button>'}</div>`, anchor);
   }
   function openScorePop(anchor) {
     ui.popView = { type: 'score', anchor };
@@ -1727,6 +1749,7 @@ td.zero { color: var(--faint); }
     if (b.dataset.clock === 'toggle') { closePop(); toggleClock(); return; }
     if (b.dataset.clock === 'period') { closePop(); startPeriod(state.clock.period === 1 ? 2 : 1); return; }
     if (b.dataset.clock === 'finish') { closePop(); if (state.finished) openFinal(); else finishMatch(); return; }
+    if (b.dataset.clock === 'halftime') { closePop(); openHalftime(); return; }
     if (b.dataset.adjust) { adjustClock(Number(b.dataset.adjust)); return; }
     if (b.dataset.clockMode) { state.clockDown = b.dataset.clockMode === 'down'; commit(); openClockPop(v.anchor); return; }
     if (b.dataset.fix) {
@@ -1954,7 +1977,8 @@ td.zero { color: var(--faint); }
     const b = ev.target.closest('button');
     if (!b) return;
     if (b.dataset.dismiss) { dismissAlert(b.dataset.dismiss); return; }
-    if (b.dataset.period2) { state.alerts = state.alerts.filter((x) => x.id !== b.dataset.period2); startPeriod(2); return; }
+    if (b.hasAttribute('data-halftime')) { openHalftime(); return; }
+    if (b.hasAttribute('data-period2')) { startSecondHalf(); return; }
     if (b.dataset.resume) { state.alerts = state.alerts.filter((x) => x.id !== b.dataset.resume); if (!isRunning()) toggleClock(); else commit(); }
   });
   document.querySelector('.phase').addEventListener('click', (ev) => {
@@ -2084,11 +2108,7 @@ td.zero { color: var(--faint); }
       const inLane = field.filter((e) => laneOf(e.origin) === l.id);
       return { ...l, list: inLane, near: inLane.filter((e) => depthOf(e) === '6M'), far: inLane.filter((e) => depthOf(e) === '9M') };
     });
-    const shooterOf = (e) => (ours ? e.playerId : e.rivalId);
-    const labelOf = (id) => { if (ours) { const p = playerById(id); return p ? `#${p.num} ${p.name}` : 'Sin jugador'; } const r = rivalById(id); return r ? rivalLabel(r) : 'Sin dorsal'; };
-    const byShooter = {};
-    shots.forEach((e) => { const id = shooterOf(e); if (!id || !labelOf(id).startsWith('#')) return; (byShooter[id] = byShooter[id] || []).push(e); });
-    const shooters = Object.entries(byShooter).map(([id, list]) => ({ label: labelOf(id), shots: list.length, goals: goalsIn(list) }))
+    const shooters = shooterRanking(shots).filter((g) => g.shooter).map((g) => ({ label: g.label, shots: g.list.length, goals: g.goals }))
       .sort((a, b) => b.shots - a.shots || b.goals - a.goals);
     const topScorer = shooters.slice().sort((a, b) => b.goals - a.goals || a.shots - b.shots)[0] || null;
     const near = field.filter((e) => depthOf(e) === '6M'), far = field.filter((e) => depthOf(e) === '9M');
@@ -2237,7 +2257,8 @@ td.zero { color: var(--faint); }
       const key = shooterKey(e);
       if (!groups.has(key)) {
         const s = shooterOf(e);
-        groups.set(key, { id: key, shooter: s, pos: s && (e.kind === 'SHOT' ? posOf(s) : rivalPos(s)), list: [] });
+        const ours = e.kind === 'SHOT';
+        groups.set(key, { id: key, shooter: s, pos: s && (ours ? posOf(s) : rivalPos(s)), label: s && (ours ? `#${s.num} ${s.name}` : rivalLabel(s)), list: [] });
       }
       groups.get(key).list.push(e);
     });
@@ -2270,6 +2291,21 @@ td.zero { color: var(--faint); }
       ${courtFloorSvg('shot-map-clip')}<rect x="${GOAL_FACE.x}" y="${GOAL_FACE.y}" width="${GOAL_FACE.w}" height="${GOAL_FACE.h}" fill="var(--goal-face)"/>
       ${GOAL_NET_SVG}${GOAL_FRAME_SVG}${marks}</svg>`;
   }
+  // Who shot, scored and missed most on one goal (a miss is a shot without a goal); ties keep the ranking order.
+  function shooterLeaders(shots) {
+    const known = shooterRanking(shots).filter((g) => g.shooter);
+    const most = (count) => known.reduce((best, g) => (count(g) > (best ? count(best) : 0) ? g : best), null);
+    return { shoots: most((g) => g.list.length), scores: most((g) => g.goals), misses: most((g) => g.list.length - g.goals) };
+  }
+  function leaderFigures(shots) {
+    const { shoots, scores, misses } = shooterLeaders(shots);
+    const who = (g, detail) => (g ? [`#${g.shooter.num}`, `${g.shooter.name ? `${g.shooter.name} · ` : ''}${detail(g)}`] : ['–', 'Sin lanzadores identificados']);
+    return [
+      ['Más lanza', ...who(shoots, (g) => plural(g.list.length, 'tiro', 'tiros'))],
+      ['Más marca', ...who(scores, (g) => `${plural(g.goals, 'gol', 'goles')} de ${g.list.length}`)],
+      ['Más falla', ...who(misses, (g) => `${g.list.length - g.goals} sin gol de ${g.list.length}`)]
+    ];
+  }
   function damageListHtml(shots, viewKey) {
     const ranking = shooterRanking(shots);
     if (!ranking.length) return '<p class="note">Sin lanzamientos.</p>';
@@ -2280,6 +2316,7 @@ td.zero { color: var(--faint); }
         <b style="color:${goalColor}">${r.goals}</b><small>${plural(r.list.length, 'tiro', 'tiros')}</small></button>`).join('')}</div>
       <p class="note">Ordenados por goles. Toca un lanzador para ver solo sus tiros.</p>`;
   }
+  const MAP_GROUPS = [['PARADA', 'Detenidos'], ['GOL', 'Encajados']];
   function sheetGkHtml() {
     const goal = ui.sheetGoal;
     const ours = goal === 'GK';
@@ -2291,10 +2328,13 @@ td.zero { color: var(--faint); }
     return `${chips(goals, 'data-sheet-goal', goal)}
       ${ours ? chips(keepers, 'data-sheet-gk', ui.sheetGk || '') : ''}
       ${figuresHtml(gkFigures(shots))}
-      <div class="map-row">${card(`Tiros de ${esc(shooters)}`, shotMapSvg(shots, goal, ui.sheetShooter))}${card('Quién hace más daño', damageListHtml(shots, goal))}</div>
+      <h3 class="acta-h">Lanzadores de ${esc(shooters)}</h3>
+      ${figuresHtml(leaderFigures(shots))}
+      <div class="map-row">${MAP_GROUPS.map(([group, title]) => { const list = shots.filter((e) => groupOf(e.result) === group); return card(`${title} · ${list.length}`, shotMapSvg(list, goal, ui.sheetShooter)); }).join('')}
+        ${card('Quién hace más daño', damageListHtml(shots, goal))}</div>
       ${tableHtml(GK_ZONE_HEAD, gkZoneRows(shots))}
       <div class="sheet-grid">${goalGridHtml(shots, 'PARADA', 'Detenidos por zona de portería', goal)}${goalGridHtml(shots, 'GOL', 'Encajados por zona de portería', goal)}</div>
-      <h3 class="acta-h">Lanzadores de ${esc(shooters)}</h3>${tableHtml(GOAL_SHOOTER_HEAD, goalShooterRows(shots, goal))}`;
+      ${tableHtml(GOAL_SHOOTER_HEAD, goalShooterRows(shots, goal))}`;
   }
   function rosterLock(p) {
     if (p.id === state.gkId) return 'En portería';
@@ -2934,11 +2974,50 @@ td.zero { color: var(--faint); }
     return [...head, '', ...finalRows().map(([label, a, b]) => `${label}: ${state.us} ${a} · ${state.them} ${b}`)].join('\n');
   }
   const mailtoUrl = (emails, attached) => `mailto:${emails.join(',')}?subject=${encodeURIComponent(`Informe ${finalTitle()}`)}&body=${encodeURIComponent(`${finalText()}\n\nAdjunta los PDF descargados en la tablet: ${attached.join(', ')}.`)}`;
+  // The headline numbers of both teams; `better` says which way is good, to colour our value against theirs.
+  function summaryKpis() {
+    const { us, them } = liveStats();
+    const s = score();
+    return [
+      { label: 'Goles', us: s.us, them: s.them, better: 'high' },
+      { label: '% de tiro', us: us.shooting, them: them.shooting, pct: true, better: 'high', sub: [`${us.goals}/${us.shots}`, `${them.goals}/${them.shots}`] },
+      { label: '% de ataque', us: us.attack, them: them.attack, pct: true, better: 'high', sub: [`${us.goals}/${us.possessions} pos.`, `${them.goals}/${them.possessions} pos.`] },
+      { label: 'Paradas', us: them.savedPct, them: us.savedPct, pct: true, better: 'high', sub: [`${them.saved}/${them.onTarget}`, `${us.saved}/${us.onTarget}`] },
+      { label: 'Pérdidas', us: us.turnovers, them: them.turnovers, better: 'low', sub: [pctText(us.turnoverPct), pctText(them.turnoverPct)] },
+      { label: "Exclusiones 2'", us: exclusionEvents().length, them: rivalExclusionEvents().length, better: 'low' }
+    ];
+  }
+  const KPI_SIGN = { high: 1, low: -1 };
+  function kpiTilesHtml() {
+    return `<div class="kpi-tiles">${summaryKpis().map((k) => {
+      const diff = k.us == null || k.them == null ? 0 : (k.us - k.them) * KPI_SIGN[k.better];
+      const tone = diff > 0 ? 'r-good' : diff < 0 ? 'r-bad' : '';
+      const side = (cls, name, value, sub, valueClass) => `<div class="${cls}"><strong class="${valueClass}">${k.pct ? pctText(value) : value}</strong><small>${esc(name)}${sub ? ` · ${esc(sub)}` : ''}</small></div>`;
+      return `<div class="kpi-tile"><span>${esc(k.label)}</span><div class="vs">${side('us', state.us, k.us, k.sub && k.sub[0], tone)}${side('them', state.them, k.them, k.sub && k.sub[1], '')}</div></div>`;
+    }).join('')}</div>`;
+  }
+  const summaryDetailHtml = () => `<details class="more"><summary>Ver más detalle</summary>${tableHtml(['', state.us, state.them], finalRows().map((r) => r.map(String)))}</details>`;
+  function openHalftime() {
+    const k = keyPoints();
+    const block = (title, items) => `<section><h3 class="acta-h">${title}</h3>${keyPointsHtml(items)}</section>`;
+    $('final').innerHTML = `<div class="final-card glass">
+      <h2>Descanso · ${esc(finalTitle())}</h2>
+      ${kpiTilesHtml()}
+      <div class="halftime-points">${block('Defensa: corregir y vigilar', k.defence)}${block('Ataque: corregir y aprovechar', k.attack)}</div>
+      ${summaryDetailHtml()}
+      <div class="row-actions">
+        ${state.clock.period === 1 ? '<button class="btn go press" type="button" data-second-half>▶ 2ª parte</button>' : ''}
+        <button class="btn press" type="button" data-final-sheet>Ver Hoja</button>
+        <button class="btn press" type="button" data-final-close>Cerrar</button>
+      </div>
+    </div>`;
+    $('final').hidden = false;
+  }
   function openFinal() {
-    const rows = finalRows();
     $('final').innerHTML = `<div class="final-card glass">
       <h2>Final · ${esc(finalTitle())}</h2>
-      ${tableHtml(['', state.us, state.them], rows.map((r) => r.map(String)))}
+      ${kpiTilesHtml()}
+      ${summaryDetailHtml()}
       <label class="final-mail">Enviar los PDF a<input class="in" id="final-email" type="email" inputmode="email" autocomplete="email" placeholder="entrenador@club.es, otro@club.es" value="${esc(state.reportEmail || '')}"></label>
       <div class="row-actions">
         <button class="btn primary press" type="button" data-final-mail>Enviar por correo</button>
@@ -2989,6 +3068,7 @@ td.zero { color: var(--faint); }
     if (!b) return;
     if (b.hasAttribute('data-final-close')) { $('final').hidden = true; return; }
     if (b.hasAttribute('data-final-sheet')) { $('final').hidden = true; ui.sheetMode = 'sheet'; ui.sheetTab = 'stats'; renderSheet(); $('sheet').hidden = false; return; }
+    if (b.hasAttribute('data-second-half')) { startSecondHalf(); return; }
     if (b.hasAttribute('data-final-mail')) { sendReportsByMail(); return; }
     if (b.hasAttribute('data-final-share')) shareReports();
   });
