@@ -8,7 +8,7 @@
  * and BUILD (a hash of the page, so every release replaces the old shell cache).
  */
 const CLUB = 'triana-fem';
-const BUILD = 'e27ccff7cc29';
+const BUILD = 'fb0b6c164bff';
 const SHELL_PREFIX = `hbstats-${CLUB}-shell-`;
 const SHELL_CACHE = `${SHELL_PREFIX}${BUILD}`;
 const RUNTIME_CACHE = `hbstats-${CLUB}-cdn-v1`;
