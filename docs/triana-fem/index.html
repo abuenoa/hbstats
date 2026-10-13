@@ -1480,7 +1480,8 @@ td.zero { color: var(--faint); }
     const ours = ui.source === 'US';
     const t = liveStats()[ours ? 'us' : 'them'];
     const colors = MAP_VIEWS[ui.source].colors;
-    const kpi = (label, value, key, sub) => `<div class="kpi"><strong class="${rateSide(value, key, ours)}">${pctText(value)}</strong><span>${label}</span><small>${sub}</small></div>`;
+    // `text` overrides the shown value; the colour still comes from the rated value.
+    const kpi = (label, value, key, sub, text = pctText(value)) => `<div class="kpi"><strong class="${rateSide(value, key, ours)}">${text}</strong><span>${label}</span><small>${sub}</small></div>`;
     const fact = (label, value) => `<div class="fact"><span>${label}</span><b>${value}</b></div>`;
     const zones = t.zones.map((z) => {
       const w = (n) => (z.att ? (n * 100) / z.att : 0);
@@ -1492,7 +1493,7 @@ td.zero { color: var(--faint); }
       <div class="kpis">
         ${kpi('Tiro', t.shooting, 'shooting', `${t.goals}/${t.shots}`)}
         ${kpi('Ataque', t.attack, 'attack', `${t.goals}/${t.possessions} pos.`)}
-        ${kpi('Pérdidas', t.turnoverPct, 'turnovers', `${t.turnovers}/${t.possessions}`)}
+        ${kpi('Pérdidas', t.turnoverPct, 'turnovers', `de ${t.possessions} pos.`, t.turnovers)}
       </div>
       <h2 class="opt">Por zona</h2>
       <div class="zones">${zones}</div>
@@ -2172,7 +2173,7 @@ td.zero { color: var(--faint); }
     if (weakZone) bad(attack, `Poco acierto desde ${ZONES[weakZone.id]}: ${weakZone.GOL}/${weakZone.att}.`);
     if (rate(live.us.turnoverPct, 'turnovers') === 'r-bad') {
       const top = Object.entries(turnoverCounts(state.events)).sort((a, b) => b[1] - a[1])[0];
-      bad(attack, `Demasiadas pérdidas: ${live.us.turnoverPct}% de las posesiones${top ? `; la más repetida, ${top[0].toLowerCase()} (${top[1]})` : ''}.`);
+      bad(attack, `Demasiadas pérdidas: ${live.us.turnovers} en ${live.us.possessions} posesiones${top ? `; la más repetida, ${top[0].toLowerCase()} (${top[1]})` : ''}.`);
     }
     if (us.blocked >= k.minBlocked) bad(attack, `${us.blocked} tiros bloqueados: buscar mejores posiciones de lanzamiento.`);
     if (us.saveSector && us.saveSector.n >= k.minRepeats) bad(attack, `Su portero os para sobre todo ${sectorName(us.saveSector.cell)} (${us.saveSector.n}).`);
@@ -2199,7 +2200,7 @@ td.zero { color: var(--faint); }
     return [
       ['Tiro', pctText(us.shooting), `${us.goals}/${us.shots} lanzamientos`],
       ['Ataque', pctText(us.attack), `${us.goals}/${us.possessions} posesiones`],
-      ['Pérdidas', pctText(us.turnoverPct), `${us.turnovers}/${us.possessions} posesiones`],
+      ['Pérdidas', us.turnovers, `de ${us.possessions} posesiones`],
       ['Paradas', pctText(them.savedPct), `${them.saved}/${them.onTarget} a puerta`],
       ['Defensa', pctText(s.defense), 'ataques rivales sin gol'],
       ['Recuperaciones', s.recov, ''],
@@ -2983,7 +2984,7 @@ td.zero { color: var(--faint); }
       ['Lanzamientos', us.shots, them.shots],
       ['% de tiro', pctText(us.shooting), pctText(them.shooting)],
       ['% de ataque', pctText(us.attack), pctText(them.attack)],
-      ['Pérdidas', `${us.turnovers} · ${pctText(us.turnoverPct)}`, `${them.turnovers} · ${pctText(them.turnoverPct)}`],
+      ['Pérdidas', us.turnovers, them.turnovers],
       ['Paradas del portero', `${them.saved}/${them.onTarget} · ${pctText(them.savedPct)}`, `${us.saved}/${us.onTarget} · ${pctText(us.savedPct)}`],
       ['7 m', `${pens(us).GOL}/${pens(us).att}`, `${pens(them).GOL}/${pens(them).att}`],
       ["Exclusiones 2'", exclusionEvents().length, rivalExclusionEvents().length],
@@ -3005,7 +3006,7 @@ td.zero { color: var(--faint); }
       { label: '% de tiro', us: us.shooting, them: them.shooting, pct: true, better: 'high', sub: [`${us.goals}/${us.shots}`, `${them.goals}/${them.shots}`] },
       { label: '% de ataque', us: us.attack, them: them.attack, pct: true, better: 'high', sub: [`${us.goals}/${us.possessions} pos.`, `${them.goals}/${them.possessions} pos.`] },
       { label: 'Paradas', us: them.savedPct, them: us.savedPct, pct: true, better: 'high', sub: [`${them.saved}/${them.onTarget}`, `${us.saved}/${us.onTarget}`] },
-      { label: 'Pérdidas', us: us.turnovers, them: them.turnovers, better: 'low', sub: [pctText(us.turnoverPct), pctText(them.turnoverPct)] },
+      { label: 'Pérdidas', us: us.turnovers, them: them.turnovers, better: 'low', sub: [`de ${us.possessions} pos.`, `de ${them.possessions} pos.`] },
       { label: "Exclusiones 2'", us: exclusionEvents().length, them: rivalExclusionEvents().length, better: 'low' }
     ];
   }
