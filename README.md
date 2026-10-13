@@ -88,15 +88,16 @@ they score. Plain-language key points to work on, for defence and attack.
 </td>
 <td width="50%" valign="top">
 
-### Goalkeeper report
-Saves and goals by zone and by goal sector for each keeper or both, 7 m saved, and shots that
-never reached the goal.
+### Who hurt each goal most
+Our goal or the rival's: every trajectory with the shooter's dorsal, the shooters ranked by goals
+(tap one to see only their shots), saves and goals by zone and goal sector. The PDF report has the
+same maps and rankings.
 
 </td>
 </tr>
 <tr>
 <td><img src=".github/readme/analysis.png" alt="Analysis tab with key points, top shooter and scorer, lanes table and goal sectors"></td>
-<td><img src=".github/readme/goalkeeper.png" alt="Goalkeeper tab with save percentage, zone table and save and goal maps of the goal"></td>
+<td><img src=".github/readme/goalkeeper.png" alt="Goalkeeper tab with the shot map showing each shooter's dorsal and the shooters ranked by goals"></td>
 </tr>
 <tr>
 <td width="50%" valign="top">
