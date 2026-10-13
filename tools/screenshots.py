@@ -32,6 +32,7 @@ SCENES = {
     "dark": f"{SAMPLE} applyTheme('dark'); setPhase('ATK'); ui.source = 'US'; commit();",
     "analysis": f"{SAMPLE} commit(); ui.sheetMode = 'sheet'; ui.sheetTab = 'analysis'; renderSheet(); $('sheet').hidden = false;",
     "goalkeeper": f"{SAMPLE} commit(); ui.sheetMode = 'sheet'; ui.sheetTab = 'gk'; renderSheet(); $('sheet').hidden = false;",
+    "halftime": f"{SAMPLE} commit(); openHalftime();",
     "final": f"{SAMPLE} commit(); openFinal();",
 }
 

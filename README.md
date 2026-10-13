@@ -89,8 +89,9 @@ they score. Plain-language key points to work on, for defence and attack.
 <td width="50%" valign="top">
 
 ### Who hurt each goal most
-Our goal or the rival's: every trajectory with the shooter's dorsal, the shooters ranked by goals
-(tap one to see only their shots), saves and goals by zone and goal sector. The PDF report has the
+Our goal or the rival's: who shoots, scores and misses most, the saved and conceded trajectories
+with the shooter's dorsal, the shooters ranked by goals (tap one to see only their shots), and
+saves and goals by zone and goal sector. The PDF report has the
 same maps and rankings.
 
 </td>
@@ -109,15 +110,16 @@ and load as files, so the next match starts in seconds.
 </td>
 <td width="50%" valign="top">
 
-### Final summary and PDFs
-At the end, a summary of both teams and the PDF reports (match, key points, each player), sent
-by e-mail or shared to WhatsApp, Drive or Gmail.
+### Half-time and final summaries
+The headline numbers of both teams as KPIs (yours coloured against the rival's), the full table
+one tap below. At half-time, the key points to fix; at the end, the PDF reports (match, key
+points, each player) by e-mail or shared to WhatsApp, Drive or Gmail.
 
 </td>
 </tr>
 <tr>
 <td><img src=".github/readme/setup.png" alt="Match setup screen with teams, venue, date and our roster with positions"></td>
-<td><img src=".github/readme/final.png" alt="End-of-match summary comparing both teams, with e-mail and share buttons"></td>
+<td><img src=".github/readme/final.png" alt="End-of-match summary with KPI tiles for both teams, folded detail table, e-mail and share buttons"></td>
 </tr>
 </table>
 
