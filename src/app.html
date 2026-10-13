@@ -1190,12 +1190,23 @@ td.zero { color: var(--faint); }
     }
     commit();
   }
+  const HALFTIME_KEY = 'period-1';
+  // Moving the clock back before the end of a half arms that end again, so the half-time window or the final
+  // summary opens when the clock gets there once more.
+  function rearmPeriodEnd() {
+    if (periodElapsedMs() >= CONFIG.halfSeconds * 1000) return;
+    state.finished = false;
+    if (state.clock.period !== 1) return;
+    state.fired = state.fired.filter((k) => k !== HALFTIME_KEY);
+    state.alerts = state.alerts.filter((a) => !(a.kind === 'period' && a.period === 1));
+  }
   function adjustClock(deltaSec) {
     state.clock.elapsedMs = clamp(periodElapsedMs() + deltaSec * 1000, 0, CONFIG.halfSeconds * 1000);
     if (isRunning()) state.clock.runningSince = Date.now();
+    rearmPeriodEnd();
     commit();
   }
-  function startPeriod(n) { state.clock = { period: n, elapsedMs: 0, runningSince: null }; commit(); }
+  function startPeriod(n) { state.clock = { period: n, elapsedMs: 0, runningSince: null }; rearmPeriodEnd(); commit(); }
   function startSecondHalf() {
     state.alerts = state.alerts.filter((a) => !(a.kind === 'period' && a.period === 1));
     $('final').hidden = true;
@@ -1219,12 +1230,19 @@ td.zero { color: var(--faint); }
     const total = min * 60 + sec;
     return total <= CONFIG.halfSeconds ? total : null;
   }
+  // Typing fills the time from the right, so the colon never moves: 1 → 00:01, 12 → 00:12, 1234 → 12:34.
+  const CLOCK_DIGITS = 4;
+  function maskClockText(raw) {
+    const d = String(raw).replace(/\D/g, '').slice(-CLOCK_DIGITS).padStart(CLOCK_DIGITS, '0');
+    return `${d.slice(0, 2)}:${d.slice(2)}`;
+  }
   // The typed time reads like the clock: elapsed when counting up, remaining when counting down.
   function setClockText(raw) {
     const shown = parseClockText(raw);
     if (shown == null) { hint(`Tiempo no válido: usa mm:ss hasta ${mmss(CONFIG.halfSeconds)}`); return false; }
     state.clock.elapsedMs = (state.clockDown ? CONFIG.halfSeconds - shown : shown) * 1000;
     if (isRunning()) state.clock.runningSince = Date.now();
+    rearmPeriodEnd();
     commit();
     return true;
   }
@@ -1271,8 +1289,8 @@ td.zero { color: var(--faint); }
     if (isRunning() && periodElapsedMs() >= CONFIG.halfSeconds * 1000) {
       pauseClock();
       if (state.clock.period === 1) {
-        const opening = !state.fired.includes('period-1');
-        fire('period-1', { id: 'period-1', kind: 'period', period: 1, title: 'Descanso' }, SOUND_ALARM);
+        const opening = !state.fired.includes(HALFTIME_KEY);
+        fire(HALFTIME_KEY, { id: HALFTIME_KEY, kind: 'period', period: 1, title: 'Descanso' }, SOUND_ALARM);
         if (opening) { commit(); openHalftime(); return; }
       } else if (!state.finished) { finishMatch(); return; }
       changed = true;
@@ -1651,7 +1669,7 @@ td.zero { color: var(--faint); }
       <div class="seg" role="group" aria-label="Sentido del reloj">${mode(false, '↑ Ascendente')}${mode(true, '↓ Descendente')}</div>
       <button class="act big ${running ? 'c-error' : 'c-gol'}" type="button" data-clock="toggle">${running ? '⏸ Parar' : '▶ Seguir'}</button>
       <div class="act-grid four">${CONFIG.clockSteps.map((s) => `<button class="act c-neutral" type="button" data-adjust="${s}">${s > 0 ? '+' : '−'}${Math.abs(s)}s</button>`).join('')}</div>
-      <form class="clock-set" id="clock-set"><input class="in time-in" id="clock-input" type="text" inputmode="numeric" maxlength="5" value="${clockText()}" aria-label="Tiempo exacto (mm:ss)"><button class="act c-dark" type="submit">Fijar</button></form>
+      <form class="clock-set" id="clock-set"><input class="in time-in" id="clock-input" type="text" inputmode="numeric" maxlength="6" value="${clockText()}" aria-label="Tiempo exacto (mm:ss)"><button class="act c-dark" type="submit">Fijar</button></form>
       <div class="act-grid two"><button class="act c-neutral" type="button" data-clock="period">${state.clock.period === 1 ? 'Ir a 2ª parte' : 'Volver a 1ª parte'}</button>
         ${state.clock.period === 2 ? `<button class="act c-dark" type="button" data-clock="finish">${state.finished ? 'Resumen final' : 'Terminar partido'}</button>` : '<button class="act c-dark" type="button" data-clock="halftime">Resumen del descanso</button>'}</div>`, anchor);
   }
@@ -1744,6 +1762,10 @@ td.zero { color: var(--faint); }
     }
     if (b.dataset.delete) { closePop(); deleteEvent(b.dataset.delete); }
   });
+  $('pop').addEventListener('input', (ev) => {
+    if (ev.target.id === 'clock-input') ev.target.value = maskClockText(ev.target.value);
+  });
+  $('pop').addEventListener('focusin', (ev) => { if (ev.target.id === 'clock-input') ev.target.select(); });
   $('pop').addEventListener('submit', (ev) => {
     if (ev.target.id !== 'clock-set') return;
     ev.preventDefault();
