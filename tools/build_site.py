@@ -8,8 +8,7 @@ docs/ gets:
   manifest.webmanifest  app name, colours and icons
   sw.js                 the service worker, stamped with a content hash and the Supabase library URL
   icons/                copied from assets/icons/ (run tools/make_icons.py first)
-  <club>/               for each retired per-club address (RETIRED_CLUBS): a page that sends visitors to the app and
-                        a service worker that clears that club's old offline copy
+  demo/index.html       the public demo: the same app on the sample match in progress, no sign-in, nothing saved
 
 src/app.html stays the single source of the app (it is also publishable alone, which is why it has no
 <html>/<head> of its own). docs/ is regenerated from scratch on every build.
@@ -30,27 +29,31 @@ OUT = ROOT / "docs"
 ICONS = ROOT / "assets" / "icons"
 CLOUD_FILE = ROOT / "config" / "cloud.json"
 CLOUD_BLOCK = re.compile(r"(/\* CLOUD[^\n]*\n[^\n]*\*/\n\s*const CLOUD_CONFIG = ).*?(;\n\s*/\* /CLOUD \*/)", re.S)
+DEMO_BLOCK = re.compile(r"(/\* DEMO[^\n]*\*/\n\s*const DEMO = ).*?(;\n\s*/\* /DEMO \*/)", re.S)
 SUPABASE_JS = re.compile(r"const SUPABASE_JS_URL = '(https://cdn\.jsdelivr\.net/npm/@supabase/supabase-js@\d+\.\d+\.\d+/[^']+)';")
 SUPABASE_URL = re.compile(r"^https://[a-z0-9-]+\.supabase\.co$")
 ICON_FILES = ("favicon-32.png", "icon-192.png", "icon-512.png", "icon-maskable-512.png", "apple-touch-icon.png")
-# Clubs that had their own address before accounts; their old links and installed apps now lead to the app.
-RETIRED_CLUBS = ("triana", "triana-fem")
 BACKGROUND = "#f4f3f0"
 THEME = "#151515"
 
-PWA_HEAD = """<!doctype html>
+PAGE_HEAD = """<!doctype html>
 <html lang="es">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <meta name="theme-color" content="{theme}">
-<meta name="mobile-web-app-capable" content="yes">
+"""
+# Only the app installs and works offline; the demo is a plain page that borrows its icon.
+INSTALL_HEAD = """<meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-title" content="HBStats">
 <link rel="manifest" href="manifest.webmanifest">
 <link rel="icon" href="icons/favicon-32.png" sizes="32x32">
 <link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
-<style>:root{{color-scheme:light;box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}}body{{margin:0;font:14px system-ui,-apple-system,"Segoe UI",Roboto,sans-serif}}img{{max-width:100%}}[hidden]{{display:none!important}}</style>
+"""
+DEMO_HEAD = """<link rel="icon" href="../icons/favicon-32.png" sizes="32x32">
+"""
+RESET_STYLE = """<style>:root{color-scheme:light;box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}body{margin:0;font:14px system-ui,-apple-system,"Segoe UI",Roboto,sans-serif}img{max-width:100%}[hidden]{display:none!important}</style>
 """
 
 SW_REGISTER = """<script>
@@ -61,39 +64,6 @@ if ('serviceWorker' in navigator) {
 }
 </script>
 """
-
-RETIRED_PAGE = """<!doctype html>
-<html lang="es">
-<head>
-<meta charset="utf-8">
-<meta name="viewport" content="width=device-width,initial-scale=1">
-<meta http-equiv="refresh" content="0; url=../">
-<title>HBStats</title>
-</head>
-<body style="font:16px system-ui,sans-serif;padding:24px">
-<p>HBStats ahora funciona con cuentas: <a href="../">entra con tu usuario</a>. Si en esta tablet había un partido a medias, la app te ofrecerá importarlo.</p>
-<script>
-if ('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js').catch((err) => console.error('Old offline copy not cleared', err));
-location.replace('../');
-</script>
-</body>
-</html>
-"""
-
-# Clears the club's old offline copy, steps aside and sends any open club page to the app.
-RETIRED_SW = """/* Retired: HBStats now runs at the site root with accounts. Clear this club's old offline copy and step aside. */
-self.addEventListener('install', () => self.skipWaiting());
-self.addEventListener('activate', (event) => {
-  event.waitUntil((async () => {
-    const names = await caches.keys();
-    await Promise.all(names.filter((n) => n.startsWith('hbstats-__CLUB__-')).map((n) => caches.delete(n)));
-    await self.registration.unregister();
-    const clients = await self.clients.matchAll({ type: 'window' });
-    clients.forEach((client) => client.navigate(new URL('../', self.registration.scope).href));
-  })());
-});
-"""
-
 
 def is_public_key(key: str) -> bool:
     """True for a publishable key (sb_publishable_...) or a legacy JWT whose role is anon; never a secret key."""
@@ -131,12 +101,22 @@ def split_head(app: str) -> tuple[str, str]:
     return app[:end], app[end:]
 
 
-def app_page(app: str, cloud: dict | None) -> str:
-    app, count = CLOUD_BLOCK.subn(lambda m: f"{m.group(1)}{json.dumps(cloud, ensure_ascii=False)}{m.group(2)}", app)
+def set_block(app: str, pattern: re.Pattern, value, name: str) -> str:
+    app, count = pattern.subn(lambda m: f"{m.group(1)}{json.dumps(value, ensure_ascii=False)}{m.group(2)}", app)
     if count != 1:
-        raise ValueError("src/app.html must contain exactly one /* CLOUD */ ... /* /CLOUD */ block")
-    head, body = split_head(app)
-    return f"{PWA_HEAD.format(theme=THEME)}{head}\n</head>\n<body>{body}\n{SW_REGISTER}</body>\n</html>\n"
+        raise ValueError(f"src/app.html must contain exactly one /* {name} */ ... /* /{name} */ block")
+    return app
+
+
+def app_page(app: str, cloud: dict | None) -> str:
+    head, body = split_head(set_block(set_block(app, CLOUD_BLOCK, cloud, "CLOUD"), DEMO_BLOCK, False, "DEMO"))
+    return f"{PAGE_HEAD.format(theme=THEME)}{INSTALL_HEAD}{RESET_STYLE}{head}\n</head>\n<body>{body}\n{SW_REGISTER}</body>\n</html>\n"
+
+
+def demo_page(app: str) -> str:
+    head, body = split_head(set_block(set_block(app, CLOUD_BLOCK, None, "CLOUD"), DEMO_BLOCK, True, "DEMO"))
+    head = re.sub(r"<title>.*?</title>", "<title>HBStats · Demo</title>", head, count=1)
+    return f"{PAGE_HEAD.format(theme=THEME)}{DEMO_HEAD}{RESET_STYLE}{head}\n</head>\n<body>{body}\n</body>\n</html>\n"
 
 
 def manifest() -> str:
@@ -180,10 +160,8 @@ def main() -> None:
     (OUT / "sw.js").write_text(sw.replace("__BUILD__", build).replace("__SUPABASE_JS__", library.group(1)), encoding="utf-8")
     for f in ICON_FILES:
         shutil.copyfile(ICONS / f, OUT / "icons" / f)
-    for club in RETIRED_CLUBS:
-        (OUT / club).mkdir()
-        (OUT / club / "index.html").write_text(RETIRED_PAGE, encoding="utf-8")
-        (OUT / club / "sw.js").write_text(RETIRED_SW.replace("__CLUB__", club), encoding="utf-8")
+    (OUT / "demo").mkdir()
+    (OUT / "demo" / "index.html").write_text(demo_page(app), encoding="utf-8")
     (OUT / ".nojekyll").write_text("", encoding="utf-8")
     print(f"docs/ (build {build}, {'accounts on ' + cloud['url'] if cloud else 'no accounts: device only'})")
 

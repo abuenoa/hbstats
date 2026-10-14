@@ -493,7 +493,9 @@ td.zero { color: var(--faint); }
 .acta-h:first-child { margin-top: 4px; }
 .acta-rosters { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 20px; align-items: start; }
 .acta-rosters .table-wrap { margin-top: 8px; }
-.in.dorsals { width: 150px; }
+.in.dorsals { width: 190px; }
+.in.rival-name { width: 170px; }
+.rival-new { margin-top: 8px; }
 @media (max-width: 1000px) { .acta-rosters { grid-template-columns: 1fr; } }
 .pos-pick { display: flex; gap: 4px; }
 .pos-btn { min-width: 48px; min-height: 40px; border-radius: 10px; border: 2px solid transparent; background: var(--soft); color: var(--muted); font-weight: 800; font-size: 12px; }
@@ -738,6 +740,11 @@ td.zero { color: var(--faint); }
      null = no accounts: teams and matches stay on this device (tests, previews). */
   const CLOUD_CONFIG = null;
   /* /CLOUD */
+  /* DEMO — tools/build_site.py sets this for the public demo page: the sample match, no sign-in, nothing saved. */
+  const DEMO = false;
+  /* /DEMO */
+  // Where the demo sends coaches who want to use their own account.
+  const APP_URL = '../';
   // The team the app wears (name, colours, crest): the signed-in coach's team once the home screen loads it.
   const DEFAULT_TEAM = { id: null, club: 'Mi club', name: 'Mi equipo', brand: '#d4202a', brand2: '#f5c400', brandInk: '#ffffff', crest: null };
   let team = DEFAULT_TEAM;
@@ -878,7 +885,7 @@ td.zero { color: var(--faint); }
   let state = sampleState();
   const ui = {
     source: 'GK', sourcePhase: null, show: new Set(), popView: null, hintTimer: null, drag: null,
-    lastPenTs: 0, shooter: null, sheetTab: 'stats', sheetMode: 'sheet', sheetGk: null, sheetGoal: 'GK', sheetShooter: null, rosterSide: 'us'
+    lastPenTs: 0, shooter: null, rivalNewPos: null, sheetTab: 'stats', sheetMode: 'sheet', sheetGk: null, sheetGoal: 'GK', sheetShooter: null, rosterSide: 'us'
   };
 
   function todayIso() { return new Date().toISOString().slice(0, 10); }
@@ -2160,7 +2167,7 @@ td.zero { color: var(--faint); }
     const r = ev.currentTarget.getBoundingClientRect();
     openScorePop({ x: r.left + r.width / 2, y: r.bottom + 120 });
   }));
-  $('btn-home').addEventListener('click', leaveMatch);
+  $('btn-home').addEventListener('click', () => { if (DEMO) location.assign(APP_URL); else leaveMatch(); });
 
   // ===================== Match sheet: statistics, goalkeeper, roster, PDF reports =====================
   const SHEET_TABS = { stats: 'Estadísticas', analysis: 'Análisis', gk: 'Portero', acta: 'Acta y plantilla', reports: 'Informes PDF' };
@@ -2520,9 +2527,13 @@ td.zero { color: var(--faint); }
           <h3 class="acta-h">Plantilla · ${esc(state.them)}</h3>
           <div class="row-actions">
             <b>${state.rivals.length}/${MAX_ROSTER}</b>
-            <input class="in dorsals" type="text" inputmode="numeric" placeholder="Dorsales: 4 7 9…" id="rival-dorsals" aria-label="Dorsales rivales separados por espacios">
-            <button class="btn primary press" type="button" data-rival-add>Añadir</button>
             ${rosterButtons('them')}
+          </div>
+          <div class="row-actions rival-new">
+            <input class="in dorsals" type="text" inputmode="numeric" placeholder="Dorsal (o varios: 4 7 9)" id="rival-dorsals" aria-label="Dorsal o dorsales rivales separados por espacios">
+            <input class="in rival-name" type="text" maxlength="${MAX_NAME_LENGTH}" placeholder="Nombre (opcional)" id="rival-new-name" aria-label="Nombre del dorsal rival que añades">
+            <div class="pos-pick" role="group" aria-label="Puesto del dorsal rival que añades (opcional)">${posButtons({ id: 'new', pos: ui.rivalNewPos }, 'data-rival-new-pos')}</div>
+            <button class="btn primary press" type="button" data-rival-add>Añadir</button>
           </div>
           <p class="note" id="rival-status" aria-live="polite"></p>
           ${state.rivals.length ? `<div class="table-wrap"><table><thead><tr><th>Dorsal</th><th style="text-align:left">Nombre</th><th style="text-align:left">Puesto</th><th></th></tr></thead><tbody>${rivalRows}</tbody></table></div>` : '<p class="note">Sin plantilla: los tiros rivales se apuntan sin dorsal.</p>'}
@@ -2633,19 +2644,30 @@ td.zero { color: var(--faint); }
     commit();
     renderSheet();
   }
-  // "4 7, 9" → adds dorsals 4, 7 and 9; reports any that were skipped and why.
-  function addRivalDorsals(raw) {
+  // "4 7, 9" → adds dorsals 4, 7 and 9; reports any that were skipped and why. A name or position (both optional)
+  // goes with a single dorsal, so it is clear whose they are.
+  function addRivalDorsals(raw, rawName = '', pos = null) {
     const nums = raw.split(/[^0-9]+/).filter(Boolean).map(Number);
+    const name = rawName.trim().slice(0, MAX_NAME_LENGTH);
     if (!nums.length) { rosterError('Escribe uno o más dorsales separados por espacios.', 'them'); return; }
+    if ((name || pos) && nums.length > 1) { sheetStatus('rival-status', 'Con nombre o puesto, añade los dorsales de uno en uno.'); return; }
     const skipped = [];
     nums.forEach((num) => {
       const problem = state.rivals.length >= MAX_ROSTER ? `máximo ${MAX_ROSTER}` : dorsalProblem(state.rivals, num, null);
       if (problem) skipped.push(`${num}: ${problem}`);
-      else state.rivals.push({ id: newId('r'), num, name: '', pos: null });
+      else state.rivals.push({ id: newId('r'), num, name, pos });
     });
+    if (skipped.length < nums.length) ui.rivalNewPos = null;
     commit();
     renderSheet();
     sheetStatus('rival-status', skipped.length ? `No añadidos · ${skipped.join(' · ')}` : `Añadidos: ${nums.join(', ')}`);
+    if (!skipped.length) $('rival-dorsals').focus();
+  }
+  const addRivalFromForm = () => addRivalDorsals($('rival-dorsals').value, $('rival-new-name').value, ui.rivalNewPos);
+  // Tapping the chosen position again clears it; only the buttons change, so what is typed stays.
+  function pickRivalNewPos(pos) {
+    ui.rivalNewPos = ui.rivalNewPos === pos ? null : pos;
+    document.querySelectorAll('[data-rival-new-pos]').forEach((b) => b.setAttribute('aria-pressed', String(b.dataset.rivalNewPos === `new:${ui.rivalNewPos}`)));
   }
   function removeRival(r) {
     if (rivalLock(r)) return;
@@ -3217,7 +3239,8 @@ td.zero { color: var(--faint); }
     if (b.hasAttribute('data-roster-add')) { addPlayer(); return; }
     if (b.dataset.rosterExport) { exportRoster(b.dataset.rosterExport); return; }
     if (b.dataset.rosterImport) { ui.rosterSide = b.dataset.rosterImport; $('roster-file').click(); return; }
-    if (b.hasAttribute('data-rival-add')) { addRivalDorsals($('rival-dorsals').value); return; }
+    if (b.hasAttribute('data-rival-add')) { addRivalFromForm(); return; }
+    if (b.dataset.rivalNewPos) { pickRivalNewPos(b.dataset.rivalNewPos.split(':')[1]); return; }
     if (b.dataset.rivalPos) { const [id, pos] = b.dataset.rivalPos.split(':'); setRivalPosition(rivalById(id), pos); return; }
     if (b.dataset.rivalDel) { removeRival(rivalById(b.dataset.rivalDel)); return; }
     if (b.dataset.pdf) exportPdf(b.dataset.pdf);
@@ -3231,7 +3254,7 @@ td.zero { color: var(--faint); }
     else if (el.dataset.rivalName) setRivalName(rivalById(el.dataset.rivalName), el.value);
     else if (el.dataset.match) setMatchField(el.dataset.match, el.value);
   });
-  $('sheet').addEventListener('keydown', (ev) => { if (ev.key === 'Enter' && ev.target.id === 'rival-dorsals') addRivalDorsals(ev.target.value); });
+  $('sheet').addEventListener('keydown', (ev) => { if (ev.key === 'Enter' && ['rival-dorsals', 'rival-new-name'].includes(ev.target.id)) addRivalFromForm(); });
   $('roster-file').addEventListener('change', (ev) => {
     const file = ev.target.files && ev.target.files[0];
     ev.target.value = '';
@@ -3739,6 +3762,13 @@ td.zero { color: var(--faint); }
     renderAll();
     hint('Partido de ejemplo · «Inicio» para volver a tus partidos');
   }
+  // The public demo: a match in progress to play with; «Entrar» leads to the real app.
+  function openDemo() {
+    applyTeam({ ...DEFAULT_TEAM, club: 'HBStats', name: 'Demo' });
+    $('btn-home').textContent = 'Entrar';
+    openSample();
+    hint('Partido de demostración: prueba lo que quieras · «Entrar» para usar tu cuenta');
+  }
   async function deleteMatch(id) {
     try { await backend.deleteMatch(id); }
     catch (err) { homeStatus(`No se pudo borrar: ${cloudErrorText(err)}.`); return; }
@@ -3981,7 +4011,8 @@ td.zero { color: var(--faint); }
   $('goal-frame').innerHTML = GOAL_FRAME_SVG;
   applyTeam(DEFAULT_TEAM);
   renderAll();
-  startHome();
+  if (DEMO) openDemo();
+  else startHome();
   setInterval(tick, CONFIG.tickMs);
 })();
 </script>

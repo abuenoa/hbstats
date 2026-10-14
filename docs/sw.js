@@ -1,6 +1,7 @@
 /* HBStats — Copyright (C) 2026 Antonio Bueno Antón. SPDX-License-Identifier: AGPL-3.0-or-later */
 /* HBStats service worker: the app keeps working without a connection (sports halls often have none).
- * - The page itself: network first, so a new version arrives as soon as there is coverage; cached copy otherwise.
+ * - The app page itself: network first, so a new version arrives as soon as there is coverage; cached copy otherwise.
+ *   Other pages under the same folder (the demo) are left to the network so they never replace the app's copy.
  * - Icons and manifest: cache first.
  * - Third-party files (Google Fonts, PDF and Supabase libraries): cache first; the libraries are fetched at install
  *   time so reports and sign-in work offline from the first visit.
@@ -8,7 +9,7 @@
  * tools/build_site.py stamps BUILD (a hash of the page, so every release replaces the old shell cache) and
  * SUPABASE_JS (the library URL the page loads).
  */
-const BUILD = 'd9cadfb6a981';
+const BUILD = '047d11069497';
 const SHELL_PREFIX = 'hbstats-app-shell-';
 const SHELL_CACHE = `${SHELL_PREFIX}${BUILD}`;
 const RUNTIME_CACHE = 'hbstats-app-cdn-v1';
@@ -33,6 +34,7 @@ const PRECACHED_THIRD_PARTY = [
 ];
 const THIRD_PARTY_HOSTS = ['cdnjs.cloudflare.com', 'cdn.jsdelivr.net', 'fonts.googleapis.com', 'fonts.gstatic.com'];
 
+const APP_PAGES = ['./', './index.html'].map((path) => new URL(path, self.registration.scope).pathname);
 const cacheable = (response) => Boolean(response) && (response.ok || response.type === 'opaque') && !response.redirected;
 
 async function putIfCacheable(cacheName, request, response) {
@@ -92,7 +94,10 @@ self.addEventListener('fetch', (event) => {
   const { request } = event;
   if (request.method !== 'GET') return;
   const url = new URL(request.url);
-  if (request.mode === 'navigate') { event.respondWith(networkFirst(request)); return; }
+  if (request.mode === 'navigate') {
+    if (APP_PAGES.includes(url.pathname)) event.respondWith(networkFirst(request));
+    return;
+  }
   if (url.origin === self.location.origin) { event.respondWith(cacheFirst(request, SHELL_CACHE)); return; }
   if (THIRD_PARTY_HOSTS.includes(url.hostname)) event.respondWith(cacheFirst(request, RUNTIME_CACHE));
 });
