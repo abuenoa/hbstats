@@ -74,6 +74,13 @@ language sql stable security definer set search_path = public as $$
 $$;
 revoke all on function private.is_team_member(uuid) from public, anon;
 grant execute on function private.is_team_member(uuid) to authenticated;
+-- Only the coach who created a team (its owner) can delete it, with its roster and matches.
+create or replace function private.is_team_owner(team uuid) returns boolean
+language sql stable security definer set search_path = public as $$
+  select exists (select 1 from team_members where team_id = team and user_id = auth.uid() and role = 'owner');
+$$;
+revoke all on function private.is_team_owner(uuid) from public, anon;
+grant execute on function private.is_team_owner(uuid) to authenticated;
 
 -- A signed-in coach creates a team and becomes its owner in one step.
 create or replace function public.create_team(p_club text, p_name text, p_brand text, p_brand2 text, p_brand_ink text, p_crest text)
@@ -104,6 +111,9 @@ create policy teams_read on public.teams for select to authenticated using (priv
 drop policy if exists teams_update on public.teams;
 create policy teams_update on public.teams for update to authenticated
   using (private.is_team_member(id)) with check (private.is_team_member(id));
+
+drop policy if exists teams_delete on public.teams;
+create policy teams_delete on public.teams for delete to authenticated using (private.is_team_owner(id));
 
 drop policy if exists members_read on public.team_members;
 create policy members_read on public.team_members for select to authenticated

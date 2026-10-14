@@ -39,7 +39,8 @@ from public.teams t, auth.users u
 where t.name = 'Triana' and u.email = 'second.coach@example.com';
 ```
 
-A coach in several teams switches between them from the home screen.
+A coach can create more teams with *+ Equipo* and switches between them from the home screen. Only a team's
+owner (whoever created it) can delete it, which also deletes its roster and matches.
 
 ## Data
 

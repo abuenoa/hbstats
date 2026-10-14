@@ -583,6 +583,7 @@ td.zero { color: var(--faint); }
 .team-layout { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.5fr); gap: 14px; align-items: start; }
 .team-form { display: grid; gap: 12px; }
 .crest-pick { display: flex; gap: 14px; align-items: center; flex-wrap: wrap; }
+.team-delete { display: grid; gap: 8px; margin-top: 18px; padding-top: 14px; border-top: 1px solid var(--line); justify-items: start; }
 .crest-preview { width: 88px; height: 88px; border-radius: 50%; object-fit: cover; background: var(--soft); }
 .in.colour { padding: 4px; }
 .squad-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(160px, 1fr)); gap: 8px; }
@@ -3400,6 +3401,13 @@ td.zero { color: var(--faint); }
         const db = read();
         delete db.matches[id];
         write(db);
+      },
+      async deleteTeam(id) {
+        const db = read();
+        db.teams = db.teams.filter((t) => t.id !== id);
+        db.players = db.players.filter((p) => p.teamId !== id);
+        Object.keys(db.matches).filter((k) => db.matches[k].teamId === id).forEach((k) => { delete db.matches[k]; });
+        write(db);
       }
     };
   }
@@ -3444,7 +3452,11 @@ td.zero { color: var(--faint); }
         const m = matchSummary(id, s);
         check(await client.from('matches').upsert({ id, team_id: teamId, played_on: m.date || null, rival: m.them, venue: m.venue, status: m.status, score_us: m.scoreUs, score_them: m.scoreThem, state: s }));
       },
-      async deleteMatch(id) { check(await client.from('matches').delete().eq('id', id)); }
+      async deleteMatch(id) { check(await client.from('matches').delete().eq('id', id)); },
+      // Row level security lets only the owner delete; anyone else deletes nothing, which is reported.
+      async deleteTeam(id) {
+        if (!check(await client.from('teams').delete().eq('id', id).select('id')).length) throw new Error('solo quien creó el equipo puede borrarlo');
+      }
     };
   }
 
@@ -3588,7 +3600,7 @@ td.zero { color: var(--faint); }
     return `<header class="home-head glass">
       <img class="crest home-crest" src="${esc(crestSrc(team))}" alt="">
       <div class="home-title"><h1>${esc(team.name)}</h1><small>${esc(team.club)}</small></div>
-      ${switcher}
+      ${switcher}<button class="btn press" type="button" data-new-team>+ Equipo</button>
       <div class="tabs" role="group" aria-label="Secciones">${tab('matches', 'Partidos')}${tab('team', 'Equipo')}</div>
       <div class="head-actions">${account}</div>
     </header>`;
@@ -3637,7 +3649,9 @@ td.zero { color: var(--faint); }
       <p class="note">En cada partido eliges la convocatoria entre estos jugadores. Quitar a alguien no cambia los partidos ya jugados.</p>`;
   }
   function teamViewHtml() {
-    return `<div class="team-layout"><section class="sheet-card"><h3>Equipo</h3>${teamFormHtml(team, false)}</section><section class="sheet-card">${teamRosterHtml()}</section></div>`;
+    const remove = `<div class="team-delete"><p class="note">Borrar el equipo borra también su plantilla y todos sus partidos. Solo puede hacerlo quien lo creó.</p>
+      ${armedButton('delete-team', 'Borrar equipo', 'data-delete-team')}</div>`;
+    return `<div class="team-layout"><section class="sheet-card"><h3>Equipo</h3>${teamFormHtml(team, false)}${remove}</section><section class="sheet-card">${teamRosterHtml()}</section></div>`;
   }
   const squadReady = () => home.squad.size > 0 && home.squad.size <= MAX_ROSTER && home.roster.some((p) => home.squad.has(p.id) && p.pos === 'POR');
   function squadHtml() {
@@ -3661,7 +3675,10 @@ td.zero { color: var(--faint); }
     else if (v === 'error') body = `<div class="auth-card glass"><h1>HBStats</h1><p>${esc(home.error)}</p><button class="btn primary press" type="button" data-retry>Reintentar</button></div>`;
     else if (v === 'login') body = loginHtml();
     else if (v === 'password') body = passwordHtml();
-    else if (v === 'team-new') body = `<div class="auth-card wide glass"><h1>Crea tu equipo</h1><p class="note">Nombre, colores y escudo. Después añadirás la plantilla.</p>${teamFormHtml(home.draft, true)}</div>`;
+    else if (v === 'team-new') {
+      const cancel = home.teams.length ? '<button class="btn press" type="button" data-cancel-team>Cancelar</button>' : '';
+      body = `<div class="auth-card wide glass"><div class="sheet-head"><h1>${home.teams.length ? 'Nuevo equipo' : 'Crea tu equipo'}</h1>${cancel}</div><p class="note">Nombre, colores y escudo. Después añadirás la plantilla.</p>${teamFormHtml(home.draft, true)}</div>`;
+    }
     else body = `${homeHeadHtml()}<main class="home-body">${HOME_VIEWS[v]()}</main>`;
     $('home').innerHTML = `<div class="home-wrap${AUTH_VIEWS.includes(v) ? ' centred' : ''}">${body}</div>`;
     $('home').hidden = false;
@@ -3692,12 +3709,7 @@ td.zero { color: var(--faint); }
     const { value, offline } = await cachedRead(`teams:${userKey()}`, () => backend.listTeams());
     home.teams = value;
     home.offline = offline;
-    if (!home.teams.length) {
-      home.draft = { ...DEFAULT_TEAM };
-      home.crestDraft = undefined;
-      showHomeView('team-new');
-      return;
-    }
+    if (!home.teams.length) { openNewTeam(); return; }
     const chosen = readJson(TEAM_CHOICE_KEY);
     await selectTeam(home.teams.find((t) => t.id === chosen) || home.teams[0]);
   }
@@ -3920,6 +3932,26 @@ td.zero { color: var(--faint); }
     }
   }
 
+  function openNewTeam() {
+    home.draft = { ...DEFAULT_TEAM };
+    home.crestDraft = undefined;
+    showHomeView('team-new');
+  }
+  // Removes the team and everything of it kept on this tablet, then opens another team (or asks for a new one).
+  async function deleteTeam() {
+    const gone = team;
+    try { await backend.deleteTeam(gone.id); }
+    catch (err) { homeStatus(`No se pudo borrar: ${cloudErrorText(err)}.`); return; }
+    localMatches().filter((m) => m.teamId === gone.id).forEach((m) => removeKey(MATCH_KEY_PREFIX + m.id));
+    [`players:${gone.id}`, `matches:${gone.id}`].forEach((key) => removeKey(CACHE_KEY_PREFIX + key));
+    removeKey(SQUAD_KEY_PREFIX + gone.id);
+    home.teams = home.teams.filter((t) => t.id !== gone.id);
+    writeJson(CACHE_KEY_PREFIX + `teams:${userKey()}`, home.teams);
+    if (home.teams.length) { await selectTeam(home.teams[0]); homeStatus(`Equipo «${gone.name}» borrado.`); return; }
+    applyTeam(DEFAULT_TEAM);
+    openNewTeam();
+  }
+
   // ---- Sign-in ----
   async function signIn(form) {
     const data = new FormData(form);
@@ -3983,6 +4015,7 @@ td.zero { color: var(--faint); }
     const armedBefore = home.armed;
     if (b.dataset.deleteMatch) { if (confirmTap(`delete-${b.dataset.deleteMatch}`)) deleteMatch(b.dataset.deleteMatch); return; }
     if (b.dataset.teamDel) { if (confirmTap(`retire-${b.dataset.teamDel}`)) retireTeamPlayer(rosterPlayer(b.dataset.teamDel)); return; }
+    if (b.hasAttribute('data-delete-team')) { if (confirmTap('delete-team')) deleteTeam(); return; }
     if (b.hasAttribute('data-legacy-drop')) { if (confirmTap('legacy-drop')) { const l = legacyMatch(); if (l) removeKey(l.key); renderHome(); } return; }
     if (armedBefore) { home.armed = null; renderHome(); }
     if (b.hasAttribute('data-retry')) { startHome(); return; }
@@ -3991,6 +4024,8 @@ td.zero { color: var(--faint); }
     if (b.dataset.homeView === 'matches') { showMatches(); return; }
     if (b.dataset.homeView) { home.crestDraft = undefined; showHomeView(b.dataset.homeView); return; }
     if (b.hasAttribute('data-new-match')) { openSquad(); return; }
+    if (b.hasAttribute('data-new-team')) { openNewTeam(); return; }
+    if (b.hasAttribute('data-cancel-team')) { showMatches(); return; }
     if (b.hasAttribute('data-sample')) { openSample(); return; }
     if (b.dataset.openMatch) { openMatch(b.dataset.openMatch); return; }
     if (b.hasAttribute('data-legacy-import')) { importLegacyMatch(); return; }
