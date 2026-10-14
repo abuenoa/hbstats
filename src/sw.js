@@ -2,16 +2,16 @@
 /* HBStats service worker: the app keeps working without a connection (sports halls often have none).
  * - The page itself: network first, so a new version arrives as soon as there is coverage; cached copy otherwise.
  * - Icons and manifest: cache first.
- * - Third-party files (Google Fonts, PDF libraries): cache first; the PDF libraries are fetched at install time
- *   so reports work offline from the first visit.
- * tools/build_site.py stamps CLUB (each club has its own folder, worker and caches, so clubs never clear each other's)
- * and BUILD (a hash of the page, so every release replaces the old shell cache).
+ * - Third-party files (Google Fonts, PDF and Supabase libraries): cache first; the libraries are fetched at install
+ *   time so reports and sign-in work offline from the first visit.
+ * - Supabase itself (accounts, teams, matches) is never cached here: the app keeps its own device copies.
+ * tools/build_site.py stamps BUILD (a hash of the page, so every release replaces the old shell cache) and
+ * SUPABASE_JS (the library URL the page loads).
  */
-const CLUB = '__CLUB__';
 const BUILD = '__BUILD__';
-const SHELL_PREFIX = `hbstats-${CLUB}-shell-`;
+const SHELL_PREFIX = 'hbstats-app-shell-';
 const SHELL_CACHE = `${SHELL_PREFIX}${BUILD}`;
-const RUNTIME_CACHE = `hbstats-${CLUB}-cdn-v1`;
+const RUNTIME_CACHE = 'hbstats-app-cdn-v1';
 
 const SHELL_ASSETS = [
   './',
@@ -28,9 +28,10 @@ const SHELL_ASSETS = [
 const PRECACHED_THIRD_PARTY = [
   'https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js',
   'https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.5.31/jspdf.plugin.autotable.min.js',
-  'https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@600;700;800&display=swap'
+  'https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@600;700;800&display=swap',
+  '__SUPABASE_JS__'
 ];
-const THIRD_PARTY_HOSTS = ['cdnjs.cloudflare.com', 'fonts.googleapis.com', 'fonts.gstatic.com'];
+const THIRD_PARTY_HOSTS = ['cdnjs.cloudflare.com', 'cdn.jsdelivr.net', 'fonts.googleapis.com', 'fonts.gstatic.com'];
 
 const cacheable = (response) => Boolean(response) && (response.ok || response.type === 'opaque') && !response.redirected;
 

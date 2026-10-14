@@ -27,8 +27,8 @@ body:
   - type: input
     id: club
     attributes:
-      label: Club page / Página del club
-      placeholder: "https://abuenoa.github.io/hbstats/triana/"
+      label: Club or team / Club o equipo
+      placeholder: "Triana BM Vivero"
   - type: textarea
     id: screens
     attributes:

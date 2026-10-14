@@ -22,16 +22,16 @@ python3 tools/build_site.py   # regenerate docs/ (commit it together with your c
 ```
 
 To try the app, serve the built site and open a club, e.g. `python3 -m http.server -d docs 8080` and
-<http://localhost:8080/triana/> (the service worker needs `http://localhost` or HTTPS, not `file://`).
+<http://localhost:8080/> (the service worker needs `http://localhost` or HTTPS, not `file://`).
 
 ## Where things are
 
 - `src/app.html` — the whole app. Event-sourced: every statistic derives from `state.events`; undoable operations
   are `{added, removed, phase?}`. Keep it a single file with no build step and no runtime dependencies beyond
-  Google Fonts and jsPDF (loaded only for reports).
+  Google Fonts, supabase-js (accounts, only when the build sets a project) and jsPDF (loaded only for reports).
 - `tests/inject.js` — tests run inside the app's scope; add one for every behaviour you add or change, including
   edge cases and failure paths.
-- `tenants/` — one folder per club (see the README).
+- `supabase/` — database schema and account setup (see `supabase/README.md`).
 - `docs/` — generated; never edit by hand.
 
 ## Code guidelines

@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 # HBStats — Copyright (C) 2026 Antonio Bueno Antón. SPDX-License-Identifier: AGPL-3.0-or-later
-"""Capture the README screenshots from the built Triana page with the sample match.
+"""Capture the README screenshots from the built page with the sample match.
 
 Each scene is a snippet spliced into the end of the app's own scope (like the test suite) that puts the app in one
 state; headless Chrome then saves the screen at tablet size. Run python3 tools/build_site.py first. The page loads
@@ -14,15 +14,17 @@ import tempfile
 from chrome import run_chrome
 
 ROOT = pathlib.Path(__file__).resolve().parent.parent
-SOURCE_PAGE = ROOT / "docs" / "triana" / "index.html"
+SOURCE_PAGE = ROOT / "docs" / "index.html"
 OUT_DIR = ROOT / ".github" / "readme"
 APP_END = "})();"
 TABLET_SIZE = "1280,800"
 RENDER_BUDGET_MS = 8000
 
-SAMPLE = "state = sampleState(); ui.sheetMode = 'sheet'; $('sheet').hidden = true; ui.show = new Set(['GOL', 'PARADA', 'FALLO']);"
+# The home screen opens over the app; scenes close it and dress the app as a club with its colours.
+SAMPLE = ("applyTeam({ ...DEFAULT_TEAM, club: 'Triana BM Vivero', name: 'Triana' }); state = sampleState(); $('home').hidden = true;"
+          " ui.sheetMode = 'sheet'; $('sheet').hidden = true; ui.show = new Set(['GOL', 'PARADA', 'FALLO']);")
 SCENES = {
-    "setup": "state = sampleState(); state.setupDone = false; commit(); openSetup();",
+    "setup": f"{SAMPLE} state.setupDone = false; commit(); openSetup();",
     "defence": f"{SAMPLE} setPhase('DEF'); ui.source = 'GK'; commit();",
     "attack-picker": (
         f"{SAMPLE} setPhase('ATK'); ui.source = 'US'; commit();"

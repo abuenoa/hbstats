@@ -1,7 +1,7 @@
 {
-  "name": "HBStats · Triana BM Vivero Femenino",
-  "short_name": "Triana Fem",
-  "description": "Estadísticas de balonmano en directo para tablet · Triana BM Vivero Femenino",
+  "name": "HBStats",
+  "short_name": "HBStats",
+  "description": "Estadísticas de balonmano en directo para tablet",
   "id": "./",
   "start_url": "./",
   "scope": "./",
@@ -12,7 +12,7 @@
   ],
   "orientation": "landscape",
   "background_color": "#f4f3f0",
-  "theme_color": "#d4202a",
+  "theme_color": "#151515",
   "lang": "es",
   "dir": "ltr",
   "categories": [

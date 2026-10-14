@@ -13,7 +13,7 @@ PDF report with key points when the final whistle goes.
 ![No build step](https://img.shields.io/badge/runtime%20deps-0-success)
 [![PRs welcome](https://img.shields.io/badge/PRs-welcome-brightgreen.svg)](CONTRIBUTING.md)
 
-[**Try it live**](https://abuenoa.github.io/hbstats/triana/) ·
+[**Open the app**](https://abuenoa.github.io/hbstats/) ·
 [Report a bug](https://github.com/abuenoa/hbstats/issues/new?template=bug_report.yml) ·
 [Suggest an idea](https://github.com/abuenoa/hbstats/issues/new?template=feature_request.yml) ·
 [🇪🇸 En español](#-en-español)
@@ -138,38 +138,32 @@ Players are coloured by position: 🟢 wings · 🟣 backs · 🩷 centre · �
 
 ## A match, step by step
 
-1. **Prepare**: teams, venue, date and both rosters, then *Empezar partido*.
+1. **Prepare**: on the home screen, *Nuevo partido* → pick the squad (convocatoria) from your roster, then the
+   rival, venue, date and rival roster, and *Empezar partido*.
 2. **Place the players** on court for attack and defence by dragging them from the bench.
 3. **Play**: draw shots, tap players for other actions. The clock starts with the first play.
 4. **Adjust** when needed: tap the clock to pause or type the exact time; tap the score to correct it.
 5. **Finish**: the final summary opens with both teams' numbers and the PDFs ready to send.
 
 > [!TIP]
-> Not ready for a real match? Tap *Ver partido de ejemplo* on the first screen to explore a match already in progress.
+> Not ready for a real match? Tap *Ver partido de ejemplo* on the home screen to explore a match already in progress.
 
 ## Install it on a tablet
 
-1. Open your club's page in Chrome (Android) or Safari (iPad), for example
-   **https://abuenoa.github.io/hbstats/triana/**.
+1. Open **https://abuenoa.github.io/hbstats/** in Chrome (Android) or Safari (iPad).
 2. Menu → *Add to home screen* / *Install app*.
-3. Open it once with a connection. From then on it works offline, and it updates itself the next
+3. Sign in once with a connection. From then on it works offline, and it updates itself the next
    time it opens online.
 
-Each club has its own page, name, crest, colours and data: see the list at
-[abuenoa.github.io/hbstats](https://abuenoa.github.io/hbstats/).
+## Accounts and teams
 
-## For clubs
+Coaches sign in with an email and a password (by invitation). Each coach's team has its own name, crest,
+colours and roster, set up on the home screen under *Equipo*; matches are listed under *Partidos* and saved
+to the coach's account, so they can be continued on another tablet. The semantic colours above are the same for
+every team; brand colours only touch primary buttons, our score, the background glow and the PDF header.
 
-Adding a club takes a crest and a short settings file:
-
-1. Create `tenants/<club>/` (lowercase, digits, hyphens) with a square `escudo.jpg` and a `tenant.json`
-   (copy `tenants/triana/tenant.json` and change the values; `brandInk` is the text colour on the brand colour).
-2. `python3 tools/make_icons.py <club>`, then `python3 tools/build_site.py`.
-3. Commit and push: the club appears in the list at the site root and installs from `/hbstats/<club>/`.
-
-The semantic colours above are the same for every club; brand colours only touch primary buttons,
-our score, the background glow and the PDF header. Or [open an issue](https://github.com/abuenoa/hbstats/issues/new?template=feature_request.yml)
-with your crest and colours and we will add it.
+Accounts run on [Supabase](https://supabase.com): see [supabase/README.md](supabase/README.md) to set up a
+project and invite coaches. Want access for your club? [Open an issue](https://github.com/abuenoa/hbstats/issues/new?template=feature_request.yml).
 
 ## Development
 
@@ -178,8 +172,8 @@ The whole app is one HTML file with no framework and no build dependencies. The 
 
 ```sh
 python3 tools/run_tests.py           # run the test suite against src/app.html
-python3 tools/build_site.py          # regenerate docs/ from src/ and tenants/
-python3 tools/make_icons.py [club]   # regenerate a club's icons from its crest (all clubs if none given)
+python3 tools/build_site.py          # regenerate docs/ from src/, assets/ and config/cloud.json
+python3 tools/make_icons.py          # regenerate the app icons from assets/icon.svg
 python3 tools/screenshots.py [scene] # refresh the README screenshots from the sample match
 ```
 
@@ -192,10 +186,11 @@ The scripts find Chrome through the `CHROME` environment variable, a Playwright-
 | Path | What it is |
 |---|---|
 | `src/app.html` | The whole app (markup, styles, script). Single source of truth; also publishable as a Claude artifact, so it has no `<html>`/`<head>` of its own. |
-| `src/sw.js` | Service worker (offline). `__CLUB__` and `__BUILD__` are replaced at build time. |
-| `tenants/<club>/tenant.json` | Club settings: name, team, brand colours, optional roster (fields in `tools/tenants.py`). |
-| `tenants/<club>/escudo.jpg` | Club crest; `icons/` next to it is generated from it. |
-| `docs/` | Generated site served by GitHub Pages: `docs/<club>/` per club plus a club list at the root. Do not edit by hand. |
+| `src/sw.js` | Service worker (offline). `__BUILD__` and `__SUPABASE_JS__` are replaced at build time. |
+| `config/cloud.json` | Supabase project URL and public anon key (optional; without it the build has no accounts). |
+| `supabase/` | Database schema and setup guide for accounts. |
+| `assets/` | App icon (`icon.svg`) and the PNG icons generated from it. |
+| `docs/` | Generated site served by GitHub Pages: the app at the root, plus redirects from the old per-club addresses. Do not edit by hand. |
 | `tests/inject.js` | In-page test suite (runs inside the app's scope). |
 | `tools/` | Build, icon, screenshot and test scripts. |
 | `.github/readme/` | README screenshots (generated by `tools/screenshots.py`). |
@@ -209,11 +204,13 @@ The scripts find Chrome through the `CHROME` environment variable, a Playwright-
 The site updates and installed tablets pick up the new version the next time they open the app online.
 CI checks both the tests and that `docs/` is up to date.
 
-**Data.** Matches live in each tablet's browser storage (no server, no accounts). Rosters move between
-devices with *Acta → Guardar / Cargar* (JSON files).
+**Data.** Teams, rosters and matches live in the coach's Supabase account, with a copy of every open match on
+the tablet so play goes on offline; changes upload when there is a connection. Rosters can also move as JSON
+files (*Guardar / Cargar*).
 
-**External files** loaded at runtime and cached for offline use: Google Fonts (Barlow Condensed), and
-jsPDF 2.5.1 with jsPDF-AutoTable 3.5.31 from cdnjs (only when a PDF is generated).
+**External files** loaded at runtime and cached for offline use: Google Fonts (Barlow Condensed),
+supabase-js 2.45.4 from jsDelivr (accounts), and jsPDF 2.5.1 with jsPDF-AutoTable 3.5.31 from cdnjs (only when a
+PDF is generated).
 
 </details>
 
@@ -221,9 +218,11 @@ jsPDF 2.5.1 with jsPDF-AutoTable 3.5.31 from cdnjs (only when a PDF is generated
 
 - [x] Live tracking of both teams with shot maps, goalkeepers and analysis
 - [x] PDF reports and end-of-match summary
-- [x] Installable offline app, one page per club
+- [x] Installable offline app
+- [x] Coach accounts with their own team, roster and saved matches
 - [ ] Testing on more tablets with coaches (feedback welcome)
 - [ ] Season history and per-player reports across matches
+- [ ] Squad call-ups sent to the players
 - [ ] Configurable turnover and observation types per coach
 - [ ] Android package (APK) from the same app
 
@@ -249,8 +248,8 @@ under the same licence. The app links to this repository so every user can get t
 This is the open edition. A commercial edition with premium features may be offered separately by the copyright
 holder; contributions can be included in both under the CLA.
 
-**Club crests and names are not covered by the licence.** `tenants/*/escudo.jpg`, the icons generated from them and
-the club names belong to their clubs; do not reuse them without the club's permission.
+**Club crests and names are not covered by the licence.** Crests and names that teams upload to their accounts
+belong to their clubs; do not reuse them without the club's permission.
 
 ## 🇪🇸 En español
 
@@ -263,7 +262,9 @@ y el reloj, y las estadísticas en vivo.
 - **Los dos equipos:** tu equipo y el rival con las mismas estadísticas, sus porteros y sus lanzadores por dorsal.
 - **Análisis y puntos clave:** quién lanza y marca más, por dónde penetran, dónde marcan y qué mejorar.
 - **Informes PDF** al acabar, por correo o compartidos por WhatsApp.
-- **Sin conexión:** funciona sin cobertura una vez abierta; los datos se quedan en la tablet.
+- **Tu equipo, tu cuenta:** entras con email y contraseña (por invitación), personalizas nombre, escudo, colores y
+  plantilla, y cada partido sale de una convocatoria y se guarda en tu cuenta.
+- **Sin conexión:** funciona sin cobertura una vez abierta; los partidos se suben solos al volver la conexión.
 
-Ábrela en la tablet (por ejemplo **https://abuenoa.github.io/hbstats/triana/**) y usa *Añadir a pantalla de inicio*.
-¿Quieres tu club con su escudo y sus colores, o tienes una idea? [Abre una propuesta](https://github.com/abuenoa/hbstats/issues/new?template=feature_request.yml).
+Ábrela en la tablet en **https://abuenoa.github.io/hbstats/** y usa *Añadir a pantalla de inicio*.
+¿Quieres acceso para tu club o tienes una idea? [Abre una propuesta](https://github.com/abuenoa/hbstats/issues/new?template=feature_request.yml).
