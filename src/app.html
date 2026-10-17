@@ -219,6 +219,10 @@ button.rex-chip { border: 0; cursor: pointer; position: relative; }
 .legend { padding: 8px 12px 10px; display: grid; grid-template-columns: 1fr 1fr; gap: 4px 8px; font-size: 12px; color: var(--muted); border-top: 1px solid var(--line); }
 .legend span { display: flex; align-items: center; gap: 6px; }
 .legend i { width: 10px; height: 10px; border-radius: 50%; display: block; border: 1px solid var(--line); }
+/* Quick note: fills the free space at the bottom of the bench panel. */
+.note-box { margin-top: auto; padding: 8px 10px 10px; display: grid; gap: 6px; border-top: 1px solid var(--line); }
+.note-box textarea { resize: none; min-height: 0; font: inherit; font-size: 14px; -webkit-user-select: text; user-select: text; }
+.ev span { max-width: 320px; overflow: hidden; text-overflow: ellipsis; }
 .empty { color: var(--muted); font-size: 13px; padding: 4px 6px; margin: 0; }
 
 .stage { position: relative; padding: 6px; overflow: hidden; transition: border-color .2s ease-out, box-shadow .2s ease-out; }
@@ -629,6 +633,10 @@ td.zero { color: var(--faint); }
         <span><i style="background:var(--cen)"></i>Central</span>
         <span><i style="background:var(--piv)"></i>Pivote</span>
       </div>
+      <form class="note-box" id="note-form">
+        <textarea class="in" id="note-text" rows="3" maxlength="140" placeholder="Nota rápida…" aria-label="Nota rápida del partido (se guarda con el minuto)"></textarea>
+        <button class="btn press" type="submit">Anotar</button>
+      </form>
     </aside>
 
     <section class="panel stage" id="stage" aria-label="Pista">
@@ -1141,6 +1149,7 @@ td.zero { color: var(--faint); }
         return `Vuelve antes de su 2'${sanction ? ` · ${exclusionTargetLabel(sanction)}` : ''}`;
       }
       case 'SCORE_FIX': return `Ajuste ${e.team === 'us' ? state.us : state.them} ${e.delta > 0 ? '+1' : '−1'}`;
+      case 'NOTE': return `Nota: ${e.text}`;
       default: return e.kind;
     }
   }
@@ -1152,6 +1161,7 @@ td.zero { color: var(--faint); }
       case 'TURNOVER': return 'var(--error)';
       case 'SANCTION': case 'RIVAL_SANCTION': return SANCTIONS[e.card].color;
       case 'EXCLUSION_END': return 'var(--dos)';
+      case 'NOTE': return 'var(--gold)';
       default: return 'var(--red)';
     }
   }
@@ -1194,6 +1204,16 @@ td.zero { color: var(--faint); }
     const next = state.autoPhase ? phaseAfter(e) : null;
     if (next && next !== state.phase) op.phase = { before: state.phase, after: next };
     record(op);
+  }
+  // A free-text note kept with the match minute; like any event it shows in the strip and can be undone or deleted.
+  const NOTE_MAX_LENGTH = 140;
+  const noteRows = () => state.events.filter((e) => e.kind === 'NOTE').map((e) => [absToClock(e.abs), e.text]);
+  function addNote(raw) {
+    const text = raw.trim().replace(/\s+/g, ' ').slice(0, NOTE_MAX_LENGTH);
+    if (!text) return false;
+    addEvent('NOTE', { text });
+    hint(`Nota apuntada en el ${absToClock(state.events.at(-1).abs)}`);
+    return true;
   }
   function setPhase(phase) {
     if (state.phase === phase) return;
@@ -2391,6 +2411,7 @@ td.zero { color: var(--faint); }
         ${card('Pérdidas por tipo', `<ul>${countListHtml(turnoverCounts(state.events), 'Sin pérdidas.')}</ul>`)}
         ${card('Fallos defensivos', `<ul>${countListHtml(defFaultCounts(state.events), 'Sin fallos.')}</ul>`)}
         ${card('Sanciones', `<ul>${sanctionRows().map(([t, who, what]) => `<li><span>${t} · ${esc(who)}</span><b>${esc(what)}</b></li>`).join('') || '<li>Sin sanciones.</li>'}</ul>`)}
+        ${card('Notas', `<ul class="notes">${noteRows().map(([t, text]) => `<li><span>${t}</span><b>${esc(text)}</b></li>`).join('') || '<li>Sin notas.</li>'}</ul>`)}
       </div>`;
   }
   function goalGridHtml(shots, group, title, viewKey = 'GK') {
@@ -2890,7 +2911,7 @@ td.zero { color: var(--faint); }
     doc.setFontSize(9);
     doc.text(pdfText([subtitle, state.venue, matchDateText()].filter(Boolean).join(' · ')), PDF_PAGE.margin, 22);
   }
-  function pdfTable(doc, { title, head, body, startY, left = PDF_PAGE.margin, width }) {
+  function pdfTable(doc, { title, head, body, startY, left = PDF_PAGE.margin, width, columnStyles = {} }) {
     let y = startY;
     if (title) {
       doc.setTextColor(...PDF_RGB.ink);
@@ -2904,7 +2925,7 @@ td.zero { color: var(--faint); }
       margin: { left, right: width ? PDF_PAGE.w - left - width : PDF_PAGE.margin }, tableWidth: width || 'auto',
       styles: { fontSize: 7.5, cellPadding: 1.2, halign: 'center', lineColor: [220, 220, 220], textColor: PDF_RGB.ink },
       headStyles: { fillColor: PDF_RGB.ink, textColor: 255, fontStyle: 'bold' },
-      alternateRowStyles: { fillColor: PDF_RGB.soft }
+      alternateRowStyles: { fillColor: PDF_RGB.soft }, columnStyles
     });
     return doc.lastAutoTable.finalY + 6;
   }
@@ -3032,7 +3053,8 @@ td.zero { color: var(--faint); }
     pdfHeader(doc, 'Informe del partido', `${state.clock.period === 1 ? '1ª' : '2ª'} parte · ${absToClock(absSeconds())}`);
     const figures = teamFigures();
     let y = pdfTable(doc, { title: 'Resumen del equipo', head: figures.map((f) => f[0]), body: [figures.map((f) => f[1]), figures.map((f) => f[2])], startY: PDF_PAGE.top + 4 });
-    pdfTable(doc, { title: 'Jugadores (lanz./gol por zona)', head: PLAYER_HEAD, body: fieldPlayers().map(playerRow), startY: y });
+    y = pdfTable(doc, { title: 'Jugadores (lanz./gol por zona)', head: PLAYER_HEAD, body: fieldPlayers().map(playerRow), startY: y });
+    if (noteRows().length) pdfTable(doc, { title: 'Notas', head: ['Min', 'Nota'], body: noteRows(), startY: y, columnStyles: { 0: { cellWidth: 14 }, 1: { halign: 'left' } } });
 
     doc.addPage();
     pdfHeader(doc, 'Puntos clave', 'Por dónde nos atacan y cómo atacamos');
@@ -3246,6 +3268,12 @@ td.zero { color: var(--faint); }
   });
 
   // ---- Sheet wiring ----
+  $('note-form').addEventListener('submit', (ev) => {
+    ev.preventDefault();
+    if (addNote($('note-text').value)) $('note-text').value = '';
+  });
+  // Enter saves the note (Shift+Enter for a new line), so the stylus keyboard needs no extra tap.
+  $('note-text').addEventListener('keydown', (ev) => { if (ev.key === 'Enter' && !ev.shiftKey) { ev.preventDefault(); $('note-form').requestSubmit(); } });
   $('btn-sheet').addEventListener('click', () => { ui.sheetMode = 'sheet'; renderSheet(); $('sheet').hidden = false; });
   $('sheet').addEventListener('click', (ev) => {
     const b = ev.target.closest('button');
