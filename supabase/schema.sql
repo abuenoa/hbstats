@@ -4,6 +4,7 @@
 -- Each signed-in coach belongs to one or more teams (team_members). A team has its look (names, colours, crest),
 -- its roster (players) and its matches, each match stored whole as the app's own state (JSON) plus a few columns
 -- for listing. Row level security: a coach only ever sees and changes the teams they belong to.
+-- Rival templates (a rival's name and dorsals, reused from match to match) belong to the coach's own profile.
 
 create table if not exists public.teams (
   id uuid primary key default gen_random_uuid(),
@@ -52,6 +53,15 @@ create table if not exists public.matches (
 );
 create index if not exists matches_team_played_on on public.matches (team_id, played_on desc);
 create index if not exists matches_updated_by on public.matches (updated_by);
+
+create table if not exists public.rival_templates (
+  id uuid primary key default gen_random_uuid(),
+  user_id uuid not null default auth.uid() references auth.users (id) on delete cascade,
+  name text not null check (char_length(name) between 1 and 24),
+  -- [{num, name, pos}]: the app validates each dorsal; the database only bounds the size (an acta holds 16).
+  players jsonb not null check (jsonb_typeof(players) = 'array' and jsonb_array_length(players) between 1 and 16)
+);
+create unique index if not exists rival_templates_user_name on public.rival_templates (user_id, lower(name));
 
 create or replace function public.touch_updated_at() returns trigger
 language plpgsql set search_path = public as $$
@@ -105,6 +115,7 @@ alter table public.teams enable row level security;
 alter table public.team_members enable row level security;
 alter table public.players enable row level security;
 alter table public.matches enable row level security;
+alter table public.rival_templates enable row level security;
 
 drop policy if exists teams_read on public.teams;
 create policy teams_read on public.teams for select to authenticated using (private.is_team_member(id));
@@ -126,5 +137,9 @@ create policy players_all on public.players for all to authenticated
 drop policy if exists matches_all on public.matches;
 create policy matches_all on public.matches for all to authenticated
   using (private.is_team_member(team_id)) with check (private.is_team_member(team_id));
+
+drop policy if exists rival_templates_own on public.rival_templates;
+create policy rival_templates_own on public.rival_templates for all to authenticated
+  using (user_id = (select auth.uid())) with check (user_id = (select auth.uid()));
 
 drop function if exists public.is_team_member(uuid);

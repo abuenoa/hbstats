@@ -197,7 +197,8 @@ button.rex-chip { border: 0; cursor: pointer; position: relative; }
 .btn.primary { background: var(--brand); color: var(--brand-ink); border-color: transparent; box-shadow: 0 1px 0 rgba(255, 255, 255, .3) inset, 0 6px 16px rgba(var(--brand-rgb), .3); }
 .btn.go { background: var(--gol); color: #fff; border-color: transparent; box-shadow: 0 1px 0 rgba(255, 255, 255, .3) inset, 0 6px 16px rgba(31, 157, 85, .3); }
 .btn.play { min-width: 104px; font-weight: 700; }
-.btn.armed { background: var(--brand); color: var(--brand-ink); border-color: transparent; }
+/* Armed (second tap deletes): outlined danger, never filled, so it never looks like a brand-coloured primary button. */
+.btn.armed { background: var(--surface); color: var(--desc); border: 2px solid var(--desc); box-shadow: 0 0 0 3px rgba(220, 38, 38, .18); }
 .tm-dots { display: inline-flex; gap: 4px; }
 .tm-dots i { width: 10px; height: 10px; border-radius: 50%; border: 1.5px solid var(--brand); display: block; }
 .tm-dots i.used { background: var(--brand); }
@@ -209,9 +210,8 @@ button.rex-chip { border: 0; cursor: pointer; position: relative; }
 .scroll { overflow-y: auto; min-height: 0; }
 
 .bench { padding: 2px 8px 10px; display: grid; grid-template-columns: 1fr 1fr; gap: 6px; touch-action: pan-y; }
-.bench > .bench-label, .bench > .empty { grid-column: 1 / -1; }
+.bench > .empty { grid-column: 1 / -1; }
 .bench.drop { outline: 3px dashed var(--defensa); outline-offset: -4px; border-radius: var(--radius); }
-.bench-label { margin: 6px 6px 0; font-size: 11px; font-weight: 700; letter-spacing: .12em; text-transform: uppercase; color: var(--muted); }
 .bench-player {
   display: flex; flex-direction: column; align-items: center; gap: 3px; min-width: 0; padding: 6px 4px 4px;
   background: var(--soft); border: 1px solid var(--line); border-radius: 14px; touch-action: none;
@@ -357,6 +357,8 @@ button.rex-chip { border: 0; cursor: pointer; position: relative; }
 .ev time { font-family: var(--font-display); font-weight: 700; font-size: 16px; color: var(--muted); font-variant-numeric: tabular-nums; }
 .ev.fresh { animation: flash 1.4s ease-out; }
 .strip-actions { display: flex; gap: 8px; flex: none; }
+/* Leaving the match: first in the strip and dark, so it reads apart from the match actions. */
+.btn.back { flex: none; background: var(--fg); color: var(--bg); border-color: transparent; }
 @keyframes flash { from { box-shadow: 0 0 0 3px var(--gold); } to { box-shadow: 0 0 0 0 transparent; } }
 @keyframes enter { from { transform: scale(.95); opacity: 0; filter: blur(6px); } to { transform: none; opacity: 1; filter: none; } }
 @keyframes ring { 0%, 100% { transform: none; } 25% { transform: translateX(-4px); } 75% { transform: translateX(4px); } }
@@ -572,7 +574,14 @@ td.zero { color: var(--faint); }
 .home-title h1 { margin: 0; font-family: var(--font-display); font-weight: 800; font-size: 28px; line-height: 1; text-transform: uppercase; }
 .home-title small { color: var(--muted); }
 .home-head .head-actions { margin-left: auto; display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
-.in.team-switch { width: auto; }
+.team-cards { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 10px; }
+.team-card { display: flex; align-items: center; gap: 12px; min-height: 64px; padding: 8px 14px 8px 10px; border-radius: 14px; border: 1px solid var(--line); background: var(--surface); color: var(--fg); font: inherit; text-align: left; cursor: pointer; }
+.team-card span { display: grid; min-width: 0; }
+.team-card b { font-size: 16px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.team-card small { color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.team-card.add { justify-content: center; border-style: dashed; font-weight: 700; }
+.template-edit { display: grid; gap: 12px; }
+.template-pick { margin-block: 6px; }
 .home-body { display: grid; gap: 14px; align-content: start; }
 .status { display: inline-block; padding: 3px 10px; border-radius: 999px; font-size: 12px; font-weight: 700; background: var(--soft); color: var(--fg); white-space: nowrap; }
 .status.s-live { background: var(--gol); color: #fff; }
@@ -685,13 +694,13 @@ td.zero { color: var(--faint); }
   </div>
 
   <footer class="strip glass">
+    <button class="btn back press" id="btn-home" type="button">‹ Partidos</button>
     <div class="events" id="events" aria-label="Últimas acciones (toca una para borrarla)"></div>
     <div class="strip-actions">
       <button class="btn press" id="btn-undo" type="button" aria-label="Deshacer">↶</button>
       <button class="btn press" id="btn-redo" type="button" aria-label="Rehacer">↷</button>
       <button class="btn primary press" id="btn-stop" type="button">⏸ Parar</button>
       <button class="btn press" id="btn-sheet" type="button">Hoja</button>
-      <button class="btn press" id="btn-home" type="button">Inicio</button>
       <button class="btn icon press" id="btn-theme" type="button" aria-label="Cambiar a modo oscuro">☾</button>
     </div>
   </footer>
@@ -901,7 +910,7 @@ td.zero { color: var(--faint); }
   let state = sampleState();
   const ui = {
     source: 'GK', sourcePhase: null, show: new Set(), popView: null, hintTimer: null, drag: null,
-    lastPenTs: 0, shooter: null, rivalNewPos: null, sheetTab: 'stats', sheetMode: 'sheet', sheetGk: null, sheetGoal: 'GK', sheetShooter: null, rosterSide: 'us'
+    lastPenTs: 0, shooter: null, rivalNewPos: null, sheetTab: 'stats', sheetMode: 'sheet', sheetGk: null, sheetGoal: 'GK', sheetShooter: null, rosterSide: 'team', templatePick: false
   };
 
   function todayIso() { return new Date().toISOString().slice(0, 10); }
@@ -983,6 +992,8 @@ td.zero { color: var(--faint); }
   const POSITION_ORDER = Object.keys(CONFIG.positions);
   const positionRank = (p) => (POSITION_ORDER.includes(p.pos) ? POSITION_ORDER.indexOf(p.pos) : POSITION_ORDER.length);
   const byPosition = (a, b) => positionRank(a) - positionRank(b) || a.num - b.num;
+  // The bench is one list: goalkeepers on top, then extremos, laterales, centrales and pivotes, each by dorsal.
+  const benchOrder = (a, b) => (b.pos === 'POR') - (a.pos === 'POR') || byPosition(a, b);
   function periodElapsedMs() {
     const c = state.clock;
     return clamp(c.elapsedMs + (c.runningSince ? Date.now() - c.runningSince : 0), 0, CONFIG.halfSeconds * 1000);
@@ -1465,12 +1476,10 @@ td.zero { color: var(--faint); }
   }
   function renderBench() {
     const onCourt = new Set(Object.keys(lineup()));
-    const field = state.players.filter((p) => p.pos !== 'POR' && !onCourt.has(p.id));
-    const gks = state.players.filter((p) => p.pos === 'POR' && p.id !== state.gkId);
+    const bench = state.players.filter((p) => !onCourt.has(p.id) && p.id !== state.gkId).sort(benchOrder);
     const out = disqualifications();
     const item = (p) => `<button class="bench-player press${out.has(p.id) ? ' out' : ''}" type="button" data-id="${p.id}" aria-label="#${p.num} ${esc(p.name)}, ${out.has(p.id) ? 'descalificado' : posOf(p).label}">${discHtml(p)}<span class="who"><b>${esc(p.name)}</b></span></button>`;
-    $('bench').innerHTML = (field.length ? field.map(item).join('') : '<p class="empty">Todos en pista.</p>')
-      + (gks.length ? `<p class="bench-label">Porteros</p>${gks.map(item).join('')}` : '');
+    $('bench').innerHTML = bench.length ? bench.map(item).join('') : '<p class="empty">Todos en pista.</p>';
   }
   function tokenMarkup(p, pos, exRemaining, extraCls) {
     const posInfo = posOf(p);
@@ -2500,6 +2509,26 @@ td.zero { color: var(--faint); }
     return '';
   }
   const posButtons = (p, attr = 'data-roster-pos') => Object.entries(CONFIG.positions).map(([k, info]) => `<button class="pos-btn press${info.darkText ? ' dark' : ''}" type="button" style="--c:${info.color}" ${attr}="${p.id}:${k}" aria-pressed="${p.pos === k}" aria-label="${info.label}">${k}</button>`).join('');
+  // Rival dorsal editing, shared by the match acta (prefix "rival") and the profile's template editor (prefix "tpl").
+  function rivalTableHtml(list, prefix, lockOf) {
+    const rows = list.slice().sort((a, b) => a.num - b.num).map((r) => `<tr>
+        <td><input class="in num" type="number" inputmode="numeric" min="${DORSAL_RANGE[0]}" max="${DORSAL_RANGE[1]}" value="${r.num}" data-${prefix}-num="${r.id}" aria-label="Dorsal rival ${r.num}"></td>
+        <td><input class="in" type="text" maxlength="${MAX_NAME_LENGTH}" value="${esc(r.name)}" placeholder="Opcional" data-${prefix}-name="${r.id}" aria-label="Nombre del dorsal rival ${r.num}"></td>
+        <td><div class="pos-pick">${posButtons(r, `data-${prefix}-pos`)}</div></td>
+        <td>${lockOf(r) ? '<small class="note">Con jugadas</small>' : `<button class="btn press" type="button" data-${prefix}-del="${r.id}" aria-label="Quitar el dorsal rival ${r.num}">✕</button>`}</td></tr>`).join('');
+    return `<div class="table-wrap"><table><thead><tr><th>Dorsal</th><th style="text-align:left">Nombre</th><th style="text-align:left">Puesto</th><th></th></tr></thead><tbody>${rows}</tbody></table></div>`;
+  }
+  const rivalAddHtml = (prefix) => `<div class="row-actions rival-new">
+      <input class="in dorsals" type="text" inputmode="numeric" placeholder="Dorsal (o varios: 4 7 9)" id="${prefix}-dorsals" aria-label="Dorsal o dorsales rivales separados por espacios">
+      <input class="in rival-name" type="text" maxlength="${MAX_NAME_LENGTH}" placeholder="Nombre (opcional)" id="${prefix}-new-name" aria-label="Nombre del dorsal rival que añades">
+      <div class="pos-pick" role="group" aria-label="Puesto del dorsal rival que añades (opcional)">${posButtons({ id: 'new', pos: ui.rivalNewPos }, `data-${prefix}-new-pos`)}</div>
+      <button class="btn primary press" type="button" data-${prefix}-add>Añadir</button>
+    </div>`;
+  function templatePickHtml() {
+    if (!ui.templatePick) return '';
+    const chips = home.templates.map((t) => `<button class="btn press" type="button" data-template-load="${t.id}">${esc(t.name)} · ${plural(t.players.length, 'dorsal', 'dorsales')}</button>`).join('');
+    return `<div class="row-actions template-pick">${chips || '<span class="note">Aún no tienes plantillas: guarda esta o créalas en tu perfil.</span>'}</div>`;
+  }
   function sheetActaHtml() {
     const players = state.players.slice().sort((a, b) => a.num - b.num);
     const rows = players.map((p) => {
@@ -2510,16 +2539,7 @@ td.zero { color: var(--faint); }
         <td><div class="pos-pick">${posButtons(p)}</div></td>
         <td>${lock ? `<small class="note">${lock}</small>` : `<button class="btn press" type="button" data-roster-del="${p.id}" aria-label="Quitar a ${esc(p.name)} del acta">✕</button>`}</td></tr>`;
     }).join('');
-    const rivalRows = sortedRivals().map((r) => {
-      const locked = rivalLock(r);
-      return `<tr>
-        <td><input class="in num" type="number" inputmode="numeric" min="${DORSAL_RANGE[0]}" max="${DORSAL_RANGE[1]}" value="${r.num}" data-rival-num="${r.id}" aria-label="Dorsal rival ${r.num}"></td>
-        <td><input class="in" type="text" maxlength="${MAX_NAME_LENGTH}" value="${esc(r.name)}" placeholder="Opcional" data-rival-name="${r.id}" aria-label="Nombre del dorsal rival ${r.num}"></td>
-        <td><div class="pos-pick">${posButtons(r, 'data-rival-pos')}</div></td>
-        <td>${locked ? '<small class="note">Con jugadas</small>' : `<button class="btn press" type="button" data-rival-del="${r.id}" aria-label="Quitar el dorsal rival ${r.num}">✕</button>`}</td></tr>`;
-    }).join('');
     const field = (label, attrs) => `<label>${label}<input class="in" ${attrs}></label>`;
-    const rosterButtons = (side) => `<button class="btn press" type="button" data-roster-export="${side}">Guardar</button><button class="btn press" type="button" data-roster-import="${side}">Cargar</button>`;
     return `<h3 class="acta-h">Partido</h3>
       <div class="acta-teams">
         ${field('Nuestro equipo', `type="text" maxlength="${MAX_NAME_LENGTH}" value="${esc(state.us)}" data-team="us"`)}
@@ -2533,7 +2553,6 @@ td.zero { color: var(--faint); }
           <div class="row-actions">
             <b>${state.players.length}/${MAX_ROSTER}</b>
             <button class="btn primary press" type="button" data-roster-add ${state.players.length >= MAX_ROSTER ? 'disabled' : ''}>+ Jugador</button>
-            ${rosterButtons('us')}
           </div>
           <p class="note" id="roster-status" aria-live="polite"></p>
           <div class="table-wrap"><table><thead><tr><th>Dorsal</th><th style="text-align:left">Jugador</th><th style="text-align:left">Puesto</th><th></th></tr></thead><tbody>${rows}</tbody></table></div>
@@ -2543,16 +2562,13 @@ td.zero { color: var(--faint); }
           <h3 class="acta-h">Plantilla · ${esc(state.them)}</h3>
           <div class="row-actions">
             <b>${state.rivals.length}/${MAX_ROSTER}</b>
-            ${rosterButtons('them')}
+            <button class="btn press" type="button" data-template-save>Guardar plantilla</button>
+            <button class="btn press" type="button" data-template-pick aria-pressed="${ui.templatePick}">Cargar plantilla</button>
           </div>
-          <div class="row-actions rival-new">
-            <input class="in dorsals" type="text" inputmode="numeric" placeholder="Dorsal (o varios: 4 7 9)" id="rival-dorsals" aria-label="Dorsal o dorsales rivales separados por espacios">
-            <input class="in rival-name" type="text" maxlength="${MAX_NAME_LENGTH}" placeholder="Nombre (opcional)" id="rival-new-name" aria-label="Nombre del dorsal rival que añades">
-            <div class="pos-pick" role="group" aria-label="Puesto del dorsal rival que añades (opcional)">${posButtons({ id: 'new', pos: ui.rivalNewPos }, 'data-rival-new-pos')}</div>
-            <button class="btn primary press" type="button" data-rival-add>Añadir</button>
-          </div>
+          ${templatePickHtml()}
+          ${rivalAddHtml('rival')}
           <p class="note" id="rival-status" aria-live="polite"></p>
-          ${state.rivals.length ? `<div class="table-wrap"><table><thead><tr><th>Dorsal</th><th style="text-align:left">Nombre</th><th style="text-align:left">Puesto</th><th></th></tr></thead><tbody>${rivalRows}</tbody></table></div>` : '<p class="note">Sin plantilla: los tiros rivales se apuntan sin dorsal.</p>'}
+          ${state.rivals.length ? rivalTableHtml(state.rivals, 'rival', rivalLock) : '<p class="note">Sin plantilla: los tiros rivales se apuntan sin dorsal.</p>'}
         </section>
       </div>`;
   }
@@ -2598,7 +2614,7 @@ td.zero { color: var(--faint); }
   function renderSheet() {
     if (ui.sheetMode === 'setup') {
       $('sheet').innerHTML = `<div class="sheet-head"><h2>Preparar partido</h2>
-          <div class="head-actions"><button class="btn press" type="button" data-go-home>‹ Inicio</button>
+          <div class="head-actions"><button class="btn press" type="button" data-go-home>‹ Partidos</button>
           <button class="btn go play press" type="button" data-start-match>Empezar partido ▶</button></div></div>
         <p class="note" id="setup-status" aria-live="polite">Pon los equipos, el lugar y las dos plantillas. El reloj no arranca hasta que tú lo inicies.</p>
         <div class="sheet-body">${sheetActaHtml()}${sourceNoteHtml()}</div>`;
@@ -2626,7 +2642,7 @@ td.zero { color: var(--faint); }
   }
 
   // ---- Roster edits (configuration, saved at once; not part of the match undo history) ----
-  const ROSTER_STATUS = { us: 'roster-status', them: 'rival-status', team: 'home-status' };
+  const ROSTER_STATUS = { us: 'roster-status', them: 'rival-status' };
   function rosterError(text, side = 'us') { renderSheet(); sheetStatus(ROSTER_STATUS[side], text); }
   // Returns why `num` cannot be used in `list` (by anyone but `selfId`), or '' when it can.
   function dorsalProblem(list, num, selfId) {
@@ -2660,30 +2676,70 @@ td.zero { color: var(--faint); }
     commit();
     renderSheet();
   }
-  // "4 7, 9" → adds dorsals 4, 7 and 9; reports any that were skipped and why. A name or position (both optional)
-  // goes with a single dorsal, so it is clear whose they are.
-  function addRivalDorsals(raw, rawName = '', pos = null) {
+  // "4 7, 9" → adds dorsals 4, 7 and 9 to `list`; returns the status text and whether all went in, or an `error`.
+  // A name or position (both optional) goes with a single dorsal, so it is clear whose they are.
+  function addDorsals(list, raw, rawName = '', pos = null) {
     const nums = raw.split(/[^0-9]+/).filter(Boolean).map(Number);
     const name = rawName.trim().slice(0, MAX_NAME_LENGTH);
-    if (!nums.length) { rosterError('Escribe uno o más dorsales separados por espacios.', 'them'); return; }
-    if ((name || pos) && nums.length > 1) { sheetStatus('rival-status', 'Con nombre o puesto, añade los dorsales de uno en uno.'); return; }
+    if (!nums.length) return { error: 'Escribe uno o más dorsales separados por espacios.' };
+    if ((name || pos) && nums.length > 1) return { error: 'Con nombre o puesto, añade los dorsales de uno en uno.' };
     const skipped = [];
     nums.forEach((num) => {
-      const problem = state.rivals.length >= MAX_ROSTER ? `máximo ${MAX_ROSTER}` : dorsalProblem(state.rivals, num, null);
+      const problem = list.length >= MAX_ROSTER ? `máximo ${MAX_ROSTER}` : dorsalProblem(list, num, null);
       if (problem) skipped.push(`${num}: ${problem}`);
-      else state.rivals.push({ id: newId('r'), num, name, pos });
+      else list.push({ id: newId('r'), num, name, pos });
     });
     if (skipped.length < nums.length) ui.rivalNewPos = null;
+    return { complete: !skipped.length, text: skipped.length ? `No añadidos · ${skipped.join(' · ')}` : `Añadidos: ${nums.join(', ')}` };
+  }
+  function addRivalDorsals(raw, rawName, pos) {
+    const added = addDorsals(state.rivals, raw, rawName, pos);
+    if (added.error) { sheetStatus('rival-status', added.error); return; }
     commit();
     renderSheet();
-    sheetStatus('rival-status', skipped.length ? `No añadidos · ${skipped.join(' · ')}` : `Añadidos: ${nums.join(', ')}`);
-    if (!skipped.length) $('rival-dorsals').focus();
+    sheetStatus('rival-status', added.text);
+    if (added.complete) $('rival-dorsals').focus();
   }
   const addRivalFromForm = () => addRivalDorsals($('rival-dorsals').value, $('rival-new-name').value, ui.rivalNewPos);
   // Tapping the chosen position again clears it; only the buttons change, so what is typed stays.
-  function pickRivalNewPos(pos) {
+  function pickRivalNewPos(pos, prefix = 'rival') {
     ui.rivalNewPos = ui.rivalNewPos === pos ? null : pos;
-    document.querySelectorAll('[data-rival-new-pos]').forEach((b) => b.setAttribute('aria-pressed', String(b.dataset.rivalNewPos === `new:${ui.rivalNewPos}`)));
+    const attr = `data-${prefix}-new-pos`;
+    document.querySelectorAll(`[${attr}]`).forEach((b) => b.setAttribute('aria-pressed', String(b.getAttribute(attr) === `new:${ui.rivalNewPos}`)));
+  }
+  // Rival templates live in the coach's profile: «Guardar plantilla» keeps this rival and its dorsals there,
+  // «Cargar plantilla» brings a saved one into the acta.
+  async function saveRivalTemplate() {
+    if (!backend) { sheetStatus('rival-status', 'Entra con tu cuenta para guardar plantillas.'); return; }
+    if (!state.rivals.length) { sheetStatus('rival-status', 'Añade al menos un dorsal antes de guardar la plantilla.'); return; }
+    sheetStatus('rival-status', 'Guardando…');
+    try {
+      await loadTemplates();
+      const same = templateByName(state.them);
+      await storeTemplate({ id: same ? same.id : null, name: state.them, players: templatePlayers(state.rivals) });
+      sheetStatus('rival-status', `Plantilla «${state.them}» ${same ? 'actualizada' : 'guardada'} en tu perfil.`);
+    } catch (err) {
+      sheetStatus('rival-status', `No se pudo guardar: ${cloudErrorText(err)}.`);
+    }
+  }
+  const RIVAL_LOCKED_TEXT = 'Ya hay jugadas con dorsal rival: empieza otro partido desde «Partidos» para cargar otra plantilla.';
+  async function toggleTemplatePick() {
+    if (ui.templatePick) { ui.templatePick = false; renderSheet(); return; }
+    if (!backend) { sheetStatus('rival-status', 'Entra con tu cuenta para usar tus plantillas.'); return; }
+    if (state.rivals.some(rivalLock)) { sheetStatus('rival-status', RIVAL_LOCKED_TEXT); return; }
+    try { await loadTemplates(); }
+    catch (err) { sheetStatus('rival-status', `No se pudieron leer tus plantillas: ${cloudErrorText(err)}.`); return; }
+    ui.templatePick = true;
+    renderSheet();
+  }
+  function applyRivalTemplate(t) {
+    if (state.rivals.some(rivalLock)) { sheetStatus('rival-status', RIVAL_LOCKED_TEXT); return; }
+    state.rivals = t.players.map((p) => ({ id: newId('r'), num: p.num, name: p.name, pos: p.pos }));
+    state.them = t.name;
+    ui.templatePick = false;
+    commit();
+    renderSheet();
+    sheetStatus('rival-status', `Plantilla «${t.name}» cargada: ${plural(t.players.length, 'dorsal', 'dorsales')}.`);
   }
   function removeRival(r) {
     if (rivalLock(r)) return;
@@ -2738,15 +2794,14 @@ td.zero { color: var(--faint); }
   }
   const matchDateText = () => (state.date ? new Date(`${state.date}T12:00:00`).toLocaleDateString('es-ES') : '');
   const slug = (s) => s.normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '') || 'equipo';
-  async function exportRoster(side) {
-    const [teamName, list] = { us: [state.us, state.players], them: [state.them, sortedRivals()], team: [team.name, home.roster] }[side];
+  async function exportRoster(teamName, list, statusId) {
     const players = list.map(({ num, name, pos }) => ({ num, name, pos }));
     const filename = `plantilla-${slug(teamName)}.json`;
     try {
       await offerFile(filename, new Blob([JSON.stringify({ format: ROSTER_FORMAT, version: 1, team: teamName, players }, null, 2)], { type: 'application/json' }));
-      sheetStatus(ROSTER_STATUS[side], `Plantilla guardada: ${filename}`);
+      sheetStatus(statusId, `Plantilla guardada: ${filename}`);
     } catch (err) {
-      sheetStatus(ROSTER_STATUS[side], fileErrorText(err));
+      sheetStatus(statusId, fileErrorText(err));
     }
   }
   // Validates an imported roster file; returns the players or throws an Error explaining what is wrong.
@@ -2776,39 +2831,6 @@ td.zero { color: var(--faint); }
     const fallback = ours ? state.us : state.them;
     return { team: typeof data.team === 'string' && data.team.trim() ? data.team.trim().slice(0, MAX_NAME_LENGTH) : fallback, players };
   }
-  async function importRoster(file, side) {
-    if (side === 'team') { importTeamRoster(file); return; }
-    if (side === 'them') {
-      if (state.rivals.some(rivalLock)) { sheetStatus('rival-status', 'Ya hay jugadas con dorsal rival: empieza otro partido desde «Inicio» para cargar otra plantilla.'); return; }
-      try {
-        const { team, players } = parseRoster(await file.text(), 'them');
-        state.rivals = players;
-        state.them = team;
-        commit();
-        renderSheet();
-        sheetStatus('rival-status', `Plantilla rival cargada: ${players.length} dorsales.`);
-      } catch (err) {
-        sheetStatus('rival-status', `No se pudo cargar: ${err.message}.`);
-      }
-      return;
-    }
-    if (state.events.length) { sheetStatus('roster-status', 'Hay acciones en este partido: empieza otro desde «Inicio» para cargar otra plantilla.'); return; }
-    try {
-      const { team, players } = parseRoster(await file.text());
-      state.players = players;
-      state.us = team;
-      state.lineups = { ATK: {}, DEF: {} };
-      state.gkId = players.find((p) => p.pos === 'POR').id;
-      state.sample = false;
-      ui.shooter = null;
-      commit();
-      renderSheet();
-      sheetStatus('roster-status', `Plantilla cargada: ${players.length} jugadores. Arrástralos a la pista desde el banquillo.`);
-    } catch (err) {
-      sheetStatus('roster-status', `No se pudo cargar: ${err.message}.`);
-    }
-  }
-
   // ---- Files: the artifact viewer's save dialog when available, a normal download otherwise ----
   async function offerFile(filename, blob) {
     const downloads = window.claude && typeof window.claude.use === 'function' ? await window.claude.use('downloads') : null;
@@ -3253,8 +3275,9 @@ td.zero { color: var(--faint); }
     if (b.dataset.rosterPos) { const [id, pos] = b.dataset.rosterPos.split(':'); setPosition(playerById(id), pos); return; }
     if (b.dataset.rosterDel) { removePlayer(playerById(b.dataset.rosterDel)); return; }
     if (b.hasAttribute('data-roster-add')) { addPlayer(); return; }
-    if (b.dataset.rosterExport) { exportRoster(b.dataset.rosterExport); return; }
-    if (b.dataset.rosterImport) { ui.rosterSide = b.dataset.rosterImport; $('roster-file').click(); return; }
+    if (b.hasAttribute('data-template-save')) { saveRivalTemplate(); return; }
+    if (b.hasAttribute('data-template-pick')) { toggleTemplatePick(); return; }
+    if (b.dataset.templateLoad) { const t = home.templates.find((x) => x.id === b.dataset.templateLoad); if (t) applyRivalTemplate(t); return; }
     if (b.hasAttribute('data-rival-add')) { addRivalFromForm(); return; }
     if (b.dataset.rivalNewPos) { pickRivalNewPos(b.dataset.rivalNewPos.split(':')[1]); return; }
     if (b.dataset.rivalPos) { const [id, pos] = b.dataset.rivalPos.split(':'); setRivalPosition(rivalById(id), pos); return; }
@@ -3274,7 +3297,7 @@ td.zero { color: var(--faint); }
   $('roster-file').addEventListener('change', (ev) => {
     const file = ev.target.files && ev.target.files[0];
     ev.target.value = '';
-    if (file) importRoster(file, ui.rosterSide);
+    if (file) (ui.rosterSide === 'template' ? importTemplateFile : importTeamRoster)(file);
   });
 
   // ===================== Accounts, team and saved matches =====================
@@ -3285,7 +3308,6 @@ td.zero { color: var(--faint); }
   const MATCH_KEY_PREFIX = 'hbstats:match:';
   const CACHE_KEY_PREFIX = 'hbstats:cache:';
   const CURRENT_MATCH_KEY = 'hbstats:current-match';
-  const TEAM_CHOICE_KEY = 'hbstats:team';
   const SQUAD_KEY_PREFIX = 'hbstats:squad:';
   const LOCAL_DB_KEY = 'hbstats:local:v1';
   // Matches left by the per-club releases on this same site, offered for import once.
@@ -3306,7 +3328,7 @@ td.zero { color: var(--faint); }
   let backend = null;
   let currentMatchId = null;
   let syncTimer = null;
-  const home = { view: 'loading', user: null, teams: [], roster: [], matches: [], squad: new Set(), offline: false, error: '', draft: null, crestDraft: undefined, armed: null };
+  const home = { view: 'loading', user: null, teams: [], roster: [], matches: [], templates: [], template: null, squad: new Set(), offline: false, error: '', draft: null, crestDraft: undefined, armed: null, passwordChange: false };
 
   // ---- Device storage ----
   function readJson(key) {
@@ -3339,6 +3361,7 @@ td.zero { color: var(--faint); }
     [/invalid login credentials/i, 'email o contraseña incorrectos'],
     [/email not confirmed/i, 'falta aceptar la invitación del email'],
     [/failed to fetch|networkerror|load failed/i, 'sin conexión'],
+    [/rival_templates_user_name/i, 'ya tienes una plantilla con ese nombre'],
     [/players_team_num_active|duplicate key/i, 'ese dorsal ya está en la plantilla'],
     [/password should be at least/i, `la contraseña necesita al menos ${MIN_PASSWORD_LENGTH} caracteres`],
     [/same password/i, 'la contraseña nueva tiene que ser distinta de la anterior'],
@@ -3354,7 +3377,7 @@ td.zero { color: var(--faint); }
 
   // Everything on this device: no sign-in, one store in localStorage. Match states are the device copies themselves.
   function localBackend() {
-    const read = () => readJson(LOCAL_DB_KEY) || { teams: [], players: [], matches: {} };
+    const read = () => ({ teams: [], players: [], matches: {}, templates: [], ...readJson(LOCAL_DB_KEY) });
     const write = (db) => { if (!writeJson(LOCAL_DB_KEY, db)) throw new Error('no queda espacio en este dispositivo'); };
     const plain = (p) => ({ id: p.id, num: p.num, name: p.name, pos: p.pos });
     return {
@@ -3408,6 +3431,21 @@ td.zero { color: var(--faint); }
         db.players = db.players.filter((p) => p.teamId !== id);
         Object.keys(db.matches).filter((k) => db.matches[k].teamId === id).forEach((k) => { delete db.matches[k]; });
         write(db);
+      },
+      async listTemplates() { return read().templates.slice().sort(byTemplateName); },
+      async saveTemplate(t) {
+        const db = read();
+        if (db.templates.some((x) => x.id !== t.id && sameName(x.name, t.name))) throw new Error('rival_templates_user_name');
+        let row = t.id && db.templates.find((x) => x.id === t.id);
+        if (!row) { row = { id: newUuid() }; db.templates.push(row); }
+        Object.assign(row, { name: t.name, players: t.players });
+        write(db);
+        return { ...row };
+      },
+      async deleteTemplate(id) {
+        const db = read();
+        db.templates = db.templates.filter((x) => x.id !== id);
+        write(db);
       }
     };
   }
@@ -3456,7 +3494,15 @@ td.zero { color: var(--faint); }
       // Row level security lets only the owner delete; anyone else deletes nothing, which is reported.
       async deleteTeam(id) {
         if (!check(await client.from('teams').delete().eq('id', id).select('id')).length) throw new Error('solo quien creó el equipo puede borrarlo');
-      }
+      },
+      // Rival templates belong to the signed-in coach (the table fills in user_id).
+      async listTemplates() { return check(await client.from('rival_templates').select('id,name,players').order('name')); },
+      async saveTemplate(t) {
+        const row = { name: t.name, players: t.players };
+        const query = t.id ? client.from('rival_templates').update(row).eq('id', t.id) : client.from('rival_templates').insert(row);
+        return check(await query.select('id,name,players').single());
+      },
+      async deleteTemplate(id) { check(await client.from('rival_templates').delete().eq('id', id)); }
     };
   }
 
@@ -3474,6 +3520,25 @@ td.zero { color: var(--faint); }
     }
   }
   const userKey = () => (home.user ? home.user.email : 'device');
+
+  // ---- Rival templates (the coach's profile) ----
+  const sameName = (a, b) => a.toLowerCase() === b.toLowerCase();
+  const byTemplateName = (a, b) => a.name.localeCompare(b.name, 'es');
+  const templateByName = (name) => home.templates.find((t) => sameName(t.name, name));
+  const templatesKey = () => `templates:${userKey()}`;
+  // What a template keeps of each rival: dorsal, name and position (both optional), in dorsal order.
+  const templatePlayers = (list) => list.slice().sort((a, b) => a.num - b.num).map(({ num, name, pos }) => ({ num, name: name || '', pos: pos || null }));
+  async function loadTemplates() {
+    const { value, offline } = await cachedRead(templatesKey(), () => backend.listTemplates());
+    home.templates = value;
+    return offline;
+  }
+  async function storeTemplate(t) {
+    const saved = await backend.saveTemplate(t);
+    home.templates = [...home.templates.filter((x) => x.id !== saved.id), saved].sort(byTemplateName);
+    writeJson(CACHE_KEY_PREFIX + templatesKey(), home.templates);
+    return saved;
+  }
 
   // ---- Match saving and upload ----
   function save() {
@@ -3545,7 +3610,7 @@ td.zero { color: var(--faint); }
   const homeStatus = (text) => sheetStatus('home-status', text);
   const statusHtml = () => '<p class="note home-status" id="home-status" role="status" aria-live="polite"></p>';
   // Destructive buttons ask once more: the first tap arms them ("¿Seguro?"), the second acts.
-  const armedButton = (id, label, attrs) => `<button class="btn press${home.armed === id ? ' armed' : ''}" type="button" ${attrs}>${home.armed === id ? '¿Seguro?' : label}</button>`;
+  const armedButton = (id, label, attrs) => `<button class="btn press${home.armed === id ? ' armed' : ''}" type="button" ${attrs}>${home.armed === id ? '⚠ ¿Seguro?' : label}</button>`;
   function confirmTap(id) {
     if (home.armed === id) { home.armed = null; return true; }
     home.armed = id;
@@ -3571,7 +3636,7 @@ td.zero { color: var(--faint); }
       <p class="note">Al menos ${MIN_PASSWORD_LENGTH} caracteres. Con ella y tu email entrarás desde cualquier tablet.</p>
       <label class="field">Contraseña nueva<input class="in" type="password" name="password" id="new-password" autocomplete="new-password" minlength="${MIN_PASSWORD_LENGTH}" required></label>
       <label class="field">Repítela<input class="in" type="password" name="repeat" id="new-password-repeat" autocomplete="new-password" minlength="${MIN_PASSWORD_LENGTH}" required></label>
-      <button class="btn primary press" type="submit">Guardar contraseña</button>
+      <div class="row-actions"><button class="btn primary press" type="submit">Guardar contraseña</button>${home.passwordChange ? '<button class="btn press" type="button" data-home-view="profile">Cancelar</button>' : ''}</div>
       ${statusHtml()}
     </form>`;
   }
@@ -3594,15 +3659,11 @@ td.zero { color: var(--faint); }
   }
   function homeHeadHtml() {
     const tab = (view, label) => `<button class="press" type="button" data-home-view="${view}" aria-pressed="${home.view === view || (view === 'matches' && home.view === 'squad')}">${label}</button>`;
-    const switcher = home.teams.length > 1
-      ? `<select class="in team-switch" id="team-switch" aria-label="Equipo">${home.teams.map((t) => `<option value="${t.id}"${t.id === team.id ? ' selected' : ''}>${esc(t.name)}</option>`).join('')}</select>` : '';
-    const account = home.user ? `<small class="note">${esc(home.user.email)}</small><button class="btn press" type="button" data-sign-out>Salir</button>` : '';
     return `<header class="home-head glass">
+      <button class="btn press" type="button" data-home-view="profile">‹ Perfil</button>
       <img class="crest home-crest" src="${esc(crestSrc(team))}" alt="">
       <div class="home-title"><h1>${esc(team.name)}</h1><small>${esc(team.club)}</small></div>
-      ${switcher}<button class="btn press" type="button" data-new-team>+ Equipo</button>
       <div class="tabs" role="group" aria-label="Secciones">${tab('matches', 'Partidos')}${tab('team', 'Equipo')}</div>
-      <div class="head-actions">${account}</div>
     </header>`;
   }
   // A match left on this tablet by the per-club release (same site), if any.
@@ -3643,9 +3704,9 @@ td.zero { color: var(--faint); }
     return `<h3 class="acta-h">Plantilla</h3>
       <div class="row-actions"><b>${home.roster.length}/${MAX_TEAM_ROSTER}</b>
         <button class="btn primary press" type="button" data-team-add ${home.roster.length >= MAX_TEAM_ROSTER ? 'disabled' : ''}>+ Jugador</button>
-        <button class="btn press" type="button" data-roster-export="team">Guardar</button><button class="btn press" type="button" data-roster-import="team">Cargar</button></div>
+        <button class="btn press" type="button" data-team-export>Exportar</button><button class="btn press" type="button" data-roster-import="team">Importar</button></div>
       ${rows ? `<div class="table-wrap"><table><thead><tr><th>Dorsal</th><th style="text-align:left">Jugador</th><th style="text-align:left">Puesto</th><th></th></tr></thead><tbody>${rows}</tbody></table></div>`
-        : '<p class="note">Añade a tus jugadores (al menos un portero) o carga una plantilla guardada.</p>'}
+        : '<p class="note">Añade a tus jugadores (al menos un portero) o importa un archivo de plantilla.</p>'}
       <p class="note">En cada partido eliges la convocatoria entre estos jugadores. Quitar a alguien no cambia los partidos ya jugados.</p>`;
   }
   function teamViewHtml() {
@@ -3668,6 +3729,40 @@ td.zero { color: var(--faint); }
       <div class="squad-grid">${home.roster.slice().sort(byPosition).map(chip).join('')}</div>`;
   }
   const HOME_VIEWS = { matches: matchesHtml, team: teamViewHtml, squad: squadHtml };
+
+  // ---- Profile: the first screen after signing in (teams, rival templates, account) ----
+  const profileHeadHtml = () => `<header class="home-head glass"><span class="app-mark" aria-hidden="true">HB</span>
+      <div class="home-title"><h1>HBStats</h1><small>${home.user ? esc(home.user.email) : 'En este dispositivo'}</small></div></header>`;
+  function profileHtml() {
+    const teams = home.teams.map((t) => `<button class="team-card press" type="button" data-open-team="${t.id}"><img class="crest" src="${esc(crestSrc(t))}" alt=""><span><b>${esc(t.name)}</b><small>${esc(t.club)}</small></span></button>`).join('');
+    const rows = home.templates.map((t) => `<tr><td style="text-align:left"><b>${esc(t.name)}</b></td><td>${plural(t.players.length, 'dorsal', 'dorsales')}</td>
+        <td><div class="row-actions"><button class="btn press" type="button" data-template-edit="${t.id}">Editar</button><button class="btn press" type="button" data-template-export="${t.id}">Exportar</button>${armedButton(`template-${t.id}`, 'Borrar', `data-template-del="${t.id}" aria-label="Borrar la plantilla ${esc(t.name)}"`)}</div></td></tr>`).join('');
+    const account = home.user
+      ? `<p>${esc(home.user.email)}</p><div class="row-actions"><button class="btn press" type="button" data-change-password>Cambiar contraseña</button><button class="btn press" type="button" data-sign-out>Salir</button></div>`
+      : '<p class="note">Sin cuenta: todo se guarda solo en esta tablet.</p>';
+    return `${statusHtml()}
+      ${home.offline ? '<p class="note">Sin conexión: ves la copia guardada en esta tablet.</p>' : ''}
+      <section class="sheet-card"><h3>Mis equipos</h3><div class="team-cards">${teams}<button class="team-card add press" type="button" data-new-team>+ Nuevo equipo</button></div></section>
+      <section class="sheet-card"><h3>Plantillas de rivales</h3>
+        <div class="row-actions"><button class="btn primary press" type="button" data-template-new>+ Nueva plantilla</button><button class="btn press" type="button" data-roster-import="template">Importar archivo</button></div>
+        ${rows ? `<div class="table-wrap"><table><thead><tr><th style="text-align:left">Rival</th><th>Dorsales</th><th></th></tr></thead><tbody>${rows}</tbody></table></div>`
+          : '<p class="note">Guarda aquí a los rivales con sus dorsales y cárgalos en el acta de cada partido con «Cargar plantilla».</p>'}</section>
+      <section class="sheet-card"><h3>Cuenta</h3>${account}</section>`;
+  }
+  function templateHtml() {
+    const t = home.template;
+    return `<section class="sheet-card template-edit">
+      <div class="sheet-head"><h2>${t.id ? 'Editar plantilla' : 'Nueva plantilla'}</h2><div class="head-actions">
+        <button class="btn press" type="button" data-home-view="profile">Cancelar</button>
+        <button class="btn primary press" type="button" data-template-store>Guardar</button></div></div>
+      <div class="acta-teams"><label>Rival<input class="in" type="text" id="tpl-name" maxlength="${MAX_NAME_LENGTH}" value="${esc(t.name)}" placeholder="Nombre del equipo rival"></label></div>
+      <div class="row-actions"><b>${t.players.length}/${MAX_ROSTER}</b></div>
+      ${rivalAddHtml('tpl')}
+      ${statusHtml()}
+      ${t.players.length ? rivalTableHtml(t.players, 'tpl', () => false) : '<p class="note">Añade los dorsales del rival; nombre y puesto son opcionales.</p>'}
+    </section>`;
+  }
+  const PROFILE_VIEWS = { profile: profileHtml, template: templateHtml };
   function renderHome() {
     const v = home.view;
     let body;
@@ -3679,6 +3774,7 @@ td.zero { color: var(--faint); }
       const cancel = home.teams.length ? '<button class="btn press" type="button" data-cancel-team>Cancelar</button>' : '';
       body = `<div class="auth-card wide glass"><div class="sheet-head"><h1>${home.teams.length ? 'Nuevo equipo' : 'Crea tu equipo'}</h1>${cancel}</div><p class="note">Nombre, colores y escudo. Después añadirás la plantilla.</p>${teamFormHtml(home.draft, true)}</div>`;
     }
+    else if (PROFILE_VIEWS[v]) body = `${profileHeadHtml()}<main class="home-body">${PROFILE_VIEWS[v]()}</main>`;
     else body = `${homeHeadHtml()}<main class="home-body">${HOME_VIEWS[v]()}</main>`;
     $('home').innerHTML = `<div class="home-wrap${AUTH_VIEWS.includes(v) ? ' centred' : ''}">${body}</div>`;
     $('home').hidden = false;
@@ -3710,12 +3806,26 @@ td.zero { color: var(--faint); }
     home.teams = value;
     home.offline = offline;
     if (!home.teams.length) { openNewTeam(); return; }
-    const chosen = readJson(TEAM_CHOICE_KEY);
-    await selectTeam(home.teams.find((t) => t.id === chosen) || home.teams[0]);
+    // A reload in the middle of a match goes straight back to it; otherwise the profile opens.
+    const resume = readJson(CURRENT_MATCH_KEY);
+    const saved = resume && localMatch(resume);
+    const playing = saved && home.teams.find((t) => t.id === saved.teamId);
+    if (playing) { await selectTeam(playing); return; }
+    await showProfile();
+  }
+  async function showProfile() {
+    home.passwordChange = false;
+    home.template = null;
+    showHomeView('profile');
+    let problem = '';
+    try { if (await loadTemplates()) home.offline = true; }
+    catch (err) { home.templates = []; problem = `No se pudieron leer tus plantillas: ${cloudErrorText(err)}.`; }
+    if (home.view !== 'profile') return;
+    renderHome();
+    if (problem) homeStatus(problem);
   }
   async function selectTeam(t) {
     applyTeam(t);
-    writeJson(TEAM_CHOICE_KEY, t.id);
     home.crestDraft = undefined;
     try { home.roster = (await cachedRead(`players:${t.id}`, () => backend.listPlayers(t.id))).value; }
     catch (err) { home.roster = []; console.warn(`Roster not available: ${cloudErrorText(err)}`); }
@@ -3751,6 +3861,7 @@ td.zero { color: var(--faint); }
     if (dirty) scheduleSync();
     ui.shooter = null;
     ui.sheetMode = 'sheet';
+    ui.templatePick = false;
     ['home', 'sheet', 'final'].forEach((el) => { $(el).hidden = true; });
     renderAll();
     if (!state.setupDone) openSetup();
@@ -3787,7 +3898,7 @@ td.zero { color: var(--faint); }
     ui.shooter = null;
     ['home', 'sheet', 'final'].forEach((el) => { $(el).hidden = true; });
     renderAll();
-    hint('Partido de ejemplo · «Inicio» para volver a tus partidos');
+    hint('Partido de ejemplo · «‹ Partidos» para volver a tus partidos');
   }
   // The public demo: a match in progress to play with; «Entrar» leads to the real app.
   function openDemo() {
@@ -3932,6 +4043,66 @@ td.zero { color: var(--faint); }
     }
   }
 
+  // ---- Template editor (a draft until «Guardar») ----
+  function editTemplate(t) {
+    home.template = t ? { id: t.id, name: t.name, players: t.players.map((r) => ({ ...r, id: newId('r') })) } : { id: null, name: '', players: [] };
+    ui.rivalNewPos = null;
+    showHomeView('template');
+  }
+  const draftRival = (id) => home.template.players.find((r) => r.id === id);
+  function editDraftRival(r, changes) {
+    if ('num' in changes) {
+      const problem = dorsalProblem(home.template.players, changes.num, r.id);
+      if (problem) { renderHome(); homeStatus(problem); return; }
+    }
+    Object.assign(r, changes);
+    renderHome();
+  }
+  function addDraftRivals() {
+    home.template.name = $('tpl-name').value;
+    const added = addDorsals(home.template.players, $('tpl-dorsals').value, $('tpl-new-name').value, ui.rivalNewPos);
+    if (added.error) { homeStatus(added.error); return; }
+    renderHome();
+    homeStatus(added.text);
+    if (added.complete) $('tpl-dorsals').focus();
+  }
+  async function storeTemplateDraft() {
+    const t = home.template;
+    const name = $('tpl-name').value.trim().slice(0, MAX_NAME_LENGTH);
+    if (!name) { homeStatus('Escribe el nombre del rival.'); return; }
+    if (!t.players.length) { homeStatus('Añade al menos un dorsal.'); return; }
+    const same = templateByName(name);
+    if (same && same.id !== t.id) { homeStatus(`Ya tienes una plantilla «${same.name}»: elige otro nombre.`); return; }
+    homeStatus('Guardando…');
+    try {
+      await storeTemplate({ id: t.id, name, players: templatePlayers(t.players) });
+    } catch (err) {
+      homeStatus(`No se pudo guardar: ${cloudErrorText(err)}.`);
+      return;
+    }
+    await showProfile();
+    homeStatus(`Plantilla «${name}» guardada.`);
+  }
+  async function deleteTemplate(id) {
+    try { await backend.deleteTemplate(id); }
+    catch (err) { homeStatus(`No se pudo borrar: ${cloudErrorText(err)}.`); return; }
+    home.templates = home.templates.filter((t) => t.id !== id);
+    writeJson(CACHE_KEY_PREFIX + templatesKey(), home.templates);
+    renderHome();
+    homeStatus('Plantilla borrada.');
+  }
+  // A roster file opens in the editor to be checked; with the name of a saved template, saving replaces that one.
+  async function importTemplateFile(file) {
+    let parsed;
+    try { parsed = parseRoster(await file.text(), 'them'); }
+    catch (err) { homeStatus(`No se pudo cargar: ${err.message}.`); return; }
+    const same = templateByName(parsed.team);
+    home.template = { id: same ? same.id : null, name: same ? same.name : parsed.team, players: parsed.players };
+    ui.rivalNewPos = null;
+    showHomeView('template');
+    homeStatus(same ? `Al guardar sustituirá a tu plantilla «${same.name}».` : 'Revisa la plantilla y pulsa «Guardar».');
+  }
+
   function openNewTeam() {
     home.draft = { ...DEFAULT_TEAM };
     home.crestDraft = undefined;
@@ -3947,8 +4118,8 @@ td.zero { color: var(--faint); }
     removeKey(SQUAD_KEY_PREFIX + gone.id);
     home.teams = home.teams.filter((t) => t.id !== gone.id);
     writeJson(CACHE_KEY_PREFIX + `teams:${userKey()}`, home.teams);
-    if (home.teams.length) { await selectTeam(home.teams[0]); homeStatus(`Equipo «${gone.name}» borrado.`); return; }
     applyTeam(DEFAULT_TEAM);
+    if (home.teams.length) { await showProfile(); homeStatus(`Equipo «${gone.name}» borrado.`); return; }
     openNewTeam();
   }
 
@@ -3981,6 +4152,7 @@ td.zero { color: var(--faint); }
     if (password !== String(data.get('repeat'))) { homeStatus('Las dos contraseñas no coinciden.'); return; }
     try {
       await backend.setPassword(password);
+      if (home.passwordChange) { await showProfile(); homeStatus('Contraseña cambiada.'); return; }
       history.replaceState(null, '', location.pathname);
       await loadTeams();
     } catch (err) {
@@ -3993,8 +4165,8 @@ td.zero { color: var(--faint); }
     if (localMatches().some((m) => m.dirty)) { homeStatus('Hay partidos sin subir: conéctate a internet antes de salir.'); return; }
     try { await backend.signOut(); }
     catch (err) { homeStatus(`No se pudo salir: ${cloudErrorText(err)}.`); return; }
-    [...storedKeys(MATCH_KEY_PREFIX), ...storedKeys(CACHE_KEY_PREFIX), ...storedKeys(SQUAD_KEY_PREFIX), CURRENT_MATCH_KEY, TEAM_CHOICE_KEY].forEach(removeKey);
-    Object.assign(home, { user: null, teams: [], roster: [], matches: [] });
+    [...storedKeys(MATCH_KEY_PREFIX), ...storedKeys(CACHE_KEY_PREFIX), ...storedKeys(SQUAD_KEY_PREFIX), CURRENT_MATCH_KEY].forEach(removeKey);
+    Object.assign(home, { user: null, teams: [], roster: [], matches: [], templates: [] });
     applyTeam(DEFAULT_TEAM);
     showHomeView('login');
   }
@@ -4016,16 +4188,28 @@ td.zero { color: var(--faint); }
     if (b.dataset.deleteMatch) { if (confirmTap(`delete-${b.dataset.deleteMatch}`)) deleteMatch(b.dataset.deleteMatch); return; }
     if (b.dataset.teamDel) { if (confirmTap(`retire-${b.dataset.teamDel}`)) retireTeamPlayer(rosterPlayer(b.dataset.teamDel)); return; }
     if (b.hasAttribute('data-delete-team')) { if (confirmTap('delete-team')) deleteTeam(); return; }
+    if (b.dataset.templateDel) { if (confirmTap(`template-${b.dataset.templateDel}`)) deleteTemplate(b.dataset.templateDel); return; }
     if (b.hasAttribute('data-legacy-drop')) { if (confirmTap('legacy-drop')) { const l = legacyMatch(); if (l) removeKey(l.key); renderHome(); } return; }
     if (armedBefore) { home.armed = null; renderHome(); }
     if (b.hasAttribute('data-retry')) { startHome(); return; }
     if (b.hasAttribute('data-forgot')) { sendPasswordReset(); return; }
     if (b.hasAttribute('data-sign-out')) { signOut(); return; }
     if (b.dataset.homeView === 'matches') { showMatches(); return; }
+    if (b.dataset.homeView === 'profile') { showProfile(); return; }
     if (b.dataset.homeView) { home.crestDraft = undefined; showHomeView(b.dataset.homeView); return; }
     if (b.hasAttribute('data-new-match')) { openSquad(); return; }
     if (b.hasAttribute('data-new-team')) { openNewTeam(); return; }
-    if (b.hasAttribute('data-cancel-team')) { showMatches(); return; }
+    if (b.hasAttribute('data-cancel-team')) { showProfile(); return; }
+    if (b.dataset.openTeam) { const t = home.teams.find((x) => x.id === b.dataset.openTeam); if (t) selectTeam(t); return; }
+    if (b.hasAttribute('data-change-password')) { home.passwordChange = true; showHomeView('password'); return; }
+    if (b.hasAttribute('data-template-new')) { editTemplate(null); return; }
+    if (b.dataset.templateEdit) { editTemplate(home.templates.find((t) => t.id === b.dataset.templateEdit)); return; }
+    if (b.dataset.templateExport) { const t = home.templates.find((x) => x.id === b.dataset.templateExport); exportRoster(t.name, t.players, 'home-status'); return; }
+    if (b.hasAttribute('data-template-store')) { storeTemplateDraft(); return; }
+    if (b.hasAttribute('data-tpl-add')) { addDraftRivals(); return; }
+    if (b.dataset.tplNewPos) { pickRivalNewPos(b.dataset.tplNewPos.split(':')[1], 'tpl'); return; }
+    if (b.dataset.tplPos) { const [id, pos] = b.dataset.tplPos.split(':'); const r = draftRival(id); editDraftRival(r, { pos: r.pos === pos ? null : pos }); return; }
+    if (b.dataset.tplDel) { home.template.players = home.template.players.filter((r) => r.id !== b.dataset.tplDel); renderHome(); return; }
     if (b.hasAttribute('data-sample')) { openSample(); return; }
     if (b.dataset.openMatch) { openMatch(b.dataset.openMatch); return; }
     if (b.hasAttribute('data-legacy-import')) { importLegacyMatch(); return; }
@@ -4037,15 +4221,18 @@ td.zero { color: var(--faint); }
     if (b.hasAttribute('data-crest-clear')) { home.crestDraft = null; $('crest-preview').src = crestSrc({ ...(home.view === 'team-new' ? home.draft : team), crest: null }); b.remove(); return; }
     if (b.hasAttribute('data-team-add')) { addTeamPlayer(); return; }
     if (b.dataset.teamPos) { const [id, pos] = b.dataset.teamPos.split(':'); saveTeamPlayer(rosterPlayer(id), { pos }); return; }
-    if (b.dataset.rosterExport) { exportRoster(b.dataset.rosterExport); return; }
+    if (b.hasAttribute('data-team-export')) { exportRoster(team.name, home.roster, 'home-status'); return; }
     if (b.dataset.rosterImport) { ui.rosterSide = b.dataset.rosterImport; $('roster-file').click(); }
   });
   $('home').addEventListener('change', (ev) => {
     const el = ev.target;
-    if (el.id === 'team-switch') { const t = home.teams.find((x) => x.id === el.value); if (t) selectTeam(t); return; }
+    if (el.id === 'tpl-name') { home.template.name = el.value; return; }
+    if (el.dataset.tplNum) { editDraftRival(draftRival(el.dataset.tplNum), { num: Number(el.value) }); return; }
+    if (el.dataset.tplName) { editDraftRival(draftRival(el.dataset.tplName), { name: el.value.trim().slice(0, MAX_NAME_LENGTH) }); return; }
     if (el.dataset.teamNum) { saveTeamPlayer(rosterPlayer(el.dataset.teamNum), { num: Number(el.value) }); return; }
     if (el.dataset.teamName) saveTeamPlayer(rosterPlayer(el.dataset.teamName), { name: el.value.trim().slice(0, MAX_NAME_LENGTH) });
   });
+  $('home').addEventListener('keydown', (ev) => { if (ev.key === 'Enter' && ['tpl-dorsals', 'tpl-new-name'].includes(ev.target.id)) addDraftRivals(); });
   $('crest-file').addEventListener('change', (ev) => {
     const file = ev.target.files && ev.target.files[0];
     ev.target.value = '';
