@@ -899,6 +899,14 @@ td.zero { color: var(--faint); }
       events: [], fired: [], alerts: [], history: [], future: []
     };
   }
+  // The same match back at 0:00: squad, rival and setup kept; clock, time-outs and log cleared.
+  function restartedMatch(from) {
+    return {
+      ...from, finished: false, phase: DEFAULT_PHASE,
+      clock: { period: 1, elapsedMs: 0, runningSince: null }, timeoutsUsed: 0, timeoutsUsedThem: 0, timeout: null,
+      events: [], fired: [], alerts: [], history: [], future: []
+    };
+  }
   // The sample match sits behind the home screen until a real match is opened.
   let state = sampleState();
   const ui = {
@@ -3700,7 +3708,7 @@ td.zero { color: var(--faint); }
         <td>${esc(dateText(m.date)) || '–'}</td><td style="text-align:left">${esc(m.them)}</td><td style="text-align:left">${esc(m.venue) || '–'}</td>
         <td class="score-cell">${m.status === 'setup' ? '–' : `${m.scoreUs} – ${m.scoreThem}`}</td>
         <td><span class="status s-${m.status}">${MATCH_STATUS[m.status]}</span>${m.pending ? ' <small class="note">sin subir</small>' : ''}</td>
-        <td><div class="row-actions"><button class="btn primary press" type="button" data-open-match="${m.id}">${m.status === 'finished' ? 'Ver' : 'Seguir'}</button>${armedButton(`delete-${m.id}`, 'Borrar', `data-delete-match="${m.id}" aria-label="Borrar el partido contra ${esc(m.them)}"`)}</div></td></tr>`).join('');
+        <td><div class="row-actions"><button class="btn primary press" type="button" data-open-match="${m.id}">${m.status === 'finished' ? 'Ver' : 'Seguir'}</button>${m.status === 'setup' ? '' : armedButton(`restart-${m.id}`, 'Reiniciar', `data-restart-match="${m.id}" aria-label="Reiniciar el partido contra ${esc(m.them)}"`)}${armedButton(`delete-${m.id}`, 'Borrar', `data-delete-match="${m.id}" aria-label="Borrar el partido contra ${esc(m.them)}"`)}</div></td></tr>`).join('');
     return `<div class="row-actions"><button class="btn go press" type="button" data-new-match>+ Nuevo partido</button><button class="btn press" type="button" data-sample>Ver partido de ejemplo</button></div>
       ${legacyHtml()}
       ${home.offline ? '<p class="note">Sin conexión: ves la copia guardada en esta tablet. Los partidos se subirán al volver la conexión.</p>' : ''}
@@ -3880,18 +3888,39 @@ td.zero { color: var(--faint); }
     if (!state.setupDone) openSetup();
     else if (state.finished) openFinal();
   }
-  async function openMatch(id) {
+  // The latest copy of a match: this device's when not uploaded yet, else the backend's (the device copy without coverage).
+  async function loadLatestMatch(id) {
     const saved = localMatch(id);
-    if (saved && saved.dirty) { enterMatch(id, saved.state, true); return; }
-    homeStatus('Abriendo el partido…');
+    if (saved && saved.dirty) return { state: saved.state, dirty: true };
     try {
       const remote = await backend.loadMatch(id);
       if (!remote) throw new Error('el partido ya no existe');
-      enterMatch(id, remote, false);
+      return { state: remote, dirty: false };
     } catch (err) {
-      if (saved) { enterMatch(id, saved.state, false); return; }
+      if (saved) return { state: saved.state, dirty: false };
+      throw err;
+    }
+  }
+  async function openMatch(id) {
+    homeStatus('Abriendo el partido…');
+    try {
+      const latest = await loadLatestMatch(id);
+      enterMatch(id, latest.state, latest.dirty);
+    } catch (err) {
       homeStatus(`No se pudo abrir: ${cloudErrorText(err)}.`);
     }
+  }
+  async function restartMatch(id) {
+    try {
+      const latest = await loadLatestMatch(id);
+      storeLocalMatch(id, restartedMatch(restoreState(latest.state)), true);
+    } catch (err) {
+      homeStatus(`No se pudo reiniciar: ${cloudErrorText(err)}.`);
+      return;
+    }
+    await syncMatches();
+    await showMatches();
+    homeStatus('Partido reiniciado: empieza de nuevo desde 0:00.');
   }
   function leaveMatch() {
     if (isRunning()) pauseClock();
@@ -4198,6 +4227,7 @@ td.zero { color: var(--faint); }
     const b = ev.target.closest('button');
     if (!b || b.type === 'submit') return;
     const armedBefore = home.armed;
+    if (b.dataset.restartMatch) { if (confirmTap(`restart-${b.dataset.restartMatch}`)) restartMatch(b.dataset.restartMatch); return; }
     if (b.dataset.deleteMatch) { if (confirmTap(`delete-${b.dataset.deleteMatch}`)) deleteMatch(b.dataset.deleteMatch); return; }
     if (b.dataset.teamDel) { if (confirmTap(`retire-${b.dataset.teamDel}`)) retireTeamPlayer(rosterPlayer(b.dataset.teamDel)); return; }
     if (b.hasAttribute('data-delete-team')) { if (confirmTap('delete-team')) deleteTeam(); return; }
