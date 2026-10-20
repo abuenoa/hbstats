@@ -194,6 +194,7 @@
   });
   T('mvp: old saved matches restore with no MVP', () => { const saved = JSON.parse(snapshot()); delete saved.mvpId; if (restoreState(saved).mvpId !== null) throw new Error('not null'); });
   T('mvp: picking the MVP changes no statistic', () => { const snap = snapshot(); const before = JSON.stringify([liveStats(), score()]); setMvp(state.players[0].id); if (JSON.stringify([liveStats(), score()]) !== before) throw new Error('stats changed'); restore(snap); });
+  T('mvp: a restarted match has no MVP', () => { const saved = JSON.parse(snapshot()); saved.mvpId = saved.players[0].id; if (restartedMatch(saved).mvpId !== null) throw new Error('MVP kept'); });
   T('crowns on screen never share gradient ids', () => { const ids = [...(crownSvg() + crownSvg('x')).matchAll(/id="([^"]+)"/g)].map((x) => x[1]); if (!ids.length || new Set(ids).size !== ids.length) throw new Error(ids.join()); });
 
   // ---- Accounts, team and saved matches (device backend; Supabase mapping through a fake client) ----

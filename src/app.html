@@ -987,7 +987,7 @@ td.zero { color: var(--faint); }
   // The same match back at 0:00: squad, rival and setup kept; clock, time-outs and log cleared.
   function restartedMatch(from) {
     return {
-      ...from, finished: false, phase: DEFAULT_PHASE,
+      ...from, finished: false, mvpId: null, phase: DEFAULT_PHASE,
       clock: { period: 1, elapsedMs: 0, runningSince: null }, timeoutsUsed: 0, timeoutsUsedThem: 0, timeout: null,
       events: [], fired: [], alerts: [], history: [], future: []
     };
