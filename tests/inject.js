@@ -191,6 +191,74 @@
     await TA('team form refuses empty names', async () => { showHomeView('team'); $('team-name').value = '  '; await submitTeam(document.querySelector('[data-form="team"]'), false); if (team.name !== 'Ejemplo Sur' || !$('home-status').textContent.includes('vacíos')) throw new Error($('home-status').textContent); });
     await TA('team roster: add, position, duplicate dorsal refused, retire', async () => { showHomeView('team'); await addTeamPlayer(); await addTeamPlayer(); await addTeamPlayer(); const [a, b, c] = home.roster; await saveTeamPlayer(a, { pos: 'POR', name: 'Ana' }); if (rosterPlayer(a.id).pos !== 'POR') throw new Error('pos'); await saveTeamPlayer(rosterPlayer(b.id), { num: a.num }); if (rosterPlayer(b.id).num === a.num || !$('home-status').textContent.includes('ya está')) throw new Error('dup'); document.querySelector(`[data-team-del="${c.id}"]`).click(); if (!rosterPlayer(c.id)) throw new Error('retired on first tap'); document.querySelector(`[data-team-del="${c.id}"]`).click(); await tick0(); await tick0(); if (rosterPlayer(c.id)) throw new Error('not retired'); const listed = await backend.listPlayers(team.id); if (listed.length !== 2) throw new Error('backend ' + listed.length); });
     await TA('roster file adds new dorsals and updates existing ones', async () => { const a = home.roster.find((p) => p.pos === 'POR'); const file = new File([JSON.stringify({ format: ROSTER_FORMAT, players: [{ num: a.num, name: 'Ana Ruiz', pos: 'POR' }, { num: 9, name: 'Lola', pos: 'CEN' }, { num: 11, name: 'Marta', pos: 'EXT' }, { num: 12, name: 'Sara', pos: 'POR' }] })], 'p.json', { type: 'application/json' }); await importTeamRoster(file); if (home.roster.length !== 5 || rosterPlayer(a.id).name !== 'Ana Ruiz') throw new Error(home.roster.map((p) => p.num + p.name).join()); });
+    // ---- Season data layer ----
+    const seasonShot = (playerId, result, zone = '9M') => ({ id: newId('e'), abs: 10, kind: 'SHOT', playerId, zone, from: zone, result });
+    const seasonRivalShot = (gkId, result) => ({ id: newId('e'), abs: 20, kind: 'RIVAL_SHOT', gkId, zone: '9M', result });
+    const seasonPlayers = [{ id: 'sp1', num: 1, name: 'Gk', pos: 'POR' }, { id: 'sp2', num: 2, name: 'Wing', pos: 'EXT' }];
+    const seasonState = (over) => ({ sample: false, setupDone: true, finished: true, date: '2026-10-01', them: 'Rival', venue: '', players: seasonPlayers, events: [], ...over });
+    const seasonRow = (id, over) => { const s = seasonState(over); return { ...matchSummary(id, s), state: s }; };
+    await TA('season: local backend lists match states with their summary', async () => {
+      const local = localBackend();
+      const a = seasonState({ them: 'A', events: [seasonShot('sp2', 'GOL')] }), b = seasonState({ them: 'B', events: [seasonRivalShot('sp1', 'PARADA')] });
+      await local.saveMatch('season-team', 'sm1', a); await local.saveMatch('season-team', 'sm2', b); await local.saveMatch('other-team', 'sm3', a);
+      try {
+        const listed = await local.listMatchStates('season-team');
+        if (listed.length !== 2 || !listed.every((x) => Array.isArray(x.state.events) && x.state.events.length === 1)) throw new Error(JSON.stringify(listed.map((x) => x.id)));
+        const first = listed.find((x) => x.id === 'sm1');
+        if (first.them !== 'A' || first.status !== 'finished' || first.scoreUs !== 1) throw new Error(JSON.stringify(first));
+      } finally { for (const id of ['sm1', 'sm2', 'sm3']) await local.deleteMatch(id); }
+    });
+    await TA('season: only live and finished matches, sample excluded, local changes merged', async () => {
+      const real = backend, savedId = team.id;
+      team.id = 'season-team';
+      const dirtyId = 'sm-dirty';
+      try {
+        backend = { listMatchStates: async () => [
+          seasonRow('s-old', { date: '2026-09-01' }), seasonRow('s-live', { date: '2026-09-15', finished: false, events: [seasonShot('sp2', 'GOL')] }),
+          seasonRow('s-setup', { date: '2026-09-20', setupDone: false }), seasonRow('s-sample', { date: '2026-09-25', sample: true }), seasonRow(dirtyId, { date: '2026-09-02', them: 'Old copy' })
+        ] };
+        storeLocalMatch(dirtyId, seasonState({ date: '2026-10-05', them: 'New copy' }), true);
+        const { matches, offline } = await loadSeason();
+        const ids = matches.map((x) => x.id).join();
+        if (offline || ids !== `${dirtyId},s-live,s-old` || home.season !== matches) throw new Error(ids + ' offline ' + offline);
+        if (matches[0].them !== 'New copy' || !matches[0].state) throw new Error('local copy not merged');
+      } finally { backend = real; team.id = savedId; removeKey(MATCH_KEY_PREFIX + dirtyId); removeKey(CACHE_KEY_PREFIX + 'season:season-team'); }
+    });
+    await TA('season: no coverage and no copy gives an empty season, offline', async () => {
+      const real = backend, savedId = team.id;
+      team.id = 'season-empty-team';
+      try {
+        backend = { listMatchStates: async () => { throw new Error('Failed to fetch'); } };
+        const { matches, offline } = await loadSeason();
+        if (matches.length || !offline || home.season.length) throw new Error(matches.length + ' ' + offline);
+      } finally { backend = real; team.id = savedId; }
+    });
+    T('season: team record uses finished matches only', () => {
+      const finished = seasonRow('f1', { events: [seasonShot('sp2', 'GOL')] }), live = seasonRow('l1', { finished: false, events: [seasonShot('sp2', 'FALLO')] });
+      finished.scoreUs = 28; finished.scoreThem = 23; live.scoreUs = 3; live.scoreThem = 5;
+      const t = teamSeason([live, finished]);
+      if (t.won !== 1 || t.lost !== 0 || t.drawn !== 0 || t.played !== 1 || t.goalsFor !== 31 || t.goalsAgainst !== 28) throw new Error(JSON.stringify(t));
+      if (t.form.join() !== 'G' || t.latest !== finished || t.shots !== 2 || t.shotGoals !== 1) throw new Error(JSON.stringify(t));
+      if (matchResult({ scoreUs: 20, scoreThem: 20 }) !== 'E' || matchResult({ scoreUs: 1, scoreThem: 2 }) !== 'P') throw new Error('result');
+      if (teamSeason([]).latest !== null) throw new Error('latest of an empty season');
+    });
+    T('season: player rows skip matches without the player and count MVPs', () => {
+      const wing = seasonPlayers[1];
+      const withPlayer = seasonRow('p1', { mvpId: 'sp2', events: [seasonShot('sp2', 'GOL'), seasonShot('sp2', 'PARADA'), { id: 'x', abs: 1, kind: 'ACTION', playerId: 'sp2', action: 'FALTA' }, { id: 'y', abs: 2, kind: 'SANCTION', playerId: 'sp2', card: '2M' }] });
+      const without = seasonRow('p2', { players: [seasonPlayers[0]] });
+      const season = playerSeason([without, withPlayer], wing);
+      const [row] = season.rows;
+      if (season.rows.length !== 1 || season.mvps !== 1 || !row.mvp) throw new Error(JSON.stringify(season));
+      if (row.goals !== 1 || row.shots !== 2 || row.faults !== 2 || row.shotsList.length !== 2 || season.totals.goals !== 1 || season.totals.faults !== 2) throw new Error(JSON.stringify(row));
+      if (playerMatchRow(without, wing) !== null) throw new Error('row for a missing player');
+    });
+    T('season: goalkeeper row counts saves and on-target rival shots', () => {
+      const gk = seasonPlayers[0];
+      const match = seasonRow('g1', { events: [seasonRivalShot('sp1', 'PARADA'), seasonRivalShot('sp1', 'PARADA'), seasonRivalShot('sp1', 'GOL'), seasonRivalShot('sp1', 'FUERA'), seasonRivalShot('other', 'PARADA')] });
+      const season = playerSeason([match], gk);
+      const [row] = season.rows;
+      if (row.saves !== 2 || row.onTarget !== 3 || row.facedList.length !== 4 || 'shots' in row || season.totals.saves !== 2 || season.totals.onTarget !== 3) throw new Error(JSON.stringify(row));
+    });
     await TA('a roster file with card names and photos stores them', async () => { const a = home.roster.find((p) => p.pos === 'POR'); const file = new File([JSON.stringify({ format: ROSTER_FORMAT, players: [{ num: a.num, name: 'Ana', pos: 'POR', fullName: 'Ana Ruiz', photo: TINY_PNG }, { num: 31, name: 'Eva', pos: 'EXT', fullName: 'Eva Gil Mora', photo: TINY_PNG }] })], 'p.json', { type: 'application/json' }); await importTeamRoster(file); const list = await backend.listPlayers(team.id); const ana = list.find((p) => p.id === a.id), eva = list.find((p) => p.num === 31); if (!ana || ana.fullName !== 'Ana Ruiz' || ana.photo !== TINY_PNG || !eva || eva.fullName !== 'Eva Gil Mora' || eva.photo !== TINY_PNG) throw new Error('not stored'); await retireTeamPlayer(rosterPlayer(eva.id)); });
     await TA('the full name and photo are saved and survive a roster file', async () => { const a = home.roster.find((p) => p.pos === 'POR'); await saveTeamPlayer(a, { fullName: 'Ana Ruiz Gómez', photo: TINY_PNG }); const file = new File([JSON.stringify({ format: ROSTER_FORMAT, players: [{ num: a.num, name: 'Ana', pos: 'POR' }] })], 'p.json', { type: 'application/json' }); await importTeamRoster(file); const stored = (await backend.listPlayers(team.id)).find((p) => p.id === a.id); if (!stored || stored.name !== 'Ana' || stored.fullName !== 'Ana Ruiz Gómez' || stored.photo !== TINY_PNG) throw new Error(JSON.stringify(stored && { ...stored, photo: Boolean(stored.photo) })); });
     await TA('convocatoria: needs a goalkeeper, then opens the setup with the squad', async () => { openSquad(); if (home.squad.size !== home.roster.length) throw new Error('default squad'); home.squad = new Set(home.roster.filter((p) => p.pos !== 'POR').map((p) => p.id)); renderHome(); if (!document.querySelector('[data-squad-next]').disabled) throw new Error('no goalkeeper accepted'); const gk = home.roster.find((p) => p.pos === 'POR'); document.querySelector(`[data-squad="${gk.id}"]`).click(); if (document.querySelector('[data-squad-next]').disabled) throw new Error('still disabled'); document.querySelector('[data-squad-next]').click(); if (!currentMatchId || state.players.length !== home.squad.size || state.us !== team.name || !$('home').hidden) throw new Error('match'); if ($('sheet').hidden || ui.sheetMode !== 'setup') throw new Error('setup'); if (!localMatch(currentMatchId).dirty) throw new Error('not saved'); });

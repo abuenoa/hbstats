@@ -1153,12 +1153,12 @@ td.zero { color: var(--faint); }
     shots.forEach((e) => { c[groupOf(e.result)]++; });
     return c;
   };
-  function playerStats(id) {
+  function playerStats(id, events = state.events) {
     const s = { shots: {}, goals: {}, blocked: 0, TURNOVER: 0 };
     Object.keys(ACTIONS).forEach((k) => { s[k] = 0; });
     Object.keys(SANCTIONS).forEach((k) => { s[k] = 0; });
     SHEET_ZONES.forEach((z) => { s.shots[z] = 0; s.goals[z] = 0; });
-    state.events.forEach((e) => {
+    events.forEach((e) => {
       if (e.playerId !== id) return;
       if (e.kind === 'SHOT') { s.shots[e.zone]++; if (e.result === 'GOL') s.goals[e.zone]++; if (e.result === 'BLOCADO') s.blocked++; }
       if (e.kind === 'ACTION') s[e.action]++;
@@ -3704,7 +3704,7 @@ td.zero { color: var(--faint); }
   let backend = null;
   let currentMatchId = null;
   let syncTimer = null;
-  const home = { view: 'loading', user: null, teams: [], roster: [], matches: [], templates: [], template: null, squad: new Set(), offline: false, error: '', draft: null, crestDraft: undefined, armed: null, passwordChange: false };
+  const home = { view: 'loading', user: null, teams: [], roster: [], matches: [], season: [], templates: [], template: null, squad: new Set(), offline: false, error: '', draft: null, crestDraft: undefined, armed: null, passwordChange: false };
 
   // ---- Device storage ----
   function readJson(key) {
@@ -3790,10 +3790,16 @@ td.zero { color: var(--faint); }
         write(db);
       },
       async listMatches(teamId) { return Object.values(read().matches).filter((m) => m.teamId === teamId).map((m) => m.summary); },
+      // Matches saved before the state was kept here fall back to their device copy.
+      async listMatchStates(teamId) {
+        return Object.entries(read().matches).filter(([, m]) => m.teamId === teamId)
+          .map(([id, m]) => ({ id, state: m.state || (localMatch(id) || {}).state })).filter((m) => m.state)
+          .map(({ id, state }) => ({ ...matchSummary(id, state), state }));
+      },
       async loadMatch(id) { const m = localMatch(id); return m ? m.state : null; },
       async saveMatch(teamId, id, s) {
         const db = read();
-        db.matches[id] = { teamId, summary: matchSummary(id, s) };
+        db.matches[id] = { teamId, summary: matchSummary(id, s), state: s };
         write(db);
       },
       async deleteMatch(id) {
@@ -3862,6 +3868,10 @@ td.zero { color: var(--faint); }
       async listMatches(teamId) {
         return check(await client.from('matches').select('id,played_on,rival,venue,status,score_us,score_them').eq('team_id', teamId)
           .order('played_on', { ascending: false, nullsFirst: false }).order('updated_at', { ascending: false })).map(toSummary);
+      },
+      async listMatchStates(teamId) {
+        return check(await client.from('matches').select('id,played_on,rival,venue,status,score_us,score_them,state').eq('team_id', teamId)
+          .order('played_on', { ascending: false, nullsFirst: false }).order('updated_at', { ascending: false })).map((r) => ({ ...toSummary(r), state: r.state }));
       },
       async loadMatch(id) { const row = check(await client.from('matches').select('state').eq('id', id).maybeSingle()); return row ? row.state : null; },
       async saveMatch(teamId, id, s) {
@@ -4214,10 +4224,69 @@ td.zero { color: var(--faint); }
     await showMatches();
   }
   // Matches changed on this device and not uploaded yet replace (or add to) the backend's list.
-  function withLocalChanges(list) {
+  function withLocalChanges(list, extra = () => ({})) {
     const byId = new Map(list.map((m) => [m.id, m]));
-    localMatches().filter((m) => m.dirty && m.teamId === team.id).forEach((m) => byId.set(m.id, { ...matchSummary(m.id, m.state), pending: true }));
+    localMatches().filter((m) => m.dirty && m.teamId === team.id).forEach((m) => byId.set(m.id, { ...matchSummary(m.id, m.state), ...extra(m), pending: true }));
     return [...byId.values()].sort((a, b) => b.date.localeCompare(a.date));
+  }
+
+  // ---- Season: every match of the team, newest first, with its state ----
+  const SEASON_STATUSES = ['live', 'finished'];
+  const RESULT_OF = { win: 'G', draw: 'E', loss: 'P' };
+  const FIELD_ROW_TOTALS = ['goals', 'shots', 'assists', 'turnovers', 'recoveries', 'blocks', 'prov7', 'faults'];
+  const GOALKEEPER_ROW_TOTALS = ['saves', 'onTarget', 'assists'];
+  const sumOf = (list, pick) => list.reduce((n, x) => n + pick(x), 0);
+  async function loadSeason() {
+    let list = [], offline = false;
+    try { ({ value: list, offline } = await cachedRead(`season:${team.id}`, () => backend.listMatchStates(team.id))); }
+    catch (err) { offline = true; console.warn(`Season not available: ${cloudErrorText(err)}`); }
+    const matches = withLocalChanges(list, (m) => ({ state: m.state })).filter((m) => SEASON_STATUSES.includes(m.status) && !m.state.sample);
+    home.season = matches;
+    return { matches, offline };
+  }
+  function matchResult(m) {
+    if (m.scoreUs === m.scoreThem) return RESULT_OF.draw;
+    return m.scoreUs > m.scoreThem ? RESULT_OF.win : RESULT_OF.loss;
+  }
+  function teamSeason(matches) {
+    const finished = matches.filter((m) => m.status === 'finished');
+    const results = finished.map(matchResult);
+    const events = matches.flatMap((m) => m.state.events);
+    const ours = events.filter((e) => e.kind === 'SHOT'), faced = countGroups(events.filter((e) => e.kind === 'RIVAL_SHOT'));
+    const count = (pred) => events.filter(pred).length;
+    return {
+      played: finished.length,
+      won: results.filter((r) => r === RESULT_OF.win).length, drawn: results.filter((r) => r === RESULT_OF.draw).length, lost: results.filter((r) => r === RESULT_OF.loss).length,
+      form: results.slice().reverse(),
+      goalsFor: sumOf(matches, (m) => m.scoreUs), goalsAgainst: sumOf(matches, (m) => m.scoreThem),
+      shots: ours.length, shotGoals: ours.filter((e) => e.result === 'GOL').length,
+      saves: faced.PARADA, onTarget: faced.GOL + faced.PARADA,
+      turnovers: count((e) => e.kind === 'TURNOVER'), recoveries: count((e) => e.kind === 'ACTION' && e.action === 'RECUP'),
+      latest: finished[0] || null
+    };
+  }
+  // One player's line in one match; null when the player was not in that match's squad.
+  function playerMatchRow(m, player) {
+    if (!m.state.players.some((p) => p.id === player.id)) return null;
+    const { events } = m.state;
+    const s = playerStats(player.id, events);
+    const row = { id: m.id, date: m.date, them: m.them, scoreUs: m.scoreUs, scoreThem: m.scoreThem, result: matchResult(m), mvp: m.state.mvpId === player.id, assists: s.ASIST };
+    if (player.pos === 'POR') {
+      const facedList = events.filter((e) => e.kind === 'RIVAL_SHOT' && e.gkId === player.id);
+      const c = countGroups(facedList);
+      return { ...row, saves: c.PARADA, onTarget: c.GOL + c.PARADA, facedList };
+    }
+    return {
+      ...row, goals: sumOf(SHEET_ZONES, (z) => s.goals[z]), shots: sumOf(SHEET_ZONES, (z) => s.shots[z]),
+      turnovers: s.TURNOVER, recoveries: s.RECUP, blocks: s.BLOC, prov7: s.PROV7,
+      faults: s.FALTA + s.GOLPE + sumOf(Object.keys(SANCTIONS), (k) => s[k]),
+      shotsList: events.filter((e) => e.kind === 'SHOT' && e.playerId === player.id)
+    };
+  }
+  function playerSeason(matches, player) {
+    const rows = matches.map((m) => playerMatchRow(m, player)).filter(Boolean);
+    const fields = player.pos === 'POR' ? GOALKEEPER_ROW_TOTALS : FIELD_ROW_TOTALS;
+    return { rows, totals: Object.fromEntries(fields.map((f) => [f, sumOf(rows, (r) => r[f])])), mvps: rows.filter((r) => r.mvp).length };
   }
   async function showMatches() {
     showHomeView('matches');
