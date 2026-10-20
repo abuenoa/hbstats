@@ -281,6 +281,13 @@ button.rex-chip { border: 0; cursor: pointer; position: relative; }
 /* While aiming: the whole goal lights up, the third under the pen a stronger yellow, the frame gold when the shot would hit it */
 .goal-sector { fill: var(--goal-sector); pointer-events: none; }
 .penalty-spot { fill: var(--gold); opacity: .85; pointer-events: none; }
+/* Actions panel: the armed action's possible receivers glow gold. */
+.panel-acts { display: flex; flex-direction: column; gap: 8px; margin: 8px 10px 0; }
+.panel-acts .acts { display: grid; grid-template-columns: repeat(2, 1fr); gap: 8px; }
+.panel-acts .act[aria-pressed="true"] { box-shadow: 0 0 0 4px var(--fg); }
+.panel-acts .arm-note { font-size: 13px; font-weight: 700; color: var(--muted); }
+.tok.target .body { stroke: var(--gold); stroke-width: 10; }
+.bench-player.target .disc, .gk-card.target { box-shadow: 0 0 0 4px var(--gold); }
 .goal-frame-hot { fill: none; stroke: var(--gold); stroke-width: 22; stroke-linejoin: round; pointer-events: none; filter: drop-shadow(0 0 6px var(--gold)); }
 .zone-tag { font-family: var(--font-display); font-weight: 800; font-size: 38px; fill: var(--fg); stroke: var(--surface); stroke-width: 8; paint-order: stroke; text-anchor: middle; }
 
@@ -672,7 +679,13 @@ td.zero { color: var(--faint); }
 
     <aside class="panel" aria-label="Portero, líneas de tiro y estadísticas">
       <div class="scroll">
+        <div class="seg panel-mode" id="panel-mode" role="group" aria-label="Qué muestra el panel">
+          <button type="button" data-panel-mode="acts" aria-pressed="true">Acciones</button>
+          <button type="button" data-panel-mode="kpis" aria-pressed="false">KPIs</button>
+        </div>
         <button class="gk-card press" id="gk-card" type="button" aria-label="Cambiar portero"></button>
+        <div class="panel-acts" id="acts"></div>
+        <div id="kpis" hidden>
         <div class="seg team-seg" id="team-seg" role="group" aria-label="Equipo cuyos lanzamientos y estadísticas se ven">
           <button type="button" data-source="US" aria-pressed="false"><b id="seg-us"></b></button>
           <button type="button" data-source="GK" aria-pressed="true"><b id="seg-them">Rival</b></button>
@@ -684,6 +697,7 @@ td.zero { color: var(--faint); }
           <button class="line-chip t-fallo press" type="button" data-show="FALLO" aria-pressed="false"><i style="background:var(--fallo)"></i>Fallo</button>
         </div>
         <div id="live"></div>
+        </div>
       </div>
     </aside>
   </div>
@@ -731,6 +745,8 @@ td.zero { color: var(--faint); }
     zones: { nineFromM: 8.7, elevenFromM: 11 },
     // Who usually shoots from a spot (m): wings wide and close to the goal line, pivots close and central, centre backs central.
     shooterZones: { wingDxM: 6, wingDyM: 5, pivotM: 7.5, pivotDxM: 4, centreDxM: 2.8 },
+    // An armed panel action waits this long for the player (twice as long while its type is still to choose).
+    armMs: 4000,
     // The strip's «Finalizar» asks «¿Seguro?» and waits this long for the second tap.
     finishConfirmMs: 4000,
     dragThresholdPx: 10,
@@ -934,7 +950,9 @@ td.zero { color: var(--faint); }
     lastPenTs: 0, shooter: null, rivalNewPos: null, sheetTab: 'stats', sheetMode: 'sheet', sheetGk: null, sheetGoal: 'GK', sheetShooter: null, rosterSide: 'team', templatePick: false,
     finishArmedTimer: null,
     // A provoked (us) or committed (them) 7 m waiting for its shot: { team, eventId, byId }.
-    penalty: null
+    penalty: null,
+    // Right panel: 'acts' (actions to arm) or 'kpis' (live stats). Armed action: { key, sub } until a player is tapped.
+    panelMode: 'acts', armedAction: null, armTimer: null
   };
 
   function todayIso() { return new Date().toISOString().slice(0, 10); }
@@ -1241,6 +1259,7 @@ td.zero { color: var(--faint); }
   const lastAdded = (op) => (op.added.length ? op.added[op.added.length - 1].id : null);
   function record(op, label) {
     state.sample = false;
+    if (op.phase) disarmAction();
     applyOp(op);
     state.history.push(op);
     if (state.history.length > CONFIG.historyLimit) state.history.shift();
@@ -1299,6 +1318,7 @@ td.zero { color: var(--faint); }
     if (state.phase === phase) return;
     state.phase = phase;
     disarm();
+    disarmAction();
     commit();
   }
   function deleteEvent(id) {
@@ -1505,7 +1525,7 @@ td.zero { color: var(--faint); }
   function renderAll(opts) {
     syncSourceToPhase();
     renderBar(); renderClock(); renderBench(); renderTokens(); renderShots();
-    renderGk(); renderLive(); renderAlerts(); renderArmed(); renderPhase(); renderEvents(opts && opts.freshId);
+    renderGk(); renderLive(); renderActs(); renderAlerts(); renderArmed(); renderPhase(); renderEvents(opts && opts.freshId);
     $('sample-tag').hidden = !state.sample;
     $('btn-undo').disabled = !state.history.length;
     $('btn-redo').disabled = !state.future.length;
@@ -1588,7 +1608,7 @@ td.zero { color: var(--faint); }
     const onCourt = new Set(Object.keys(lineup()));
     const bench = state.players.filter((p) => !onCourt.has(p.id) && p.id !== state.gkId).sort(benchOrder);
     const out = disqualifications();
-    const item = (p) => `<button class="bench-player press${out.has(p.id) ? ' out' : ''}" type="button" data-id="${p.id}" aria-label="#${p.num} ${esc(p.name)}, ${out.has(p.id) ? 'descalificado' : posOf(p).label}">${discHtml(p)}<span class="who"><b>${esc(p.name)}</b></span></button>`;
+    const item = (p) => `<button class="bench-player press${out.has(p.id) ? ' out' : ''}${canReceive(p.id) ? ' target' : ''}" type="button" data-id="${p.id}" aria-label="#${p.num} ${esc(p.name)}, ${out.has(p.id) ? 'descalificado' : posOf(p).label}">${discHtml(p)}<span class="who"><b>${esc(p.name)}</b></span></button>`;
     $('bench').innerHTML = bench.length ? bench.map(item).join('') : '<p class="empty">Todos en pista.</p>';
   }
   function tokenMarkup(p, pos, exRemaining, extraCls) {
@@ -1606,10 +1626,10 @@ td.zero { color: var(--faint); }
     const ex = new Map(activeExclusions().map((x) => [x.event.playerId, x.remaining]));
     const gk = playerById(state.gkId);
     const exOf = (id) => (ex.has(id) ? ex.get(id) : null);
-    $('tokens-layer').innerHTML = tokenMarkup(gk, GK_SPOT, exOf(gk.id), ' gk')
+    $('tokens-layer').innerHTML = tokenMarkup(gk, GK_SPOT, exOf(gk.id), ` gk${canReceive(gk.id) ? ' target' : ''}`)
       + Object.entries(lineup()).map(([id, pos]) => {
         const p = playerById(id);
-        return p ? tokenMarkup(p, pos, exOf(id), id === ui.shooter ? ' shooter' : '') : '';
+        return p ? tokenMarkup(p, pos, exOf(id), (id === ui.shooter ? ' shooter' : '') + (canReceive(id) ? ' target' : '')) : '';
       }).join('');
   }
   // The shot map follows the phase (defence → our goalkeeper, attack → our shooters); the manual toggle holds until the next phase change.
@@ -1671,6 +1691,7 @@ td.zero { color: var(--faint); }
     const c = countGroups(gkShots(state.gkId));
     const onTarget = c.GOL + c.PARADA;
     const p = pct(c.PARADA, onTarget);
+    $('gk-card').classList.toggle('target', canReceive(gk.id));
     $('gk-card').innerHTML = `<span class="disc">${gk.num}</span><span class="who"><b>${esc(gk.name)}</b><small>Portero ›</small></span>
       <span class="pct"><strong class="${rate(p, 'gk')}">${pctText(p)}</strong><small>${c.PARADA}/${onTarget} paradas</small></span>`;
     document.querySelectorAll('[data-source]').forEach((b) => b.setAttribute('aria-pressed', String(b.dataset.source === ui.source)));
@@ -2003,6 +2024,7 @@ td.zero { color: var(--faint); }
     commit();
   }
   function armShooter(playerId) {
+    disarmAction();
     ui.shooter = playerId;
     renderTokens();
     renderArmed();
@@ -2013,6 +2035,92 @@ td.zero { color: var(--faint); }
     renderTokens();
     renderArmed();
   }
+
+  // ===================== Actions panel: action first, then the player =====================
+  // TURNOVER and DEFFAULT ask for their type before the player.
+  const PANEL_ACTIONS = { ATK: ['ASIST', 'PROV7', 'TURNOVER'], DEF: ['RECUP', 'BLOC', 'PEN7C', 'DEFFAULT'] };
+  const PANEL_TYPED = {
+    TURNOVER: { label: 'Pérdida', cls: 'c-error', groups: () => CONFIG.turnoverGroups.map((g) => ({ label: g.label, cls: g.cls, subs: g.types.map((t) => [t, t]) })) },
+    DEFFAULT: { label: 'Falta def.', cls: 'c-error', groups: () => CONFIG.defFaultGroups.map((g) => ({ label: g.label, cls: g.cls, subs: g.actions.filter((k) => k !== 'PEN7C').map((k) => [k, ACTIONS[k].label]) })).filter((g) => g.subs.length) }
+  };
+  const panelLabel = (key) => (PANEL_TYPED[key] ? `${PANEL_TYPED[key].label} ›` : ACTIONS[key].label);
+  const panelClass = (key) => (PANEL_TYPED[key] ? PANEL_TYPED[key].cls : `c-${ACTIONS[key].group}`);
+  const armedReady = () => Boolean(ui.armedAction) && (!PANEL_TYPED[ui.armedAction.key] || ui.armedAction.sub != null);
+  // Who may take the armed action: anyone in play; of the goalkeepers only the one in goal, and only for an assist.
+  function canReceive(playerId) {
+    if (!armedReady()) return false;
+    const p = playerById(playerId);
+    if (!p || ourOffCourt().has(playerId)) return false;
+    if (p.pos === 'POR') return playerId === state.gkId && ui.armedAction.key === 'ASIST';
+    return true;
+  }
+  function renderActs() {
+    document.querySelectorAll('[data-panel-mode]').forEach((b) => b.setAttribute('aria-pressed', String(b.dataset.panelMode === ui.panelMode)));
+    $('acts').hidden = ui.panelMode !== 'acts';
+    $('kpis').hidden = ui.panelMode !== 'kpis';
+    const a = ui.armedAction;
+    if (a && PANEL_TYPED[a.key] && a.sub == null) {
+      const typed = PANEL_TYPED[a.key];
+      $('acts').innerHTML = `<p class="arm-note">${typed.label} · ¿de qué tipo?</p>
+        ${typed.groups().map((g) => group(g.label, `t-${g.cls.slice(2)}`, g.subs.map(([k, label]) => `<button class="act ${g.cls}" type="button" data-panel-sub="${esc(k)}">${esc(label)}</button>`).join(''))).join('')}
+        <button class="act c-neutral" type="button" data-panel-cancel>Cancelar</button>`;
+      return;
+    }
+    const note = a ? `${panelLabel(a.key).replace(' ›', '')}${a.sub ? ` · ${esc(subLabel(a))}` : ''} · toca al jugador` : 'Toca una acción y luego al jugador (en pista o banquillo).';
+    $('acts').innerHTML = `<div class="acts">${PANEL_ACTIONS[state.phase].map((k) => `<button class="act big ${panelClass(k)}" type="button" data-panel-act="${k}" aria-pressed="${Boolean(a && a.key === k)}">${panelLabel(k)}</button>`).join('')}</div>
+      <p class="arm-note">${note}</p>`;
+  }
+  const subLabel = (a) => (a.key === 'DEFFAULT' ? ACTIONS[a.sub].label : a.sub);
+  function renderTargets() { renderTokens(); renderBench(); renderGk(); renderActs(); }
+  function restartArmTimer(ms) {
+    clearTimeout(ui.armTimer);
+    ui.armTimer = setTimeout(disarmAction, ms);
+  }
+  // Tapping the armed action again disarms it.
+  function armAction(key) {
+    if (ui.armedAction && ui.armedAction.key === key) { disarmAction(); return; }
+    disarm();
+    ui.armedAction = { key, sub: null };
+    restartArmTimer(CONFIG.armMs * (PANEL_TYPED[key] ? 2 : 1));
+    renderTargets();
+  }
+  function chooseArmedSub(sub) {
+    if (!ui.armedAction) return;
+    ui.armedAction.sub = sub;
+    restartArmTimer(CONFIG.armMs);
+    renderTargets();
+  }
+  function disarmAction() {
+    clearTimeout(ui.armTimer);
+    ui.armTimer = null;
+    if (!ui.armedAction) return;
+    ui.armedAction = null;
+    renderTargets();
+  }
+  // Logs the armed action for the tapped player; false when they cannot take it (the tap is then ignored).
+  function applyArmedAction(playerId) {
+    if (!canReceive(playerId)) return false;
+    const { key, sub } = ui.armedAction;
+    const p = playerById(playerId);
+    disarmAction();
+    if (key === 'TURNOVER') addEvent('TURNOVER', { playerId, subtype: sub }, { bringOn: playerId });
+    else addEvent('ACTION', { playerId, action: key === 'DEFFAULT' ? sub : key }, { bringOn: playerId });
+    hint(`${describe(state.events.at(-1))} · ↶ deshacer`);
+    return true;
+  }
+  $('panel-mode').addEventListener('click', (ev) => {
+    const b = ev.target.closest('[data-panel-mode]');
+    if (!b) return;
+    ui.panelMode = b.dataset.panelMode;
+    renderActs();
+  });
+  $('acts').addEventListener('click', (ev) => {
+    const b = ev.target.closest('button');
+    if (!b) return;
+    if (b.dataset.panelAct) armAction(b.dataset.panelAct);
+    else if (b.dataset.panelSub != null) chooseArmedSub(b.dataset.panelSub);
+    else if (b.hasAttribute('data-panel-cancel')) disarmAction();
+  });
 
   $('pop').addEventListener('click', (ev) => {
     const b = ev.target.closest('button');
@@ -2080,7 +2188,7 @@ td.zero { color: var(--faint); }
     if (ev.key !== 'Escape') return;
     if (!$('pop').hidden) closePop();
     else if (!$('sheet').hidden) $('sheet').hidden = true;
-    else disarm();
+    else { disarm(); disarmAction(); }
   });
 
   // ===================== Court gestures (finger and pen) =====================
@@ -2173,7 +2281,7 @@ td.zero { color: var(--faint); }
     const pt = svgPoint(ev.clientX, ev.clientY);
     const anchor = { x: ev.clientX, y: ev.clientY };
     if (d.type === 'token') {
-      if (!d.moved) { if (d.isGk) openGkPop(anchor); else openPlayerPop(d.id, anchor); return; }
+      if (!d.moved) { if (armedReady()) applyArmedAction(d.id); else if (d.isGk) openGkPop(anchor); else openPlayerPop(d.id, anchor); return; }
       if (d.toGoal) {
         renderTokens();
         if (state.phase === 'ATK' && ourOffCourt().has(d.id)) { const p = playerById(d.id); hint(`#${p.num} ${p.name} no puede lanzar: ${isDisqualified(d.id) ? 'descalificado' : "cumple 2'"}`); return; }
@@ -2244,7 +2352,7 @@ td.zero { color: var(--faint); }
     ui.drag = null;
     if (d.ghost) d.ghost.remove();
     if (cancelled) return;
-    if (!d.moved) { openPlayerPop(d.id, { x: ev.clientX, y: ev.clientY }); return; }
+    if (!d.moved) { if (armedReady()) applyArmedAction(d.id); else openPlayerPop(d.id, { x: ev.clientX, y: ev.clientY }); return; }
     if (!insideRect(svg, ev.clientX, ev.clientY)) return;
     const incoming = playerById(d.id);
     if (isDisqualified(incoming.id)) { hint(`#${incoming.num} ${incoming.name} está descalificado`); return; }
@@ -2276,7 +2384,7 @@ td.zero { color: var(--faint); }
   benchEl.addEventListener('pointercancel', (ev) => endBenchDrag(ev, true));
 
   // ===================== Wiring =====================
-  $('gk-card').addEventListener('click', (ev) => { const r = ev.currentTarget.getBoundingClientRect(); openGkPop({ x: r.left - 30, y: r.top + r.height / 2 }); });
+  $('gk-card').addEventListener('click', (ev) => { if (armedReady()) { applyArmedAction(state.gkId); return; } const r = ev.currentTarget.getBoundingClientRect(); openGkPop({ x: r.left - 30, y: r.top + r.height / 2 }); });
   $('clock-face').addEventListener('click', (ev) => { const r = ev.currentTarget.getBoundingClientRect(); openClockPop({ x: r.left + r.width / 2, y: r.bottom + 140 }); });
   $('team-seg').addEventListener('click', (ev) => {
     const b = ev.target.closest('[data-source]');
