@@ -640,7 +640,7 @@ td.zero { color: var(--faint); }
     </aside>
 
     <section class="panel stage" id="stage" aria-label="Pista">
-      <svg id="court" viewBox="0 0 1000 810" preserveAspectRatio="xMidYMid meet" role="application" aria-label="Media pista: arrastra hasta la portería para registrar un lanzamiento">
+      <svg id="court" viewBox="0 0 1000 880" preserveAspectRatio="xMidYMid meet" role="application" aria-label="Media pista: arrastra hasta la portería para registrar un lanzamiento">
         <g id="court-floor"></g>
         <rect id="goal-face" class="goal-face" x="320" y="20" width="360" height="240" fill="var(--goal-face)"/>
         <rect id="goal-sector" class="goal-sector" width="120" height="80" visibility="hidden"/>
@@ -725,6 +725,8 @@ td.zero { color: var(--faint); }
     historyLimit: 300,
     tickMs: 250,
     hintMs: 2600,
+    // Shot zones by distance from the goal (m): the dashed 9 m line itself already counts as 9 m.
+    zones: { nineFromM: 8.7, elevenFromM: 11 },
     // The strip's «Finalizar» asks «¿Seguro?» and waits this long for the second tap.
     finishConfirmMs: 4000,
     dragThresholdPx: 10,
@@ -751,7 +753,7 @@ td.zero { color: var(--faint); }
     },
     // Reference values for a senior regional team: [good from, poor below]; 'lower' = lower is better.
     targets: {
-      shooting: [60, 50], '6M': [70, 55], '9M': [45, 35], CONTRA: [80, 65], '7M': [75, 60],
+      shooting: [60, 50], '6M': [70, 55], '9M': [45, 35], '11M': [45, 35], CONTRA: [80, 65], '7M': [75, 60],
       attack: [50, 40], turnovers: [12, 20, 'lower'], gk: [33, 25], defense: [55, 45]
     },
     // Key points only speak from a minimum of evidence.
@@ -782,17 +784,21 @@ td.zero { color: var(--faint); }
   const CENTER_X = 500;
   const POST_HALF_M = 1.5;
   const NINE_M = 9;
-  const COURT = { minX: 30, maxX: 970, minY: GOAL_LINE_Y + 30, maxY: 780 };
+  const ELEVEN_M = CONFIG.zones.elevenFromM;
+  // The court is drawn 11.8 m deep so that long shots (+11 m) have room; the view adds a margin below it.
+  const COURT_DEPTH_M = 11.8;
+  const COURT = { minX: 30, maxX: 970, minY: GOAL_LINE_Y + 30, maxY: GOAL_LINE_Y + COURT_DEPTH_M * UNITS_PER_M };
+  const COURT_VIEW_H = COURT.maxY + 30;
   const GOAL_FACE = { x: 320, y: 20, w: 360, h: 240 };
   const GOAL_MARGIN = 60;
   const GOAL_GRID = 3;
   const FRAME_BAND = 14;
   const GK_SPOT = { x: CENTER_X, y: GOAL_LINE_Y + 1.3 * UNITS_PER_M };
-  const SEVEN_M = { dy: 7, toleranceX: 1, toleranceY: 0.7 };
+  const SEVEN_M = { dy: 7 };
   const ZONE_TAG_OFFSET = 56;
 
-  const ZONES = { '6M': '6 m', '9M': '9 m', '7M': '7 m', CONTRA: 'Contra' };
-  const SHEET_ZONES = ['6M', '9M', 'CONTRA', '7M'];
+  const ZONES = { '6M': '6 m', '9M': '9 m', '11M': '+11 m', '7M': '7 m', CONTRA: 'Contra' };
+  const SHEET_ZONES = ['6M', '9M', '11M', 'CONTRA', '7M'];
   // Shot results and the three colour groups they belong to
   const RESULTS = {
     GOL: { label: 'Gol', group: 'GOL' },
@@ -852,13 +858,18 @@ td.zero { color: var(--faint); }
   }
   const groupOf = (result) => RESULTS[result].group;
 
-  // Zone from where the shot starts: penalty mark = 7 m, beyond the dashed 9 m line = 9 m, otherwise 6 m.
-  function zoneFrom(pt) {
+  // Distance in metres from the goal-line segment between the posts (the way the 6 m and 9 m lines are drawn).
+  function goalDistance(pt) {
     const dx = (pt.x - CENTER_X) / UNITS_PER_M;
     const dy = (pt.y - GOAL_LINE_Y) / UNITS_PER_M;
-    if (Math.abs(dx) <= SEVEN_M.toleranceX && Math.abs(dy - SEVEN_M.dy) <= SEVEN_M.toleranceY) return '7M';
-    const dist = Math.hypot(dx - clamp(dx, -POST_HALF_M, POST_HALF_M), dy);
-    return dist > NINE_M ? '9M' : '6M';
+    return Math.hypot(dx - clamp(dx, -POST_HALF_M, POST_HALF_M), dy);
+  }
+  // Zone from where the shot starts: on or beyond the dashed line = 9 m, beyond 11 m = +11 m, otherwise 6 m.
+  // A 7 m is never inferred from the spot: it comes only from a provoked or committed penalty.
+  function zoneFrom(pt) {
+    const dist = goalDistance(pt);
+    if (dist >= CONFIG.zones.elevenFromM) return '11M';
+    return dist >= CONFIG.zones.nineFromM ? '9M' : '6M';
   }
   function rate(value, key) {
     if (value == null) return 'r-none';
@@ -938,14 +949,16 @@ td.zero { color: var(--faint); }
     };
     const E = [];
     const ev = (abs, kind, data) => E.push(Object.assign({ id: newId('e'), abs, kind }, data));
+    // A shot from the penalty mark is a 7 m in the sample (in play, only the penalty flow records one).
+    const zoneAt = (o) => (o[0] === 0 && o[1] === SEVEN_M.dy ? '7M' : zoneFrom(m(o[0], o[1])));
     const shot = (abs, playerId, o, t, result, contra) => {
       const origin = m(o[0], o[1]);
-      const zone = zoneFrom(origin);
+      const zone = zoneAt(o);
       ev(abs, 'SHOT', { playerId, origin, target: gf(t[0], t[1]), from: zone, zone: contra ? 'CONTRA' : zone, result });
     };
     const rival = (abs, o, t, result, contra) => {
       const origin = m(o[0], o[1]);
-      ev(abs, 'RIVAL_SHOT', { gkId: 'p1', origin, target: gf(t[0], t[1]), zone: zoneFrom(origin), result, contra: Boolean(contra) });
+      ev(abs, 'RIVAL_SHOT', { gkId: 'p1', origin, target: gf(t[0], t[1]), zone: zoneAt(o), result, contra: Boolean(contra) });
     };
     rival(45, [0.5, 9.6], [0.82, 0.25], 'GOL');
     shot(80, 'p8', [-4.5, 9.8], [0.15, 0.2], 'GOL');
@@ -1560,17 +1573,19 @@ td.zero { color: var(--faint); }
   };
   const TALLY_ROW_Y = [64, 132, 200];
   // Static court drawing shared by the live court and the sheet's shot maps; each SVG needs its own clip id.
-  const courtFloorSvg = (clipId) => `<defs><clipPath id="${clipId}"><rect x="0" y="260" width="1000" height="550"/></clipPath></defs>
-    <rect x="0" y="260" width="1000" height="550" fill="var(--court)" rx="10"/>
+  const courtFloorSvg = (clipId) => `<defs><clipPath id="${clipId}"><rect x="0" y="260" width="1000" height="${COURT_VIEW_H - GOAL_LINE_Y}"/></clipPath></defs>
+    <rect x="0" y="260" width="1000" height="${COURT_VIEW_H - GOAL_LINE_Y}" fill="var(--court)" rx="10"/>
     <g clip-path="url(#${clipId})">
       <path d="M 125 260 A 300 300 0 0 0 425 560 L 575 560 A 300 300 0 0 0 875 260 Z" fill="var(--area)" stroke="var(--court-line)" stroke-width="4"/>
       <path d="M -25 260 A 450 450 0 0 0 425 710 L 575 710 A 450 450 0 0 0 1025 260" fill="none" stroke="var(--court-line)" stroke-width="3" stroke-dasharray="18 14"/>
+      <path d="M -125 260 A 550 550 0 0 0 425 810 L 575 810 A 550 550 0 0 0 1125 260" fill="none" stroke="var(--court-line)" stroke-width="2" stroke-dasharray="3 12" opacity=".55"/>
     </g>
     <line x1="0" y1="260" x2="1000" y2="260" stroke="var(--court-line)" stroke-width="4"/>
     <line x1="475" y1="610" x2="525" y2="610" stroke="var(--court-line)" stroke-width="6"/>
     <text class="court-label" x="600" y="590">6 m</text>
     <text class="court-label" x="535" y="617">7 m</text>
-    <text class="court-label" x="600" y="745">9 m</text>`;
+    <text class="court-label" x="600" y="745">9 m</text>
+    <text class="court-label" x="600" y="845">+11 m</text>`;
   const GOAL_NET_SVG = `<g stroke="var(--net)" stroke-width="2" stroke-dasharray="6 6">
       <line x1="440" y1="20" x2="440" y2="260"/><line x1="560" y1="20" x2="560" y2="260"/>
       <line x1="320" y1="100" x2="680" y2="100"/><line x1="320" y1="180" x2="680" y2="180"/>
@@ -2242,7 +2257,7 @@ td.zero { color: var(--faint); }
   const DORSAL_RANGE = [1, 99];
   const ROSTER_FORMAT = 'hbstats-plantilla';
   const MAX_VENUE_LENGTH = 40;
-  const PLAYER_HEAD = ['Nº', 'Jugador', '6 m', '9 m', 'Contra', '7 m', 'T. bloq.', 'Bloc.', 'Recup.', 'Pase gol', 'Pérdida', 'Prov. 7 m', 'Falta', '7 m com.', 'F. táctico', 'A', "2'", 'D', 'Az'];
+  const PLAYER_HEAD = ['Nº', 'Jugador', '6 m', '9 m', '+11 m', 'Contra', '7 m', 'T. bloq.', 'Bloc.', 'Recup.', 'Pase gol', 'Pérdida', 'Prov. 7 m', 'Falta', '7 m com.', 'F. táctico', 'A', "2'", 'D', 'Az'];
   const SHOT_ZONE_HEAD = ['Zona', 'Lanz.', 'Goles', 'Parados', 'Fallados', '% gol'];
   const GK_ZONE_HEAD = ['Zona', 'Recibidos', 'A puerta', 'Detenidos', 'Encajados', '% paradas'];
   const fieldPlayers = () => state.players.filter((p) => p.pos !== 'POR').sort((a, b) => a.num - b.num);
@@ -2297,7 +2312,9 @@ td.zero { color: var(--faint); }
   const GOAL_ROWS = ['arriba', 'a media altura', 'abajo'];
   const GOAL_COLS = ['izquierda', 'centro', 'derecha'];
   const sectorName = ([row, col]) => `${GOAL_ROWS[row]} ${GOAL_COLS[col]}`;
-  const LANE_HEAD = ['Carril', '6 m', '9 m', 'Total', '% gol'];
+  const LANE_HEAD = ['Carril', '6 m', '9 m o más', 'Total', '% gol'];
+  // Lanes split penetration (6 m) from shots taken from distance (9 m and +11 m).
+  const FAR_ZONES = ['9M', '11M'];
   const SHOOTER_HEAD = ['Jugador', 'Tiros', 'Goles', '% gol'];
   const plural = (n, one, many) => `${n} ${n === 1 ? one : many}`;
   const goalsIn = (list) => list.filter((e) => e.result === 'GOL').length;
@@ -2314,12 +2331,12 @@ td.zero { color: var(--faint); }
     const field = shots.filter((e) => depthOf(e) !== '7M');
     const lanes = LANES.map((l) => {
       const inLane = field.filter((e) => laneOf(e.origin) === l.id);
-      return { ...l, list: inLane, near: inLane.filter((e) => depthOf(e) === '6M'), far: inLane.filter((e) => depthOf(e) === '9M') };
+      return { ...l, list: inLane, near: inLane.filter((e) => depthOf(e) === '6M'), far: inLane.filter((e) => FAR_ZONES.includes(depthOf(e))) };
     });
     const shooters = shooterRanking(shots).filter((g) => g.shooter).map((g) => ({ label: g.label, shots: g.list.length, goals: g.goals }))
       .sort((a, b) => b.shots - a.shots || b.goals - a.goals);
     const topScorer = shooters.slice().sort((a, b) => b.goals - a.goals || a.shots - b.shots)[0] || null;
-    const near = field.filter((e) => depthOf(e) === '6M'), far = field.filter((e) => depthOf(e) === '9M');
+    const near = field.filter((e) => depthOf(e) === '6M'), far = field.filter((e) => FAR_ZONES.includes(depthOf(e)));
     const isContra = (e) => (ours ? e.zone === 'CONTRA' : e.contra);
     return {
       ours, shots, field, lanes, shooters, topShooter: shooters[0] || null, topScorer: topScorer && topScorer.goals ? topScorer : null,
@@ -2496,7 +2513,7 @@ td.zero { color: var(--faint); }
         : `<circle cx="${x}" cy="${y}" r="9" fill="${color}"/>`;
       return `<g${focused(e) ? '' : ` opacity="${MAP_FADED_OPACITY}"`}>${shotLineSvg(e, color)}${release}</g>`;
     }).join('');
-    return `<svg class="shot-map" viewBox="0 0 1000 810" role="img" aria-label="Trayectorias de los lanzamientos con el dorsal de quien lanza">
+    return `<svg class="shot-map" viewBox="0 0 1000 ${COURT_VIEW_H}" role="img" aria-label="Trayectorias de los lanzamientos con el dorsal de quien lanza">
       ${courtFloorSvg('shot-map-clip')}<rect x="${GOAL_FACE.x}" y="${GOAL_FACE.y}" width="${GOAL_FACE.w}" height="${GOAL_FACE.h}" fill="var(--goal-face)"/>
       ${GOAL_NET_SVG}${GOAL_FRAME_SVG}${marks}</svg>`;
   }
@@ -3005,7 +3022,7 @@ td.zero { color: var(--faint); }
     const P = (pt) => [x + pt.x * k, y + pt.y * k];
     const polyline = (pts) => pts.slice(1).forEach((pt, i) => doc.line(...P(pts[i]), ...P(pt)));
     doc.setFillColor(...PDF_RGB.court);
-    doc.rect(x, y + GOAL_LINE_Y * k, w, (810 - GOAL_LINE_Y) * k, 'F');
+    doc.rect(x, y + GOAL_LINE_Y * k, w, (COURT_VIEW_H - GOAL_LINE_Y) * k, 'F');
     doc.setFillColor(255, 255, 255);
     doc.rect(...P(GOAL_FACE), GOAL_FACE.w * k, GOAL_FACE.h * k, 'F');
     doc.setDrawColor(...PDF_RGB.net);
@@ -3022,6 +3039,8 @@ td.zero { color: var(--faint); }
     polyline(areaLine(6));
     doc.setLineDashPattern([1.5, 1.2], 0);
     polyline(areaLine(NINE_M));
+    doc.setLineDashPattern([0.4, 1.4], 0);
+    polyline(areaLine(ELEVEN_M));
     doc.setLineDashPattern([], 0);
     doc.setLineWidth(0.7);
     doc.line(...P(m(-0.5, SEVEN_M.dy)), ...P(m(0.5, SEVEN_M.dy)));
@@ -3058,7 +3077,7 @@ td.zero { color: var(--faint); }
     }
     const c = countGroups(shots);
     let lx = x;
-    const ly = y + 810 * k + 6;
+    const ly = y + COURT_VIEW_H * k + 6;
     doc.setFontSize(8);
     TALLY_ORDER.forEach((g) => {
       doc.setFillColor(...view.colors[g]);
