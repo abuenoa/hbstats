@@ -1204,13 +1204,32 @@ td.zero { color: var(--faint); }
     const removeIds = new Set(op.removed.map((r) => r.event.id));
     state.events = state.events.filter((e) => !removeIds.has(e.id));
     state.events.push(...op.added);
+    if (op.lineup) swapInLineup(op.lineup, op.lineup.outId, op.lineup.inId);
     if (op.phase) state.phase = op.phase.after;
   }
   function revertOp(op) {
     const addIds = new Set(op.added.map((e) => e.id));
     state.events = state.events.filter((e) => !addIds.has(e.id));
     op.removed.slice().sort((a, b) => a.index - b.index).forEach((r) => state.events.splice(r.index, 0, r.event));
+    if (op.lineup) swapInLineup(op.lineup, op.lineup.inId, op.lineup.outId);
     if (op.phase) state.phase = op.phase.before;
+  }
+  function swapInLineup(swap, leaving, entering) {
+    const team = state.lineups[swap.phase];
+    delete team[leaving];
+    team[entering] = { ...swap.spot };
+    if (ui.shooter === leaving) ui.shooter = null;
+  }
+  // A bench field player who acts comes on, in the current phase, for the court player of the same position
+  // (the one furthest from goal when there are several). Null when there is nothing to swap.
+  function benchSwapFor(playerId) {
+    const p = playerById(playerId);
+    const team = lineup();
+    if (!p || p.pos === 'POR' || team[playerId] || ourOffCourt().has(playerId)) return null;
+    const same = Object.keys(team).filter((id) => playerById(id) && playerById(id).pos === p.pos);
+    if (!same.length) return null;
+    const outId = same.reduce((a, b) => (team[b].y > team[a].y ? b : a));
+    return { phase: state.phase, inId: playerId, outId, spot: { ...team[outId] } };
   }
   const lastAdded = (op) => (op.added.length ? op.added[op.added.length - 1].id : null);
   function record(op, label) {
@@ -1223,14 +1242,19 @@ td.zero { color: var(--faint); }
     if (label) hint(label);
   }
   const makeEvent = (kind, data) => Object.assign({ id: newId('e'), abs: absSeconds(), kind }, data);
-  function addEvent(kind, data) {
+  // `opts.bringOn`: the player who acts; from the bench they come on in the same undoable step.
+  function addEvent(kind, data, opts = {}) {
     const e = makeEvent(kind, data);
     autoStartClock(kind);
     const op = { added: [e], removed: [] };
+    const benched = opts.bringOn ? isOnBench(opts.bringOn) : false;
+    if (benched) { const swap = benchSwapFor(opts.bringOn); if (swap) op.lineup = swap; }
     const next = state.autoPhase ? phaseAfter(e) : null;
     if (next && next !== state.phase) op.phase = { before: state.phase, after: next };
     record(op);
+    if (benched && !op.lineup) hint('Arrástralo a la pista si ha entrado');
   }
+  const isOnBench = (playerId) => { const p = playerById(playerId); return Boolean(p) && p.pos !== 'POR' && !lineup()[playerId]; };
   // A free-text note kept with the match minute; like any event it shows in the strip and can be undone or deleted.
   const NOTE_MAX_LENGTH = 140;
   const noteRows = () => state.events.filter((e) => e.kind === 'NOTE').map((e) => [absToClock(e.abs), e.text]);
