@@ -280,6 +280,7 @@ button.rex-chip { border: 0; cursor: pointer; position: relative; }
 .goal-face.hot { fill: var(--goal-hot); }
 /* While aiming: the whole goal lights up, the third under the pen a stronger yellow, the frame gold when the shot would hit it */
 .goal-sector { fill: var(--goal-sector); pointer-events: none; }
+.penalty-spot { fill: var(--gold); opacity: .85; pointer-events: none; }
 .goal-frame-hot { fill: none; stroke: var(--gold); stroke-width: 22; stroke-linejoin: round; pointer-events: none; filter: drop-shadow(0 0 6px var(--gold)); }
 .zone-tag { font-family: var(--font-display); font-weight: 800; font-size: 38px; fill: var(--fg); stroke: var(--surface); stroke-width: 8; paint-order: stroke; text-anchor: middle; }
 
@@ -642,6 +643,7 @@ td.zero { color: var(--faint); }
     <section class="panel stage" id="stage" aria-label="Pista">
       <svg id="court" viewBox="0 0 1000 880" preserveAspectRatio="xMidYMid meet" role="application" aria-label="Media pista: arrastra hasta la portería para registrar un lanzamiento">
         <g id="court-floor"></g>
+        <rect id="penalty-spot" class="penalty-spot" x="440" y="595" width="120" height="30" rx="15" visibility="hidden"/>
         <rect id="goal-face" class="goal-face" x="320" y="20" width="360" height="240" fill="var(--goal-face)"/>
         <rect id="goal-sector" class="goal-sector" width="120" height="80" visibility="hidden"/>
         <g id="goal-net"></g>
@@ -842,6 +844,7 @@ td.zero { color: var(--faint); }
   let idSeq = 0;
   const newId = (p) => `${p}${Date.now().toString(36)}${(idSeq++).toString(36)}`;
   const m = (dx, dy) => ({ x: CENTER_X + dx * UNITS_PER_M, y: GOAL_LINE_Y + dy * UNITS_PER_M });
+  const PENALTY_SPOT = m(0, SEVEN_M.dy);
   const gf = (gx, gy) => ({ x: GOAL_FACE.x + gx * GOAL_FACE.w, y: GOAL_FACE.y + gy * GOAL_FACE.h });
   const inGoalFace = (pt) => pt.x >= GOAL_FACE.x && pt.x <= GOAL_FACE.x + GOAL_FACE.w && pt.y >= GOAL_FACE.y && pt.y <= GOAL_FACE.y + GOAL_FACE.h;
   // Posts and crossbar: a band around the red frame. Released there, the shot is "Palo" straight away.
@@ -927,7 +930,9 @@ td.zero { color: var(--faint); }
   const ui = {
     source: 'GK', sourcePhase: null, show: new Set(), popView: null, hintTimer: null, drag: null,
     lastPenTs: 0, shooter: null, rivalNewPos: null, sheetTab: 'stats', sheetMode: 'sheet', sheetGk: null, sheetGoal: 'GK', sheetShooter: null, rosterSide: 'team', templatePick: false,
-    finishArmedTimer: null
+    finishArmedTimer: null,
+    // A provoked (us) or committed (them) 7 m waiting for its shot: { team, eventId, byId }.
+    penalty: null
   };
 
   function todayIso() { return new Date().toISOString().slice(0, 10); }
@@ -1253,6 +1258,29 @@ td.zero { color: var(--faint); }
     if (next && next !== state.phase) op.phase = { before: state.phase, after: next };
     record(op);
     if (benched && !op.lineup) hint('Arrástralo a la pista si ha entrado');
+    if (kind === 'ACTION' && PENALTY_TEAM[data.action]) startPenalty(PENALTY_TEAM[data.action], e.id, data.playerId);
+  }
+  // ---- Penalties: a 7 m is recorded only after it is provoked or committed; its shot starts on the mark ----
+  const PENALTY_TEAM = { PROV7: 'us', PEN7C: 'them' };
+  function startPenalty(team, eventId, byId) {
+    ui.penalty = { team, eventId, byId };
+    renderPenalty();
+  }
+  function cancelPenalty() {
+    if (!ui.penalty) return;
+    ui.penalty = null;
+    renderPenalty();
+  }
+  function renderPenalty() {
+    $('penalty-spot').setAttribute('visibility', ui.penalty ? 'visible' : 'hidden');
+    renderArmed();
+  }
+  // Our taker: whoever took our last 7 m and can still play, else the player who provoked it.
+  function penaltyShooterId() {
+    const out = ourOffCourt();
+    const last = ourShots().filter((e) => e.from === '7M' && !out.has(e.playerId)).at(-1);
+    if (last) return last.playerId;
+    return ui.penalty && !out.has(ui.penalty.byId) ? ui.penalty.byId : null;
   }
   const isOnBench = (playerId) => { const p = playerById(playerId); return Boolean(p) && p.pos !== 'POR' && !lineup()[playerId]; };
   // A free-text note kept with the match minute; like any event it shows in the strip and can be undone or deleted.
@@ -1274,6 +1302,7 @@ td.zero { color: var(--faint); }
   function deleteEvent(id) {
     const index = state.events.findIndex((e) => e.id === id);
     if (index < 0) return;
+    if (ui.penalty && ui.penalty.eventId === id) cancelPenalty();
     const event = state.events[index];
     record({ added: [], removed: [{ event, index }] }, `Borrado: ${describe(event)}`);
   }
@@ -1281,6 +1310,7 @@ td.zero { color: var(--faint); }
   function undo() {
     const op = state.history.pop();
     if (!op) return;
+    if (ui.penalty && op.added.some((e) => e.id === ui.penalty.eventId)) cancelPenalty();
     revertOp(op);
     state.future.push(op);
     commit();
@@ -1698,8 +1728,9 @@ td.zero { color: var(--faint); }
   function renderArmed() {
     const bar = $('armed-bar');
     const p = ui.shooter ? playerById(ui.shooter) : null;
-    bar.hidden = !p;
+    bar.hidden = !p && !ui.penalty;
     if (p) bar.innerHTML = `${discHtml(p)}<b>Dibuja el tiro</b><button class="btn press" type="button" data-unarm aria-label="Cancelar lanzamiento">✕</button>`;
+    else if (ui.penalty) bar.innerHTML = `<b>${ui.penalty.team === 'us' ? 'Penalti a favor' : 'Penalti en contra'} · dibuja el tiro</b><button class="btn press" type="button" data-unarm aria-label="Cancelar el penalti">✕</button>`;
   }
   function updateLiveBits() {
     const t = document.querySelector('[data-live-timeout]');
@@ -1848,9 +1879,10 @@ td.zero { color: var(--faint); }
     const results = ['GOL', 'PARADA', 'PALO', 'BLOCADO'];
     return `${head}${view.pick ? shooterPickerHtml(view) : ''}${view.rivalPick ? rivalPickerHtml(view) : ''}
       <div class="act-grid two">${results.map((r) => `<button class="act ${r === 'GOL' || r === 'PARADA' ? 'big ' : ''}${GROUP_CLASS[groupOf(r)]}" style="background:${MAP_VIEWS[ours ? 'US' : 'GK'].colors[groupOf(r)]}" type="button" data-result="${r}" ${p ? '' : 'disabled'}>${RESULTS[r].label}</button>`).join('')}
-        <button class="chip" type="button" data-contra aria-pressed="${view.contra}">Contraataque</button></div>`;
+        ${view.penalty ? '' : `<button class="chip" type="button" data-contra aria-pressed="${view.contra}">Contraataque</button>`}</div>`;
   }
   function commitShot(view, result) {
+    if (view.penalty) cancelPenalty();
     if (view.type === 'ourShot') {
       disarm();
       addEvent('SHOT', { playerId: view.playerId, origin: view.origin, target: view.target, from: view.zone, zone: view.contra ? 'CONTRA' : view.zone, result });
@@ -1863,7 +1895,7 @@ td.zero { color: var(--faint); }
     hint(`${RESULTS[result].label} ${ZONES[view.zone]} · ↶ deshacer`);
   }
   function openShotPop(view, anchor) {
-    Object.assign(view, { zone: zoneFrom(view.origin), contra: false, anchor });
+    Object.assign(view, { zone: view.penalty ? '7M' : zoneFrom(view.origin), contra: false, anchor });
     // Released on a post or the crossbar, or outside the goal: no result question, only "who" if we do not know it yet.
     const direct = onGoalFrame(view.target) ? 'PALO' : (inGoalFace(view.target) ? null : 'FUERA');
     view.rivalPick = view.type === 'rivalShot' && state.rivals.length > 0;
@@ -2026,7 +2058,7 @@ td.zero { color: var(--faint); }
     if (setClockText($('clock-input').value)) closePop();
   });
   $('scrim').addEventListener('pointerdown', (ev) => { ev.preventDefault(); closePop(); });
-  $('armed-bar').addEventListener('click', (ev) => { if (ev.target.closest('[data-unarm]')) disarm(); });
+  $('armed-bar').addEventListener('click', (ev) => { if (!ev.target.closest('[data-unarm]')) return; if (ui.penalty && !ui.shooter) cancelPenalty(); else disarm(); });
   document.addEventListener('keydown', (ev) => {
     if (ev.key !== 'Escape') return;
     if (!$('pop').hidden) closePop();
@@ -2052,12 +2084,12 @@ td.zero { color: var(--faint); }
   const clampCourt = (pt) => ({ x: clamp(pt.x, COURT.minX, COURT.maxX), y: clamp(pt.y, COURT.minY, COURT.maxY) });
   const DRAW_IDS = ['draw-line', 'draw-origin', 'draw-end', 'draw-zone'];
   const setDraw = (on) => DRAW_IDS.forEach((id) => $(id).setAttribute('visibility', on ? 'visible' : 'hidden'));
-  function startDraw(origin) {
+  function startDraw(origin, zone = ui.penalty ? '7M' : zoneFrom(origin)) {
     setAttrs($('draw-origin'), { cx: origin.x, cy: origin.y });
     setAttrs($('draw-line'), { x1: origin.x, y1: origin.y, x2: origin.x, y2: origin.y });
     const tag = $('draw-zone');
     setAttrs(tag, { x: origin.x, y: Math.min(origin.y + ZONE_TAG_OFFSET + 12, COURT.maxY + 20) });
-    tag.textContent = ZONES[zoneFrom(origin)];
+    tag.textContent = ZONES[zone];
   }
   function moveDraw(pt) {
     setDraw(true);
@@ -2089,7 +2121,7 @@ td.zero { color: var(--faint); }
       const start = isGk ? GK_SPOT : lineup()[id];
       ui.drag = { type: 'token', id, el: tok, isGk, start, grab: { x: pt.x, y: pt.y }, startX: ev.clientX, startY: ev.clientY, moved: false, toGoal: false, pointerId: ev.pointerId };
     } else if (pt.y > GOAL_LINE_Y) {
-      ui.drag = { type: 'shot', origin: { x: pt.x, y: pt.y }, pointerId: ev.pointerId };
+      ui.drag = { type: 'shot', origin: ui.penalty ? { ...PENALTY_SPOT } : { x: pt.x, y: pt.y }, pointerId: ev.pointerId };
       startDraw(ui.drag.origin);
     } else return;
     svg.setPointerCapture(ev.pointerId);
@@ -2102,7 +2134,7 @@ td.zero { color: var(--faint); }
     if (d.type === 'shot') { moveDraw(pt); return; }
     if (d.isGk) return; // the goalkeeper stays in goal; change it from its popup or from the bench
     if (!d.moved && Math.hypot(ev.clientX - d.startX, ev.clientY - d.startY) < CONFIG.dragThresholdPx) return;
-    if (!d.moved) { d.moved = true; startDraw(state.phase === 'DEF' ? d.grab : d.start); }
+    if (!d.moved) { d.moved = true; startDraw(ui.penalty ? PENALTY_SPOT : state.phase === 'DEF' ? d.grab : d.start); }
     d.toGoal = pt.y < GOAL_LINE_Y;
     if (d.toGoal) {
       d.el.setAttribute('transform', `translate(${d.start.x} ${d.start.y})`);
@@ -2129,6 +2161,7 @@ td.zero { color: var(--faint); }
         renderTokens();
         if (state.phase === 'ATK' && ourOffCourt().has(d.id)) { const p = playerById(d.id); hint(`#${p.num} ${p.name} no puede lanzar: ${isDisqualified(d.id) ? 'descalificado' : "cumple 2'"}`); return; }
         // Defending, a drag through one of our defenders is the rival's shot from that spot; attacking, it is that player's shot.
+        if (ui.penalty) { shotFromDrag(PENALTY_SPOT, pt, anchor, ui.penalty.team === 'us' ? d.id : null); return; }
         const view = state.phase === 'DEF'
           ? { type: 'rivalShot', origin: d.grab, target: goalTarget(pt) }
           : { type: 'ourShot', playerId: d.id, origin: d.start, target: goalTarget(pt) };
@@ -2143,10 +2176,23 @@ td.zero { color: var(--faint); }
     }
     const len = Math.hypot(pt.x - d.origin.x, pt.y - d.origin.y);
     if (len < CONFIG.minShotLengthUnits || pt.y > GOAL_LINE_Y) { hint('Arrastra hasta la portería'); return; }
+    shotFromDrag(d.origin, pt, anchor);
+  }
+  // A shot drawn to `pt` from empty court (or, with a pending penalty, from any token: `shooterId`).
+  // A pending penalty starts on the mark and decides whose shot it is.
+  function shotFromDrag(origin, pt, anchor, shooterId = null) {
     const target = goalTarget(pt);
+    const pen = ui.penalty;
+    if (pen) {
+      const view = pen.team === 'us'
+        ? { type: 'ourShot', playerId: shooterId || penaltyShooterId(), pick: !shooterId, origin: { ...PENALTY_SPOT }, target, penalty: true }
+        : { type: 'rivalShot', origin: { ...PENALTY_SPOT }, target, penalty: true };
+      openShotPop(view, anchor);
+      return;
+    }
     const view = ui.shooter || state.phase === 'ATK'
-      ? { type: 'ourShot', playerId: ui.shooter || lastShooterId(), pick: !ui.shooter, origin: d.origin, target }
-      : { type: 'rivalShot', origin: d.origin, target };
+      ? { type: 'ourShot', playerId: ui.shooter || lastShooterId(), pick: !ui.shooter, origin, target }
+      : { type: 'rivalShot', origin, target };
     openShotPop(view, anchor);
   }
   svg.addEventListener('pointerup', (ev) => endCourtDrag(ev, false));
@@ -2245,7 +2291,7 @@ td.zero { color: var(--faint); }
   document.querySelector('.phase').addEventListener('click', (ev) => {
     const b = ev.target.closest('button');
     if (!b) return;
-    if (b.dataset.phase) { setPhase(b.dataset.phase); return; }
+    if (b.dataset.phase) { cancelPenalty(); setPhase(b.dataset.phase); return; }
     state.autoPhase = !state.autoPhase;
     commit();
     hint(state.autoPhase ? 'Auto: cambia sola tras cada posesión' : 'Auto desactivado: cambia tú la fase');
