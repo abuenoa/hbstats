@@ -233,6 +233,10 @@ button.rex-chip { border: 0; cursor: pointer; position: relative; }
   font-family: var(--font-display); font-weight: 800; font-size: 21px; color: #fff; box-shadow: 0 0 0 3px var(--surface), 0 2px 6px rgba(0, 0, 0, .18);
 }
 .disc.light-text { color: #151515; }
+/* With a photo the face fills the circle and the dorsal sits on a small badge in the position colour */
+.disc.photo { position: relative; }
+.disc.photo b { position: absolute; right: -6px; bottom: -4px; min-width: 20px; padding: 0 3px; border-radius: 10px; font-size: 12px; line-height: 18px; text-align: center; box-shadow: 0 0 0 2px var(--surface); }
+.disc.photo b.light-text { color: #151515; }
 .bench-player.out { opacity: .45; text-decoration: line-through; }
 .bench-player.out .who b { color: var(--desc); }
 .who { min-width: 0; }
@@ -286,6 +290,8 @@ button.rex-chip { border: 0; cursor: pointer; position: relative; }
 .tok .body { stroke: var(--surface); stroke-width: 5; filter: drop-shadow(0 3px 4px rgba(0, 0, 0, .25)); }
 .tok .num { font-family: var(--font-display); font-weight: 800; font-size: 34px; fill: #fff; text-anchor: middle; dominant-baseline: central; pointer-events: none; }
 .tok .num.dark { fill: #151515; }
+.tok .num.badge { font-size: 22px; }
+.tok .num-badge { stroke: var(--surface); stroke-width: 3; }
 .tok .nm-bg { fill: var(--surface); stroke: var(--line); opacity: .94; }
 .tok .nm { font-family: var(--font-body); font-weight: 600; font-size: 19px; fill: var(--fg); text-anchor: middle; dominant-baseline: central; pointer-events: none; }
 .tok.excluded { opacity: .45; }
@@ -994,6 +1000,8 @@ td.zero { color: var(--faint); }
     source: 'GK', sourcePhase: null, show: new Set(), popView: null, hintTimer: null, drag: null,
     lastPenTs: 0, shooter: null, rivalNewPos: null, sheetTab: 'stats', sheetMode: 'sheet', sheetGk: null, sheetGoal: 'GK', sheetShooter: null, rosterSide: 'team', templatePick: false,
     finishArmedTimer: null,
+    // Team photos by player id (see setTeamPhotos).
+    photos: new Map(),
     // A provoked (us) or committed (them) 7 m waiting for its shot: { team, eventId, byId }.
     penalty: null,
     // Right panel: 'acts' (actions to arm) or 'kpis' (live stats). Armed action: { key, sub } until a player is tapped.
@@ -1673,7 +1681,15 @@ td.zero { color: var(--faint); }
     disarmFinish();
     finishMatch();
   }
+  // Team photos by player id, from the team roster (never copied into the match itself).
+  function setTeamPhotos(roster) {
+    ui.photos = new Map(roster.filter((p) => p.photo && IMAGE_DATA_URL.test(p.photo)).map((p) => [p.id, p.photo]));
+  }
+  const photoOf = (id) => ui.photos.get(id) || null;
   function discHtml(p, pos = posOf(p)) {
+    // A roster player carries their photo; match players are looked up in the team photos.
+    const photo = p.photo && IMAGE_DATA_URL.test(p.photo) ? p.photo : photoOf(p.id);
+    if (photo) return `<span class="disc photo" style="background:${pos.color} url('${photo}') center/cover"><b class="${pos.darkText ? 'light-text' : ''}" style="background:${pos.color}">${p.num}</b></span>`;
     return `<span class="disc${pos.darkText ? ' light-text' : ''}" style="background:${pos.color}">${p.num}</span>`;
   }
   function renderPhase() {
@@ -1693,7 +1709,9 @@ td.zero { color: var(--faint); }
     const ex = exRemaining != null;
     return `<g class="tok${ex ? ' excluded' : ''}${extraCls}" data-id="${p.id}" transform="translate(${pos.x} ${pos.y})">
       <circle r="40" class="body" fill="${posInfo.color}"/>
-      <text class="num${posInfo.darkText ? ' dark' : ''}">${p.num}</text>
+      ${photoOf(p.id) ? `<clipPath id="face-${p.id}"><circle r="34"/></clipPath><image href="${photoOf(p.id)}" x="-34" y="-34" width="68" height="68" clip-path="url(#face-${p.id})" preserveAspectRatio="xMidYMid slice"/>
+      <circle class="num-badge" cx="30" cy="28" r="17" fill="${posInfo.color}"/><text class="num badge${posInfo.darkText ? ' dark' : ''}" x="30" y="28">${p.num}</text>`
+    : `<text class="num${posInfo.darkText ? ' dark' : ''}">${p.num}</text>`}
       <rect class="nm-bg" x="-60" y="45" width="120" height="30" rx="15"/>
       <text class="nm" y="60">${esc(p.name)}</text>
       ${onePhaseOnly(p.id) ? '<g class="ad-mark" transform="translate(-36 -36)"><circle r="22"/><text>⇄</text></g>' : ''}
@@ -2548,6 +2566,9 @@ td.zero { color: var(--faint); }
   const SHEET_TABS = { stats: 'Estadísticas', analysis: 'Análisis', gk: 'Portero', acta: 'Acta y plantilla', reports: 'Informes PDF' };
   const MAX_ROSTER = 16;
   const MAX_NAME_LENGTH = 24;
+  // The name on the official card and the face photo (a small data URL, see supabase/schema.sql for the same limits).
+  const MAX_FULL_NAME_LENGTH = 80;
+  const MAX_PHOTO_LENGTH = 60000;
   const DORSAL_RANGE = [1, 99];
   const ROSTER_FORMAT = 'hbstats-plantilla';
   const MAX_VENUE_LENGTH = 40;
@@ -3179,7 +3200,14 @@ td.zero { color: var(--faint); }
       }
       if (!name) throw new Error(`falta el nombre del dorsal ${num}`);
       if (!CONFIG.positions[x.pos]) throw new Error(`puesto desconocido para ${name}`);
-      return { id: newId('p'), num, name, pos: x.pos };
+      const player = { id: newId('p'), num, name, pos: x.pos };
+      const fullName = typeof x.fullName === 'string' ? x.fullName.trim().slice(0, MAX_FULL_NAME_LENGTH) : '';
+      if (fullName) player.fullName = fullName;
+      if (x.photo != null) {
+        if (typeof x.photo !== 'string' || x.photo.length > MAX_PHOTO_LENGTH || !IMAGE_DATA_URL.test(x.photo)) throw new Error(`la foto de ${name} no es una imagen válida`);
+        player.photo = x.photo;
+      }
+      return player;
     });
     if (ours && !players.some((p) => p.pos === 'POR')) throw new Error('hace falta al menos un portero');
     const fallback = ours ? state.us : state.them;
@@ -3680,7 +3708,7 @@ td.zero { color: var(--faint); }
   const MAX_CLUB_LENGTH = 60;
   const MIN_PASSWORD_LENGTH = 8;
   const CREST_SIZE_PX = 160;
-  const CREST_DATA_URL = /^data:image\/(png|jpeg|webp);base64,[A-Za-z0-9+/=]+$/;
+  const IMAGE_DATA_URL = /^data:image\/(png|jpeg|webp);base64,[A-Za-z0-9+/=]+$/;
   const HEX_COLOUR = /^#[0-9a-fA-F]{6}$/;
   const INK_DARK = '#151515';
   const INK_LIGHT = '#ffffff';
@@ -3742,7 +3770,7 @@ td.zero { color: var(--faint); }
   function localBackend() {
     const read = () => ({ teams: [], players: [], matches: {}, templates: [], ...readJson(LOCAL_DB_KEY) });
     const write = (db) => { if (!writeJson(LOCAL_DB_KEY, db)) throw new Error('no queda espacio en este dispositivo'); };
-    const plain = (p) => ({ id: p.id, num: p.num, name: p.name, pos: p.pos });
+    const plain = (p) => ({ id: p.id, num: p.num, name: p.name, pos: p.pos, fullName: p.fullName || null, photo: p.photo || null });
     return {
       needsLogin: false,
       async listTeams() { return read().teams; },
@@ -3766,7 +3794,7 @@ td.zero { color: var(--faint); }
         const db = read();
         let row = player.id && db.players.find((p) => p.id === player.id);
         if (!row) { row = { id: newUuid(), teamId, active: true }; db.players.push(row); }
-        Object.assign(row, { num: player.num, name: player.name, pos: player.pos });
+        Object.assign(row, { num: player.num, name: player.name, pos: player.pos, fullName: player.fullName || null, photo: player.photo || null });
         write(db);
         return plain(row);
       },
@@ -3822,6 +3850,9 @@ td.zero { color: var(--faint); }
     const check = (result) => { if (result.error) throw new Error(result.error.message); return result.data; };
     const toTeam = (r) => ({ id: r.id, club: r.club, name: r.name, brand: r.brand, brand2: r.brand2, brandInk: r.brand_ink, crest: r.crest });
     const teamRow = (t) => ({ club: t.club, name: t.name, brand: t.brand, brand2: t.brand2, brand_ink: t.brandInk, crest: t.crest });
+    const PLAYER_COLUMNS = 'id,num,name,pos,full_name,photo';
+    // `name` is the short name shown on court; `fullName` is the one on the official card.
+    const toPlayer = (r) => ({ id: r.id, num: r.num, name: r.name, pos: r.pos, fullName: r.full_name, photo: r.photo });
     const toSummary = (r) => ({ id: r.id, date: r.played_on || '', them: r.rival, venue: r.venue, status: r.status, scoreUs: r.score_us, scoreThem: r.score_them });
     return {
       needsLogin: true,
@@ -3836,12 +3867,11 @@ td.zero { color: var(--faint); }
         return toTeam(check(await client.rpc('create_team', { p_club: t.club, p_name: t.name, p_brand: t.brand, p_brand2: t.brand2, p_brand_ink: t.brandInk, p_crest: t.crest })));
       },
       async updateTeam(id, t) { return toTeam(check(await client.from('teams').update(teamRow(t)).eq('id', id).select().single())); },
-      async listPlayers(teamId) { return check(await client.from('players').select('id,num,name,pos').eq('team_id', teamId).eq('active', true).order('num')); },
+      async listPlayers(teamId) { return check(await client.from('players').select(PLAYER_COLUMNS).eq('team_id', teamId).eq('active', true).order('num')).map(toPlayer); },
       async savePlayer(teamId, p) {
-        const row = { team_id: teamId, num: p.num, name: p.name, pos: p.pos };
+        const row = { team_id: teamId, num: p.num, name: p.name, pos: p.pos, full_name: p.fullName || null, photo: p.photo || null };
         const query = p.id ? client.from('players').update(row).eq('id', p.id) : client.from('players').insert(row);
-        const saved = check(await query.select('id,num,name,pos').single());
-        return saved;
+        return toPlayer(check(await query.select(PLAYER_COLUMNS).single()));
       },
       async retirePlayer(teamId, id) { check(await client.from('players').update({ active: false }).eq('id', id).eq('team_id', teamId)); },
       async listMatches(teamId) {
@@ -3938,7 +3968,7 @@ td.zero { color: var(--faint); }
   }
   // The uploaded crest, or the team's initials on its colours.
   function crestSrc(t) {
-    if (t.crest && CREST_DATA_URL.test(t.crest)) return t.crest;
+    if (t.crest && IMAGE_DATA_URL.test(t.crest)) return t.crest;
     const initials = t.name.split(/\s+/).filter(Boolean).map((w) => w[0]).join('').slice(0, 2).toUpperCase();
     const svg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 96 96"><circle cx="48" cy="48" r="45" fill="${t.brand}" stroke="${t.brand2}" stroke-width="6"/>`
       + `<text x="48" y="61" font-family="system-ui,sans-serif" font-weight="800" font-size="36" text-anchor="middle" fill="${t.brandInk}">${esc(initials)}</text></svg>`;
@@ -4220,6 +4250,7 @@ td.zero { color: var(--faint); }
     currentMatchId = id;
     writeJson(CURRENT_MATCH_KEY, id);
     state = restoreState(saved);
+    setTeamPhotos(home.roster.length ? home.roster : readJson(CACHE_KEY_PREFIX + `players:${team.id}`) || []);
     storeLocalMatch(id, state, dirty);
     if (dirty) scheduleSync();
     resetPlayUi();
@@ -4415,7 +4446,7 @@ td.zero { color: var(--faint); }
     try {
       for (const p of players) {
         const existing = home.roster.find((x) => x.num === p.num);
-        const saved = await backend.savePlayer(team.id, { id: existing ? existing.id : null, num: p.num, name: p.name, pos: p.pos });
+        const saved = await backend.savePlayer(team.id, { ...existing, ...p, id: existing ? existing.id : null });
         home.roster = existing ? home.roster.map((x) => (x.id === saved.id ? saved : x)) : [...home.roster, saved];
       }
       writeJson(CACHE_KEY_PREFIX + `players:${team.id}`, home.roster);
