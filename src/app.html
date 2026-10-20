@@ -645,6 +645,47 @@ td.zero { color: var(--faint); }
 .in.colour { padding: 4px; }
 .squad-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(160px, 1fr)); gap: 8px; }
 .home input { -webkit-user-select: text; user-select: text; }
+/* Team page: season card, leaders, squad */
+.team-page { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.1fr) minmax(0, 1.3fr); gap: 14px; align-items: start; }
+.record b { display: block; font-family: var(--font-display); font-weight: 800; font-size: 44px; line-height: 1; font-variant-numeric: tabular-nums; }
+.record small { color: var(--muted); }
+.form-chips { display: flex; gap: 6px; margin: 10px 0; }
+.form-chip { font-style: normal; font-weight: 800; font-size: 13px; min-width: 28px; line-height: 28px; text-align: center; border-radius: 8px; color: #fff; }
+.res-G { background: var(--act-good); }
+.res-E { background: var(--dos); }
+.res-P { background: var(--act-bad); }
+.last-score.res-G { color: var(--act-good); background: none; }
+.last-score.res-E { color: var(--dos); background: none; }
+.last-score.res-P { color: var(--act-bad); background: none; }
+.kpis { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-bottom: 14px; }
+.kpi { display: grid; gap: 2px; align-content: start; padding: 10px 12px; border-radius: 12px; background: var(--soft); min-width: 0; }
+.kpi b { font-family: var(--font-display); font-weight: 800; font-size: 28px; line-height: 1.1; font-variant-numeric: tabular-nums; }
+.kpi span { font-size: 12px; color: var(--muted); }
+.kpi.hot { background: var(--brand); color: var(--brand-ink); }
+.kpi.hot span { color: inherit; opacity: .85; }
+.last-match { display: flex; align-items: center; gap: 10px; }
+.mvp-face-static { position: relative; flex: none; display: inline-flex; }
+.last-who { display: grid; min-width: 0; flex: 1; }
+.last-who small { color: var(--muted); }
+.last-score { font-family: var(--font-display); font-weight: 800; font-size: 28px; font-variant-numeric: tabular-nums; }
+.leaders .chips { margin-bottom: 8px; }
+.chip { min-height: 36px; padding: 0 12px; border-radius: 999px; border: 1px solid var(--line); background: var(--soft); color: var(--fg); font: inherit; font-size: 13px; font-weight: 700; }
+.chip[aria-pressed="true"] { background: var(--gold); border-color: var(--gold); color: #151515; }
+.leader-list { margin: 0; padding: 0; list-style: none; }
+.leader { display: flex; align-items: center; gap: 10px; width: 100%; min-height: 56px; padding: 6px 0; border: 0; border-bottom: 1px solid var(--line); background: none; color: var(--fg); font: inherit; text-align: left; }
+.leader .rank { font-style: normal; font-weight: 700; color: var(--muted); width: 16px; text-align: center; }
+.leader .who { display: grid; flex: 1; min-width: 0; }
+.leader .who small { color: var(--muted); }
+.leader .value { font-family: var(--font-display); font-weight: 800; font-size: 26px; font-variant-numeric: tabular-nums; }
+.squad h4 { margin: 14px 0 6px; font-size: 12px; letter-spacing: .1em; text-transform: uppercase; }
+.faces { display: grid; grid-template-columns: repeat(auto-fill, minmax(76px, 1fr)); gap: 8px; }
+.face { display: grid; justify-items: center; gap: 4px; min-height: var(--tap); padding: 4px; border: 0; background: none; color: var(--fg); font: inherit; font-size: 12px; font-weight: 700; }
+.face span { max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.face .disc, .last-match .disc { width: 56px; height: 56px; font-size: 22px; }
+.face .disc { box-shadow: 0 0 0 3px var(--pos); }
+.squad .row-actions { margin-top: 14px; }
+@media (max-width: 1100px) { .team-page { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); } .squad { grid-column: 1 / -1; } }
+@media (max-width: 700px) { .team-page { grid-template-columns: minmax(0, 1fr); } }
 @media (max-width: 900px) { .team-layout { grid-template-columns: minmax(0, 1fr); } }
 @media (prefers-reduced-transparency: reduce) {
   .glass, .pop { background: var(--surface); -webkit-backdrop-filter: none; backdrop-filter: none; }
@@ -3758,7 +3799,7 @@ td.zero { color: var(--faint); }
   let backend = null;
   let currentMatchId = null;
   let syncTimer = null;
-  const home = { view: 'loading', user: null, teams: [], roster: [], matches: [], season: [], templates: [], template: null, squad: new Set(), offline: false, error: '', draft: null, crestDraft: undefined, armed: null, passwordChange: false };
+  const home = { view: 'loading', user: null, teams: [], roster: [], matches: [], season: [], templates: [], template: null, squad: new Set(), leaderMetric: 'goals', offline: false, error: '', draft: null, crestDraft: undefined, armed: null, passwordChange: false };
 
   // ---- Device storage ----
   function readJson(key) {
@@ -4099,12 +4140,13 @@ td.zero { color: var(--faint); }
     </form>`;
   }
   function homeHeadHtml() {
-    const tab = (view, label) => `<button class="press" type="button" data-home-view="${view}" aria-pressed="${home.view === view || (view === 'matches' && home.view === 'squad')}">${label}</button>`;
+    const tab = (view, label) => `<button class="press" type="button" data-home-view="${view}" aria-pressed="${home.view === view || (view === 'matches' && home.view === 'squad') || (view === 'team' && home.view === 'team-edit')}">${label}</button>`;
     return `<header class="home-head glass">
       <button class="btn press" type="button" data-home-view="profile">‹ Perfil</button>
       <img class="crest home-crest" src="${esc(crestSrc(team))}" alt="">
       <div class="home-title"><h1>${esc(team.name)}</h1><small>${esc(team.club)}</small></div>
-      <div class="tabs" role="group" aria-label="Secciones">${tab('matches', 'Partidos')}${tab('team', 'Equipo')}</div>
+      <div class="tabs" role="group" aria-label="Secciones">${tab('team', 'Equipo')}${tab('matches', 'Partidos')}</div>
+      ${home.view === 'team' ? '<button class="btn go press" type="button" data-new-match>+ Nuevo partido</button>' : ''}
     </header>`;
   }
   // A match left on this tablet by the per-club release (same site), if any.
@@ -4150,15 +4192,16 @@ td.zero { color: var(--faint); }
         : '<p class="note">Añade a tus jugadores (al menos un portero) o importa un archivo de plantilla.</p>'}
       <p class="note">En cada partido eliges la convocatoria entre estos jugadores. Quitar a alguien no cambia los partidos ya jugados.</p>`;
   }
-  function teamViewHtml() {
+  function teamEditHtml() {
     const remove = `<div class="team-delete"><p class="note">Borrar el equipo borra también su plantilla y todos sus partidos. Solo puede hacerlo quien lo creó.</p>
       ${armedButton('delete-team', 'Borrar equipo', 'data-delete-team')}</div>`;
-    return `<div class="team-layout"><section class="sheet-card"><h3>Equipo</h3>${teamFormHtml(team, false)}${remove}</section><section class="sheet-card">${teamRosterHtml()}</section></div>`;
+    return `<div class="row-actions"><button class="btn press" type="button" data-home-view="team">‹ Equipo</button></div>
+      <div class="team-layout"><section class="sheet-card"><h3>Equipo</h3>${teamFormHtml(team, false)}${remove}</section><section class="sheet-card">${teamRosterHtml()}</section></div>`;
   }
   const squadReady = () => home.squad.size > 0 && home.squad.size <= MAX_ROSTER && home.roster.some((p) => home.squad.has(p.id) && p.pos === 'POR');
   function squadHtml() {
     const chip = (p) => `<button class="pick press" type="button" data-squad="${p.id}" aria-pressed="${home.squad.has(p.id)}">${discHtml(p)}<span>${esc(p.name)}</span></button>`;
-    const problem = !home.roster.length ? 'La plantilla está vacía: añade jugadores en «Equipo».'
+    const problem = !home.roster.length ? 'La plantilla está vacía: añade jugadores en «Editar equipo».'
       : home.squad.size > MAX_ROSTER ? `Máximo ${MAX_ROSTER} en el acta.`
         : !squadReady() ? 'Hace falta al menos un portero.' : '';
     return `<div class="sheet-head"><h2>Convocatoria</h2><div class="head-actions">
@@ -4169,7 +4212,7 @@ td.zero { color: var(--faint); }
         ${problem ? `<span class="note">${problem}</span>` : ''}</div>
       <div class="squad-grid">${home.roster.slice().sort(byPosition).map(chip).join('')}</div>`;
   }
-  const HOME_VIEWS = { matches: matchesHtml, team: teamViewHtml, squad: squadHtml };
+  const HOME_VIEWS = { team: teamPageHtml, 'team-edit': teamEditHtml, matches: matchesHtml, squad: squadHtml };
 
   // ---- Profile: the first screen after signing in (teams, rival templates, account) ----
   const profileHeadHtml = () => `<header class="home-head glass"><span class="app-mark" aria-hidden="true">HB</span>
@@ -4274,7 +4317,7 @@ td.zero { color: var(--faint); }
     const resume = readJson(CURRENT_MATCH_KEY);
     const saved = resume && localMatch(resume);
     if (saved && saved.teamId === t.id) { enterMatch(resume, saved.state, saved.dirty); return; }
-    await showMatches();
+    await showTeamPage();
   }
   // Matches changed on this device and not uploaded yet replace (or add to) the backend's list.
   function withLocalChanges(list, extra = () => ({})) {
@@ -4544,6 +4587,87 @@ td.zero { color: var(--faint); }
       home.offline = true;
     }
     if (home.view === 'matches') renderHome();
+  }
+  // ---- Team page: the season at a glance (record, leaders, squad) ----
+  const LEADER_LIMIT = 7;
+  const LEADER_METRICS = [
+    { key: 'goals', label: 'Goles' }, { key: 'pct', label: '% tiro' }, { key: 'saves', label: 'Paradas' },
+    { key: 'recoveries', label: 'Recuperaciones' }, { key: 'assists', label: 'Pases de gol' }, { key: 'mvps', label: 'MVP' }
+  ];
+  const POSITION_GROUPS = { POR: 'Porteros', EXT: 'Extremos', LAT: 'Laterales', CEN: 'Centrales', PIV: 'Pivotes' };
+  const SQUAD_GROUP_ORDER = ['POR', ...POSITION_ORDER.filter((k) => k !== 'POR')];
+  // The figure a player is ranked by and its caption; null when the player does not qualify for the metric.
+  function leaderFigure(player, season, metric) {
+    const t = season.totals, keeper = player.pos === 'POR', who = `#${player.num}`;
+    const shotLine = `${t.goals}/${t.shots} tiros`;
+    if (metric === 'mvps') return { value: season.mvps, detail: `${who} · ${plural(season.rows.length, 'partido', 'partidos')}` };
+    if (metric === 'assists') return { value: t.assists, detail: `${who} · ${plural(season.rows.length, 'partido', 'partidos')}` };
+    if (metric === 'saves') return keeper ? { value: t.saves, detail: `${who} · ${t.saves}/${t.onTarget} · ${pctText(pct(t.saves, t.onTarget))}` } : null;
+    if (keeper) return null;
+    if (metric === 'goals') return { value: t.goals, detail: `${who} · ${shotLine} · ${pctText(pct(t.goals, t.shots))}` };
+    if (metric === 'pct') return t.shots >= CONFIG.leaders.minShots ? { value: pct(t.goals, t.shots), detail: `${who} · ${shotLine}` } : null;
+    return { value: t.recoveries, detail: `${who} · ${plural(season.rows.length, 'partido', 'partidos')}` };
+  }
+  function leaders(matches, roster, metric) {
+    return roster.map((player) => ({ player, figure: leaderFigure(player, playerSeason(matches, player), metric) }))
+      .filter(({ figure }) => figure && (figure.value > 0 || metric === 'pct'))
+      .map(({ player, figure }) => ({ player, value: figure.value, detail: figure.detail }))
+      .sort((a, b) => b.value - a.value || a.player.num - b.player.num)
+      .slice(0, LEADER_LIMIT);
+  }
+  const resultClass = (m) => `res-${matchResult(m)}`;
+  function seasonCardHtml(matches) {
+    if (matches === null) return '<section class="sheet-card season-card"><h3>Temporada</h3><p class="note">Cargando…</p></section>';
+    if (!matches.length) return '<section class="sheet-card season-card"><h3>Temporada</h3><p class="note">Sin partidos todavía</p></section>';
+    const s = teamSeason(matches);
+    const tile = (value, label, cls = '') => `<div class="kpi${cls}"><b>${value}</b><span>${label}</span></div>`;
+    const form = s.form.map((r) => `<i class="form-chip res-${r}">${r}</i>`).join('');
+    const perMatch = decimalText(s.goalsFor / matches.length);
+    const latest = s.latest;
+    const mvp = latest && latest.state.mvpId && latest.state.players.find((p) => p.id === latest.state.mvpId);
+    const last = latest ? `<h3>Último partido</h3><div class="last-match">${mvp ? `<span class="mvp-face-static">${discHtml(mvp)}${crownSvg('crown-face')}</span>` : ''}
+        <span class="last-who"><b>${esc(latest.them)}</b><small>${esc(dateText(latest.date))}${latest.venue ? ` · ${esc(latest.venue)}` : ''}</small></span>
+        <strong class="last-score ${resultClass(latest)}">${latest.scoreUs}–${latest.scoreThem}</strong></div>` : '';
+    return `<section class="sheet-card season-card"><h3>Temporada</h3>
+      <div class="record"><b>${s.won} – ${s.drawn} – ${s.lost}</b><small>ganados · empatados · perdidos</small></div>
+      <div class="form-chips">${form}</div>
+      <div class="kpis">${tile(s.goalsFor, `goles a favor · ${perMatch} por partido`, ' hot')}${tile(s.goalsAgainst, 'goles en contra')}
+        ${tile(pctText(pct(s.shotGoals, s.shots)), `acierto en tiro (${s.shotGoals}/${s.shots})`)}${tile(pctText(pct(s.saves, s.onTarget)), `paradas (${s.saves}/${s.onTarget})`)}
+        ${tile(s.turnovers, 'pérdidas')}${tile(s.recoveries, 'recuperaciones')}</div>${last}</section>`;
+  }
+  function leadersCardHtml(matches) {
+    const chips = LEADER_METRICS.map(({ key, label }) => `<button class="chip press" type="button" data-leader="${key}" aria-pressed="${home.leaderMetric === key}">${label}</button>`).join('');
+    const rows = (matches && matches.length ? leaders(matches, home.roster, home.leaderMetric) : []);
+    const list = rows.map((r, i) => `<li><button class="leader press" type="button" data-player="${esc(r.player.id)}"><i class="rank">${i + 1}</i>${discHtml(r.player)}
+        <span class="who"><b>${esc(r.player.name)}</b><small>${esc(r.detail)}</small></span><strong class="value">${r.value}${home.leaderMetric === 'pct' ? '%' : ''}</strong></button></li>`).join('');
+    const body = !matches || !matches.length ? '' : list ? `<ol class="leader-list">${list}</ol>` : '<p class="note">Nadie con datos en esta categoría.</p>';
+    return `<section class="sheet-card leaders"><h3>Líderes</h3><div class="chips">${chips}</div>${body}</section>`;
+  }
+  function squadCardHtml() {
+    const groups = SQUAD_GROUP_ORDER.map((pos) => {
+      const players = home.roster.filter((p) => (POSITION_GROUPS[p.pos] ? p.pos : 'CEN') === pos).sort((a, b) => a.num - b.num);
+      const faces = players.map((p) => `<button class="face press" type="button" data-player="${esc(p.id)}" style="--pos:${posOf(p).color}" aria-label="#${p.num} ${esc(p.name)}">${discHtml(p)}<span>${esc(p.name)}</span></button>`).join('');
+      return players.length ? `<h4 style="color:${CONFIG.positions[pos].color}">${POSITION_GROUPS[pos]}</h4><div class="faces">${faces}</div>` : '';
+    }).join('');
+    return `<section class="sheet-card squad"><h3>Plantilla · ${home.roster.length}</h3>${groups || '<p class="note">Todavía no hay jugadores.</p>'}
+      <div class="row-actions"><button class="btn press" type="button" data-home-view="team-edit">Editar equipo</button></div></section>`;
+  }
+  function teamPageHtml() {
+    return `${statusHtml()}${home.offline ? '<p class="note">Sin conexión: ves la copia guardada en esta tablet.</p>' : ''}
+      <div class="team-page">${seasonCardHtml(home.season)}${leadersCardHtml(home.season)}${squadCardHtml()}</div>`;
+  }
+  async function showTeamPage() {
+    home.season = null;
+    showHomeView('team');
+    try {
+      const { offline } = await loadSeason();
+      if (offline) home.offline = true;
+    } catch (err) {
+      home.season = [];
+      home.offline = true;
+      console.warn(`Season not available: ${cloudErrorText(err)}`);
+    }
+    if (home.view === 'team') renderHome();
   }
   function enterMatch(id, saved, dirty) {
     currentMatchId = id;
@@ -4910,6 +5034,8 @@ td.zero { color: var(--faint); }
     if (b.hasAttribute('data-forgot')) { sendPasswordReset(); return; }
     if (b.hasAttribute('data-sign-out')) { signOut(); return; }
     if (b.dataset.homeView === 'matches') { showMatches(); return; }
+    if (b.dataset.homeView === 'team') { home.crestDraft = undefined; showTeamPage(); return; }
+    if (b.dataset.leader) { home.leaderMetric = b.dataset.leader; renderHome(); return; }
     if (b.dataset.homeView === 'profile') { showProfile(); return; }
     if (b.dataset.homeView) { home.crestDraft = undefined; showHomeView(b.dataset.homeView); return; }
     if (b.hasAttribute('data-new-match')) { openSquad(); return; }
