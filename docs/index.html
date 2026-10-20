@@ -68,10 +68,12 @@
   --dos: #f08a1c;
   --desc: #dc2626;
   --azul: #0ea5e9;
-  /* Turnover groups */
-  --to-ball: #c2410c;
-  --to-rule: #be123c;
-  --to-play: #86198f;
+  /* Our actions: good in attack green, good in defence blue, bad red, rule breaches orange, forced by the rival purple */
+  --act-good: #1f9d55;
+  --act-def: #2563eb;
+  --act-bad: #d4202a;
+  --act-rule: #f08a1c;
+  --act-rival: #7c3aed;
 
   --ext: #14b8a6;
   --lat: #8b5cf6;
@@ -101,6 +103,7 @@
     --black: #f2f1ef; --por: #2a2a2e;
     --court: #1d242b; --area: #3b3215; --court-line: #e6e6e6; --goal-face: #121417; --goal-hot: #2e2a14; --goal-sector: #7a6412; --net: #2c3238;
     --parada: #4f8bff; --fallo: #7d838c; --gol: #2fbf71; --ataque: #9461ff;
+    --act-good: #2fbf71; --act-def: #4f8bff; --act-bad: #ef4444; --act-rival: #9461ff;
   }
 }
 :root[data-theme="dark"] {
@@ -114,6 +117,7 @@
   --black: #f2f1ef; --por: #2a2a2e;
   --court: #1d242b; --area: #3b3215; --court-line: #e6e6e6; --goal-face: #121417; --goal-hot: #2e2a14; --goal-sector: #7a6412; --net: #2c3238;
   --parada: #4f8bff; --fallo: #7d838c; --gol: #2fbf71; --ataque: #9461ff;
+    --act-good: #2fbf71; --act-def: #4f8bff; --act-bad: #ef4444; --act-rival: #9461ff;
 }
 
 html, body { height: 100%; }
@@ -217,6 +221,11 @@ button.rex-chip { border: 0; cursor: pointer; position: relative; }
   background: var(--soft); border: 1px solid var(--line); border-radius: 14px; touch-action: none;
 }
 .bench-player .disc { width: 38px; height: 38px; font-size: 18px; }
+/* ⇄: on court in one phase only (the attack-defence change) */
+.bench-player { position: relative; }
+.bench-player .ad-mark { position: absolute; top: 2px; left: 5px; font-style: normal; font-size: 18px; font-weight: 800; line-height: 1; }
+.tok .ad-mark circle { fill: var(--surface); stroke: var(--fg); stroke-width: 3; }
+.tok .ad-mark text { font-size: 32px; font-weight: 800; fill: var(--fg); text-anchor: middle; dominant-baseline: central; pointer-events: none; }
 .bench-player .who { width: 100%; text-align: center; }
 .bench-player .who b { font-size: 12px; }
 .disc {
@@ -301,7 +310,12 @@ button.rex-chip { border: 0; cursor: pointer; position: relative; }
 .panel-acts .acts { display: grid; grid-template-columns: repeat(2, 1fr); gap: 8px; }
 .panel-acts .act[aria-pressed="true"] { box-shadow: 0 0 0 4px var(--fg); }
 .panel-acts .arm-note { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin: 0; font-size: 13px; font-weight: 700; color: var(--muted); }
-.panel-acts .arm-note .btn { min-height: 36px; min-width: 36px; padding: 0; }
+.panel-section { display: flex; flex-direction: column; gap: 6px; }
+.panel-section .type-row { display: flex; flex-direction: column; gap: 3px; }
+.panel-section .type-row > span { font-size: 10px; font-weight: 800; letter-spacing: .08em; text-transform: uppercase; }
+.panel-acts .acts.types { grid-template-columns: none; grid-auto-flow: column; grid-auto-columns: 1fr; gap: 6px; }
+.panel-acts .acts.types .act { min-height: 44px; font-size: 13px; padding: 0 4px; }
+.panel-acts .acts:not(.types) .act { font-size: 16px; }
 .tok.target .body { stroke: var(--gold); stroke-width: 10; }
 .bench-player.target .disc, .gk-card.target { box-shadow: 0 0 0 4px var(--gold); }
 .goal-frame-hot { fill: none; stroke: var(--gold); stroke-width: 22; stroke-linejoin: round; pointer-events: none; filter: drop-shadow(0 0 6px var(--gold)); }
@@ -393,7 +407,7 @@ button.rex-chip { border: 0; cursor: pointer; position: relative; }
 .pop header b { display: block; font-size: 17px; }
 .pop header small { color: var(--muted); font-size: 12px; }
 .pop .zone-big { margin-left: auto; font-family: var(--font-display); font-weight: 800; font-size: 34px; line-height: 1; padding: 4px 12px; border-radius: 12px; background: var(--soft); }
-.pop h3 { margin: 0; font-size: 11px; font-weight: 700; letter-spacing: .12em; text-transform: uppercase; color: var(--muted); }
+.pop h3, .panel-section h3 { margin: 0; font-size: 11px; font-weight: 700; letter-spacing: .12em; text-transform: uppercase; color: var(--muted); }
 .group { display: grid; grid-template-columns: 64px 1fr; gap: 8px; align-items: center; }
 .group > span { font-size: 11px; font-weight: 800; letter-spacing: .08em; text-transform: uppercase; }
 .group .acts { display: grid; grid-template-columns: repeat(2, 1fr); gap: 6px; }
@@ -408,7 +422,7 @@ button.rex-chip { border: 0; cursor: pointer; position: relative; }
 .act:active { transform: scale(.96); }
 .act.big { min-height: 64px; font-size: 18px; }
 .c-gol { background: var(--gol); } .c-parada { background: var(--parada); } .c-fallo { background: var(--fallo); }
-.c-ataque { background: var(--ataque); } .c-defensa { background: var(--defensa); } .c-error { background: var(--error); }
+.c-error { background: var(--error); }
 .c-amarilla { background: var(--amarilla); color: #151515; } .c-dos { background: var(--dos); } .c-desc { background: var(--desc); } .c-azul { background: var(--azul); }
 /* Sanctions: a card-shaped icon in the card's colour so each one reads at a glance */
 .act.card-btn { background: var(--surface); color: var(--fg); border: 1px solid var(--line); box-shadow: none; flex-direction: column; gap: 3px; min-height: 66px; font-size: 12px; padding: 4px; }
@@ -419,15 +433,14 @@ button.rex-chip { border: 0; cursor: pointer; position: relative; }
 .rpick .marks { display: flex; gap: 2px; }
 .rpick.sent-off { opacity: .5; }
 .note { color: var(--muted); font-size: 12px; margin: 0; }
-.c-to-ball { background: var(--to-ball); } .c-to-rule { background: var(--to-rule); } .c-to-play { background: var(--to-play); }
-.t-to-ball { color: var(--to-ball); } .t-to-rule { color: var(--to-rule); } .t-to-play { color: var(--to-play); }
+.c-act-good { background: var(--act-good); } .c-act-def { background: var(--act-def); } .c-act-bad { background: var(--act-bad); } .c-act-rule { background: var(--act-rule); } .c-act-rival { background: var(--act-rival); }
+.t-act-good { color: var(--act-good); } .t-act-def { color: var(--act-def); } .t-act-bad { color: var(--act-bad); } .t-act-rule { color: var(--act-rule); } .t-act-rival { color: var(--act-rival); }
 .c-neutral { background: var(--surface); color: var(--fg); border: 1px solid var(--line); box-shadow: none; }
 .c-dark { background: #151515; }
 .t-gol { color: var(--gol); } .t-parada { color: var(--parada); } .t-fallo { color: var(--fallo); }
-.t-ataque { color: var(--ataque); } .t-defensa { color: var(--defensa); } .t-error { color: var(--error); } .t-sancion { color: var(--dos); }
+.t-sancion { color: var(--dos); }
 .act-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; }
 .act-grid.two { grid-template-columns: repeat(2, 1fr); }
-.act-grid.four { grid-template-columns: repeat(4, 1fr); }
 .chip { min-height: 40px; padding: 0 14px; border-radius: 20px; border: 1px solid var(--line); background: var(--surface); font-weight: 700; font-size: 13px; }
 .chip[aria-pressed="true"] { background: var(--fg); color: var(--bg); border-color: var(--fg); }
 .pop.wide { width: 560px; }
@@ -438,6 +451,12 @@ button.rex-chip { border: 0; cursor: pointer; position: relative; }
 .rpick .disc { width: 34px; height: 34px; font-size: 16px; }
 .rpick span { font-size: 13px; font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .rpick[aria-pressed="true"] { border-color: var(--fg); box-shadow: 0 0 0 3px var(--fg); }
+/* Rival shot: who shot is the hard part to log, so the dorsals are the big targets and the results stay small */
+.rival-picks.shooter { grid-template-columns: repeat(auto-fill, minmax(76px, 1fr)); gap: 8px; }
+.rival-picks.shooter.named { grid-template-columns: repeat(auto-fill, minmax(124px, 1fr)); }
+.rival-picks.shooter .rpick { min-height: 72px; }
+.rival-picks.shooter .rpick .disc { width: 50px; height: 50px; font-size: 24px; }
+.rival-picks.shooter .rpick span { font-size: 15px; }
 /* Shooter picker: court players first (bigger), bench on the right */
 .picker { display: grid; grid-template-columns: 3fr 2fr; gap: 10px; }
 .picker > div { display: grid; gap: 6px; align-content: start; min-width: 0; }
@@ -762,7 +781,7 @@ td.zero { color: var(--faint); }
     zones: { nineFromM: 8.7, elevenFromM: 11 },
     // Who usually shoots from a spot (m): wings wide and close to the goal line, pivots close and central, centre backs central.
     shooterZones: { wingDxM: 6, wingDyM: 5, pivotM: 7.5, pivotDxM: 4, centreDxM: 2.8 },
-    // An armed panel action waits this long for the player (twice as long while its type is still to choose).
+    // An armed panel action waits this long for the player.
     armMs: 4000,
     // The strip's «Finalizar» asks «¿Seguro?» and waits this long for the second tap.
     finishConfirmMs: 4000,
@@ -770,17 +789,20 @@ td.zero { color: var(--faint); }
     minShotLengthUnits: 40,
     swapRadiusUnits: 70,
     palmGuardMs: 600,
-    // Clock corrections, shown as a minus row and a plus row; taps add up (+30 +5 +1 = 36 s).
-    clockSteps: [-30, -10, -5, -1, 1, 5, 10, 30],
+    // Clock corrections, shown as a minus row and a plus row; taps add up (+10 +5 +1 = 16 s).
+    clockSteps: [-10, -5, -1, 1, 5, 10],
     // Turnover types grouped by what went wrong, one colour per group (coach-editable later)
     turnoverGroups: [
-      { label: 'Balón', cls: 'c-to-ball', types: ['Pase', 'Recepción', 'Bote'] },
-      { label: 'Regla', cls: 'c-to-rule', types: ['Pasos', 'Dobles', 'Área', 'Pasivo'] },
-      { label: 'Juego', cls: 'c-to-play', types: ['Falta ataque', 'Salida fallada'] }
+      { label: 'Balón', cls: 'c-act-bad', types: ['Pase', 'Recepción', 'Bote'] },
+      { label: 'Regla', cls: 'c-act-rule', types: ['Pasos', 'Dobles', 'Área', 'Pasivo'] },
+      // Forced by the rival; a blocked shot is logged as a turnover and still counted as blocked
+      { label: 'Rival', cls: 'c-act-rival', types: ['Falta ataque', 'Bloqueado'] }
     ],
     defFaultGroups: [
-      { label: 'Regla', cls: 'c-to-rule', actions: ['FALTA', 'PEN7C'] },
-      { label: 'Táctico', cls: 'c-error', actions: ['BEATEN', 'NOATK', 'BADEXIT', 'LATE', 'HELP'] }
+      { label: 'Regla', cls: 'c-act-bad', actions: ['FALTA', 'PEN7C', 'GOLPE'] },
+      { label: 'Táctico', cls: 'c-act-bad', actions: ['BEATEN', 'BADEXIT', 'LATE', 'HELP'] },
+      // Faults of the whole defence, logged with one tap and no player
+      { label: 'Equipo', cls: 'c-act-rival', actions: ['NOATK'], team: true }
     ],
     positions: {
       EXT: { label: 'Extremo', color: 'var(--ext)', darkText: false },
@@ -848,20 +870,26 @@ td.zero { color: var(--faint); }
   const GROUP_COLOR = { GOL: 'var(--gol)', PARADA: 'var(--parada)', FALLO: 'var(--fallo)' };
   const GROUP_CLASS = { GOL: 'c-gol', PARADA: 'c-parada', FALLO: 'c-fallo' };
   const ACTIONS = {
-    ASIST: { label: 'Pase de gol', group: 'ataque' },
-    PROV7: { label: 'Provoca 7 m', group: 'ataque' },
-    RECUP: { label: 'Recuperación', group: 'defensa' },
-    BLOC: { label: 'Blocaje', group: 'defensa' },
-    FALTA: { label: 'Falta regl.', group: 'error' },
-    PEN7C: { label: '7 m cometido', group: 'error' },
-    BEATEN: { label: 'Superado 1x1', group: 'error' },
-    NOATK: { label: 'No ataca', group: 'error' },
-    BADEXIT: { label: 'Salida fallida', group: 'error' },
-    LATE: { label: 'Llega tarde', group: 'error' },
-    HELP: { label: 'Ayuda innec.', group: 'error' }
+    ASIST: { label: 'Pase de gol', group: 'act-good' },
+    PROV7: { label: 'Provoca 7 m', group: 'act-good' },
+    RECUP: { label: 'Recuperación', group: 'act-def' },
+    BLOC: { label: 'Blocaje', group: 'act-def' },
+    FALTA: { label: 'Falta regl.', group: 'act-rule' },
+    PEN7C: { label: '7 m cometido', group: 'act-bad' },
+    GOLPE: { label: 'Golpe', group: 'act-rule' },
+    BEATEN: { label: 'Superado 1x1', group: 'act-bad' },
+    NOATK: { label: 'Falta de contundencia', group: 'act-rival' },
+    BADEXIT: { label: 'Salida fallida', group: 'act-bad' },
+    LATE: { label: 'Llega tarde', group: 'act-bad' },
+    HELP: { label: 'Ayuda innec.', group: 'act-bad' }
   };
   const DEFENSIVE_FAULTS = CONFIG.defFaultGroups.flatMap((g) => g.actions);
   const TACTICAL_FAULTS = CONFIG.defFaultGroups.find((g) => g.label === 'Táctico').actions;
+  const BLOCKED_TURNOVER = 'Bloqueado';
+  const isBlockedTurnover = (e) => e.kind === 'TURNOVER' && e.subtype === BLOCKED_TURNOVER;
+  const TEAM_FAULTS = CONFIG.defFaultGroups.filter((g) => g.team).flatMap((g) => g.actions);
+  // No longer offered (regulation fouls are logged as sanctions on the top bar); kept so past matches keep their numbers.
+  const RETIRED_FAULTS = ['FALTA'];
   const SANCTIONS = {
     A: { label: 'Amarilla', name: 'Amarilla', short: 'A', color: 'var(--amarilla)', darkText: true },
     '2M': { label: "Exclusión 2'", name: '2 min', short: "2'", color: 'var(--dos)' },
@@ -1019,7 +1047,7 @@ td.zero { color: var(--faint); }
     rival(540, [0, 7], [0.88, 0.15], 'GOL');
     shot(590, 'p77', [0, 7], [0.1, 0.12], 'GOL');
     rival(630, [-3.4, 6.2], [0.5, 0.55], 'PARADA');
-    ev(650, 'TURNOVER', { playerId: 'p8', subtype: 'Salida fallada' });
+    ev(650, 'TURNOVER', { playerId: 'p8', subtype: 'Falta ataque' });
     rival(670, [-4.2, 9.5], [1.08, 0.4], 'FUERA');
     shot(690, 'p8', [-3.8, 10], [1.1, 0.3], 'FUERA');
     ev(700, 'SANCTION', { playerId: 'p13', card: '2M' });
@@ -1142,6 +1170,7 @@ td.zero { color: var(--faint); }
       if (e.kind === 'SHOT') { s.shots[e.zone]++; if (e.result === 'GOL') s.goals[e.zone]++; if (e.result === 'BLOCADO') s.blocked++; }
       if (e.kind === 'ACTION') s[e.action]++;
       if (e.kind === 'TURNOVER') s.TURNOVER++;
+      if (isBlockedTurnover(e)) s.blocked++;
       if (e.kind === 'SANCTION') s[e.card]++;
     });
     return s;
@@ -1181,6 +1210,7 @@ td.zero { color: var(--faint); }
       };
     }
     const us = side(ourShots(), turnovers, (e) => e.zone, usGoals, themGoals, usShort, themShort);
+    us.blocked += ev.filter(isBlockedTurnover).length;
     const them = side(rivalShots(), recov, (e) => (e.contra ? 'CONTRA' : e.zone), themGoals, usGoals, themShort, usShort);
     const byScorer = {};
     usGoals.forEach((e) => { byScorer[e.playerId] = (byScorer[e.playerId] || 0) + 1; });
@@ -1203,7 +1233,7 @@ td.zero { color: var(--faint); }
     const who = p ? ` #${p.num} ${p.name}` : '';
     switch (e.kind) {
       case 'SHOT': return `${RESULTS[e.result].label} ${ZONES[e.zone]} ·${who}`;
-      case 'ACTION': return `${ACTIONS[e.action].label} ·${who}`;
+      case 'ACTION': return `${ACTIONS[e.action].label} ·${who || ' equipo'}`;
       case 'TURNOVER': return `Pérdida ${e.subtype.toLowerCase()} ·${who}`;
       case 'SANCTION': return `${SANCTIONS[e.card].label} ·${who}`;
       case 'RIVAL_SANCTION': return `${rivalTeamLabel(e.rivalId)}: ${SANCTIONS[e.card].label}`;
@@ -1226,7 +1256,7 @@ td.zero { color: var(--faint); }
       case 'SHOT': return MAP_VIEWS.US.colors[groupOf(e.result)];
       case 'RIVAL_SHOT': return MAP_VIEWS.GK.colors[groupOf(e.result)];
       case 'ACTION': return `var(--${ACTIONS[e.action].group})`;
-      case 'TURNOVER': return 'var(--error)';
+      case 'TURNOVER': { const g = CONFIG.turnoverGroups.find((x) => x.types.includes(e.subtype)); return `var(--${g ? g.cls.slice(2) : 'act-bad'})`; }
       case 'SANCTION': case 'RIVAL_SANCTION': return SANCTIONS[e.card].color;
       case 'EXCLUSION_END': return 'var(--dos)';
       case 'NOTE': return 'var(--gold)';
@@ -1246,14 +1276,14 @@ td.zero { color: var(--faint); }
     const removeIds = new Set(op.removed.map((r) => r.event.id));
     state.events = state.events.filter((e) => !removeIds.has(e.id));
     state.events.push(...op.added);
-    if (op.lineup) swapInLineup(op.lineup, op.lineup.outId, op.lineup.inId);
+    if (op.lineup) op.lineup.forEach((swap) => swapInLineup(swap, swap.outId, swap.inId));
     if (op.phase) state.phase = op.phase.after;
   }
   function revertOp(op) {
     const addIds = new Set(op.added.map((e) => e.id));
     state.events = state.events.filter((e) => !addIds.has(e.id));
     op.removed.slice().sort((a, b) => a.index - b.index).forEach((r) => state.events.splice(r.index, 0, r.event));
-    if (op.lineup) swapInLineup(op.lineup, op.lineup.inId, op.lineup.outId);
+    if (op.lineup) op.lineup.slice().reverse().forEach((swap) => swapInLineup(swap, swap.inId, swap.outId));
     if (op.phase) state.phase = op.phase.before;
   }
   // Skipped when a manual substitution has changed those players since (the lineup is then left as it is).
@@ -1264,8 +1294,24 @@ td.zero { color: var(--faint); }
     team[entering] = { ...swap.spot };
     if (ui.shooter === leaving) ui.shooter = null;
   }
-  // A bench field player who acts comes on, in the current phase, for the court player of the same position
-  // (the one furthest from goal when there are several). Null when there is nothing to swap.
+  // A substitution takes the leaving player out of the game: it is made in both phases when they are on court in both
+  // (the incoming player takes their spot in each). A player on court in one phase only does the attack-defence change.
+  const OTHER_PHASE = { ATK: 'DEF', DEF: 'ATK' };
+  function substitutionSwaps(phase, outId, inId) {
+    const swaps = [{ phase, inId, outId, spot: { ...state.lineups[phase][outId] } }];
+    const other = state.lineups[OTHER_PHASE[phase]];
+    if (other[outId] && !other[inId]) swaps.push({ phase: OTHER_PHASE[phase], inId, outId, spot: { ...other[outId] } });
+    return swaps;
+  }
+  // True when the substitution was also made in the other phase.
+  function substituteFromBench(inId, outId) {
+    const swaps = substitutionSwaps(state.phase, outId, inId);
+    swaps.forEach((swap) => swapInLineup(swap, outId, inId));
+    return swaps.length > 1;
+  }
+  const onePhaseOnly = (id) => Boolean(state.lineups.ATK[id]) !== Boolean(state.lineups.DEF[id]);
+  // A bench field player who acts comes on for the court player of the same position (the one furthest from goal
+  // when there are several), as a substitution. Null when there is nothing to swap.
   function benchSwapFor(playerId) {
     const p = playerById(playerId);
     const team = lineup();
@@ -1274,7 +1320,7 @@ td.zero { color: var(--faint); }
     const same = Object.keys(team).filter((id) => playerById(id) && playerById(id).pos === p.pos && !out.has(id));
     if (!same.length) return null;
     const outId = same.reduce((a, b) => (team[b].y > team[a].y ? b : a));
-    return { phase: state.phase, inId: playerId, outId, spot: { ...team[outId] } };
+    return substitutionSwaps(state.phase, outId, playerId);
   }
   const lastAdded = (op) => (op.added.length ? op.added[op.added.length - 1].id : null);
   function record(op, label) {
@@ -1639,7 +1685,7 @@ td.zero { color: var(--faint); }
     const onCourt = new Set(Object.keys(lineup()));
     const bench = state.players.filter((p) => !onCourt.has(p.id) && p.id !== state.gkId).sort(benchOrder);
     const out = disqualifications();
-    const item = (p) => `<button class="bench-player press${out.has(p.id) ? ' out' : ''}${canReceive(p.id) ? ' target' : ''}" type="button" data-id="${p.id}" aria-label="#${p.num} ${esc(p.name)}, ${out.has(p.id) ? 'descalificado' : posOf(p).label}">${discHtml(p)}<span class="who"><b>${esc(p.name)}</b></span></button>`;
+    const item = (p) => `<button class="bench-player press${out.has(p.id) ? ' out' : ''}${canReceive(p.id) ? ' target' : ''}" type="button" data-id="${p.id}" aria-label="#${p.num} ${esc(p.name)}, ${out.has(p.id) ? 'descalificado' : posOf(p).label}${onePhaseOnly(p.id) ? ', cambio ataque-defensa' : ''}">${onePhaseOnly(p.id) ? '<i class="ad-mark" aria-hidden="true">⇄</i>' : ''}${discHtml(p)}<span class="who"><b>${esc(p.name)}</b></span></button>`;
     $('bench').innerHTML = bench.length ? bench.map(item).join('') : '<p class="empty">Todos en pista.</p>';
   }
   function tokenMarkup(p, pos, exRemaining, extraCls) {
@@ -1650,6 +1696,7 @@ td.zero { color: var(--faint); }
       <text class="num${posInfo.darkText ? ' dark' : ''}">${p.num}</text>
       <rect class="nm-bg" x="-60" y="45" width="120" height="30" rx="15"/>
       <text class="nm" y="60">${esc(p.name)}</text>
+      ${onePhaseOnly(p.id) ? '<g class="ad-mark" transform="translate(-36 -36)"><circle r="22"/><text>⇄</text></g>' : ''}
       ${ex ? `<rect class="ex-bg" x="16" y="-60" width="66" height="30" rx="9"/><text class="ex-t" x="49" y="-45" data-ex="${p.id}">${mmss(exRemaining).slice(1)}</text>` : ''}
     </g>`;
   }
@@ -1852,15 +1899,15 @@ td.zero { color: var(--faint); }
     // The popup only offers what can happen in the current phase.
     if (state.phase === 'DEF') {
       return `${head}
-        ${group('Bien', 't-defensa', actBtn('RECUP') + actBtn('BLOC'))}
-        ${CONFIG.defFaultGroups.map((g) => group(g.label, `t-${g.cls.slice(2)}`,
-          g.actions.map((k) => `<button class="act ${g.cls}" type="button" data-action="${k}">${ACTIONS[k].label}</button>`).join(''))).join('')}
+        ${group('Bien', 't-act-def', actBtn('RECUP') + actBtn('BLOC'))}
+        ${CONFIG.defFaultGroups.filter((g) => !g.team).map((g) => group(g.label, `t-${g.cls.slice(2)}`,
+          g.actions.filter((k) => !RETIRED_FAULTS.includes(k)).map(actBtn).join(''))).join('')}
         ${sanctionGroup()}`;
     }
     return `${head}
       <button class="act big c-gol" type="button" data-arm>Lanzamiento</button>
-      ${group('Ataque', 't-ataque', actBtn('ASIST') + actBtn('PROV7'))}
-      ${group('Error', 't-error', '<button class="act c-error" type="button" data-sub="TURNOVER">Pérdida ›</button>')}
+      ${group('Ataque', 't-act-good', actBtn('ASIST') + actBtn('PROV7'))}
+      ${group('Error', 't-act-bad', '<button class="act c-act-bad" type="button" data-sub="TURNOVER">Pérdida ›</button>')}
       ${sanctionGroup()}`;
   }
   function openPlayerPop(playerId, anchor) {
@@ -1913,7 +1960,7 @@ td.zero { color: var(--faint); }
   function rivalPickerHtml(view) {
     const named = state.rivals.some((r) => r.name);
     const out = rivalOffCourt();
-    return `<h3>Lanzador rival</h3><div class="rival-picks${named ? ' named' : ''}">${state.rivals.filter((r) => !out.has(r.id)).sort(byPosition).map((r) => `<button class="rpick press" type="button" data-rival="${r.id}" aria-pressed="${r.id === view.rivalId}" aria-label="${rivalLabel(r)}, ${rivalPos(r).label}">${discHtml(r, rivalPos(r))}${r.name ? `<span>${esc(r.name)}</span>` : ''}</button>`).join('')}</div>`;
+    return `<h3>Lanzador rival</h3><div class="rival-picks shooter${named ? ' named' : ''}">${state.rivals.filter((r) => !out.has(r.id)).sort(byPosition).map((r) => `<button class="rpick press" type="button" data-rival="${r.id}" aria-pressed="${r.id === view.rivalId}" aria-label="${rivalLabel(r)}, ${rivalPos(r).label}">${discHtml(r, rivalPos(r))}${r.name ? `<span>${esc(r.name)}</span>` : ''}</button>`).join('')}</div>`;
   }
   // Rival cards: the card (2' preselected), then the dorsal, each chip showing the cards it already has.
   // Without a roster the card alone is logged; "Sin dorsal" does the same with one.
@@ -1946,10 +1993,15 @@ td.zero { color: var(--faint); }
     const p = ours ? (view.playerId && playerById(view.playerId)) : playerById(state.gkId);
     const head = p ? popHead(p, ours ? 'Lanzamiento' : 'Tiro rival', zone) : `<header><div><b>¿Quién lanza?</b><small>Jugador y resultado</small></div>${zone}</header>`;
     // Only reached when the shot ends inside the goal, so "Fuera" is not offered (frame drops are already "Palo").
-    const results = ['GOL', 'PARADA', 'PALO', 'BLOCADO'];
+    // A goal or a save: posts and misses are decided by where the shot ends, and our blocked shots are a turnover.
+    // With a rival roster the dorsal comes first, so the results shrink to one row under it.
+    const results = ['GOL', 'PARADA'];
+    const compact = Boolean(view.rivalPick);
+    const button = (r) => `<button class="act ${!compact && (r === 'GOL' || r === 'PARADA') ? 'big ' : ''}${GROUP_CLASS[groupOf(r)]}" style="background:${MAP_VIEWS[ours ? 'US' : 'GK'].colors[groupOf(r)]}" type="button" data-result="${r}" ${p ? '' : 'disabled'}>${RESULTS[r].label}</button>`;
+    const contra = view.penalty ? '' : `<button class="chip" type="button" data-contra aria-pressed="${view.contra}">Contraataque</button>`;
     return `${head}${view.pick ? shooterPickerHtml(view) : ''}${view.rivalPick ? rivalPickerHtml(view) : ''}
-      <div class="act-grid two">${results.map((r) => `<button class="act ${r === 'GOL' || r === 'PARADA' ? 'big ' : ''}${GROUP_CLASS[groupOf(r)]}" style="background:${MAP_VIEWS[ours ? 'US' : 'GK'].colors[groupOf(r)]}" type="button" data-result="${r}" ${p ? '' : 'disabled'}>${RESULTS[r].label}</button>`).join('')}
-        ${view.penalty ? '' : `<button class="chip" type="button" data-contra aria-pressed="${view.contra}">Contraataque</button>`}</div>`;
+      ${compact ? `<div class="act-grid two">${results.map(button).join('')}</div>${contra}` : `<div class="act-grid two">${results.map(button).join('')}
+        ${contra}</div>`}`;
   }
   function commitShot(view, result) {
     const penalty = view.penalty ? ui.penalty : null;
@@ -1972,7 +2024,7 @@ td.zero { color: var(--faint); }
     if (direct && !view.pick && !view.rivalPick) { commitDirectShot(view, direct); return; }
     view.preset = direct;
     ui.popView = view;
-    openPop(shotPopHtml(view), anchor, Boolean(view.pick) || (view.rivalPick && rivalPickWide()));
+    openPop(shotPopHtml(view), anchor, Boolean(view.pick) || view.rivalPick);
   }
   function openGkPop(anchor, focusId) {
     const gk = playerById(focusId || state.gkId);
@@ -2002,7 +2054,7 @@ td.zero { color: var(--faint); }
       <div class="big-time" id="pop-clock">${clockText()}</div>
       <div class="seg" role="group" aria-label="Sentido del reloj">${mode(false, '↑ Ascendente')}${mode(true, '↓ Descendente')}</div>
       <button class="act big ${running ? 'c-error' : 'c-gol'}" type="button" data-clock="toggle">${running ? '⏸ Parar' : '▶ Seguir'}</button>
-      ${[CONFIG.clockSteps.filter((s) => s < 0), CONFIG.clockSteps.filter((s) => s > 0)].map((row) => `<div class="act-grid four">${row.map((s) => `<button class="act c-neutral" type="button" data-adjust="${s}">${s > 0 ? '+' : '−'}${Math.abs(s)}s</button>`).join('')}</div>`).join('')}
+      ${[CONFIG.clockSteps.filter((s) => s < 0), CONFIG.clockSteps.filter((s) => s > 0)].map((row) => `<div class="act-grid">${row.map((s) => `<button class="act c-neutral" type="button" data-adjust="${s}">${s > 0 ? '+' : '−'}${Math.abs(s)}s</button>`).join('')}</div>`).join('')}
       <form class="clock-set" id="clock-set"><input class="in time-in" id="clock-input" type="text" inputmode="numeric" maxlength="6" value="${clockText()}" aria-label="Tiempo exacto (mm:ss)"><button class="act c-dark" type="submit">Fijar</button></form>
       <div class="act-grid two"><button class="act c-neutral" type="button" data-clock="period">${state.clock.period === 1 ? 'Ir a 2ª parte' : 'Volver a 1ª parte'}</button>
         ${state.clock.period === 2 ? `<button class="act c-dark" type="button" data-clock="finish">${state.finished ? 'Resumen final' : 'Terminar partido'}</button>` : '<button class="act c-dark" type="button" data-clock="halftime">Resumen del descanso</button>'}</div>`, anchor);
@@ -2075,18 +2127,20 @@ td.zero { color: var(--faint); }
   }
 
   // ===================== Actions panel: action first, then the player =====================
-  // TURNOVER and DEFFAULT ask for their type before the player.
-  const PANEL_ACTIONS = { ATK: ['ASIST', 'PROV7', 'TURNOVER'], DEF: ['RECUP', 'BLOC', 'PEN7C', 'DEFFAULT'] };
+  // TURNOVER and DEFFAULT are a section of their types: one tap on a type arms it.
+  const PANEL_ACTIONS = { ATK: ['ASIST', 'PROV7', 'TURNOVER'], DEF: ['RECUP', 'BLOC', 'DEFFAULT'] };
+  // One row per group of types; team groups log at once, without a player.
   const PANEL_TYPED = {
-    TURNOVER: { label: 'Pérdida', cls: 'c-error', groups: () => CONFIG.turnoverGroups.map((g) => ({ label: g.label, cls: g.cls, subs: g.types.map((t) => [t, t]) })) },
-    DEFFAULT: { label: 'Falta def.', cls: 'c-error', groups: () => CONFIG.defFaultGroups.map((g) => ({ label: g.label, cls: g.cls, subs: g.actions.filter((k) => k !== 'PEN7C').map((k) => [k, ACTIONS[k].label]) })).filter((g) => g.subs.length) }
+    TURNOVER: { label: 'Pérdida', groups: () => CONFIG.turnoverGroups.map((g) => ({ label: g.label, cls: g.cls, subs: g.types.map((t) => [t, t, g.cls]) })) },
+    DEFFAULT: {
+      label: 'Falta defensiva',
+      groups: () => CONFIG.defFaultGroups.map((g) => ({ label: g.label, cls: g.cls, team: Boolean(g.team), subs: g.actions.filter((k) => !RETIRED_FAULTS.includes(k)).map((k) => [k, ACTIONS[k].label, `c-${ACTIONS[k].group}`]) })).filter((g) => g.subs.length)
+    }
   };
-  const panelLabel = (key) => (PANEL_TYPED[key] ? `${PANEL_TYPED[key].label} ›` : ACTIONS[key].label);
-  const panelClass = (key) => (PANEL_TYPED[key] ? PANEL_TYPED[key].cls : `c-${ACTIONS[key].group}`);
-  const armedReady = () => Boolean(ui.armedAction) && (!PANEL_TYPED[ui.armedAction.key] || ui.armedAction.sub != null);
+  const panelLabel = (key) => (PANEL_TYPED[key] ? PANEL_TYPED[key].label : ACTIONS[key].label);
   // Who may take the armed action: anyone in play; of the goalkeepers only the one in goal, and only for an assist.
   function canReceive(playerId) {
-    if (!armedReady()) return false;
+    if (!ui.armedAction) return false;
     const p = playerById(playerId);
     if (!p || ourOffCourt().has(playerId)) return false;
     if (p.pos === 'POR') return playerId === state.gkId && ui.armedAction.key === 'ASIST';
@@ -2097,15 +2151,22 @@ td.zero { color: var(--faint); }
     $('acts').hidden = ui.panelMode !== 'acts';
     $('kpis').hidden = ui.panelMode !== 'kpis';
     const a = ui.armedAction;
-    if (a && PANEL_TYPED[a.key] && a.sub == null) {
-      const typed = PANEL_TYPED[a.key];
-      $('acts').innerHTML = `<p class="arm-note">${typed.label} · ¿de qué tipo?<button class="btn press" type="button" data-panel-cancel aria-label="Cancelar">✕</button></p>
-        ${typed.groups().map((g) => group(g.label, `t-${g.cls.slice(2)}`, g.subs.map(([k, label]) => `<button class="act ${g.cls}" type="button" data-panel-sub="${esc(k)}">${esc(label)}</button>`).join(''))).join('')}`;
-      return;
-    }
-    const note = a ? `${panelLabel(a.key).replace(' ›', '')}${a.sub ? ` · ${esc(subLabel(a))}` : ''} · toca al jugador` : 'Toca una acción y luego al jugador (en pista o banquillo).';
-    $('acts').innerHTML = `<div class="acts">${PANEL_ACTIONS[state.phase].map((k) => `<button class="act big ${panelClass(k)}" type="button" data-panel-act="${k}" aria-pressed="${Boolean(a && a.key === k)}">${panelLabel(k)}</button>`).join('')}</div>
-      <p class="arm-note">${note}</p>`;
+    const armed = (key, sub = null) => Boolean(a && a.key === key && a.sub === sub);
+    const keys = PANEL_ACTIONS[state.phase];
+    const typeButton = (key, g) => ([k, label, cls]) => (g.team
+      ? `<button class="act ${cls}" type="button" data-team-fault="${k}">${esc(label)}</button>`
+      : `<button class="act ${cls}" type="button" data-panel-key="${key}" data-panel-sub="${esc(k)}" aria-pressed="${armed(key, k)}">${esc(label)}</button>`);
+    const row = (key) => (g) => `<div class="type-row"><span class="t-${g.cls.slice(2)}">${esc(g.label)}</span><div class="acts types">${g.subs.map(typeButton(key, g)).join('')}</div></div>`;
+    const section = (key) => `<div class="panel-section"><h3>${PANEL_TYPED[key].label}</h3>${PANEL_TYPED[key].groups().map(row(key)).join('')}</div>`;
+    const note = a ? `${a.sub ? esc(subLabel(a)) : panelLabel(a.key)} · toca al jugador` : 'Toca la acción y luego al jugador';
+    $('acts').innerHTML = `<div class="acts">${keys.filter((k) => !PANEL_TYPED[k]).map((k) => `<button class="act c-${ACTIONS[k].group}" type="button" data-panel-act="${k}" aria-pressed="${armed(k)}">${panelLabel(k)}</button>`).join('')}</div>
+      <p class="arm-note">${note}</p>${keys.filter((k) => PANEL_TYPED[k]).map(section).join('')}`;
+  }
+  function logTeamFault(action) {
+    disarm();
+    disarmAction();
+    addEvent('ACTION', { playerId: null, action });
+    hint(`${describe(state.events.at(-1))} · ↶ deshacer`);
   }
   const subLabel = (a) => (a.key === 'DEFFAULT' ? ACTIONS[a.sub].label : a.sub);
   function renderTargets() { renderTokens(); renderBench(); renderGk(); renderActs(); }
@@ -2113,17 +2174,11 @@ td.zero { color: var(--faint); }
     clearTimeout(ui.armTimer);
     ui.armTimer = setTimeout(disarmAction, ms);
   }
-  // Tapping the armed action again disarms it.
-  function armAction(key) {
-    if (ui.armedAction && ui.armedAction.key === key) { disarmAction(); return; }
+  // Tapping the armed action (or type) again disarms it.
+  function armAction(key, sub = null) {
+    if (ui.armedAction && ui.armedAction.key === key && ui.armedAction.sub === sub) { disarmAction(); return; }
     disarm();
-    ui.armedAction = { key, sub: null };
-    restartArmTimer(CONFIG.armMs * (PANEL_TYPED[key] ? 2 : 1));
-    renderTargets();
-  }
-  function chooseArmedSub(sub) {
-    if (!ui.armedAction) return;
-    ui.armedAction.sub = sub;
+    ui.armedAction = { key, sub };
     restartArmTimer(CONFIG.armMs);
     renderTargets();
   }
@@ -2150,8 +2205,8 @@ td.zero { color: var(--faint); }
     const b = ev.target.closest('button');
     if (!b) return;
     if (b.dataset.panelAct) armAction(b.dataset.panelAct);
-    else if (b.dataset.panelSub != null) chooseArmedSub(b.dataset.panelSub);
-    else if (b.hasAttribute('data-panel-cancel')) disarmAction();
+    else if (b.dataset.panelKey) armAction(b.dataset.panelKey, b.dataset.panelSub);
+    else if (b.dataset.teamFault) logTeamFault(b.dataset.teamFault);
   });
 
   $('pop').addEventListener('click', (ev) => {
@@ -2177,7 +2232,7 @@ td.zero { color: var(--faint); }
     if (b.dataset.rival != null) {
       if (v.preset) { closePop(); v.rivalId = b.dataset.rival || null; commitDirectShot(v, v.preset); return; }
       v.rivalId = v.rivalId === b.dataset.rival ? null : b.dataset.rival;
-      openPop(shotPopHtml(v), v.anchor, rivalPickWide());
+      openPop(shotPopHtml(v), v.anchor, v.rivalPick);
       return;
     }
     if (b.dataset.pick && v.type === 'sanctionPick') { closePop(); addSanction(b.dataset.pick, v.card); return; }
@@ -2292,7 +2347,8 @@ td.zero { color: var(--faint); }
     if (d.isGk) return; // the goalkeeper stays in goal; change it from its popup or from the bench
     if (!d.moved && Math.hypot(ev.clientX - d.startX, ev.clientY - d.startY) < CONFIG.dragThresholdPx) return;
     if (!d.moved) { d.moved = true; startDraw(ui.penalty ? PENALTY_SPOT : state.phase === 'DEF' ? d.grab : d.start); }
-    d.toGoal = pt.y < GOAL_LINE_Y;
+    // Over the bench it is a substitution, never a shot, whatever height of the goal it is level with.
+    d.toGoal = pt.y < GOAL_LINE_Y && !insideRect($('bench'), ev.clientX, ev.clientY);
     if (d.toGoal) {
       d.el.setAttribute('transform', `translate(${d.start.x} ${d.start.y})`);
       moveDraw(pt);
@@ -2313,7 +2369,7 @@ td.zero { color: var(--faint); }
     const pt = svgPoint(ev.clientX, ev.clientY);
     const anchor = { x: ev.clientX, y: ev.clientY };
     if (d.type === 'token') {
-      if (!d.moved) { if (armedReady()) applyArmedAction(d.id); else if (d.isGk) openGkPop(anchor); else openPlayerPop(d.id, anchor); return; }
+      if (!d.moved) { if (ui.armedAction) applyArmedAction(d.id); else if (d.isGk) openGkPop(anchor); else openPlayerPop(d.id, anchor); return; }
       if (d.toGoal) {
         renderTokens();
         if (state.phase === 'ATK' && ourOffCourt().has(d.id)) { const p = playerById(d.id); hint(`#${p.num} ${p.name} no puede lanzar: ${isDisqualified(d.id) ? 'descalificado' : "cumple 2'"}`); return; }
@@ -2326,8 +2382,19 @@ td.zero { color: var(--faint); }
         return;
       }
       const p = playerById(d.id);
-      if (insideRect($('bench'), ev.clientX, ev.clientY)) { delete lineup()[d.id]; hint(`#${p.num} ${p.name} al banquillo (${PHASES[state.phase].toLowerCase()})`); }
-      else lineup()[d.id] = clampCourt(pt);
+      if (insideRect($('bench'), ev.clientX, ev.clientY)) {
+        // Dropped on a bench player: the attack-defence change, in this phase only.
+        const onto = [...document.querySelectorAll('#bench .bench-player')].find((el) => insideRect(el, ev.clientX, ev.clientY));
+        const partner = onto ? playerById(onto.dataset.id) : null;
+        const phaseName = PHASES[state.phase].toLowerCase();
+        if (partner && partner.pos !== 'POR' && !isDisqualified(partner.id)) {
+          swapInLineup({ phase: state.phase, spot: { ...lineup()[d.id] } }, d.id, partner.id);
+          hint(`⇄ ataque-defensa en ${phaseName}: entra #${partner.num}, sale #${p.num}`);
+        } else {
+          delete lineup()[d.id];
+          hint(`#${p.num} ${p.name} al banquillo (${phaseName})`);
+        }
+      } else lineup()[d.id] = clampCourt(pt);
       commit();
       return;
     }
@@ -2384,7 +2451,7 @@ td.zero { color: var(--faint); }
     ui.drag = null;
     if (d.ghost) d.ghost.remove();
     if (cancelled) return;
-    if (!d.moved) { if (armedReady()) applyArmedAction(d.id); else openPlayerPop(d.id, { x: ev.clientX, y: ev.clientY }); return; }
+    if (!d.moved) { if (ui.armedAction) applyArmedAction(d.id); else openPlayerPop(d.id, { x: ev.clientX, y: ev.clientY }); return; }
     if (!insideRect(svg, ev.clientX, ev.clientY)) return;
     const incoming = playerById(d.id);
     if (isDisqualified(incoming.id)) { hint(`#${incoming.num} ${incoming.name} está descalificado`); return; }
@@ -2399,10 +2466,8 @@ td.zero { color: var(--faint); }
     });
     if (nearest) {
       const out = playerById(nearest);
-      team[d.id] = team[nearest];
-      delete team[nearest];
-      if (ui.shooter === nearest) ui.shooter = null;
-      hint(`⇄ ${phaseName}: entra #${incoming.num}, sale #${out.num}`);
+      const both = substituteFromBench(d.id, nearest);
+      hint(`Cambio: entra #${incoming.num}, sale #${out.num} · ${both ? 'ataque y defensa' : `solo ${phaseName}`}`);
     } else if (Object.keys(team).length < CONFIG.maxFieldPlayers) {
       team[d.id] = clampCourt(pt);
       hint(`Entra #${incoming.num} en ${phaseName}`);
@@ -2416,7 +2481,7 @@ td.zero { color: var(--faint); }
   benchEl.addEventListener('pointercancel', (ev) => endBenchDrag(ev, true));
 
   // ===================== Wiring =====================
-  $('gk-card').addEventListener('click', (ev) => { if (armedReady()) { applyArmedAction(state.gkId); return; } const r = ev.currentTarget.getBoundingClientRect(); openGkPop({ x: r.left - 30, y: r.top + r.height / 2 }); });
+  $('gk-card').addEventListener('click', (ev) => { if (ui.armedAction) { applyArmedAction(state.gkId); return; } const r = ev.currentTarget.getBoundingClientRect(); openGkPop({ x: r.left - 30, y: r.top + r.height / 2 }); });
   $('clock-face').addEventListener('click', (ev) => { const r = ev.currentTarget.getBoundingClientRect(); openClockPop({ x: r.left + r.width / 2, y: r.bottom + 140 }); });
   $('team-seg').addEventListener('click', (ev) => {
     const b = ev.target.closest('[data-source], [data-panel-mode]');
@@ -2503,8 +2568,9 @@ td.zero { color: var(--faint); }
   const eventsOf = (id) => state.events.filter((e) => e.playerId === id);
   function playerRow(p) {
     const s = playerStats(p.id);
-    const tactical = TACTICAL_FAULTS.reduce((n, k) => n + s[k], 0);
-    return [p.num, p.name, ...SHEET_ZONES.map((z) => `${s.shots[z]}/${s.goals[z]}`), s.blocked, s.BLOC, s.RECUP, s.ASIST, s.TURNOVER, s.PROV7, s.FALTA, s.PEN7C, tactical, s.A, s['2M'], s.D, s.AZ];
+    // Team faults count too: matches logged before they became team faults have them per player.
+    const tactical = [...TACTICAL_FAULTS, ...TEAM_FAULTS].reduce((n, k) => n + s[k], 0);
+    return [p.num, p.name, ...SHEET_ZONES.map((z) => `${s.shots[z]}/${s.goals[z]}`), s.blocked, s.BLOC, s.RECUP, s.ASIST, s.TURNOVER, s.PROV7, s.FALTA + s.GOLPE, s.PEN7C, tactical, s.A, s['2M'], s.D, s.AZ];
   }
   function shotZoneRows(shots) {
     const row = (label, list) => { const c = countGroups(list); return [label, list.length, c.GOL, c.PARADA, c.FALLO, pctText(pct(c.GOL, list.length))]; };
@@ -2570,7 +2636,7 @@ td.zero { color: var(--faint); }
     return {
       ours, shots, field, lanes, shooters, topShooter: shooters[0] || null, topScorer: topScorer && topScorer.goals ? topScorer : null,
       near, far, penetrationShare: pct(near.length, field.length), penalties: shots.filter((e) => depthOf(e) === '7M'),
-      contraGoals: goalsIn(shots.filter(isContra)), blocked: shots.filter((e) => e.result === 'BLOCADO').length,
+      contraGoals: goalsIn(shots.filter(isContra)), blocked: shots.filter((e) => e.result === 'BLOCADO').length + (ours ? state.events.filter(isBlockedTurnover).length : 0),
       goalSector: topCell(goalGrid(shots, 'GOL')), saveSector: topCell(goalGrid(shots, 'PARADA'))
     };
   }
