@@ -262,6 +262,8 @@ button.rex-chip { border: 0; cursor: pointer; position: relative; }
   border-color: var(--gol); animation: enter .22s var(--spring);
 }
 .armed-bar .disc { width: 38px; height: 38px; font-size: 18px; }
+/* A penalty can stay pending a while: its bar sits below the phase toggle so the toggle stays reachable. */
+.armed-bar.penalty { top: 76px; border-color: var(--gold); }
 .armed-bar b { font-size: 15px; white-space: nowrap; }
 .armed-bar .btn { min-height: 40px; min-width: 40px; border-radius: 20px; padding: 0; }
 
@@ -1249,8 +1251,10 @@ td.zero { color: var(--faint); }
     if (op.lineup) swapInLineup(op.lineup, op.lineup.inId, op.lineup.outId);
     if (op.phase) state.phase = op.phase.before;
   }
+  // Skipped when a manual substitution has changed those players since (the lineup is then left as it is).
   function swapInLineup(swap, leaving, entering) {
     const team = state.lineups[swap.phase];
+    if (!team[leaving] || team[entering]) return;
     delete team[leaving];
     team[entering] = { ...swap.spot };
     if (ui.shooter === leaving) ui.shooter = null;
@@ -1261,7 +1265,8 @@ td.zero { color: var(--faint); }
     const p = playerById(playerId);
     const team = lineup();
     if (!p || p.pos === 'POR' || team[playerId] || ourOffCourt().has(playerId)) return null;
-    const same = Object.keys(team).filter((id) => playerById(id) && playerById(id).pos === p.pos);
+    const out = ourOffCourt();
+    const same = Object.keys(team).filter((id) => playerById(id) && playerById(id).pos === p.pos && !out.has(id));
     if (!same.length) return null;
     const outId = same.reduce((a, b) => (team[b].y > team[a].y ? b : a));
     return { phase: state.phase, inId: playerId, outId, spot: { ...team[outId] } };
@@ -1279,18 +1284,25 @@ td.zero { color: var(--faint); }
   }
   const makeEvent = (kind, data) => Object.assign({ id: newId('e'), abs: absSeconds(), kind }, data);
   // `opts.bringOn`: the player who acts; from the bench they come on in the same undoable step.
+  // `opts.penalty`: the pending penalty this event (its shot) used up; undo brings it back.
+  // Returns { unplaced }: a bench player with nobody of their position on court to swap with.
   function addEvent(kind, data, opts = {}) {
     const e = makeEvent(kind, data);
     autoStartClock(kind);
     const op = { added: [e], removed: [] };
     const benched = opts.bringOn ? isOnBench(opts.bringOn) : false;
     if (benched) { const swap = benchSwapFor(opts.bringOn); if (swap) op.lineup = swap; }
+    if (opts.penalty) op.penalty = opts.penalty;
     const next = state.autoPhase ? phaseAfter(e) : null;
     if (next && next !== state.phase) op.phase = { before: state.phase, after: next };
     record(op);
-    if (benched && !op.lineup) hint('Arrástralo a la pista si ha entrado');
+    const unplaced = benched && !op.lineup;
+    if (unplaced) hint(BENCH_NOTE);
     if (kind === 'ACTION' && PENALTY_TEAM[data.action]) startPenalty(PENALTY_TEAM[data.action], e.id, data.playerId);
+    return { unplaced };
   }
+  const BENCH_NOTE = 'Arrástralo a la pista si ha entrado';
+  const withBenchNote = (text, result) => (result && result.unplaced ? `${text} · ${BENCH_NOTE}` : text);
   // ---- Penalties: a 7 m is recorded only after it is provoked or committed; its shot starts on the mark ----
   const PENALTY_TEAM = { PROV7: 'us', PEN7C: 'them' };
   function startPenalty(team, eventId, byId) {
@@ -1343,7 +1355,9 @@ td.zero { color: var(--faint); }
     const op = state.history.pop();
     if (!op) return;
     if (ui.penalty && op.added.some((e) => e.id === ui.penalty.eventId)) cancelPenalty();
+    if (op.phase) disarmAction();
     revertOp(op);
+    if (op.penalty) startPenalty(op.penalty.team, op.penalty.eventId, op.penalty.byId);
     state.future.push(op);
     commit();
     hint(`↶ ${opLabel(op)}`);
@@ -1351,6 +1365,8 @@ td.zero { color: var(--faint); }
   function redo() {
     const op = state.future.pop();
     if (!op) return;
+    if (op.phase) disarmAction();
+    if (op.penalty) cancelPenalty();
     applyOp(op);
     state.history.push(op);
     commit({ freshId: lastAdded(op) });
@@ -1762,6 +1778,7 @@ td.zero { color: var(--faint); }
     const bar = $('armed-bar');
     const p = ui.shooter ? playerById(ui.shooter) : null;
     bar.hidden = !p && !ui.penalty;
+    bar.classList.toggle('penalty', !p && Boolean(ui.penalty));
     if (p) bar.innerHTML = `${discHtml(p)}<b>Dibuja el tiro</b><button class="btn press" type="button" data-unarm aria-label="Cancelar lanzamiento">✕</button>`;
     else if (ui.penalty) bar.innerHTML = `<b>${ui.penalty.team === 'us' ? 'Penalti a favor' : 'Penalti en contra'} · dibuja el tiro</b><button class="btn press" type="button" data-unarm aria-label="Cancelar el penalti">✕</button>`;
   }
@@ -1930,17 +1947,17 @@ td.zero { color: var(--faint); }
         ${view.penalty ? '' : `<button class="chip" type="button" data-contra aria-pressed="${view.contra}">Contraataque</button>`}</div>`;
   }
   function commitShot(view, result) {
-    if (view.penalty) cancelPenalty();
+    const penalty = view.penalty ? ui.penalty : null;
+    if (penalty) cancelPenalty();
     if (view.type === 'ourShot') {
       disarm();
-      addEvent('SHOT', { playerId: view.playerId, origin: view.origin, target: view.target, from: view.zone, zone: view.contra ? 'CONTRA' : view.zone, result }, { bringOn: view.playerId });
-    } else {
-      addEvent('RIVAL_SHOT', { gkId: state.gkId, rivalId: view.rivalId || null, origin: view.origin, target: view.target, zone: view.zone, result, contra: view.contra });
+      return addEvent('SHOT', { playerId: view.playerId, origin: view.origin, target: view.target, from: view.zone, zone: view.contra ? 'CONTRA' : view.zone, result }, { bringOn: view.playerId, penalty });
     }
+    return addEvent('RIVAL_SHOT', { gkId: state.gkId, rivalId: view.rivalId || null, origin: view.origin, target: view.target, zone: view.zone, result, contra: view.contra }, { penalty });
   }
   function commitDirectShot(view, result) {
-    commitShot(view, result);
-    hint(`${RESULTS[result].label} ${ZONES[view.zone]} · ↶ deshacer`);
+    const done = commitShot(view, result);
+    hint(withBenchNote(`${RESULTS[result].label} ${ZONES[view.zone]} · ↶ deshacer`, done));
   }
   function openShotPop(view, anchor) {
     Object.assign(view, { zone: view.penalty ? '7M' : zoneFrom(view.origin), contra: false, anchor });
@@ -2033,6 +2050,12 @@ td.zero { color: var(--faint); }
     pushAlert({ id: newId('d'), kind: 'desc', title: `Descalificado: #${p.num} ${p.name}`, body: `${body} · no vuelve` }, SOUND_ALARM);
     commit();
   }
+  // A match opens with nothing armed or pending from the previous one.
+  function resetPlayUi() {
+    ui.shooter = null;
+    disarmAction();
+    cancelPenalty();
+  }
   function armShooter(playerId) {
     disarmAction();
     ui.shooter = playerId;
@@ -2112,9 +2135,10 @@ td.zero { color: var(--faint); }
     const { key, sub } = ui.armedAction;
     const p = playerById(playerId);
     disarmAction();
-    if (key === 'TURNOVER') addEvent('TURNOVER', { playerId, subtype: sub }, { bringOn: playerId });
-    else addEvent('ACTION', { playerId, action: key === 'DEFFAULT' ? sub : key }, { bringOn: playerId });
-    hint(`${describe(state.events.at(-1))} · ↶ deshacer`);
+    const result = key === 'TURNOVER'
+      ? addEvent('TURNOVER', { playerId, subtype: sub }, { bringOn: playerId })
+      : addEvent('ACTION', { playerId, action: key === 'DEFFAULT' ? sub : key }, { bringOn: playerId });
+    hint(withBenchNote(`${describe(state.events.at(-1))} · ↶ deshacer`, result));
     return true;
   }
   $('acts').addEventListener('click', (ev) => {
@@ -4127,7 +4151,7 @@ td.zero { color: var(--faint); }
     state = restoreState(saved);
     storeLocalMatch(id, state, dirty);
     if (dirty) scheduleSync();
-    ui.shooter = null;
+    resetPlayUi();
     ui.sheetMode = 'sheet';
     ui.templatePick = false;
     ['home', 'sheet', 'final'].forEach((el) => { $(el).hidden = true; });
@@ -4184,7 +4208,7 @@ td.zero { color: var(--faint); }
     currentMatchId = null;
     removeKey(CURRENT_MATCH_KEY);
     state = sampleState();
-    ui.shooter = null;
+    resetPlayUi();
     ['home', 'sheet', 'final'].forEach((el) => { $(el).hidden = true; });
     renderAll();
     hint('Partido de ejemplo · «‹ Partidos» para volver a tus partidos');
