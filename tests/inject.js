@@ -181,6 +181,20 @@
   T('play after the final whistle does not restart the clock', () => { const snap = snapshot(); state.finished = true; pauseClock(); state.clock.elapsedMs = 0; addEvent('TURNOVER', { playerId: 'p8', subtype: 'Pasos' }); if (isRunning()) throw new Error('restarted'); restore(snap); });
   T('report e-mail addresses and mailto', () => { if (!parseEmails('a@x.es, b@y.com;c@z.org') || parseEmails('a@x.es, nope') || parseEmails('')) throw new Error('parse'); const url = mailtoUrl(['a@x.es', 'b@y.com'], ['informe.pdf']); if (!url.startsWith('mailto:a@x.es,b@y.com?subject=') || !decodeURIComponent(url).includes(finalTitle()) || !decodeURIComponent(url).includes('informe.pdf')) throw new Error(url); });
   T('invalid e-mail is refused without leaving the page', () => { const snap = snapshot(); openFinal(); $('final-email').value = 'entrenador@'; document.querySelector('[data-final-mail]').click(); if (!$('final-status').textContent.includes('válidas')) throw new Error($('final-status').textContent); restore(snap); });
+  T('mvp: final screen picks, changes and clears the MVP', () => {
+    const snap = snapshot(); openFinal();
+    const pick = (id) => document.querySelector(`[data-mvp="${id}"]`).click();
+    const [a, b] = state.players.map((p) => p.id);
+    pick(a); if (state.mvpId !== a) throw new Error('pick ' + state.mvpId);
+    if (document.querySelector(`[data-mvp="${a}"]`).getAttribute('aria-pressed') !== 'true' || $('final').querySelectorAll('.crown-face').length !== 1) throw new Error('crown not shown on the pick');
+    if (restoreState(JSON.parse(snapshot())).mvpId !== a) throw new Error('not kept by restoreState');
+    pick(a); if (state.mvpId !== null) throw new Error('clear ' + state.mvpId);
+    pick(a); pick(b); if (state.mvpId !== b) throw new Error('change ' + state.mvpId);
+    restore(snap);
+  });
+  T('mvp: old saved matches restore with no MVP', () => { const saved = JSON.parse(snapshot()); delete saved.mvpId; if (restoreState(saved).mvpId !== null) throw new Error('not null'); });
+  T('mvp: picking the MVP changes no statistic', () => { const snap = snapshot(); const before = JSON.stringify([liveStats(), score()]); setMvp(state.players[0].id); if (JSON.stringify([liveStats(), score()]) !== before) throw new Error('stats changed'); restore(snap); });
+  T('crowns on screen never share gradient ids', () => { const ids = [...(crownSvg() + crownSvg('x')).matchAll(/id="([^"]+)"/g)].map((x) => x[1]); if (!ids.length || new Set(ids).size !== ids.length) throw new Error(ids.join()); });
 
   // ---- Accounts, team and saved matches (device backend; Supabase mapping through a fake client) ----
   const TA = async (name, fn) => { try { await fn(); __results.push('OK ' + name); } catch (e) { __results.push('FAIL ' + name + ': ' + (e && e.message || e) + ' ' + ((e && e.stack) || '').split('\n')[1]); } };

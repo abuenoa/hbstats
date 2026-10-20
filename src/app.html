@@ -32,6 +32,11 @@
   --red: #d4202a;
   --red-deep: #a3141c;
   --gold: #f5c400;
+  --crown-light: #fff3a6;
+  --crown-deep: #b8860b;
+  --crown-band-deep: #8a6400;
+  --crown-edge: #7a5500;
+  --crown-shine: #fffbe0;
   --black: #151515;
   --on-color: #ffffff;
 
@@ -484,6 +489,12 @@ button.rex-chip { border: 0; cursor: pointer; position: relative; }
 .halftime-points { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
 .halftime-points .acta-h { margin-top: 0; }
 @media (max-width: 700px) { .kpi-tiles { grid-template-columns: repeat(2, minmax(0, 1fr)); } .halftime-points { grid-template-columns: 1fr; } }
+.mvp-pick { display: grid; gap: 6px; }
+.mvp-pick h3 { margin: 0; font-size: 12px; font-weight: 700; color: var(--muted); text-transform: uppercase; letter-spacing: .06em; }
+.mvp-faces { display: flex; flex-wrap: wrap; gap: 14px 10px; padding-top: 22px; }
+.mvp-face { position: relative; display: grid; justify-items: center; gap: 4px; min-width: var(--tap); min-height: var(--tap); padding: 4px 6px; border: 2px solid transparent; border-radius: 14px; background: transparent; color: var(--fg); font: inherit; font-size: 12px; font-weight: 600; }
+.mvp-face[aria-pressed="true"] { border-color: var(--gold); background: var(--glow-gold); }
+.crown-face { position: absolute; left: -6px; top: -22px; width: 38px; height: auto; transform: rotate(-34deg); pointer-events: none; filter: drop-shadow(0 3px 4px rgba(0, 0, 0, .5)); }
 .final-mail { display: grid; gap: 4px; font-size: 12px; font-weight: 700; color: var(--muted); text-transform: uppercase; letter-spacing: .06em; }
 .sheet-head { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; margin-bottom: 12px; }
 .sheet-head h2 { margin: 0; font-family: var(--font-display); font-weight: 800; font-size: 30px; text-wrap: balance; }
@@ -967,7 +978,7 @@ td.zero { color: var(--faint); }
     return {
       sample: false, setupDone: false, finished: false,
       us: from.us, players: from.players, lineups: from.lineups, gkId: from.gkId,
-      autoPhase: from.autoPhase, clockDown: Boolean(from.clockDown), reportEmail: from.reportEmail || '',
+      autoPhase: from.autoPhase, clockDown: Boolean(from.clockDown), reportEmail: from.reportEmail || '', mvpId: null,
       them: 'Rival', rivals: [], venue: '', date: todayIso(), phase: DEFAULT_PHASE,
       clock: { period: 1, elapsedMs: 0, runningSince: null }, timeoutsUsed: 0, timeoutsUsedThem: 0, timeout: null,
       events: [], fired: [], alerts: [], history: [], future: []
@@ -1060,7 +1071,7 @@ td.zero { color: var(--faint); }
   // A saved match (from this device or the cloud) ready to play on; throws when it is not a match.
   function restoreState(saved) {
     if (!saved || !Array.isArray(saved.players) || !Array.isArray(saved.events) || !Array.isArray(saved.history)) throw new Error('el partido guardado está dañado');
-    const s = Object.assign({ rivals: [], venue: '', date: todayIso(), setupDone: true, finished: false, reportEmail: '' }, JSON.parse(JSON.stringify(saved)));
+    const s = Object.assign({ rivals: [], venue: '', date: todayIso(), setupDone: true, finished: false, reportEmail: '', mvpId: null }, JSON.parse(JSON.stringify(saved)));
     s.clock.runningSince = null; // never resume the clock on its own after a reload
     return s;
   }
@@ -1673,6 +1684,24 @@ td.zero { color: var(--faint); }
     ui.photos = new Map(roster.filter((p) => p.photo && IMAGE_DATA_URL.test(p.photo)).map((p) => [p.id, p.photo]));
   }
   const photoOf = (id) => ui.photos.get(id) || null;
+  // Gradients get a fresh id per crown: several crowns can share one document.
+  let crownCount = 0;
+  const crownStop = (offset, token) => `<stop offset="${offset}" style="stop-color:var(${token})"/>`;
+  const crownPearl = (cx, cy) => `<circle cx="${cx}" cy="${cy}" r="6" style="fill:var(--crown-light);stroke:var(--crown-edge)" stroke-width="2"/>`;
+  const crownJewel = (cx, r, token) => `<circle cx="${cx}" cy="75" r="${r}" style="fill:var(${token})"/>`;
+  function crownSvg(cls = '') {
+    const n = ++crownCount;
+    const body = `crown-body-${n}`, band = `crown-band-${n}`;
+    const edge = 'style="stroke:var(--crown-edge)" stroke-width="3"';
+    return `<svg class="${esc(cls)}" viewBox="0 0 120 92" aria-hidden="true"><defs>
+      <linearGradient id="${body}" x1="0" y1="0" x2="0" y2="1">${crownStop(0, '--crown-light')}${crownStop(0.45, '--gold')}${crownStop(1, '--crown-deep')}</linearGradient>
+      <linearGradient id="${band}" x1="0" y1="0" x2="0" y2="1">${crownStop(0, '--gold')}${crownStop(1, '--crown-band-deep')}</linearGradient></defs>
+      <path d="M10 70 L4 22 Q4 18 8 20 L34 40 L56 8 Q60 3 64 8 L86 40 L112 20 Q116 18 116 22 L110 70 Z" fill="url(#${body})" ${edge} stroke-linejoin="round"/>
+      <rect x="8" y="66" width="104" height="18" rx="6" fill="url(#${band})" ${edge}/>
+      ${crownPearl(6, 18)}${crownPearl(60, 5)}${crownPearl(114, 18)}
+      ${crownJewel(60, 5, '--red')}${crownJewel(34, 4, '--parada')}${crownJewel(86, 4, '--gol')}
+      <path d="M22 58 L30 48 M44 56 L50 44" style="stroke:var(--crown-shine)" stroke-width="4" stroke-linecap="round" opacity=".7"/></svg>`;
+  }
   function discHtml(p, pos = posOf(p)) {
     // A roster player carries their photo; match players are looked up in the team photos.
     const photo = p.photo && IMAGE_DATA_URL.test(p.photo) ? p.photo : photoOf(p.id);
@@ -3572,10 +3601,21 @@ td.zero { color: var(--faint); }
     </div>`;
     $('final').hidden = false;
   }
+  function mvpPickHtml() {
+    const faces = state.players.slice().sort(byPosition).map((p) => `<button class="mvp-face press" type="button" data-mvp="${esc(p.id)}" aria-pressed="${p.id === state.mvpId}" aria-label="${esc(p.name)}, MVP del partido">${discHtml(p)}<span>${esc(p.name)}</span>${p.id === state.mvpId ? crownSvg('crown-face') : ''}</button>`).join('');
+    return `<section class="mvp-pick"><h3>MVP del partido</h3><div class="mvp-faces">${faces}</div></section>`;
+  }
+  // Not an event: picking the MVP is neither undoable nor part of any statistic.
+  function setMvp(id) {
+    state.mvpId = state.mvpId === id ? null : id;
+    save();
+    openFinal();
+  }
   function openFinal() {
     $('final').innerHTML = `<div class="final-card glass">
       <h2>Final · ${esc(finalTitle())}</h2>
       ${kpiTilesHtml()}
+      ${mvpPickHtml()}
       ${summaryDetailHtml()}
       <label class="final-mail">Enviar los PDF a<input class="in" id="final-email" type="email" inputmode="email" autocomplete="email" placeholder="entrenador@club.es, otro@club.es" value="${esc(state.reportEmail || '')}"></label>
       <div class="row-actions">
@@ -3625,6 +3665,7 @@ td.zero { color: var(--faint); }
   $('final').addEventListener('click', (ev) => {
     const b = ev.target.closest('button');
     if (!b) return;
+    if (b.dataset.mvp) { setMvp(b.dataset.mvp); return; }
     if (b.hasAttribute('data-final-close')) { $('final').hidden = true; return; }
     if (b.hasAttribute('data-final-sheet')) { $('final').hidden = true; ui.sheetMode = 'sheet'; ui.sheetTab = 'stats'; renderSheet(); $('sheet').hidden = false; return; }
     if (b.hasAttribute('data-second-half')) { startSecondHalf(); return; }
