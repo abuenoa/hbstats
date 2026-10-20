@@ -709,6 +709,7 @@ td.zero { color: var(--faint); }
       <button class="btn press" id="btn-redo" type="button" aria-label="Rehacer">↷</button>
       <button class="btn primary press" id="btn-stop" type="button">⏸ Parar</button>
       <button class="btn press" id="btn-sheet" type="button">Hoja</button>
+      <button class="btn press" id="btn-finish" type="button">Finalizar</button>
       <button class="btn icon press" id="btn-theme" type="button" aria-label="Cambiar a modo oscuro">☾</button>
     </div>
   </footer>
@@ -739,6 +740,8 @@ td.zero { color: var(--faint); }
     historyLimit: 300,
     tickMs: 250,
     hintMs: 2600,
+    // The strip's «Finalizar» asks «¿Seguro?» and waits this long for the second tap.
+    finishConfirmMs: 4000,
     dragThresholdPx: 10,
     minShotLengthUnits: 40,
     swapRadiusUnits: 70,
@@ -926,7 +929,8 @@ td.zero { color: var(--faint); }
   let state = sampleState();
   const ui = {
     source: 'GK', sourcePhase: null, show: new Set(), popView: null, hintTimer: null, drag: null,
-    lastPenTs: 0, shooter: null, rivalNewPos: null, sheetTab: 'stats', sheetMode: 'sheet', sheetGk: null, sheetGoal: 'GK', sheetShooter: null, rosterSide: 'team', templatePick: false
+    lastPenTs: 0, shooter: null, rivalNewPos: null, sheetTab: 'stats', sheetMode: 'sheet', sheetGk: null, sheetGoal: 'GK', sheetShooter: null, rosterSide: 'team', templatePick: false,
+    finishArmedTimer: null
   };
 
   function todayIso() { return new Date().toISOString().slice(0, 10); }
@@ -1493,6 +1497,29 @@ td.zero { color: var(--faint); }
     stop.classList.toggle('go', !running);
     const big = $('pop-clock');
     if (big) big.textContent = clockText();
+    renderFinish();
+  }
+  // Ending the match is always at hand in the strip; once over it reopens the final summary.
+  function renderFinish() {
+    const b = $('btn-finish');
+    const armed = Boolean(ui.finishArmedTimer) && !state.finished;
+    b.textContent = state.finished ? 'Resumen' : armed ? '⚠ ¿Seguro?' : 'Finalizar';
+    b.classList.toggle('armed', armed);
+  }
+  function disarmFinish() {
+    clearTimeout(ui.finishArmedTimer);
+    ui.finishArmedTimer = null;
+    renderFinish();
+  }
+  function tapFinish() {
+    if (state.finished) { openFinal(); return; }
+    if (!ui.finishArmedTimer) {
+      ui.finishArmedTimer = setTimeout(disarmFinish, CONFIG.finishConfirmMs);
+      renderFinish();
+      return;
+    }
+    disarmFinish();
+    finishMatch();
   }
   function discHtml(p, pos = posOf(p)) {
     return `<span class="disc${pos.darkText ? ' light-text' : ''}" style="background:${pos.color}">${p.num}</span>`;
@@ -2200,6 +2227,7 @@ td.zero { color: var(--faint); }
   });
   $('btn-play').addEventListener('click', toggleClock);
   $('btn-stop').addEventListener('click', toggleClock);
+  $('btn-finish').addEventListener('click', tapFinish);
   $('btn-undo').addEventListener('click', undo);
   $('btn-redo').addEventListener('click', redo);
   $('btn-tm-us').addEventListener('click', () => startTimeout('us'));
