@@ -657,20 +657,20 @@ td.zero { color: var(--faint); }
 .last-score.res-G { color: var(--act-good); background: none; }
 .last-score.res-E { color: var(--dos); background: none; }
 .last-score.res-P { color: var(--act-bad); background: none; }
-.kpis { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-bottom: 14px; }
-.kpi { display: grid; gap: 2px; align-content: start; padding: 10px 12px; border-radius: 12px; background: var(--soft); min-width: 0; }
-.kpi b { font-family: var(--font-display); font-weight: 800; font-size: 28px; line-height: 1.1; font-variant-numeric: tabular-nums; }
-.kpi span { font-size: 12px; color: var(--muted); }
-.kpi.hot { background: var(--brand); color: var(--brand-ink); }
-.kpi.hot span { color: inherit; opacity: .85; }
+.season-kpis { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-bottom: 14px; }
+.season-kpi { display: grid; gap: 2px; align-content: start; padding: 10px 12px; border-radius: 12px; background: var(--soft); min-width: 0; }
+.season-kpi b { font-family: var(--font-display); font-weight: 800; font-size: 28px; line-height: 1.1; font-variant-numeric: tabular-nums; }
+.season-kpi span { font-size: 12px; color: var(--muted); }
+.season-kpi.hot { background: var(--brand); color: var(--brand-ink); }
+.season-kpi.hot span { color: inherit; opacity: .85; }
 .last-match { display: flex; align-items: center; gap: 10px; }
 .mvp-face-static { position: relative; flex: none; display: inline-flex; }
 .last-who { display: grid; min-width: 0; flex: 1; }
 .last-who small { color: var(--muted); }
 .last-score { font-family: var(--font-display); font-weight: 800; font-size: 28px; font-variant-numeric: tabular-nums; }
 .leaders .chips { margin-bottom: 8px; }
-.chip { min-height: 36px; padding: 0 12px; border-radius: 999px; border: 1px solid var(--line); background: var(--soft); color: var(--fg); font: inherit; font-size: 13px; font-weight: 700; }
-.chip[aria-pressed="true"] { background: var(--gold); border-color: var(--gold); color: #151515; }
+.leaders .chip { min-height: 36px; padding: 0 12px; border-radius: 999px; border: 1px solid var(--line); background: var(--soft); color: var(--fg); font: inherit; font-size: 13px; font-weight: 700; }
+.leaders .chip[aria-pressed="true"] { background: var(--gold); border-color: var(--gold); color: #151515; }
 .leader-list { margin: 0; padding: 0; list-style: none; }
 .leader { display: flex; align-items: center; gap: 10px; width: 100%; min-height: 56px; padding: 6px 0; border: 0; border-bottom: 1px solid var(--line); background: none; color: var(--fg); font: inherit; text-align: left; }
 .leader .rank { font-style: normal; font-weight: 700; color: var(--muted); width: 16px; text-align: center; }
@@ -4620,7 +4620,7 @@ td.zero { color: var(--faint); }
     if (matches === null) return '<section class="sheet-card season-card"><h3>Temporada</h3><p class="note">Cargando…</p></section>';
     if (!matches.length) return '<section class="sheet-card season-card"><h3>Temporada</h3><p class="note">Sin partidos todavía</p></section>';
     const s = teamSeason(matches);
-    const tile = (value, label, cls = '') => `<div class="kpi${cls}"><b>${value}</b><span>${label}</span></div>`;
+    const tile = (value, label, cls = '') => `<div class="season-kpi${cls}"><b>${value}</b><span>${label}</span></div>`;
     const form = s.form.map((r) => `<i class="form-chip res-${r}">${r}</i>`).join('');
     const perMatch = decimalText(s.goalsFor / matches.length);
     const latest = s.latest;
@@ -4631,7 +4631,7 @@ td.zero { color: var(--faint); }
     return `<section class="sheet-card season-card"><h3>Temporada</h3>
       <div class="record"><b>${s.won} – ${s.drawn} – ${s.lost}</b><small>ganados · empatados · perdidos</small></div>
       <div class="form-chips">${form}</div>
-      <div class="kpis">${tile(s.goalsFor, `goles a favor · ${perMatch} por partido`, ' hot')}${tile(s.goalsAgainst, 'goles en contra')}
+      <div class="season-kpis">${tile(s.goalsFor, `goles a favor · ${perMatch} por partido`, ' hot')}${tile(s.goalsAgainst, 'goles en contra')}
         ${tile(pctText(pct(s.shotGoals, s.shots)), `acierto en tiro (${s.shotGoals}/${s.shots})`)}${tile(pctText(pct(s.saves, s.onTarget)), `paradas (${s.saves}/${s.onTarget})`)}
         ${tile(s.turnovers, 'pérdidas')}${tile(s.recoveries, 'recuperaciones')}</div>${last}</section>`;
   }

@@ -253,6 +253,17 @@
         if (!copies.offline || copies.matches.map((x) => x.id).join() !== 'sd1' || !copies.matches[0].state) throw new Error(copies.matches.map((x) => x.id).join());
       } finally { backend = real; team.id = savedId; ['sd1', 'sd2', 'sd3'].forEach((id) => removeKey(MATCH_KEY_PREFIX + id)); }
     });
+    T('team page styles do not leak into the live match KPI strip and chips', () => {
+      const probe = document.createElement('div');
+      probe.innerHTML = '<div class="kpis"><div class="kpi"><strong>1</strong></div><div class="kpi"></div><div class="kpi"></div></div><button class="chip" type="button" aria-pressed="true">x</button>';
+      document.body.appendChild(probe);
+      try {
+        const strip = getComputedStyle(probe.querySelector('.kpis')), tile = getComputedStyle(probe.querySelector('.kpi')), chip = getComputedStyle(probe.querySelector('.chip'));
+        if (strip.gridTemplateColumns.split(' ').length !== 3 || strip.columnGap !== '6px' || strip.paddingLeft !== '10px') throw new Error('kpis ' + strip.gridTemplateColumns + ' ' + strip.columnGap + ' ' + strip.paddingLeft);
+        if (tile.textAlign !== 'center' || tile.paddingTop !== '6px' || tile.paddingLeft !== '4px') throw new Error('kpi ' + tile.textAlign + ' ' + tile.padding);
+        if (chip.minHeight !== '40px' || chip.borderTopLeftRadius !== '20px' || chip.paddingLeft !== '14px') throw new Error('chip ' + chip.minHeight + ' ' + chip.borderTopLeftRadius + ' ' + chip.paddingLeft);
+      } finally { probe.remove(); }
+    });
     T('season: team record uses finished matches only', () => {
       const finished = seasonRow('f1', { events: [seasonShot('sp2', 'GOL')] }), live = seasonRow('l1', { finished: false, events: [seasonShot('sp2', 'FALLO')] });
       finished.scoreUs = 28; finished.scoreThem = 23; live.scoreUs = 3; live.scoreThem = 5;
