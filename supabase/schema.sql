@@ -37,6 +37,10 @@ create table if not exists public.players (
   created_at timestamptz not null default now()
 );
 create unique index if not exists players_team_num_active on public.players (team_id, num) where active;
+-- `name` is the short name shown on court; `full_name` the one on the official card. The photo is a small face crop
+-- as a data URL (like the crest), so the roster works offline from the device copy. Added after the first release.
+alter table public.players add column if not exists full_name text check (full_name is null or char_length(full_name) between 1 and 80);
+alter table public.players add column if not exists photo text check (photo is null or (photo like 'data:image/%' and char_length(photo) <= 60000));
 
 create table if not exists public.matches (
   id uuid primary key,
