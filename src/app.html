@@ -297,6 +297,7 @@ button.rex-chip { border: 0; cursor: pointer; position: relative; }
 .court-label { font-family: var(--font-display); font-weight: 700; font-size: 21px; fill: var(--court-line); opacity: .4; }
 .chart-num { font-family: var(--font-display); font-weight: 800; fill: var(--fg); }
 .chart-cap { font-size: 13px; font-weight: 700; fill: var(--muted); }
+.radar .chart-cap { font-size: 18px; }
 .zone-pct, .goal-pct { font-family: var(--font-display); font-weight: 800; }
 .zone-pct { font-size: 34px; fill: var(--fg); }
 .zone-n { font-size: 22px; font-weight: 700; fill: var(--fg); }
@@ -663,7 +664,7 @@ td.zero { color: var(--faint); }
 .season-kpi span { font-size: 12px; color: var(--muted); }
 .season-kpi.hot { background: var(--brand); color: var(--brand-ink); }
 .season-kpi.hot span { color: inherit; opacity: .85; }
-.last-match { display: flex; align-items: center; gap: 10px; }
+.last-match { display: flex; align-items: center; gap: 10px; margin-top: 16px; }
 .mvp-face-static { position: relative; flex: none; display: inline-flex; }
 .last-who { display: grid; min-width: 0; flex: 1; }
 .last-who small { color: var(--muted); }
@@ -680,7 +681,7 @@ td.zero { color: var(--faint); }
 .squad h4 { margin: 14px 0 6px; font-size: 12px; letter-spacing: .1em; text-transform: uppercase; }
 .faces { display: grid; grid-template-columns: repeat(auto-fill, minmax(76px, 1fr)); gap: 8px; }
 .face { display: grid; justify-items: center; gap: 4px; min-height: var(--tap); padding: 4px; border: 0; background: none; color: var(--fg); font: inherit; font-size: 12px; font-weight: 700; }
-.face span { max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.face span:not(.disc) { max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .face .disc, .last-match .disc { width: 56px; height: 56px; font-size: 22px; }
 .face .disc { box-shadow: 0 0 0 3px var(--pos); }
 .squad .row-actions { margin-top: 14px; }
@@ -688,12 +689,12 @@ td.zero { color: var(--faint); }
 .player-page { display: grid; gap: 14px; }
 .player-bar { display: flex; justify-content: space-between; gap: 10px; }
 .player-bar [data-player-edit][aria-pressed="true"] { background: var(--gold); border-color: var(--gold); color: #151515; }
-.player-grid { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.5fr) minmax(0, 1fr); gap: 14px; align-items: start; }
+.player-grid { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.25fr) minmax(0, 1fr); gap: 14px; align-items: start; }
 .player-col { display: grid; gap: 14px; min-width: 0; }
 .poster { position: relative; overflow: hidden; display: grid; gap: 6px; background: linear-gradient(160deg, color-mix(in srgb, var(--pos) 28%, var(--surface)), var(--surface) 60%); }
 .poster > :not(.poster-dorsal) { position: relative; }
 .poster-dorsal { position: absolute; right: -14px; top: -34px; font-family: var(--font-display); font-weight: 800; font-size: 280px; line-height: 1; color: var(--fg); opacity: .07; pointer-events: none; }
-.poster-face { justify-self: start; display: inline-flex; margin: 18px 0 0 10px; }
+.poster-face { justify-self: start; display: inline-flex; margin: 36px 0 0 18px; }
 .poster-face .disc { width: 150px; height: 150px; font-size: 64px; box-shadow: 0 0 0 5px var(--pos); }
 .poster-face .disc.photo b { min-width: 34px; font-size: 20px; line-height: 32px; right: -2px; bottom: 2px; }
 .poster-face .crown-face { left: -14px; top: -28px; width: 70px; }
@@ -718,7 +719,9 @@ td.zero { color: var(--faint); }
 .rate-tile.none { color: var(--muted); }
 .zone-map svg, .goal-chart svg, .radar svg, .evolution svg { display: block; width: 100%; height: auto; }
 .match-table { font-size: 13px; }
-.match-table th, .match-table td { padding: 8px 5px; }
+.match-table th, .match-table td { padding: 8px 3px; }
+.match-table th { font-size: 11px; letter-spacing: .02em; }
+.match-table td:nth-child(2) { white-space: normal; min-width: 80px; }
 .match-table .res-G { background: none; color: var(--act-good); font-weight: 800; }
 .match-table .res-E { background: none; color: var(--dos); font-weight: 800; }
 .match-table .res-P { background: none; color: var(--act-bad); font-weight: 800; }
@@ -4158,6 +4161,7 @@ td.zero { color: var(--faint); }
     return false;
   }
   const dateText = (iso) => (iso ? new Date(`${iso}T12:00:00`).toLocaleDateString('es-ES') : '');
+  const shortDateText = (iso) => (iso ? new Date(`${iso}T12:00:00`).toLocaleDateString('es-ES', { day: 'numeric', month: 'numeric' }) : '');
 
   function loginHtml() {
     return `<form class="auth-card glass" data-form="login">
@@ -4545,7 +4549,7 @@ td.zero { color: var(--faint); }
   let chartCount = 0;
   const rateText = (ok, n) => pctText(pct(ok, n));
   const svgNum = (v) => Number(v.toFixed(1));
-  const RADAR = { w: 520, h: 380, radius: 110, rings: [0.25, 0.5, 0.75, 1], labelGap: 18, valueLift: 12, captionDrop: 15, edge: 0.5 };
+  const RADAR = { w: 500, h: 396, radius: 130, rings: [0.25, 0.5, 0.75, 1], labelGap: 18, valueLift: 18, captionDrop: 20, edge: 0.5 };
   function radarSvg(axes, centreText, centreLabel) {
     const cx = RADAR.w / 2, cy = RADAR.h / 2;
     const dir = (i) => { const a = -Math.PI / 2 + (2 * Math.PI * i) / axes.length; return [Math.cos(a), Math.sin(a)]; };
@@ -4560,18 +4564,19 @@ td.zero { color: var(--faint); }
       const above = dy < -RADAR.edge, below = dy > RADAR.edge;
       const valueY = above ? y - RADAR.valueLift : below ? y + RADAR.valueLift : y;
       const captionY = valueY + RADAR.captionDrop;
-      return `<text class="chart-num" x="${x}" y="${valueY}" font-size="20" text-anchor="${anchor}">${esc(a.text)}</text><text class="chart-cap" x="${x}" y="${captionY}" text-anchor="${anchor}">${esc(a.label)}</text>`;
+      return `<text class="chart-num" x="${x}" y="${valueY}" font-size="28" text-anchor="${anchor}">${esc(a.text)}</text><text class="chart-cap" x="${x}" y="${captionY}" text-anchor="${anchor}">${esc(a.label)}</text>`;
     }).join('');
     return `<svg viewBox="0 0 ${RADAR.w} ${RADAR.h}" role="img">${rings}${spokes}
       <polygon points="${polygon((a) => RADAR.radius * clamp(a.fraction, 0, 1))}" fill="var(--fg)" fill-opacity=".08" stroke="var(--fg)" stroke-width="2" stroke-linejoin="round"/>
       ${dots}${labels}
-      <text class="chart-num" x="${cx}" y="${cy + 6}" font-size="30" text-anchor="middle">${esc(centreText)}</text><text class="chart-cap" x="${cx}" y="${cy + 24}" text-anchor="middle">${esc(centreLabel)}</text></svg>`;
+      <text class="chart-num" x="${cx}" y="${cy + 6}" font-size="34" text-anchor="middle">${esc(centreText)}</text><text class="chart-cap" x="${cx}" y="${cy + 24}" text-anchor="middle">${esc(centreLabel)}</text></svg>`;
   }
 
   // Lane wedges fan out from the goal centre; the angles are the lane edges seen from the attacker, left to right.
   const WEDGE_REACH = 3000;
   const LANE_BOUNDS_DEG = [-90, -LANE_EDGES_DEG[1], -LANE_EDGES_DEG[0], LANE_EDGES_DEG[0], LANE_EDGES_DEG[1], 90];
-  const ZONE_LABEL_RADIUS = { [RING_NEAR]: 385, [RING_FAR]: 500 };
+  // Near-ring labels sit mid-way between the 6 m and 9 m lines, which are not concentric with the goal centre.
+  const NEAR_LABEL_RADIUS = { EXT_I: 446, LAT_I: 413, CEN: 395, LAT_D: 413, EXT_D: 446 }, FAR_LABEL_RADIUS = 500;
   const ZONE_LABEL_PAD = 60, ZONE_LABEL_GAP = 36;
   const ZONE_FILL_OPACITY = 0.55, ZONE_NEUTRAL_OPACITY = 0.05, ZONE_DOT_R = 7, ZONE_DOT_OPACITY = 0.55;
   const MASK_SHOW = '#fff', MASK_HIDE = '#000';
@@ -4590,7 +4595,7 @@ td.zero { color: var(--faint); }
       const fill = rate ? `fill="${rateColour(rate.ok / rate.n)}" fill-opacity="${ZONE_FILL_OPACITY}"` : `fill="var(--court-line)" fill-opacity="${ZONE_NEUTRAL_OPACITY}"`;
       const path = `<path d="${wedge}" mask="url(#${mask})" ${fill}/>`;
       if (!rate) return { path, label: '' };
-      const [x, y] = polar((from + to) / 2, ZONE_LABEL_RADIUS[ring]);
+      const [x, y] = polar((from + to) / 2, ring === RING_NEAR ? NEAR_LABEL_RADIUS[lane.id] : FAR_LABEL_RADIUS);
       const lx = svgNum(clamp(x, ZONE_LABEL_PAD, COURT_WIDTH - ZONE_LABEL_PAD)), ly = svgNum(y);
       return { path, label: `<text class="zone-pct" x="${lx}" y="${ly}" text-anchor="middle">${rateText(rate.ok, rate.n)}</text><text class="zone-n" x="${lx}" y="${svgNum(y + ZONE_LABEL_GAP)}" text-anchor="middle">${rate.ok}/${rate.n}</text>` };
     }));
@@ -4627,7 +4632,7 @@ td.zero { color: var(--faint); }
       const barH = svgNum((r[barKey] / peak) * plotH);
       return `<rect class="evo-bar" x="${svgNum(centre(i) - barW / 2)}" y="${svgNum(base - barH)}" width="${svgNum(barW)}" height="${barH}" rx="4" fill="var(--act-def)" fill-opacity=".45"/>`
         + `<text class="chart-num" x="${centre(i)}" y="${svgNum(base - barH - 6)}" font-size="16" text-anchor="middle">${esc(r[barKey])}</text>`
-        + `<text class="chart-cap" x="${centre(i)}" y="${EVO.h - 10}" font-size="11" text-anchor="middle">${esc(dateText(r.date))}</text>`;
+        + `<text class="chart-cap" x="${centre(i)}" y="${EVO.h - 10}" font-size="11" text-anchor="middle">${esc(shortDateText(r.date))}</text>`;
     }).join('');
     const points = rows.map((r, i) => [centre(i), svgNum(base - clamp(pct(r), 0, 1) * plotH)]);
     const dots = points.map(([x, y]) => `<circle class="evo-dot" cx="${x}" cy="${y}" r="${EVO.dotR}" fill="var(--gold)" stroke="var(--surface)" stroke-width="2"/>`).join('');
@@ -4705,7 +4710,7 @@ td.zero { color: var(--faint); }
     const groups = SQUAD_GROUP_ORDER.map((pos) => {
       const players = home.roster.filter((p) => (POSITION_GROUPS[p.pos] ? p.pos : 'CEN') === pos).sort((a, b) => a.num - b.num);
       const faces = players.map((p) => `<button class="face press" type="button" data-player="${esc(p.id)}" style="--pos:${posOf(p).color}" aria-label="#${p.num} ${esc(p.name)}">${discHtml(p)}<span>${esc(p.name)}</span></button>`).join('');
-      return players.length ? `<h4 style="color:${CONFIG.positions[pos].color}">${POSITION_GROUPS[pos]}</h4><div class="faces">${faces}</div>` : '';
+      return players.length ? `<h4 style="color:${pos === 'POR' ? 'var(--fg)' : CONFIG.positions[pos].color}">${POSITION_GROUPS[pos]}</h4><div class="faces">${faces}</div>` : '';
     }).join('');
     return `<section class="sheet-card squad"><h3>Plantilla · ${home.roster.length}</h3>${groups || '<p class="note">Todavía no hay jugadores.</p>'}
       <div class="row-actions"><button class="btn press" type="button" data-home-view="team-edit">Editar equipo</button></div></section>`;
@@ -4780,7 +4785,7 @@ td.zero { color: var(--faint); }
     const best = teamBest(home.season, home.roster);
     const keeper = player.pos === 'POR';
     const card = keeper ? keeperCard(season, best.keeper) : fieldCard(season, best.field);
-    const rows = season.rows.map((r) => `<tr${r.mvp ? ' class="mvp-row"' : ''}><td>${r.mvp ? crownSvg('crown-face') : ''}${esc(dateText(r.date))}</td><td>${esc(r.them)}</td><td class="${resultClass(r)}">${r.scoreUs}–${r.scoreThem}</td>${card.cells(r)}</tr>`).join('');
+    const rows = season.rows.map((r) => `<tr${r.mvp ? ' class="mvp-row"' : ''}><td>${r.mvp ? crownSvg('crown-face') : ''}${esc(shortDateText(r.date))}</td><td>${esc(r.them)}</td><td class="${resultClass(r)}">${r.scoreUs}–${r.scoreThem}</td>${card.cells(r)}</tr>`).join('');
     const mvp = season.mvps ? `<div class="mvp-tile">${crownSvg()}<b>${season.mvps}</b> <span>MVP del partido · ${season.mvps} de ${season.rows.length} partidos</span></div>` : '';
     const body = `<div class="sentences">${card.sentences.map((x) => `<p>${x}</p>`).join('')}</div>
       <div class="tiles"><div class="tile ${card.lead.cls}"><b>${card.lead.figure}</b><span>${card.lead.label}${card.lead.leads ? ' · el mejor del equipo' : ''}</span></div>

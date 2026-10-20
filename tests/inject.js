@@ -379,6 +379,16 @@
       if (laneOf(wingL) !== 'EXT_I' || laneOf(wingR) !== 'EXT_D') throw new Error('lane premise');
       if (!(labelX(wingL) < CENTER_X && labelX(latL) < CENTER_X && labelX(wingR) > CENTER_X && labelX(latR) > CENTER_X)) throw new Error('map mirrored against the lane keys');
     });
+    T('charts: near-ring labels keep clear of the 6 m and 9 m lines', () => {
+      const colours = { GOL: 'x', PARADA: 'x', FALLO: 'x' }, CLEARANCE = 40, SIX_M_PX = 300, NINE_M_PX = 450, LABEL_MIDDLE = 10;
+      // The 6 m and 9 m lines are the points 300 and 450 px from the goal-line segment between the posts of the area.
+      const lineDistance = (x, y) => Math.hypot(Math.max(425 - x, 0, x - 575), y - GOAL_LINE_Y);
+      [m(-8, 3), m(-5, 6), m(0, 8), m(5, 6), m(8, 3)].forEach((origin) => {
+        const svg = zoneMapSvg([chartShot({ origin })], () => true, colours), [, x, y] = svg.match(/class="zone-pct" x="(-?[\d.]+)" y="(-?[\d.]+)"/);
+        const d = lineDistance(+x, +y + LABEL_MIDDLE);
+        if (d - SIX_M_PX < CLEARANCE || NINE_M_PX - d < CLEARANCE) throw new Error(`${laneOf(origin)} label ${Math.round(d)} px from the goal, lines at ${SIX_M_PX} and ${NINE_M_PX}`);
+      });
+    });
     T('charts: goal grid shows rates for cells with shots', () => {
       const list = [chartShot({ target: gf(0.1, 0.1) }), chartShot({ target: gf(0.1, 0.1), result: 'PARADA' }), chartShot({ target: gf(0.9, 0.9) }), chartShot({ target: gf(0.5, 0.5), result: 'FUERA' })];
       const svg = goalRateSvg(list, (e) => e.result === 'GOL');
@@ -398,7 +408,7 @@
       if (/NaN|Infinity/.test(zero)) throw new Error('all zero');
       const three = evolutionSvg([row('2026-10-01', 2, 0.2), row('2026-10-08', 4, 0.6), row('2026-10-15', 3, 1)], 'goals', (r) => r.made);
       const xs = [...three.matchAll(/class="evo-bar" x="([\d.]+)"/g)].map((x) => +x[1]);
-      if (xs.length !== 3 || !(xs[0] < xs[1] && xs[1] < xs[2]) || !three.includes(`>${dateText('2026-10-01')}<`) || !three.includes('<polyline')) throw new Error('order ' + xs);
+      if (xs.length !== 3 || !(xs[0] < xs[1] && xs[1] < xs[2]) || !three.includes(`>${shortDateText('2026-10-01')}<`) || !three.includes('<polyline')) throw new Error('order ' + xs);
     });
     await TA('a roster file with card names and photos stores them', async () => { const a = home.roster.find((p) => p.pos === 'POR'); const file = new File([JSON.stringify({ format: ROSTER_FORMAT, players: [{ num: a.num, name: 'Ana', pos: 'POR', fullName: 'Ana Ruiz', photo: TINY_PNG }, { num: 31, name: 'Eva', pos: 'EXT', fullName: 'Eva Gil Mora', photo: TINY_PNG }] })], 'p.json', { type: 'application/json' }); await importTeamRoster(file); const list = await backend.listPlayers(team.id); const ana = list.find((p) => p.id === a.id), eva = list.find((p) => p.num === 31); if (!ana || ana.fullName !== 'Ana Ruiz' || ana.photo !== TINY_PNG || !eva || eva.fullName !== 'Eva Gil Mora' || eva.photo !== TINY_PNG) throw new Error('not stored'); await retireTeamPlayer(rosterPlayer(eva.id)); });
     await TA('the full name and photo are saved and survive a roster file', async () => { const a = home.roster.find((p) => p.pos === 'POR'); await saveTeamPlayer(a, { fullName: 'Ana Ruiz Gómez', photo: TINY_PNG }); const file = new File([JSON.stringify({ format: ROSTER_FORMAT, players: [{ num: a.num, name: 'Ana', pos: 'POR' }] })], 'p.json', { type: 'application/json' }); await importTeamRoster(file); const stored = (await backend.listPlayers(team.id)).find((p) => p.id === a.id); if (!stored || stored.name !== 'Ana' || stored.fullName !== 'Ana Ruiz Gómez' || stored.photo !== TINY_PNG) throw new Error(JSON.stringify(stored && { ...stored, photo: Boolean(stored.photo) })); });
@@ -502,6 +512,29 @@
         const real = backend;
         try { backend = { listMatchStates: async () => [] }; showPlayer('nobody'); for (let i = 0; i < 5; i++) await tick0(); } finally { backend = real; }
         if (home.view !== 'team') throw new Error('unknown player: ' + home.view);
+      } finally { Object.assign(home, keep); }
+    });
+    await TA('layout: team page and player card have no horizontal overflow at the test viewport', async () => {
+      const keep = { roster: home.roster, season: home.season };
+      const overflow = (where) => { const wide = document.documentElement.scrollWidth - innerWidth; if (wide > 0) throw new Error(`${where} overflows by ${wide}px`); };
+      try {
+        const matches = [cardMatch({ mvpId: 'ca' }), seasonRow('cm2', { players: [cardField, cardKeeper], date: '2026-09-01', them: 'Un rival con un nombre largo' })];
+        openCard('ca', matches); overflow('field card');
+        showHomeView('team'); overflow('team page');
+        openCard('cg', matches); overflow('goalkeeper card');
+        const wrap = document.querySelector('.match-table').parentElement;
+        if (wrap.scrollWidth > wrap.clientWidth) throw new Error(`match table scrolls sideways by ${wrap.scrollWidth - wrap.clientWidth}px`);
+      } finally { Object.assign(home, keep); }
+    });
+    await TA('layout: radar labels stay inside their card', async () => {
+      const keep = { roster: home.roster, season: home.season };
+      try {
+        for (const id of ['ca', 'cg']) {
+          openCard(id, [cardMatch({ mvpId: id })]);
+          const card = document.querySelector('.radar').getBoundingClientRect(), labels = document.querySelectorAll('.radar text');
+          if (!labels.length) throw new Error('no radar labels');
+          labels.forEach((t) => { const b = t.getBoundingClientRect(); if (b.left < card.left || b.right > card.right || b.top < card.top || b.bottom > card.bottom) throw new Error(`${id}: «${t.textContent}» sticks out of the card`); });
+        }
       } finally { Object.assign(home, keep); }
     });
     const openEdit = async (p) => { await selectTeam(team); showPlayer(p.id); document.querySelector('[data-player-edit]').click(); if (!$('player-name')) throw new Error('edit panel closed'); };
