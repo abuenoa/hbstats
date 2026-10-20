@@ -729,6 +729,8 @@ td.zero { color: var(--faint); }
     hintMs: 2600,
     // Shot zones by distance from the goal (m): the dashed 9 m line itself already counts as 9 m.
     zones: { nineFromM: 8.7, elevenFromM: 11 },
+    // Who usually shoots from a spot (m): wings wide and close to the goal line, pivots close and central, centre backs central.
+    shooterZones: { wingDxM: 6, wingDyM: 5, pivotM: 7.5, pivotDxM: 4, centreDxM: 2.8 },
     // The strip's «Finalizar» asks «¿Seguro?» and waits this long for the second tap.
     finishConfirmMs: 4000,
     dragThresholdPx: 10,
@@ -1819,10 +1821,25 @@ td.zero { color: var(--faint); }
     }
     openPop(playerPopHtml(p, ui.popView), anchor);
   }
-  // Last player of ours who shot: preselected when a shot is drawn from empty court in attack.
-  function lastShooterId() {
-    const last = ourShots().at(-1);
-    return last && playerById(last.playerId) && !ourOffCourt().has(last.playerId) ? last.playerId : null;
+  // Position that usually shoots from where a drawn shot starts.
+  function expectedPosition(pt) {
+    const z = CONFIG.shooterZones;
+    const dx = Math.abs(pt.x - CENTER_X) / UNITS_PER_M;
+    const dy = (pt.y - GOAL_LINE_Y) / UNITS_PER_M;
+    if (dx > z.wingDxM && dy < z.wingDyM) return 'EXT';
+    if (goalDistance(pt) < z.pivotM && dx < z.pivotDxM) return 'PIV';
+    if (dx < z.centreDxM) return 'CEN';
+    return 'LAT';
+  }
+  // Preselected shooter of a shot drawn in attack: the nearest available attacker of that position, else the nearest attacker.
+  function zoneShooterId(origin) {
+    const out = ourOffCourt();
+    const team = state.lineups.ATK;
+    const field = Object.keys(team).filter((id) => playerById(id) && playerById(id).pos !== 'POR' && !out.has(id));
+    const dist = (id) => Math.hypot(team[id].x - origin.x, team[id].y - origin.y);
+    const nearest = (ids) => (ids.length ? ids.reduce((a, b) => (dist(b) < dist(a) ? b : a)) : null);
+    const pos = expectedPosition(origin);
+    return nearest(field.filter((id) => playerById(id).pos === pos)) || nearest(field);
   }
   // Players on court first, bench on the right; goalkeepers only when they are in `onCourt`.
   function playerPickerHtml(view, onCourt) {
@@ -1885,7 +1902,7 @@ td.zero { color: var(--faint); }
     if (view.penalty) cancelPenalty();
     if (view.type === 'ourShot') {
       disarm();
-      addEvent('SHOT', { playerId: view.playerId, origin: view.origin, target: view.target, from: view.zone, zone: view.contra ? 'CONTRA' : view.zone, result });
+      addEvent('SHOT', { playerId: view.playerId, origin: view.origin, target: view.target, from: view.zone, zone: view.contra ? 'CONTRA' : view.zone, result }, { bringOn: view.playerId });
     } else {
       addEvent('RIVAL_SHOT', { gkId: state.gkId, rivalId: view.rivalId || null, origin: view.origin, target: view.target, zone: view.zone, result, contra: view.contra });
     }
@@ -2191,7 +2208,7 @@ td.zero { color: var(--faint); }
       return;
     }
     const view = ui.shooter || state.phase === 'ATK'
-      ? { type: 'ourShot', playerId: ui.shooter || lastShooterId(), pick: !ui.shooter, origin, target }
+      ? { type: 'ourShot', playerId: ui.shooter || zoneShooterId(origin), pick: !ui.shooter, origin, target }
       : { type: 'rivalShot', origin, target };
     openShotPop(view, anchor);
   }
