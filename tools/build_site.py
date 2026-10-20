@@ -108,9 +108,10 @@ def set_block(app: str, pattern: re.Pattern, value, name: str) -> str:
     return app
 
 
-def app_page(app: str, cloud: dict | None) -> str:
+def app_page(app: str, cloud: dict | None, offline: bool = True) -> str:
     head, body = split_head(set_block(set_block(app, CLOUD_BLOCK, cloud, "CLOUD"), DEMO_BLOCK, False, "DEMO"))
-    return f"{PAGE_HEAD.format(theme=THEME)}{INSTALL_HEAD}{RESET_STYLE}{head}\n</head>\n<body>{body}\n{SW_REGISTER}</body>\n</html>\n"
+    register = SW_REGISTER if offline else ""
+    return f"{PAGE_HEAD.format(theme=THEME)}{INSTALL_HEAD}{RESET_STYLE}{head}\n</head>\n<body>{body}\n{register}</body>\n</html>\n"
 
 
 def demo_page(app: str) -> str:
@@ -137,7 +138,8 @@ def manifest() -> str:
     }, ensure_ascii=False, indent=2) + "\n"
 
 
-def main() -> None:
+def build(out: pathlib.Path = OUT, cloud: dict | None = None, offline: bool = True) -> str:
+    """Regenerate the site in `out` and return its build hash. `offline=False` leaves the service worker out."""
     app = (SRC / "app.html").read_text(encoding="utf-8")
     sw = (SRC / "sw.js").read_text(encoding="utf-8")
     for placeholder in ("__BUILD__", "__SUPABASE_JS__"):
@@ -149,21 +151,25 @@ def main() -> None:
     missing = [f for f in ICON_FILES if not (ICONS / f).exists()]
     if missing:
         raise FileNotFoundError(f"assets/icons/ lacks {', '.join(missing)}: run tools/make_icons.py")
-    cloud = cloud_config()
-    if OUT.exists():
-        shutil.rmtree(OUT)
-    (OUT / "icons").mkdir(parents=True)
-    page = app_page(app, cloud)
+    if out.exists():
+        shutil.rmtree(out)
+    (out / "icons").mkdir(parents=True)
+    page = app_page(app, cloud, offline)
     build = hashlib.sha256(page.encode("utf-8")).hexdigest()[:12]
-    (OUT / "index.html").write_text(page, encoding="utf-8")
-    (OUT / "manifest.webmanifest").write_text(manifest(), encoding="utf-8")
-    (OUT / "sw.js").write_text(sw.replace("__BUILD__", build).replace("__SUPABASE_JS__", library.group(1)), encoding="utf-8")
+    (out / "index.html").write_text(page, encoding="utf-8")
+    (out / "manifest.webmanifest").write_text(manifest(), encoding="utf-8")
+    (out / "sw.js").write_text(sw.replace("__BUILD__", build).replace("__SUPABASE_JS__", library.group(1)), encoding="utf-8")
     for f in ICON_FILES:
-        shutil.copyfile(ICONS / f, OUT / "icons" / f)
-    (OUT / "demo").mkdir()
-    (OUT / "demo" / "index.html").write_text(demo_page(app), encoding="utf-8")
-    (OUT / ".nojekyll").write_text("", encoding="utf-8")
-    print(f"docs/ (build {build}, {'accounts on ' + cloud['url'] if cloud else 'no accounts: device only'})")
+        shutil.copyfile(ICONS / f, out / "icons" / f)
+    (out / "demo").mkdir()
+    (out / "demo" / "index.html").write_text(demo_page(app), encoding="utf-8")
+    (out / ".nojekyll").write_text("", encoding="utf-8")
+    return build
+
+
+def main() -> None:
+    cloud = cloud_config()
+    print(f"docs/ (build {build(OUT, cloud)}, {'accounts on ' + cloud['url'] if cloud else 'no accounts: device only'})")
 
 
 if __name__ == "__main__":
