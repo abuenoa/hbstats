@@ -21,8 +21,10 @@ python3 tools/run_tests.py    # test suite (must pass)
 python3 tools/build_site.py   # regenerate docs/ (commit it together with your change)
 ```
 
-To try the app, serve the built site and open a club, e.g. `python3 -m http.server -d docs 8080` and
-<http://localhost:8080/> (the service worker needs `http://localhost` or HTTPS, not `file://`).
+To try your changes, run `python3 tools/dev_server.py` (or `docker compose up` with Docker Desktop) and open
+<http://localhost:8080/>. It rebuilds on every save of `src/` and serves a build with no accounts and no service
+worker, so a reload always shows the latest edit. To check the published site itself, offline mode included, serve
+`docs/` instead: `python3 -m http.server -d docs 8080`.
 
 ## Where things are
 

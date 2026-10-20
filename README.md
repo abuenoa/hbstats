@@ -175,9 +175,14 @@ The whole app is one HTML file with no framework and no build dependencies. The 
 ```sh
 python3 tools/run_tests.py           # run the test suite against src/app.html
 python3 tools/build_site.py          # regenerate docs/ from src/, assets/ and config/cloud.json
+python3 tools/dev_server.py          # serve src/ at http://localhost:8080, rebuilt on every save
 python3 tools/make_icons.py          # regenerate the app icons from assets/icon.svg
 python3 tools/screenshots.py [scene] # refresh the README screenshots from the sample match
 ```
+
+`docker compose up` runs the same development server in a container (Docker Desktop is enough; no
+Python needed on the host). The development build has no accounts and no service worker, so a reload always shows
+your latest edit; it is written to `build/dev/` (or inside the container), never to `docs/`.
 
 The scripts find Chrome through the `CHROME` environment variable, a Playwright-installed browser, or
 `google-chrome`/`chromium` on the PATH.
