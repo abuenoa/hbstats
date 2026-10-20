@@ -4442,7 +4442,7 @@ td.zero { color: var(--faint); }
   }
   // ---- Season charts: inline SVG strings for the player card; ids are unique per call ----
   let chartCount = 0;
-  const rateText = (ok, n) => `${Math.round(ratio(ok, n) * PERCENT)} %`;
+  const rateText = (ok, n) => pctText(pct(ok, n));
   const svgNum = (v) => Number(v.toFixed(1));
   const RADAR = { w: 520, h: 380, radius: 110, rings: [0.25, 0.5, 0.75, 1], labelGap: 18, valueLift: 12, captionDrop: 15, edge: 0.5 };
   function radarSvg(axes, centreText, centreLabel) {
@@ -4474,6 +4474,7 @@ td.zero { color: var(--faint); }
   const ZONE_LABEL_PAD = 60, ZONE_LABEL_GAP = 36;
   const ZONE_FILL_OPACITY = 0.55, ZONE_NEUTRAL_OPACITY = 0.05, ZONE_DOT_R = 7, ZONE_DOT_OPACITY = 0.55;
   const MASK_SHOW = '#fff', MASK_HIDE = '#000';
+  const LANE_DIVIDER = { dash: '6 8', width: 2, opacity: 0.18 };
   const COURT_WIDTH = COURT.minX + COURT.maxX, ZONE_VIEW_TOP = GOAL_LINE_Y - 10, LANE_NAME_INSET = 16;
   function zoneMapSvg(list, success, colours) {
     const id = ++chartCount, clip = `zone-clip-${id}`, near = `zone-near-${id}`, far = `zone-far-${id}`;
@@ -4492,11 +4493,12 @@ td.zero { color: var(--faint); }
       const lx = svgNum(clamp(x, ZONE_LABEL_PAD, COURT_WIDTH - ZONE_LABEL_PAD)), ly = svgNum(y);
       return { path, label: `<text class="zone-pct" x="${lx}" y="${ly}" text-anchor="middle">${rateText(rate.ok, rate.n)}</text><text class="zone-n" x="${lx}" y="${svgNum(y + ZONE_LABEL_GAP)}" text-anchor="middle">${rate.ok}/${rate.n}</text>` };
     }));
+    const dividers = LANE_BOUNDS_DEG.slice(1, -1).map((deg) => { const [x, y] = polar(deg, WEDGE_REACH); return `<line class="lane-divider" x1="${CENTER_X}" y1="${GOAL_LINE_Y}" x2="${svgNum(x)}" y2="${svgNum(y)}" stroke="var(--court-line)" stroke-opacity="${LANE_DIVIDER.opacity}" stroke-width="${LANE_DIVIDER.width}" stroke-dasharray="${LANE_DIVIDER.dash}"/>`; }).join('');
     const dots = list.filter((e) => e.origin && ![ZONE_P7, ZONE_CONTRA].includes(shotZone(e)))
       .map((e) => `<circle class="zone-dot" cx="${svgNum(e.origin.x)}" cy="${svgNum(e.origin.y)}" r="${ZONE_DOT_R}" fill="${colours[groupOf(e.result)]}" fill-opacity="${ZONE_DOT_OPACITY}"/>`).join('');
     const names = LANES.map((lane, i) => `<text class="court-label" x="${svgNum(((i + 0.5) / LANES.length) * COURT_WIDTH)}" y="${COURT_VIEW_H - LANE_NAME_INSET}" text-anchor="middle">${esc(lane.label)}</text>`).join('');
     return `<svg viewBox="0 ${ZONE_VIEW_TOP} ${COURT_WIDTH} ${COURT_VIEW_H - ZONE_VIEW_TOP}" role="img"><defs>${masks}</defs>${courtFloorSvg(clip)}
-      <g clip-path="url(#${clip})">${zones.map((z) => z.path).join('')}</g>${dots}${zones.map((z) => z.label).join('')}${names}</svg>`;
+      <g clip-path="url(#${clip})">${zones.map((z) => z.path).join('')}${dividers}</g>${dots}${zones.map((z) => z.label).join('')}${names}</svg>`;
   }
 
   const GOAL_CELL = { w: 108, h: 74, gap: 4, pad: 14, pctDrop: 38, nDrop: 58, corner: 8, frame: 10 };

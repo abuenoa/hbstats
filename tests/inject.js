@@ -352,18 +352,26 @@
       const list = [chartShot(), chartShot({ result: 'PARADA' }), chartShot({ origin: m(-5, 6), result: 'GOL' }), chartShot({ from: '7M', zone: '7M', origin: m(0, 7) }), chartShot({ zone: 'CONTRA' }), chartShot({ origin: m(6, 10), result: 'FUERA' })];
       const svg = zoneMapSvg(list, (e) => e.result === 'GOL', colours);
       if (countOf(svg, /class="zone-pct"/g) !== 2 || countOf(svg, /class="zone-n"/g) !== 2) throw new Error('labels ' + countOf(svg, /class="zone-pct"/g));
-      if (!svg.includes('>50 %<') || !svg.includes('>1/2<') || !svg.includes('>100 %<') || !svg.includes('>1/1<')) throw new Error('rates');
+      if (!svg.includes('>50%<') || !svg.includes('>1/2<') || !svg.includes('>100%<') || !svg.includes('>1/1<')) throw new Error('rates');
       if (countOf(svg, /class="zone-dot"/g) !== 4 || !svg.includes('fill="var(--c-gol)"') || !svg.includes('fill="var(--c-fallo)"')) throw new Error('dots');
+      if (countOf(svg, /class="lane-divider"[^>]*stroke="var\(--[\w-]+\)"[^>]*stroke-dasharray/g) !== LANES.length - 1) throw new Error('lane dividers');
       LANES.forEach((l) => { if (!svg.includes(`>${l.label}<`)) throw new Error(`lane ${l.label}`); });
       if (!svg.includes('>6 m<') || /NaN/.test(svg)) throw new Error('court');
       const again = zoneMapSvg([], () => true, colours), ids = [...(svg + again).matchAll(/ id="([^"]+)"/g)].map((x) => x[1]);
       if (new Set(ids).size !== ids.length) throw new Error('shared ids ' + ids.join());
       if (again.includes('zone-pct')) throw new Error('labels without shots');
     });
+    T('charts: zone map draws each lane on the side its shots came from', () => {
+      const colours = { GOL: 'x', PARADA: 'x', FALLO: 'x' };
+      const labelX = (origin) => +zoneMapSvg([chartShot({ origin })], () => true, colours).match(/class="zone-pct" x="(-?[\d.]+)"/)[1];
+      const wingL = m(-8, 3), wingR = m(8, 3), latL = m(-5, 6), latR = m(5, 6);
+      if (laneOf(wingL) !== 'EXT_I' || laneOf(wingR) !== 'EXT_D') throw new Error('lane premise');
+      if (!(labelX(wingL) < CENTER_X && labelX(latL) < CENTER_X && labelX(wingR) > CENTER_X && labelX(latR) > CENTER_X)) throw new Error('map mirrored against the lane keys');
+    });
     T('charts: goal grid shows rates for cells with shots', () => {
       const list = [chartShot({ target: gf(0.1, 0.1) }), chartShot({ target: gf(0.1, 0.1), result: 'PARADA' }), chartShot({ target: gf(0.9, 0.9) }), chartShot({ target: gf(0.5, 0.5), result: 'FUERA' })];
       const svg = goalRateSvg(list, (e) => e.result === 'GOL');
-      if (countOf(svg, /class="goal-pct"/g) !== 2 || !svg.includes('>50 %<') || !svg.includes('>1/2<') || !svg.includes('>100 %<') || !svg.includes('>1/1<')) throw new Error('labels');
+      if (countOf(svg, /class="goal-pct"/g) !== 2 || !svg.includes('>50%<') || !svg.includes('>1/2<') || !svg.includes('>100%<') || !svg.includes('>1/1<')) throw new Error('labels');
       if (countOf(svg, /class="goal-cell"/g) !== GOAL_GRID * GOAL_GRID || /NaN/.test(svg)) throw new Error('cells');
     });
     T('charts: user text is escaped in charts', () => {
