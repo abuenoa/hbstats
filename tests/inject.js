@@ -192,6 +192,13 @@
     pick(a); pick(b); if (state.mvpId !== b) throw new Error('change ' + state.mvpId);
     restore(snap);
   });
+  T('mvp: picking keeps an e-mail typed but not sent', () => {
+    const snap = snapshot(); openFinal();
+    $('final-email').value = 'entrenador@club.es';
+    document.querySelector(`[data-mvp="${state.players[0].id}"]`).click();
+    if ($('final-email').value !== 'entrenador@club.es') throw new Error('typed e-mail lost: ' + $('final-email').value);
+    restore(snap);
+  });
   T('mvp: old saved matches restore with no MVP', () => { const saved = JSON.parse(snapshot()); delete saved.mvpId; if (restoreState(saved).mvpId !== null) throw new Error('not null'); });
   T('mvp: picking the MVP changes no statistic', () => { const snap = snapshot(); const before = JSON.stringify([liveStats(), score()]); setMvp(state.players[0].id); if (JSON.stringify([liveStats(), score()]) !== before) throw new Error('stats changed'); restore(snap); });
   T('mvp: a restarted match has no MVP', () => { const saved = JSON.parse(snapshot()); saved.mvpId = saved.players[0].id; if (restartedMatch(saved).mvpId !== null) throw new Error('MVP kept'); });
@@ -253,6 +260,22 @@
         if (!copies.offline || copies.matches.map((x) => x.id).join() !== 'sd1' || !copies.matches[0].state) throw new Error(copies.matches.map((x) => x.id).join());
       } finally { backend = real; team.id = savedId; ['sd1', 'sd2', 'sd3'].forEach((id) => removeKey(MATCH_KEY_PREFIX + id)); }
     });
+    await TA('season: rows without a state are skipped, not fatal', async () => {
+      const real = backend, savedId = team.id;
+      team.id = 'season-null-team';
+      try {
+        backend = { listMatchStates: async () => [seasonRow('n-ok', { date: '2026-09-01' }), { ...seasonRow('n-bad', { date: '2026-09-02' }), state: null }] };
+        const online = await loadSeason();
+        if (online.matches.map((x) => x.id).join() !== 'n-ok') throw new Error(online.matches.map((x) => x.id).join());
+        const local = localBackend();
+        for (const [id, st] of [['nl1', seasonState()], ['nl2', null]]) { await local.saveMatch(team.id, id, seasonState()); writeJson(MATCH_KEY_PREFIX + id, { id, teamId: team.id, state: st, dirty: false }); }
+        const listed = await local.listMatchStates(team.id);
+        if (listed.map((x) => x.id).join() !== 'nl1') throw new Error('local ' + listed.map((x) => x.id).join());
+        backend = { listMatchStates: async () => { throw new Error('Failed to fetch'); } };
+        const offline = await loadSeason();
+        if (offline.matches.map((x) => x.id).join() !== 'nl1') throw new Error('offline ' + offline.matches.map((x) => x.id).join());
+      } finally { backend = real; team.id = savedId; for (const id of ['nl1', 'nl2']) { await localBackend().deleteMatch(id); removeKey(MATCH_KEY_PREFIX + id); } }
+    });
     T('team page styles do not leak into the live match KPI strip and chips', () => {
       const probe = document.createElement('div');
       probe.innerHTML = '<div class="kpis"><div class="kpi"><strong>1</strong></div><div class="kpi"></div><div class="kpi"></div></div><button class="chip" type="button" aria-pressed="true">x</button>';
@@ -298,10 +321,12 @@
       const theirs = [shotZone(rival({ zone: '7M' })), shotZone(rival({ contra: true })), shotZone(rival({ origin: m(8, 4) }))];
       if (theirs.join() !== 'P7,CONTRA,EXT_D:near') throw new Error(theirs.join());
     });
-    T('zones: rates count only shots on target', () => {
+    T('zones: rates count shots on target unless told to count every shot', () => {
       const shots = ['GOL', 'PARADA', 'FUERA', 'PALO'].map((result) => ({ kind: 'SHOT', from: '9M', zone: '9M', origin: m(0, 10), target: gf(0.1, 0.1), result }));
       const rates = zoneRates(shots, (e) => e.result === 'GOL');
       if (rates.size !== 1 || JSON.stringify(rates.get('CEN:far')) !== '{"ok":1,"n":2}') throw new Error(JSON.stringify([...rates]));
+      const every = zoneRates(shots, (e) => e.result === 'GOL', anyShot);
+      if (JSON.stringify(every.get('CEN:far')) !== '{"ok":1,"n":4}') throw new Error('all shots ' + JSON.stringify([...every]));
       const grid = goalRates([...shots, { ...shots[0], target: { x: 0, y: 0 } }], (e) => e.result === 'GOL');
       if (grid.length !== GOAL_GRID || JSON.stringify(grid[0][0]) !== '{"ok":1,"n":2}' || grid.flat().reduce((n, c) => n + c.n, 0) !== 2) throw new Error(JSON.stringify(grid));
     });
@@ -457,10 +482,45 @@
       team.id = 'page-empty-team';
       try {
         backend = { listMatchStates: async () => [] };
+        home.season = null;
         await showTeamPage();
         const text = $('home').textContent;
         if (!text.includes('Sin partidos todavía') || /NaN|undefined/.test(text) || document.querySelector('.leaders [data-player]')) throw new Error(text.slice(0, 300));
       } finally { backend = real; team.id = savedId; }
+    });
+    await TA('team page: offline season says only this tablet\'s matches count, and online clears it', async () => {
+      const real = backend, savedId = team.id;
+      team.id = 'page-offline-team';
+      try {
+        backend = { listMatchStates: async () => { throw new Error('Failed to fetch'); } };
+        home.season = null; home.offline = false;
+        await showTeamPage();
+        const text = $('home').textContent;
+        if (!home.offline || !text.includes('Sin conexión: solo cuentan los partidos abiertos en esta tablet.') || text.includes('ves la copia guardada')) throw new Error(text.slice(0, 200));
+        backend = { listMatchStates: async () => [] };
+        home.season = null;
+        await showTeamPage();
+        if (home.offline || $('home').textContent.includes('Sin conexión')) throw new Error('offline note stays after a good load');
+      } finally { backend = real; team.id = savedId; home.season = null; home.offline = false; }
+    });
+    await TA('team best and the lead tile need the minimum shots', async () => {
+      const lucky = { id: 'ta', num: 4, name: 'Lucky', pos: 'EXT' }, steady = { id: 'tb', num: 6, name: 'Steady', pos: 'LAT' };
+      const shot = (id, result) => ({ ...seasonShot(id, result), origin: m(0, 10), target: gf(0.5, 0.5) });
+      const match = seasonRow('tm1', { players: [lucky, steady], events: [shot('ta', 'GOL'), shot('tb', 'GOL'), shot('tb', 'GOL'), shot('tb', 'FALLO'), shot('tb', 'FALLO')] });
+      const best = teamBest([match], [lucky, steady]);
+      if (best.field.pct !== 0.5) throw new Error('best ' + best.field.pct);
+      if (fieldCard(playerSeason([match], lucky), best.field).lead.leads) throw new Error('one shot leads the team');
+      if (!fieldCard(playerSeason([match], steady), best.field).lead.leads) throw new Error('qualified shooter does not lead');
+    });
+    await TA('imageFromFile asks the browser for upright pixels', async () => {
+      const real = window.createImageBitmap; let options;
+      window.createImageBitmap = (file, opts) => { options = opts; return real.call(window, file, opts); };
+      try {
+        const c = document.createElement('canvas'); c.width = 4; c.height = 2;
+        const blob = await new Promise((r) => c.toBlob(r, 'image/png'));
+        await imageFromFile(new File([blob], 'f.png', { type: 'image/png' }), 16, 'image/png');
+      } finally { window.createImageBitmap = real; }
+      if (!options || options.imageOrientation !== 'from-image') throw new Error(JSON.stringify(options));
     });
     // ---- Player card ----
     const cardField = { id: 'ca', num: 5, name: 'Ari', pos: 'EXT', fullName: 'Ari Gómez Ruiz' }, cardKeeper = { id: 'cg', num: 1, name: 'Gus', pos: 'POR' };
@@ -537,6 +597,49 @@
         }
       } finally { Object.assign(home, keep); }
     });
+    await TA('team page: coming back does not download the season again, a changed match does', async () => {
+      const real = backend, savedId = team.id, keep = { roster: home.roster, season: home.season };
+      team.id = 'page-back-team';
+      let downloads = 0;
+      try {
+        backend = { listMatchStates: async () => { downloads++; return []; }, deleteMatch: async () => {}, listMatches: async () => [] };
+        home.roster = [cardField]; home.season = null;
+        await showTeamPage();
+        showHomeView('team-edit');
+        document.querySelector('[data-home-view="team"]').click(); await tick0();
+        showPlayer('ca');
+        document.querySelector('.player-bar [data-home-view="team"]').click(); await tick0();
+        if (downloads !== 1 || home.view !== 'team' || !document.querySelector('.team-page')) throw new Error(`downloads ${downloads} view ${home.view}`);
+        await deleteMatch('gone');
+        document.querySelector('[data-home-view="team"]').click(); await tick0();
+        if (downloads !== 2) throw new Error('season kept after a match was deleted: ' + downloads);
+      } finally { backend = real; team.id = savedId; Object.assign(home, keep); }
+    });
+    await TA('team page: the latest match MVP shows the roster photo', async () => {
+      const keep = { roster: home.roster, season: home.season }, photos = ui.photos;
+      try {
+        ui.photos = new Map();
+        home.roster = [{ ...cardField, photo: TINY_PNG }, cardKeeper];
+        home.season = [seasonRow('mv1', { players: [cardField, cardKeeper], mvpId: 'ca', events: [] })];
+        showHomeView('team');
+        if (!document.querySelector('.mvp-face-static .disc.photo')) throw new Error($('home').innerHTML.slice(0, 300));
+      } finally { Object.assign(home, keep); ui.photos = photos; }
+    });
+    await TA('player card: field zone map and tiles count every shot', async () => {
+      const keep = { roster: home.roster, season: home.season };
+      const shot = (result, over) => ({ ...seasonShot('ca', result), origin: m(0, 10), target: gf(0.5, 0.5), ...over });
+      const events = [shot('GOL'), shot('FUERA'), shot('FUERA'), shot('GOL', { from: '7M', zone: '7M', origin: m(0, 7) }), shot('FUERA', { from: '7M', zone: '7M', origin: m(0, 7) }), shot('GOL', { zone: 'CONTRA' }), shot('FUERA', { zone: 'CONTRA' }), shot('FUERA', { zone: 'CONTRA' })];
+      try {
+                openCard('ca', [seasonRow('ev1', { players: [cardField], events })]);
+        const tiles = [...document.querySelectorAll('.rate-tile')].map((t) => t.textContent);
+        if (tiles.length !== 2 || !tiles[0].includes('7 m · 1/2') || !tiles[1].includes('Contraataque · 1/3')) throw new Error(tiles.length + ' tiles: ' + $('home').textContent.slice(0, 300));
+        const labels = [...document.querySelectorAll('.zone-map .zone-n')].map((t) => t.textContent);
+        if (labels.join() !== '1/3') throw new Error('zone labels ' + labels.join());
+      } finally { Object.assign(home, keep); }
+    });
+    await TA('player card: field radar names the assists axis «Pases de gol» and the leaders chip says MVPs', async () => {
+      if (FIELD_AXES.find((a) => a.key === 'assists').label !== 'Pases de gol' || LEADER_METRICS.find((x) => x.key === 'mvps').label !== 'MVPs') throw new Error('wording');
+    });
     const openEdit = async (p) => { await selectTeam(team); showPlayer(p.id); document.querySelector('[data-player-edit]').click(); if (!$('player-name')) throw new Error('edit panel closed'); };
     const saveCard = async () => { document.querySelector('[data-player-save]').click(); for (let i = 0; i < 5; i++) await tick0(); };
     await TA('player card: edit saves court name, card name and position', async () => {
@@ -581,6 +684,22 @@
       document.querySelector('[data-player-edit]').click(); document.querySelector('[data-player-photo-clear]').click(); await saveCard();
       if (rosterPlayer(p.id).photo || photoOf(p.id) || (await backend.listPlayers(team.id)).find((x) => x.id === p.id).photo) throw new Error('photo not removed');
     });
+    await TA('player card: a photo that is ready after leaving the editor is dropped silently', async () => {
+      const c = document.createElement('canvas'); c.width = 20; c.height = 20; c.getContext('2d').fillRect(0, 0, 20, 20);
+      const blob = await new Promise((r) => c.toBlob(r, 'image/png')), file = new File([blob], 'f.png', { type: 'image/png' });
+      await selectTeam(team);
+      const [a, b] = home.roster.filter((x) => x.pos !== 'POR');
+      await openEdit(a);
+      const closed = pickPhoto(file);
+      showHomeView('team');
+      await closed;
+      if (home.view !== 'team' || /No se pudo|Foto lista/.test($('home').textContent)) throw new Error('message after leaving: ' + $('home').textContent.slice(0, 120));
+      await openEdit(a);
+      const other = pickPhoto(file);
+      showPlayer(b.id); document.querySelector('[data-player-edit]').click();
+      await other;
+      if (home.playerId !== b.id || home.playerDraft.photo !== undefined || /Foto lista/.test($('home').textContent)) throw new Error('photo leaked into another draft');
+    });
     await TA('crest upload becomes a small square PNG', async () => { showHomeView('team-edit'); const c = document.createElement('canvas'); c.width = 300; c.height = 200; c.getContext('2d').fillRect(0, 0, 300, 200); const blob = await new Promise((r) => c.toBlob(r, 'image/png')); await pickCrest(new File([blob], 'e.png', { type: 'image/png' })); if (!IMAGE_DATA_URL.test(home.crestDraft || '')) throw new Error('not a data url'); const img = new Image(); img.src = home.crestDraft; await img.decode(); if (img.width !== CREST_SIZE_PX || img.height !== CREST_SIZE_PX) throw new Error(img.width + 'x' + img.height); await pickCrest(new File(['x'], 'e.gif', { type: 'image/gif' })); if (!$('home-status').textContent.includes('PNG')) throw new Error('gif accepted'); });
     await TA('a coach adds a second team; rosters and matches stay apart; switch between them', async () => { await showMatches(); const first = team; const firstMatches = home.matches.length; if (!firstMatches) throw new Error('first team has no matches to compare'); await showProfile(); document.querySelector('[data-new-team]').click(); if (home.view !== 'team-new' || !document.querySelector('[data-cancel-team]')) throw new Error('no new-team form'); document.querySelector('[data-cancel-team]').click(); await tick0(); if (home.view !== 'profile' || team.id !== first.id) throw new Error('cancel'); document.querySelector('[data-new-team]').click(); $('team-club').value = 'CB Ejemplo'; $('team-name').value = 'Ejemplo Fem'; await submitTeam(document.querySelector('[data-form="team-new"]'), true); if (team.name !== 'Ejemplo Fem' || home.teams.length !== 2) throw new Error('not created'); await showMatches(); if (home.roster.length || home.matches.length) throw new Error('shares data with the first team'); document.querySelector('[data-home-view="profile"]').click(); for (let i = 0; i < 5; i++) await tick0(); if (home.view !== 'profile' || document.querySelectorAll('[data-open-team]').length !== 2) throw new Error('profile teams'); document.querySelector(`[data-open-team="${first.id}"]`).click(); for (let i = 0; i < 5; i++) await tick0(); await showMatches(); if (team.id !== first.id || home.matches.length !== firstMatches || !home.roster.length) throw new Error('switch back'); });
     await TA('deleting a team asks twice and opens the remaining one', async () => { const other = home.teams.find((x) => x.id !== team.id); await selectTeam(other); showHomeView('team-edit'); document.querySelector('[data-delete-team]').click(); if (home.teams.length !== 2) throw new Error('deleted on first tap'); document.querySelector('[data-delete-team]').click(); for (let i = 0; i < 5; i++) await tick0(); if (home.teams.length !== 1 || home.view !== 'profile' || document.querySelector(`[data-open-team="${other.id}"]`)) throw new Error('not deleted'); if ((await backend.listTeams()).some((x) => x.id === other.id)) throw new Error('still in backend'); });
@@ -596,6 +715,9 @@
       try {
         const cloud = await supabaseBackend({ url: 'https://x.supabase.co', anonKey: 'k' });
         if ((await cloud.currentUser()).email !== 'a@b.es') throw new Error('user');
+        next = { data: [{ id: 'm8', played_on: '2026-10-10', rival: 'Sur', venue: 'P', status: 'live', score_us: 3, score_them: 2, state: null }, { id: 'm9', played_on: '2026-10-10', rival: 'Sur', venue: 'P', status: 'live', score_us: 3, score_them: 2, state: { events: [] } }], error: null };
+        const withStates = await cloud.listMatchStates('t1');
+        if (withStates.map((x) => x.id).join() !== 'm9') throw new Error('null state kept ' + withStates.map((x) => x.id).join());
         next = { data: [{ id: 'm1', played_on: '2026-10-10', rival: 'Sur', venue: 'P', status: 'live', score_us: 3, score_them: 2 }], error: null };
         const [row] = await cloud.listMatches('t1');
         if (row.date !== '2026-10-10' || row.them !== 'Sur' || row.scoreUs !== 3) throw new Error(JSON.stringify(row));

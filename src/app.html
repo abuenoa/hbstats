@@ -3712,15 +3712,16 @@ td.zero { color: var(--faint); }
   function setMvp(id) {
     state.mvpId = state.mvpId === id ? null : id;
     save();
-    openFinal();
+    const typed = $('final-email');
+    openFinal(typed ? typed.value : undefined);
   }
-  function openFinal() {
+  function openFinal(email = state.reportEmail) {
     $('final').innerHTML = `<div class="final-card glass">
       <h2>Final · ${esc(finalTitle())}</h2>
       ${kpiTilesHtml()}
       ${mvpPickHtml()}
       ${summaryDetailHtml()}
-      <label class="final-mail">Enviar los PDF a<input class="in" id="final-email" type="email" inputmode="email" autocomplete="email" placeholder="entrenador@club.es, otro@club.es" value="${esc(state.reportEmail || '')}"></label>
+      <label class="final-mail">Enviar los PDF a<input class="in" id="final-email" type="email" inputmode="email" autocomplete="email" placeholder="entrenador@club.es, otro@club.es" value="${esc(email || '')}"></label>
       <div class="row-actions">
         <button class="btn primary press" type="button" data-final-mail>Enviar por correo</button>
         <button class="btn press" type="button" data-final-share>Compartir PDF</button>
@@ -3850,7 +3851,7 @@ td.zero { color: var(--faint); }
   let backend = null;
   let currentMatchId = null;
   let syncTimer = null;
-  const home = { view: 'loading', user: null, teams: [], roster: [], matches: [], season: [], templates: [], template: null, squad: new Set(), leaderMetric: 'goals', playerId: null, playerEdit: false, playerDraft: null, offline: false, error: '', draft: null, crestDraft: undefined, armed: null, passwordChange: false };
+  const home = { view: 'loading', user: null, teams: [], roster: [], matches: [], season: null, templates: [], template: null, squad: new Set(), leaderMetric: 'goals', playerId: null, playerEdit: false, playerDraft: null, offline: false, error: '', draft: null, crestDraft: undefined, armed: null, passwordChange: false, seasonOffline: false };
 
   // ---- Device storage ----
   function readJson(key) {
@@ -3939,7 +3940,7 @@ td.zero { color: var(--faint); }
       // States are the device copies; a match without one is skipped.
       async listMatchStates(teamId) {
         return Object.keys(read().matches).filter((id) => read().matches[id].teamId === teamId)
-          .map((id) => localMatch(id)).filter(Boolean).map((m) => ({ ...matchSummary(m.id, m.state), state: m.state }));
+          .map((id) => localMatch(id)).filter((m) => m && m.state).map((m) => ({ ...matchSummary(m.id, m.state), state: m.state }));
       },
       async loadMatch(id) { const m = localMatch(id); return m ? m.state : null; },
       async saveMatch(teamId, id, s) {
@@ -4016,7 +4017,7 @@ td.zero { color: var(--faint); }
       },
       async listMatchStates(teamId) {
         return check(await client.from('matches').select('id,played_on,rival,venue,status,score_us,score_them,state').eq('team_id', teamId)
-          .order('played_on', { ascending: false, nullsFirst: false }).order('updated_at', { ascending: false })).map((r) => ({ ...toSummary(r), state: r.state }));
+          .order('played_on', { ascending: false, nullsFirst: false }).order('updated_at', { ascending: false })).filter((r) => r.state).map((r) => ({ ...toSummary(r), state: r.state }));
       },
       async loadMatch(id) { const row = check(await client.from('matches').select('state').eq('id', id).maybeSingle()); return row ? row.state : null; },
       async saveMatch(teamId, id, s) {
@@ -4131,7 +4132,7 @@ td.zero { color: var(--faint); }
   // A square crop of the uploaded image, small enough to keep with the team (and offline).
   async function imageFromFile(file, sizePx, type) {
     if (!IMAGE_FILE_TYPE.test(file.type)) throw new Error('la imagen tiene que ser PNG, JPG o WebP');
-    const bitmap = await createImageBitmap(file);
+    const bitmap = await createImageBitmap(file, { imageOrientation: 'from-image' });
     const side = Math.min(bitmap.width, bitmap.height);
     const canvas = document.createElement('canvas');
     canvas.width = sizePx;
@@ -4373,6 +4374,7 @@ td.zero { color: var(--faint); }
   async function selectTeam(t) {
     applyTeam(t);
     home.crestDraft = undefined;
+    home.season = null;
     try { home.roster = (await cachedRead(`players:${t.id}`, () => backend.listPlayers(t.id))).value; }
     catch (err) { home.roster = []; console.warn(`Roster not available: ${cloudErrorText(err)}`); }
     // A reload in the middle of a match goes straight back to it.
@@ -4401,10 +4403,10 @@ td.zero { color: var(--faint); }
     try { list = await backend.listMatchStates(team.id); }
     catch (err) {
       offline = true;
-      list = localMatches().filter((m) => m.teamId === team.id).map(withState);
+      list = localMatches().filter((m) => m.teamId === team.id && m.state).map(withState);
       console.warn(`Season from the device copies: ${cloudErrorText(err)}`);
     }
-    const matches = withLocalChanges(list, (m) => ({ state: m.state })).filter((m) => SEASON_STATUSES.includes(m.status) && !m.state.sample);
+    const matches = withLocalChanges(list, (m) => ({ state: m.state })).filter((m) => m.state && SEASON_STATUSES.includes(m.status) && !m.state.sample);
     home.season = matches;
     return { matches, offline };
   }
@@ -4466,10 +4468,11 @@ td.zero { color: var(--faint); }
     if (rival ? e.contra : e.zone === 'CONTRA') return ZONE_CONTRA;
     return `${laneOf(e.origin)}:${goalDistance(e.origin) < CONFIG.zones.nineFromM ? RING_NEAR : RING_FAR}`;
   }
-  // Shots on target per zone: ok when success(e), n in all.
-  function zoneRates(list, success) {
+  // Shots per zone: ok when success(e), n in all that counts(e); on target by default (a goalkeeper saves those only).
+  const anyShot = () => true;
+  function zoneRates(list, success, counts = onTarget) {
     const rates = new Map();
-    list.filter(onTarget).forEach((e) => {
+    list.filter(counts).forEach((e) => {
       const key = shotZone(e), rate = rates.get(key) || { ok: 0, n: 0 };
       rate.n++;
       if (success(e)) rate.ok++;
@@ -4493,7 +4496,7 @@ td.zero { color: var(--faint); }
   const FIELD_AXES = [
     { key: 'pct', label: 'Acierto', group: 'act-good', text: percentText },
     { key: 'goals', label: 'Goles', group: 'act-good', text: decimalText },
-    { key: 'assists', label: 'Asistencias', group: 'act-good', text: decimalText },
+    { key: 'assists', label: 'Pases de gol', group: 'act-good', text: decimalText },
     { key: 'prov7', label: 'Provoca 7 m', group: 'act-good', text: decimalText },
     { key: 'recoveries', label: 'Recuperaciones', group: 'act-def', text: decimalText },
     { key: 'blocks', label: 'Blocajes', group: 'act-def', text: decimalText },
@@ -4533,11 +4536,14 @@ td.zero { color: var(--faint); }
   const fieldRadar = (season, best) => radar(FIELD_AXES, fieldValues(season), best);
   const keeperRadar = (season, best) => radar(KEEPER_AXES, keeperValues(season), best);
   // The highest value of every axis among the roster players who played; security and discipline keep the raw worst.
+  // Like the % tiro leaders, the shooting rate only counts players with CONFIG.leaders.minShots shots.
   function teamBest(matches, roster) {
     const best = (axes, values, seasons) => Object.fromEntries(axes.map(({ key }) => [key, Math.max(0, ...seasons.map((s) => values(s)[key]))]));
     const seasons = roster.map((p) => ({ pos: p.pos, season: playerSeason(matches, p) })).filter((s) => s.season.rows.length);
     const of = (keepers) => seasons.filter((s) => (s.pos === 'POR') === keepers).map((s) => s.season);
-    return { field: best(FIELD_AXES, fieldValues, of(false)), keeper: best(KEEPER_AXES, keeperValues, of(true)) };
+    const shooters = of(false), field = best(FIELD_AXES, fieldValues, shooters);
+    field.pct = best([{ key: 'pct' }], fieldValues, shooters.filter((x) => x.totals.shots >= CONFIG.leaders.minShots)).pct;
+    return { field, keeper: best(KEEPER_AXES, keeperValues, of(true)) };
   }
   // Red at 0, amber at the midpoint, green at 1, mixed from the theme tokens so light and dark both work.
   function rateColour(fraction) {
@@ -4549,7 +4555,7 @@ td.zero { color: var(--faint); }
   let chartCount = 0;
   const rateText = (ok, n) => pctText(pct(ok, n));
   const svgNum = (v) => Number(v.toFixed(1));
-  const RADAR = { w: 500, h: 396, radius: 130, rings: [0.25, 0.5, 0.75, 1], labelGap: 18, valueLift: 18, captionDrop: 20, edge: 0.5 };
+  const RADAR = { w: 540, h: 396, radius: 130, rings: [0.25, 0.5, 0.75, 1], labelGap: 18, valueLift: 18, captionDrop: 20, edge: 0.5 };
   function radarSvg(axes, centreText, centreLabel) {
     const cx = RADAR.w / 2, cy = RADAR.h / 2;
     const dir = (i) => { const a = -Math.PI / 2 + (2 * Math.PI * i) / axes.length; return [Math.cos(a), Math.sin(a)]; };
@@ -4582,9 +4588,9 @@ td.zero { color: var(--faint); }
   const MASK_SHOW = '#fff', MASK_HIDE = '#000';
   const LANE_DIVIDER = { dash: '6 8', width: 2, opacity: 0.18 };
   const COURT_WIDTH = COURT.minX + COURT.maxX, ZONE_VIEW_TOP = GOAL_LINE_Y - 10, LANE_NAME_INSET = 16;
-  function zoneMapSvg(list, success, colours) {
+  function zoneMapSvg(list, success, colours, counts) {
     const id = ++chartCount, clip = `zone-clip-${id}`, near = `zone-near-${id}`, far = `zone-far-${id}`;
-    const rates = zoneRates(list, success);
+    const rates = zoneRates(list, success, counts);
     const polar = (deg, radius) => { const rad = (deg * Math.PI) / 180; return [CENTER_X + radius * Math.sin(rad), GOAL_LINE_Y + radius * Math.cos(rad)]; };
     const masks = `<mask id="${near}"><rect x="-100" y="0" width="${COURT_WIDTH + 200}" height="2000" fill="${MASK_HIDE}"/><path d="${LINE_9M_PATH} Z" fill="${MASK_SHOW}"/><path d="${AREA_6M_PATH}" fill="${MASK_HIDE}"/></mask>
       <mask id="${far}"><rect x="-100" y="0" width="${COURT_WIDTH + 200}" height="2000" fill="${MASK_SHOW}"/><path d="${LINE_9M_PATH} Z" fill="${MASK_HIDE}"/></mask>`;
@@ -4655,7 +4661,7 @@ td.zero { color: var(--faint); }
   const LEADER_LIMIT = 7;
   const LEADER_METRICS = [
     { key: 'goals', label: 'Goles' }, { key: 'pct', label: '% tiro' }, { key: 'saves', label: 'Paradas' },
-    { key: 'recoveries', label: 'Recuperaciones' }, { key: 'assists', label: 'Pases de gol' }, { key: 'mvps', label: 'MVP' }
+    { key: 'recoveries', label: 'Recuperaciones' }, { key: 'assists', label: 'Pases de gol' }, { key: 'mvps', label: 'MVPs' }
   ];
   const POSITION_GROUPS = { POR: 'Porteros', EXT: 'Extremos', LAT: 'Laterales', CEN: 'Centrales', PIV: 'Pivotes' };
   const SQUAD_GROUP_ORDER = ['POR', ...POSITION_ORDER.filter((k) => k !== 'POR')];
@@ -4687,7 +4693,8 @@ td.zero { color: var(--faint); }
     const form = s.form.map((r) => `<i class="form-chip res-${r}">${r}</i>`).join('');
     const perMatch = decimalText(s.goalsFor / matches.length);
     const latest = s.latest;
-    const mvp = latest && latest.state.mvpId && latest.state.players.find((p) => p.id === latest.state.mvpId);
+    const mvpId = latest && latest.state.mvpId;
+    const mvp = mvpId && (rosterPlayer(mvpId) || latest.state.players.find((p) => p.id === mvpId));
     const last = latest ? `<h3>Último partido</h3><div class="last-match">${mvp ? `<span class="mvp-face-static">${discHtml(mvp)}${crownSvg('crown-face')}</span>` : ''}
         <span class="last-who"><b>${esc(latest.them)}</b><small>${esc(dateText(latest.date))}${latest.venue ? ` · ${esc(latest.venue)}` : ''}</small></span>
         <strong class="last-score ${resultClass(latest)}">${latest.scoreUs}–${latest.scoreThem}</strong></div>` : '';
@@ -4715,19 +4722,24 @@ td.zero { color: var(--faint); }
     return `<section class="sheet-card squad"><h3>Plantilla · ${home.roster.length}</h3>${groups || '<p class="note">Todavía no hay jugadores.</p>'}
       <div class="row-actions"><button class="btn press" type="button" data-home-view="team-edit">Editar equipo</button></div></section>`;
   }
+  const SEASON_OFFLINE_NOTE = '<p class="note">Sin conexión: solo cuentan los partidos abiertos en esta tablet.</p>';
   function teamPageHtml() {
-    return `${statusHtml()}${home.offline ? '<p class="note">Sin conexión: ves la copia guardada en esta tablet.</p>' : ''}
+    const note = home.seasonOffline ? SEASON_OFFLINE_NOTE : home.offline ? '<p class="note">Sin conexión: ves la copia guardada en esta tablet.</p>' : '';
+    return `${statusHtml()}${note}
       <div class="team-page">${seasonCardHtml(home.season)}${leadersCardHtml(home.season)}${squadCardHtml()}</div>`;
   }
+  // The season stays loaded while the coach moves between the team pages; anything that changes it clears it.
   async function showTeamPage() {
-    home.season = null;
     showHomeView('team');
+    if (home.season !== null) return;
     try {
       const { offline } = await loadSeason();
-      if (offline) home.offline = true;
+      home.offline = offline;
+      home.seasonOffline = offline;
     } catch (err) {
       home.season = [];
       home.offline = true;
+      home.seasonOffline = false;
       console.warn(`Season not available: ${cloudErrorText(err)}`);
     }
     if (['team', 'player'].includes(home.view)) renderHome();
@@ -4744,15 +4756,15 @@ td.zero { color: var(--faint); }
     : `<div class="rate-tile none"><b>–</b><span>${label}</span></div>`);
   // What differs between a field player's card and a goalkeeper's; `best` is the team best of the player's kind.
   function fieldCard(season, best) {
-    const t = season.totals, shots = season.rows.flatMap((r) => r.shotsList), rates = zoneRates(shots, isGoal);
+    const t = season.totals, shots = season.rows.flatMap((r) => r.shotsList), rates = zoneRates(shots, isGoal, anyShot);
     const counterGoals = shots.filter((e) => isGoal(e) && shotZone(e) === ZONE_CONTRA).length;
     return {
       sentences: [`${unit(t.goals, 'gol', 'goles')} en ${unit(t.shots, 'lanzamiento', 'lanzamientos')}`, unit(season.rows.length, 'partido jugado', 'partidos jugados'), unit(t.turnovers, 'pérdida', 'pérdidas'), unit(counterGoals, 'gol al contraataque', 'goles al contraataque')],
-      lead: { figure: pctText(pct(t.goals, t.shots)), label: 'acierto', cls: 'lead-field', leads: leadsTeam(fieldValues(season).pct, best.pct) },
+      lead: { figure: pctText(pct(t.goals, t.shots)), label: 'acierto', cls: 'lead-field', leads: t.shots >= CONFIG.leaders.minShots && leadsTeam(fieldValues(season).pct, best.pct) },
       second: { figure: decimalText(perMatch(season, t.goals)), label: 'goles por partido' },
       radar: radarSvg(fieldRadar(season, best), pctText(pct(t.goals, t.shots)), '% tiro'),
       titles: { map: 'Mapa de tiros · temporada', radar: 'Perfil frente al equipo', grid: 'Dónde marca' },
-      list: shots, success: isGoal, colours: CARD_ZONE_COLOURS.field, tiles: [['7 m', rates.get(ZONE_P7)], ['Contraataque', rates.get(ZONE_CONTRA)]],
+      list: shots, success: isGoal, counts: anyShot, colours: CARD_ZONE_COLOURS.field, tiles: [['7 m', rates.get(ZONE_P7)], ['Contraataque', rates.get(ZONE_CONTRA)]],
       heads: ['Fecha', 'Rival', 'Res.', 'Goles', '%', 'Pases', 'Pérd.'],
       cells: (r) => `<td>${r.goals}/${r.shots}</td><td>${pctText(pct(r.goals, r.shots))}</td><td>${r.assists}</td><td>${r.turnovers}</td>`,
       barKey: 'goals', barRate: (r) => ratio(r.goals, r.shots)
@@ -4766,7 +4778,7 @@ td.zero { color: var(--faint); }
       second: { figure: decimalText(perMatch(season, t.saves)), label: 'paradas por partido' },
       radar: radarSvg(keeperRadar(season, best), pctText(pct(t.saves, t.onTarget)), '% paradas'),
       titles: { map: 'Paradas por zona de lanzamiento', radar: 'Perfil de portero', grid: 'Dónde para · % por zona de portería' },
-      list: faced, success: isSave, colours: CARD_ZONE_COLOURS.keeper, tiles: [['7 m', rates.get(ZONE_P7)], ['Contraataque', rates.get(ZONE_CONTRA)]],
+      list: faced, success: isSave, counts: onTarget, colours: CARD_ZONE_COLOURS.keeper, tiles: [['7 m', rates.get(ZONE_P7)], ['Contraataque', rates.get(ZONE_CONTRA)]],
       heads: ['Fecha', 'Rival', 'Res.', 'Paradas', '%', '7 m', 'Goles'],
       cells: (r) => { const p7 = zoneRates(r.facedList, isSave).get(ZONE_P7); return `<td>${r.saves}/${r.onTarget}</td><td>${pctText(pct(r.saves, r.onTarget))}</td><td>${p7 ? `${p7.ok}/${p7.n}` : '–'}</td><td>${r.onTarget - r.saves}</td>`; },
       barKey: 'saves', barRate: (r) => ratio(r.saves, r.onTarget)
@@ -4791,7 +4803,7 @@ td.zero { color: var(--faint); }
       <div class="tiles"><div class="tile ${card.lead.cls}"><b>${card.lead.figure}</b><span>${card.lead.label}${card.lead.leads ? ' · el mejor del equipo' : ''}</span></div>
         <div class="tile"><b>${card.second.figure}</b><span>${card.second.label}</span></div></div>${mvp}`;
     return `<div class="player-grid"><div class="player-col">${posterHtml(player, season.mvps, body)}</div>
-      <div class="player-col"><section class="sheet-card zone-map"><h3>${card.titles.map}</h3>${zoneMapSvg(card.list, card.success, card.colours)}
+      <div class="player-col"><section class="sheet-card zone-map"><h3>${card.titles.map}</h3>${zoneMapSvg(card.list, card.success, card.colours, card.counts)}
           <div class="rate-tiles">${card.tiles.map(([label, rate]) => rateTileHtml(label, rate)).join('')}</div></section>
         <section class="sheet-card"><h3>Partidos</h3><div class="table-wrap"><table class="match-table"><thead><tr>${card.heads.map((h) => `<th>${h}</th>`).join('')}</tr></thead><tbody>${rows}</tbody></table></div></section>
         <section class="sheet-card evolution"><h3>Evolución</h3>${evolutionSvg(season.rows.slice().reverse(), card.barKey, card.barRate)}</section></div>
@@ -4840,12 +4852,17 @@ td.zero { color: var(--faint); }
     Object.assign(home.playerDraft, change);
     renderHome();
   }
+  // The picked image belongs to the draft that was open when it was chosen; if that is gone by the time it is ready, it is dropped.
   async function pickPhoto(file) {
+    const { view, playerId, playerDraft } = home;
+    const sameDraft = () => home.view === view && home.playerId === playerId && home.playerDraft === playerDraft;
     try {
-      editDraft({ photo: await photoFromFile(file) });
+      const photo = await photoFromFile(file);
+      if (!sameDraft()) return;
+      editDraft({ photo });
       homeStatus('Foto lista: pulsa «Guardar» para quedártela.');
     } catch (err) {
-      homeStatus(`No se pudo usar la imagen: ${err.message}.`);
+      if (sameDraft()) homeStatus(`No se pudo usar la imagen: ${err.message}.`);
     }
   }
   async function savePlayerCard() {
@@ -4861,6 +4878,7 @@ td.zero { color: var(--faint); }
   }
   function enterMatch(id, saved, dirty) {
     currentMatchId = id;
+    home.season = null;
     writeJson(CURRENT_MATCH_KEY, id);
     state = restoreState(saved);
     setTeamPhotos(home.roster.length ? home.roster : readJson(CACHE_KEY_PREFIX + `players:${team.id}`) || []);
@@ -4900,6 +4918,7 @@ td.zero { color: var(--faint); }
     try {
       const latest = await loadLatestMatch(id);
       storeLocalMatch(id, restartedMatch(restoreState(latest.state)), true);
+      home.season = null;
     } catch (err) {
       homeStatus(`No se pudo reiniciar: ${cloudErrorText(err)}.`);
       return;
@@ -4939,6 +4958,7 @@ td.zero { color: var(--faint); }
     try { await backend.deleteMatch(id); }
     catch (err) { homeStatus(`No se pudo borrar: ${cloudErrorText(err)}.`); return; }
     removeKey(MATCH_KEY_PREFIX + id);
+    home.season = null;
     if (readJson(CURRENT_MATCH_KEY) === id) removeKey(CURRENT_MATCH_KEY);
     await showMatches();
   }
