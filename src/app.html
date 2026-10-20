@@ -770,6 +770,8 @@ td.zero { color: var(--faint); }
     hintMs: 2600,
     // Shot zones by distance from the goal (m): the dashed 9 m line itself already counts as 9 m.
     zones: { nineFromM: 8.7, elevenFromM: 11 },
+    // A leaderboard needs this many shots before a player is ranked on shooting accuracy.
+    leaders: { minShots: 3 },
     // Who usually shoots from a spot (m): wings wide and close to the goal line, pivots close and central, centre backs central.
     shooterZones: { wingDxM: 6, wingDyM: 5, pivotM: 7.5, pivotDxM: 4, centreDxM: 2.8 },
     // An armed panel action waits this long for the player.
@@ -4292,6 +4294,99 @@ td.zero { color: var(--faint); }
     const rows = matches.map((m) => playerMatchRow(m, player)).filter(Boolean);
     const fields = player.pos === 'POR' ? GOALKEEPER_ROW_TOTALS : FIELD_ROW_TOTALS;
     return { rows, totals: Object.fromEntries(fields.map((f) => [f, sumOf(rows, (r) => r[f])])), mvps: rows.filter((r) => r.mvp).length };
+  }
+  // ---- Season figures: zones, rates and radar axes ----
+  const ZONE_P7 = 'P7', ZONE_CONTRA = 'CONTRA';
+  const RING_NEAR = 'near', RING_FAR = 'far';
+  const ON_TARGET_GROUPS = ['GOL', 'PARADA'];
+  const RATE_MIDPOINT = 0.5;
+  const PERCENT = 100;
+  const onTarget = (e) => ON_TARGET_GROUPS.includes(groupOf(e.result));
+  // Where a shot came from: penalty and counter-attack apart, otherwise the lane and whether it was inside the 9 m line.
+  function shotZone(e) {
+    const rival = e.kind === 'RIVAL_SHOT';
+    if (rival ? e.zone === '7M' : e.from === '7M') return ZONE_P7;
+    if (rival ? e.contra : e.zone === 'CONTRA') return ZONE_CONTRA;
+    return `${laneOf(e.origin)}:${goalDistance(e.origin) < CONFIG.zones.nineFromM ? RING_NEAR : RING_FAR}`;
+  }
+  // Shots on target per zone: ok when success(e), n in all.
+  function zoneRates(list, success) {
+    const rates = new Map();
+    list.filter(onTarget).forEach((e) => {
+      const key = shotZone(e), rate = rates.get(key) || { ok: 0, n: 0 };
+      rate.n++;
+      if (success(e)) rate.ok++;
+      rates.set(key, rate);
+    });
+    return rates;
+  }
+  function goalRates(list, success) {
+    const grid = Array.from({ length: GOAL_GRID }, () => Array.from({ length: GOAL_GRID }, () => ({ ok: 0, n: 0 })));
+    list.filter((e) => onTarget(e) && inGoalFace(e.target)).forEach((e) => {
+      const [row, col] = goalCell(e.target);
+      grid[row][col].n++;
+      if (success(e)) grid[row][col].ok++;
+    });
+    return grid;
+  }
+  const ratio = (ok, n) => (n ? ok / n : 0);
+  const perMatch = (season, total) => ratio(total, season.rows.length);
+  const decimalText = (v) => v.toFixed(1).replace('.', ',');
+  const percentText = (v) => `${Math.round(v * PERCENT)}%`;
+  const FIELD_AXES = [
+    { key: 'pct', label: 'Acierto', group: 'act-good', text: percentText },
+    { key: 'goals', label: 'Goles', group: 'act-good', text: decimalText },
+    { key: 'assists', label: 'Asistencias', group: 'act-good', text: decimalText },
+    { key: 'prov7', label: 'Provoca 7 m', group: 'act-good', text: decimalText },
+    { key: 'recoveries', label: 'Recuperaciones', group: 'act-def', text: decimalText },
+    { key: 'blocks', label: 'Blocajes', group: 'act-def', text: decimalText },
+    { key: 'security', label: 'Seguridad', group: 'act-bad', text: decimalText, inverted: true },
+    { key: 'discipline', label: 'Disciplina', group: 'act-rule', text: decimalText, inverted: true }
+  ];
+  const KEEPER_AXES = [
+    { key: 'pct', label: 'Paradas', group: 'act-def', text: percentText },
+    { key: 'near', label: 'Cerca', group: 'act-def', text: percentText },
+    { key: 'far', label: 'Lejos', group: 'act-def', text: percentText },
+    { key: 'p7', label: '7 m', group: 'act-rule', text: percentText },
+    { key: 'contra', label: 'Contra', group: 'act-bad', text: percentText },
+    { key: 'assists', label: 'Asistencias', group: 'act-good', text: decimalText }
+  ];
+  // Raw per-match (or rate) value of every axis; security and discipline are the turnovers and faults per match.
+  function fieldValues(season) {
+    const t = season.totals, per = (total) => perMatch(season, total);
+    return { pct: ratio(t.goals, t.shots), goals: per(t.goals), assists: per(t.assists), prov7: per(t.prov7), recoveries: per(t.recoveries), blocks: per(t.blocks), security: per(t.turnovers), discipline: per(t.faults) };
+  }
+  function keeperValues(season) {
+    const rates = zoneRates(season.rows.flatMap((r) => r.facedList), (e) => e.result === 'PARADA');
+    const saved = (match) => {
+      const r = [...rates].filter(([key]) => match(key)).reduce((sum, [, x]) => ({ ok: sum.ok + x.ok, n: sum.n + x.n }), { ok: 0, n: 0 });
+      return ratio(r.ok, r.n);
+    };
+    return {
+      pct: ratio(season.totals.saves, season.totals.onTarget), near: saved((k) => k.endsWith(`:${RING_NEAR}`)), far: saved((k) => k.endsWith(`:${RING_FAR}`)),
+      p7: saved((k) => k === ZONE_P7), contra: saved((k) => k === ZONE_CONTRA), assists: perMatch(season, season.totals.assists)
+    };
+  }
+  function radar(axes, values, best) {
+    return axes.map(({ key, label, group, text, inverted }) => {
+      const share = best[key] ? clamp(values[key] / best[key], 0, 1) : 0;
+      return { key, label, value: values[key], text: text(values[key]), fraction: inverted ? 1 - share : share, group };
+    });
+  }
+  const fieldRadar = (season, best) => radar(FIELD_AXES, fieldValues(season), best);
+  const keeperRadar = (season, best) => radar(KEEPER_AXES, keeperValues(season), best);
+  // The highest value of every axis among the roster players who played; security and discipline keep the raw worst.
+  function teamBest(matches, roster) {
+    const best = (axes, values, seasons) => Object.fromEntries(axes.map(({ key }) => [key, Math.max(0, ...seasons.map((s) => values(s)[key]))]));
+    const seasons = roster.map((p) => ({ pos: p.pos, season: playerSeason(matches, p) })).filter((s) => s.season.rows.length);
+    const of = (keepers) => seasons.filter((s) => (s.pos === 'POR') === keepers).map((s) => s.season);
+    return { field: best(FIELD_AXES, fieldValues, of(false)), keeper: best(KEEPER_AXES, keeperValues, of(true)) };
+  }
+  // Red at 0, amber at the midpoint, green at 1, mixed from the theme tokens so light and dark both work.
+  function rateColour(fraction) {
+    const f = clamp(fraction, 0, 1);
+    const mix = (to, from, share) => `color-mix(in srgb, ${to} ${share * PERCENT}%, ${from})`;
+    return f <= RATE_MIDPOINT ? mix('var(--dos)', 'var(--act-bad)', f / RATE_MIDPOINT) : mix('var(--act-good)', 'var(--dos)', (f - RATE_MIDPOINT) / (1 - RATE_MIDPOINT));
   }
   async function showMatches() {
     showHomeView('matches');
