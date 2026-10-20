@@ -733,7 +733,8 @@ td.zero { color: var(--faint); }
     minShotLengthUnits: 40,
     swapRadiusUnits: 70,
     palmGuardMs: 600,
-    clockSteps: [-10, -1, 1, 10],
+    // Clock corrections, shown as a minus row and a plus row; taps add up (+30 +5 +1 = 36 s).
+    clockSteps: [-30, -10, -5, -1, 1, 5, 10, 30],
     // Turnover types grouped by what went wrong, one colour per group (coach-editable later)
     turnoverGroups: [
       { label: 'Balón', cls: 'c-to-ball', types: ['Pase', 'Recepción', 'Bote'] },
@@ -1875,7 +1876,7 @@ td.zero { color: var(--faint); }
       <div class="big-time" id="pop-clock">${clockText()}</div>
       <div class="seg" role="group" aria-label="Sentido del reloj">${mode(false, '↑ Ascendente')}${mode(true, '↓ Descendente')}</div>
       <button class="act big ${running ? 'c-error' : 'c-gol'}" type="button" data-clock="toggle">${running ? '⏸ Parar' : '▶ Seguir'}</button>
-      <div class="act-grid four">${CONFIG.clockSteps.map((s) => `<button class="act c-neutral" type="button" data-adjust="${s}">${s > 0 ? '+' : '−'}${Math.abs(s)}s</button>`).join('')}</div>
+      ${[CONFIG.clockSteps.filter((s) => s < 0), CONFIG.clockSteps.filter((s) => s > 0)].map((row) => `<div class="act-grid four">${row.map((s) => `<button class="act c-neutral" type="button" data-adjust="${s}">${s > 0 ? '+' : '−'}${Math.abs(s)}s</button>`).join('')}</div>`).join('')}
       <form class="clock-set" id="clock-set"><input class="in time-in" id="clock-input" type="text" inputmode="numeric" maxlength="6" value="${clockText()}" aria-label="Tiempo exacto (mm:ss)"><button class="act c-dark" type="submit">Fijar</button></form>
       <div class="act-grid two"><button class="act c-neutral" type="button" data-clock="period">${state.clock.period === 1 ? 'Ir a 2ª parte' : 'Volver a 1ª parte'}</button>
         ${state.clock.period === 2 ? `<button class="act c-dark" type="button" data-clock="finish">${state.finished ? 'Resumen final' : 'Terminar partido'}</button>` : '<button class="act c-dark" type="button" data-clock="halftime">Resumen del descanso</button>'}</div>`, anchor);
