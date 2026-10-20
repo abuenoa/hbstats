@@ -452,6 +452,102 @@
         if (!text.includes('Sin partidos todavía') || /NaN|undefined/.test(text) || document.querySelector('.leaders [data-player]')) throw new Error(text.slice(0, 300));
       } finally { backend = real; team.id = savedId; }
     });
+    // ---- Player card ----
+    const cardField = { id: 'ca', num: 5, name: 'Ari', pos: 'EXT', fullName: 'Ari Gómez Ruiz' }, cardKeeper = { id: 'cg', num: 1, name: 'Gus', pos: 'POR' };
+    const cardMatch = (over) => seasonRow('cm1', { players: [cardField, cardKeeper], events: [seasonShot('ca', 'GOL'), seasonShot('ca', 'GOL'), seasonShot('ca', 'GOL', 'CONTRA'), seasonShot('ca', 'PARADA'), seasonRivalShot('cg', 'PARADA'), seasonRivalShot('cg', 'PARADA'), seasonRivalShot('cg', 'GOL'), { ...seasonRivalShot('cg', 'PARADA'), zone: '7M' }, { ...seasonRivalShot('cg', 'GOL'), zone: '7M' }].map((e) => ({ origin: m(0, 10), target: gf(0.5, 0.5), ...e })), ...over });
+    const openCard = (id, matches) => { home.roster = [cardField, cardKeeper]; home.season = matches; showHomeView('team'); document.querySelector(`.squad [data-player="${id}"]`).click(); };
+    await TA('player card: tapping a face opens the card with sentences and radar', async () => {
+      const keep = { roster: home.roster, season: home.season };
+      try {
+        openCard('ca', [cardMatch()]);
+        if (home.view !== 'player' || home.playerId !== 'ca' || !document.querySelector('.player-page .poster')) throw new Error(home.view);
+        const text = $('home').textContent;
+        ['3 goles en 4 lanzamientos', '1 partido jugado', '0 pérdidas', '1 gol al contraataque', 'Ari', 'Ari Gómez Ruiz', 'Extremo', '#5'].forEach((s) => { if (!text.includes(s)) throw new Error('missing «' + s + '»: ' + text.slice(0, 400)); });
+        if (!document.querySelector('.player-page .radar svg') || !document.querySelector('.radar').textContent.includes('75%')) throw new Error('radar');
+        if (!document.querySelector('.player-page .zone-map svg') || !document.querySelector('.player-page .goal-chart svg') || !document.querySelector('.player-page .evolution svg')) throw new Error('charts');
+        const lead = document.querySelector('.tile.lead-field');
+        if (!lead || !lead.textContent.includes('el mejor del equipo') || !lead.textContent.includes('75%')) throw new Error('lead tile');
+        if (document.querySelectorAll('.match-table tbody tr').length !== 1 || /NaN|undefined/.test(text)) throw new Error('rows or NaN');
+        if (!document.querySelector('.player-bar [data-home-view="team"]').textContent.includes(`‹ ${team.name}`)) throw new Error('back button');
+      } finally { Object.assign(home, keep); }
+    });
+    await TA('player card: goalkeeper card uses keeper sentences and radar', async () => {
+      const keep = { roster: home.roster, season: home.season };
+      try {
+        openCard('cg', [cardMatch()]);
+        const text = $('home').textContent;
+        ['3 paradas de 5 a puerta', '1 de 2 penaltis parados', '2 goles encajados', '1 partido jugado'].forEach((s) => { if (!text.includes(s)) throw new Error('missing «' + s + '»: ' + text.slice(0, 400)); });
+        if (!document.querySelector('.tile.lead-keeper') || !document.querySelector('.radar').textContent.includes('60%') || !document.querySelector('.radar').textContent.includes('Cerca')) throw new Error('keeper radar');
+        const heads = [...document.querySelectorAll('.match-table th')].map((th) => th.textContent).join();
+        if (!heads.includes('Paradas') || !heads.includes('7 m') || heads.includes('Pérd.')) throw new Error(heads);
+        if (document.querySelectorAll('.rate-tile').length !== 2) throw new Error('7 m and counter tiles');
+      } finally { Object.assign(home, keep); }
+    });
+    await TA('player card: MVP crown and tile appear only with an MVP', async () => {
+      const keep = { roster: home.roster, season: home.season };
+      try {
+        openCard('ca', [cardMatch()]);
+        if (document.querySelector('.poster .crown-face') || document.querySelector('.mvp-tile') || document.querySelector('.mvp-row')) throw new Error('crown without MVP');
+        openCard('ca', [cardMatch({ mvpId: 'ca' }), seasonRow('cm2', { players: [cardField], date: '2026-09-01' })]);
+        if (!document.querySelector('.poster .crown-face') || document.querySelectorAll('.mvp-row').length !== 1 || document.querySelectorAll('.mvp-row .crown-face').length !== 1) throw new Error('crown');
+        if (!document.querySelector('.mvp-tile').textContent.includes('MVP del partido · 1 de 2 partidos')) throw new Error(document.querySelector('.mvp-tile').textContent);
+      } finally { Object.assign(home, keep); }
+    });
+    await TA('player card: no matches shows the empty text', async () => {
+      const keep = { roster: home.roster, season: home.season };
+      try {
+        openCard('ca', []);
+        const text = $('home').textContent;
+        if (!text.includes('Sin partidos todavía') || !document.querySelector('.poster') || document.querySelector('.radar, .zone-map, .match-table') || /NaN|undefined/.test(text)) throw new Error(text.slice(0, 300));
+        const real = backend;
+        try { backend = { listMatchStates: async () => [] }; showPlayer('nobody'); for (let i = 0; i < 5; i++) await tick0(); } finally { backend = real; }
+        if (home.view !== 'team') throw new Error('unknown player: ' + home.view);
+      } finally { Object.assign(home, keep); }
+    });
+    const openEdit = async (p) => { await selectTeam(team); showPlayer(p.id); document.querySelector('[data-player-edit]').click(); if (!$('player-name')) throw new Error('edit panel closed'); };
+    const saveCard = async () => { document.querySelector('[data-player-save]').click(); for (let i = 0; i < 5; i++) await tick0(); };
+    await TA('player card: edit saves court name, card name and position', async () => {
+      await selectTeam(team);
+      const p = home.roster.find((x) => x.pos !== 'POR');
+      await openEdit(p);
+      $('player-name').value = 'Nuria'; $('player-full').value = 'Nuria Pérez Lara';
+      document.querySelector(`[data-player-pos="${p.id}:PIV"]`).click();
+      if ($('player-name').value !== 'Nuria') throw new Error('typed text lost on position tap');
+      await saveCard();
+      const stored = (await backend.listPlayers(team.id)).find((x) => x.id === p.id);
+      if (stored.name !== 'Nuria' || stored.fullName !== 'Nuria Pérez Lara' || stored.pos !== 'PIV') throw new Error(JSON.stringify(stored));
+      if ($('player-name') || home.view !== 'player' || !$('home').textContent.includes('Nuria Pérez Lara') || !$('home-status').textContent.includes('Ficha guardada')) throw new Error('panel stays open or card not refreshed');
+      document.querySelector('[data-player-edit]').click(); $('player-name').value = '  '; await saveCard();
+      if (rosterPlayer(p.id).name !== 'Nuria' || !$('player-name') || !$('home-status').textContent.includes('vacío')) throw new Error('empty name accepted');
+    });
+    await TA('player card: a taken dorsal is refused and nothing changes', async () => {
+      await selectTeam(team);
+      const [a, b] = home.roster;
+      await openEdit(b);
+      $('player-num').value = String(a.num); $('player-name').value = 'Otro';
+      await saveCard();
+      const stored = (await backend.listPlayers(team.id)).find((x) => x.id === b.id);
+      if (stored.num !== b.num || stored.name !== b.name || rosterPlayer(b.id).num !== b.num) throw new Error('changed');
+      if (!$('player-name') || $('player-name').value !== 'Otro' || !$('home-status').textContent.includes('ya está')) throw new Error('panel or message: ' + $('home-status').textContent);
+    });
+    await TA('player card: photo upload becomes a small square jpeg', async () => {
+      const c = document.createElement('canvas'); c.width = 300; c.height = 200; c.getContext('2d').fillRect(0, 0, 300, 200);
+      const blob = await new Promise((r) => c.toBlob(r, 'image/png'));
+      const photo = await photoFromFile(new File([blob], 'f.png', { type: 'image/png' }));
+      if (!/^data:image\/jpeg;base64,/.test(photo) || photo.length >= MAX_PHOTO_LENGTH) throw new Error(photo.slice(0, 30) + ' ' + photo.length);
+      const img = new Image(); img.src = photo; await img.decode();
+      if (img.width !== CONFIG.photoSizePx || img.height !== CONFIG.photoSizePx || CONFIG.photoSizePx !== 128) throw new Error(img.width + 'x' + img.height);
+      let refused = false; try { await photoFromFile(new File(['x'], 'f.gif', { type: 'image/gif' })); } catch (err) { refused = /PNG/.test(err.message); }
+      if (!refused) throw new Error('gif accepted');
+      await selectTeam(team);
+      const p = home.roster[0];
+      await openEdit(p);
+      await pickPhoto(new File([blob], 'f.png', { type: 'image/png' }));
+      await saveCard();
+      if (!/^data:image\/jpeg/.test(rosterPlayer(p.id).photo || '') || !photoOf(p.id)) throw new Error('not saved or faces not refreshed');
+      document.querySelector('[data-player-edit]').click(); document.querySelector('[data-player-photo-clear]').click(); await saveCard();
+      if (rosterPlayer(p.id).photo || photoOf(p.id) || (await backend.listPlayers(team.id)).find((x) => x.id === p.id).photo) throw new Error('photo not removed');
+    });
     await TA('crest upload becomes a small square PNG', async () => { showHomeView('team-edit'); const c = document.createElement('canvas'); c.width = 300; c.height = 200; c.getContext('2d').fillRect(0, 0, 300, 200); const blob = await new Promise((r) => c.toBlob(r, 'image/png')); await pickCrest(new File([blob], 'e.png', { type: 'image/png' })); if (!IMAGE_DATA_URL.test(home.crestDraft || '')) throw new Error('not a data url'); const img = new Image(); img.src = home.crestDraft; await img.decode(); if (img.width !== CREST_SIZE_PX || img.height !== CREST_SIZE_PX) throw new Error(img.width + 'x' + img.height); await pickCrest(new File(['x'], 'e.gif', { type: 'image/gif' })); if (!$('home-status').textContent.includes('PNG')) throw new Error('gif accepted'); });
     await TA('a coach adds a second team; rosters and matches stay apart; switch between them', async () => { await showMatches(); const first = team; const firstMatches = home.matches.length; if (!firstMatches) throw new Error('first team has no matches to compare'); await showProfile(); document.querySelector('[data-new-team]').click(); if (home.view !== 'team-new' || !document.querySelector('[data-cancel-team]')) throw new Error('no new-team form'); document.querySelector('[data-cancel-team]').click(); await tick0(); if (home.view !== 'profile' || team.id !== first.id) throw new Error('cancel'); document.querySelector('[data-new-team]').click(); $('team-club').value = 'CB Ejemplo'; $('team-name').value = 'Ejemplo Fem'; await submitTeam(document.querySelector('[data-form="team-new"]'), true); if (team.name !== 'Ejemplo Fem' || home.teams.length !== 2) throw new Error('not created'); await showMatches(); if (home.roster.length || home.matches.length) throw new Error('shares data with the first team'); document.querySelector('[data-home-view="profile"]').click(); for (let i = 0; i < 5; i++) await tick0(); if (home.view !== 'profile' || document.querySelectorAll('[data-open-team]').length !== 2) throw new Error('profile teams'); document.querySelector(`[data-open-team="${first.id}"]`).click(); for (let i = 0; i < 5; i++) await tick0(); await showMatches(); if (team.id !== first.id || home.matches.length !== firstMatches || !home.roster.length) throw new Error('switch back'); });
     await TA('deleting a team asks twice and opens the remaining one', async () => { const other = home.teams.find((x) => x.id !== team.id); await selectTeam(other); showHomeView('team-edit'); document.querySelector('[data-delete-team]').click(); if (home.teams.length !== 2) throw new Error('deleted on first tap'); document.querySelector('[data-delete-team]').click(); for (let i = 0; i < 5; i++) await tick0(); if (home.teams.length !== 1 || home.view !== 'profile' || document.querySelector(`[data-open-team="${other.id}"]`)) throw new Error('not deleted'); if ((await backend.listTeams()).some((x) => x.id === other.id)) throw new Error('still in backend'); });

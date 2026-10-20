@@ -684,6 +684,51 @@ td.zero { color: var(--faint); }
 .face .disc, .last-match .disc { width: 56px; height: 56px; font-size: 22px; }
 .face .disc { box-shadow: 0 0 0 3px var(--pos); }
 .squad .row-actions { margin-top: 14px; }
+/* Player card: poster, sentences, charts, per-match table, edit panel */
+.player-page { display: grid; gap: 14px; }
+.player-bar { display: flex; justify-content: space-between; gap: 10px; }
+.player-bar [data-player-edit][aria-pressed="true"] { background: var(--gold); border-color: var(--gold); color: #151515; }
+.player-grid { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.5fr) minmax(0, 1fr); gap: 14px; align-items: start; }
+.player-col { display: grid; gap: 14px; min-width: 0; }
+.poster { position: relative; overflow: hidden; display: grid; gap: 6px; background: linear-gradient(160deg, color-mix(in srgb, var(--pos) 28%, var(--surface)), var(--surface) 60%); }
+.poster > :not(.poster-dorsal) { position: relative; }
+.poster-dorsal { position: absolute; right: -14px; top: -34px; font-family: var(--font-display); font-weight: 800; font-size: 280px; line-height: 1; color: var(--fg); opacity: .07; pointer-events: none; }
+.poster-face { justify-self: start; display: inline-flex; margin: 18px 0 0 10px; }
+.poster-face .disc { width: 150px; height: 150px; font-size: 64px; box-shadow: 0 0 0 5px var(--pos); }
+.poster-face .disc.photo b { min-width: 34px; font-size: 20px; line-height: 32px; right: -2px; bottom: 2px; }
+.poster-face .crown-face { left: -14px; top: -28px; width: 70px; }
+.poster-name { margin: 10px 0 0; font-family: var(--font-display); font-weight: 800; font-size: 56px; line-height: 1; text-transform: uppercase; overflow-wrap: anywhere; }
+.poster-sub { margin: 0; color: var(--muted); }
+.sentences { display: grid; gap: 4px; margin-top: 12px; font-size: 18px; color: var(--muted); }
+.sentences p { margin: 0; }
+.sentences b { font-family: var(--font-display); font-weight: 800; font-size: 30px; color: var(--gold); font-variant-numeric: tabular-nums; }
+.tiles { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-top: 14px; }
+.tile { display: grid; gap: 2px; align-content: start; padding: 12px; border-radius: 14px; background: var(--soft); min-width: 0; }
+.tile b, .rate-tile b, .mvp-tile b { font-family: var(--font-display); font-weight: 800; font-size: 34px; line-height: 1.1; font-variant-numeric: tabular-nums; }
+.tile span, .rate-tile span, .mvp-tile span { font-size: 12px; color: var(--muted); }
+.tile.lead-field { background: var(--brand); color: var(--brand-ink); }
+.tile.lead-keeper { background: var(--parada); color: #fff; }
+.tile.lead-field span, .tile.lead-keeper span { color: inherit; opacity: .9; }
+.mvp-tile { display: flex; align-items: center; gap: 10px; margin-top: 8px; padding: 10px 12px; border-radius: 14px; border: 1px solid var(--gold); background: color-mix(in srgb, var(--gold) 14%, transparent); }
+.mvp-tile svg { width: 52px; height: auto; flex: none; }
+.mvp-tile b { color: var(--gold); }
+.rate-tiles { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-top: 10px; }
+.rate-tile { display: grid; gap: 2px; padding: 12px 14px; border-radius: 14px; background: var(--soft); color: #fff; }
+.rate-tile span { color: inherit; opacity: .9; }
+.rate-tile.none { color: var(--muted); }
+.zone-map svg, .goal-chart svg, .radar svg, .evolution svg { display: block; width: 100%; height: auto; }
+.match-table { font-size: 13px; }
+.match-table th, .match-table td { padding: 8px 5px; }
+.match-table .res-G { background: none; color: var(--act-good); font-weight: 800; }
+.match-table .res-E { background: none; color: var(--dos); font-weight: 800; }
+.match-table .res-P { background: none; color: var(--act-bad); font-weight: 800; }
+.mvp-row { background: linear-gradient(90deg, color-mix(in srgb, var(--gold) 22%, transparent), transparent); }
+.mvp-row td:first-child { position: relative; padding-left: 30px; }
+.mvp-row .crown-face { left: 0; top: 2px; width: 26px; filter: none; }
+.player-fields { display: grid; grid-template-columns: 1fr 100px 1fr; gap: 10px; margin-bottom: 10px; }
+.player-edit .pos-pick, .player-edit .row-actions { margin-top: 10px; }
+@media (max-width: 1100px) { .player-grid { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); } .player-grid > :last-child { grid-column: 1 / -1; } }
+@media (max-width: 700px) { .player-grid, .player-fields { grid-template-columns: minmax(0, 1fr); } }
 @media (max-width: 1100px) { .team-page { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); } .squad { grid-column: 1 / -1; } }
 @media (max-width: 700px) { .team-page { grid-template-columns: minmax(0, 1fr); } }
 @media (max-width: 900px) { .team-layout { grid-template-columns: minmax(0, 1fr); } }
@@ -811,6 +856,7 @@ td.zero { color: var(--faint); }
 <div class="home" id="home" role="dialog" aria-label="HBStats" hidden></div>
 <input type="file" id="roster-file" accept=".json,application/json" hidden>
 <input type="file" id="crest-file" accept="image/png,image/jpeg,image/webp" hidden>
+<input type="file" id="photo-file" accept="image/png,image/jpeg,image/webp" hidden>
 
 <script>
 (() => {
@@ -833,6 +879,8 @@ td.zero { color: var(--faint); }
     zones: { nineFromM: 8.7, elevenFromM: 11 },
     // A leaderboard needs this many shots before a player is ranked on shooting accuracy.
     leaders: { minShots: 3 },
+    // Player photos are kept as small square JPEGs this wide.
+    photoSizePx: 128,
     // Who usually shoots from a spot (m): wings wide and close to the goal line, pivots close and central, centre backs central.
     shooterZones: { wingDxM: 6, wingDyM: 5, pivotM: 7.5, pivotDxM: 4, centreDxM: 2.8 },
     // An armed panel action waits this long for the player.
@@ -3799,7 +3847,7 @@ td.zero { color: var(--faint); }
   let backend = null;
   let currentMatchId = null;
   let syncTimer = null;
-  const home = { view: 'loading', user: null, teams: [], roster: [], matches: [], season: [], templates: [], template: null, squad: new Set(), leaderMetric: 'goals', offline: false, error: '', draft: null, crestDraft: undefined, armed: null, passwordChange: false };
+  const home = { view: 'loading', user: null, teams: [], roster: [], matches: [], season: [], templates: [], template: null, squad: new Set(), leaderMetric: 'goals', playerId: null, playerEdit: false, playerDraft: null, offline: false, error: '', draft: null, crestDraft: undefined, armed: null, passwordChange: false };
 
   // ---- Device storage ----
   function readJson(key) {
@@ -4075,17 +4123,27 @@ td.zero { color: var(--faint); }
     $('bar-crest').src = crestSrc(t);
     document.title = `${t.name} · HBStats`;
   }
+  const IMAGE_FILE_TYPE = /^image\/(png|jpeg|webp)$/;
+  const IMAGE_QUALITY = 0.85, JPEG_BACKDROP = '#fff';
   // A square crop of the uploaded image, small enough to keep with the team (and offline).
-  async function crestFromFile(file) {
-    if (!/^image\/(png|jpeg|webp)$/.test(file.type)) throw new Error('el escudo tiene que ser una imagen PNG, JPG o WebP');
+  async function imageFromFile(file, sizePx, type) {
+    if (!IMAGE_FILE_TYPE.test(file.type)) throw new Error('la imagen tiene que ser PNG, JPG o WebP');
     const bitmap = await createImageBitmap(file);
     const side = Math.min(bitmap.width, bitmap.height);
     const canvas = document.createElement('canvas');
-    canvas.width = CREST_SIZE_PX;
-    canvas.height = CREST_SIZE_PX;
-    canvas.getContext('2d').drawImage(bitmap, (bitmap.width - side) / 2, (bitmap.height - side) / 2, side, side, 0, 0, CREST_SIZE_PX, CREST_SIZE_PX);
+    canvas.width = sizePx;
+    canvas.height = sizePx;
+    const context = canvas.getContext('2d');
+    if (type === 'image/jpeg') { context.fillStyle = JPEG_BACKDROP; context.fillRect(0, 0, sizePx, sizePx); }
+    context.drawImage(bitmap, (bitmap.width - side) / 2, (bitmap.height - side) / 2, side, side, 0, 0, sizePx, sizePx);
     bitmap.close();
-    return canvas.toDataURL('image/png');
+    return canvas.toDataURL(type, IMAGE_QUALITY);
+  }
+  const crestFromFile = (file) => imageFromFile(file, CREST_SIZE_PX, 'image/png');
+  async function photoFromFile(file) {
+    const photo = await imageFromFile(file, CONFIG.photoSizePx, 'image/jpeg');
+    if (photo.length > MAX_PHOTO_LENGTH) throw new Error('la foto es demasiado grande');
+    return photo;
   }
 
   // ---- Home screen ----
@@ -4140,7 +4198,7 @@ td.zero { color: var(--faint); }
     </form>`;
   }
   function homeHeadHtml() {
-    const tab = (view, label) => `<button class="press" type="button" data-home-view="${view}" aria-pressed="${home.view === view || (view === 'matches' && home.view === 'squad') || (view === 'team' && home.view === 'team-edit')}">${label}</button>`;
+    const tab = (view, label) => `<button class="press" type="button" data-home-view="${view}" aria-pressed="${home.view === view || (view === 'matches' && home.view === 'squad') || (view === 'team' && ['team-edit', 'player'].includes(home.view))}">${label}</button>`;
     return `<header class="home-head glass">
       <button class="btn press" type="button" data-home-view="profile">‹ Perfil</button>
       <img class="crest home-crest" src="${esc(crestSrc(team))}" alt="">
@@ -4212,7 +4270,7 @@ td.zero { color: var(--faint); }
         ${problem ? `<span class="note">${problem}</span>` : ''}</div>
       <div class="squad-grid">${home.roster.slice().sort(byPosition).map(chip).join('')}</div>`;
   }
-  const HOME_VIEWS = { team: teamPageHtml, 'team-edit': teamEditHtml, matches: matchesHtml, squad: squadHtml };
+  const HOME_VIEWS = { team: teamPageHtml, player: playerPageHtml, 'team-edit': teamEditHtml, matches: matchesHtml, squad: squadHtml };
 
   // ---- Profile: the first screen after signing in (teams, rival templates, account) ----
   const profileHeadHtml = () => `<header class="home-head glass"><span class="app-mark" aria-hidden="true">HB</span>
@@ -4667,7 +4725,134 @@ td.zero { color: var(--faint); }
       home.offline = true;
       console.warn(`Season not available: ${cloudErrorText(err)}`);
     }
-    if (home.view === 'team') renderHome();
+    if (['team', 'player'].includes(home.view)) renderHome();
+  }
+  // ---- Player card: the season of one player, and «Editar ficha» ----
+  const unit = (n, one, many) => `<b>${n}</b> ${n === 1 ? one : many}`;
+  const CARD_ZONE_COLOURS = {
+    field: { GOL: 'var(--gol)', PARADA: 'var(--parada)', FALLO: 'var(--fallo)' },
+    keeper: { PARADA: 'var(--gol)', GOL: 'var(--red)', FALLO: 'var(--fallo)' }
+  };
+  const isGoal = (e) => e.result === 'GOL', isSave = (e) => e.result === 'PARADA';
+  const rateTileHtml = (label, rate) => (rate
+    ? `<div class="rate-tile" style="background:${rateColour(rate.ok / rate.n)}"><b>${rateText(rate.ok, rate.n)}</b><span>${label} · ${rate.ok}/${rate.n}</span></div>`
+    : `<div class="rate-tile none"><b>–</b><span>${label}</span></div>`);
+  // What differs between a field player's card and a goalkeeper's; `best` is the team best of the player's kind.
+  function fieldCard(season, best) {
+    const t = season.totals, shots = season.rows.flatMap((r) => r.shotsList), rates = zoneRates(shots, isGoal);
+    const counterGoals = shots.filter((e) => isGoal(e) && shotZone(e) === ZONE_CONTRA).length;
+    return {
+      sentences: [`${unit(t.goals, 'gol', 'goles')} en ${unit(t.shots, 'lanzamiento', 'lanzamientos')}`, unit(season.rows.length, 'partido jugado', 'partidos jugados'), unit(t.turnovers, 'pérdida', 'pérdidas'), unit(counterGoals, 'gol al contraataque', 'goles al contraataque')],
+      lead: { figure: pctText(pct(t.goals, t.shots)), label: 'acierto', cls: 'lead-field', leads: leadsTeam(fieldValues(season).pct, best.pct) },
+      second: { figure: decimalText(perMatch(season, t.goals)), label: 'goles por partido' },
+      radar: radarSvg(fieldRadar(season, best), pctText(pct(t.goals, t.shots)), '% tiro'),
+      titles: { map: 'Mapa de tiros · temporada', radar: 'Perfil frente al equipo', grid: 'Dónde marca' },
+      list: shots, success: isGoal, colours: CARD_ZONE_COLOURS.field, tiles: [['7 m', rates.get(ZONE_P7)], ['Contraataque', rates.get(ZONE_CONTRA)]],
+      heads: ['Fecha', 'Rival', 'Res.', 'Goles', '%', 'Pases', 'Pérd.'],
+      cells: (r) => `<td>${r.goals}/${r.shots}</td><td>${pctText(pct(r.goals, r.shots))}</td><td>${r.assists}</td><td>${r.turnovers}</td>`,
+      barKey: 'goals', barRate: (r) => ratio(r.goals, r.shots)
+    };
+  }
+  function keeperCard(season, best) {
+    const t = season.totals, faced = season.rows.flatMap((r) => r.facedList), rates = zoneRates(faced, isSave), penalties = rates.get(ZONE_P7) || { ok: 0, n: 0 };
+    return {
+      sentences: [`${unit(t.saves, 'parada', 'paradas')} de <b>${t.onTarget}</b> a puerta`, `<b>${penalties.ok}</b> de <b>${penalties.n}</b> ${penalties.n === 1 ? 'penalti parado' : 'penaltis parados'}`, unit(t.onTarget - t.saves, 'gol encajado', 'goles encajados'), unit(season.rows.length, 'partido jugado', 'partidos jugados')],
+      lead: { figure: pctText(pct(t.saves, t.onTarget)), label: 'paradas · temporada', cls: 'lead-keeper', leads: leadsTeam(keeperValues(season).pct, best.pct) },
+      second: { figure: decimalText(perMatch(season, t.saves)), label: 'paradas por partido' },
+      radar: radarSvg(keeperRadar(season, best), pctText(pct(t.saves, t.onTarget)), '% paradas'),
+      titles: { map: 'Paradas por zona de lanzamiento', radar: 'Perfil de portero', grid: 'Dónde para · % por zona de portería' },
+      list: faced, success: isSave, colours: CARD_ZONE_COLOURS.keeper, tiles: [['7 m', rates.get(ZONE_P7)], ['Contraataque', rates.get(ZONE_CONTRA)]],
+      heads: ['Fecha', 'Rival', 'Res.', 'Paradas', '%', '7 m', 'Goles'],
+      cells: (r) => { const p7 = zoneRates(r.facedList, isSave).get(ZONE_P7); return `<td>${r.saves}/${r.onTarget}</td><td>${pctText(pct(r.saves, r.onTarget))}</td><td>${p7 ? `${p7.ok}/${p7.n}` : '–'}</td><td>${r.onTarget - r.saves}</td>`; },
+      barKey: 'saves', barRate: (r) => ratio(r.saves, r.onTarget)
+    };
+  }
+  // The player leads a rate when it is above zero and nobody who played has a higher one.
+  const leadsTeam = (own, best) => own > 0 && own >= best;
+  function posterHtml(player, mvps, body = '') {
+    const pos = posOf(player);
+    return `<section class="sheet-card poster" style="--pos:${pos.color}"><span class="poster-dorsal" aria-hidden="true">${player.num}</span>
+      <span class="poster-face">${discHtml(player, pos)}${mvps ? crownSvg('crown-face') : ''}</span>
+      <h2 class="poster-name">${esc(player.name)}</h2>
+      <p class="poster-sub">${player.fullName ? `${esc(player.fullName)} · ` : ''}${pos.label} · #${player.num}</p>${body}</section>`;
+  }
+  function playerSeasonHtml(player, season) {
+    const best = teamBest(home.season, home.roster);
+    const keeper = player.pos === 'POR';
+    const card = keeper ? keeperCard(season, best.keeper) : fieldCard(season, best.field);
+    const rows = season.rows.map((r) => `<tr${r.mvp ? ' class="mvp-row"' : ''}><td>${r.mvp ? crownSvg('crown-face') : ''}${esc(dateText(r.date))}</td><td>${esc(r.them)}</td><td class="${resultClass(r)}">${r.scoreUs}–${r.scoreThem}</td>${card.cells(r)}</tr>`).join('');
+    const mvp = season.mvps ? `<div class="mvp-tile">${crownSvg()}<b>${season.mvps}</b> <span>MVP del partido · ${season.mvps} de ${season.rows.length} partidos</span></div>` : '';
+    const body = `<div class="sentences">${card.sentences.map((x) => `<p>${x}</p>`).join('')}</div>
+      <div class="tiles"><div class="tile ${card.lead.cls}"><b>${card.lead.figure}</b><span>${card.lead.label}${card.lead.leads ? ' · el mejor del equipo' : ''}</span></div>
+        <div class="tile"><b>${card.second.figure}</b><span>${card.second.label}</span></div></div>${mvp}`;
+    return `<div class="player-grid"><div class="player-col">${posterHtml(player, season.mvps, body)}</div>
+      <div class="player-col"><section class="sheet-card zone-map"><h3>${card.titles.map}</h3>${zoneMapSvg(card.list, card.success, card.colours)}
+          <div class="rate-tiles">${card.tiles.map(([label, rate]) => rateTileHtml(label, rate)).join('')}</div></section>
+        <section class="sheet-card"><h3>Partidos</h3><div class="table-wrap"><table class="match-table"><thead><tr>${card.heads.map((h) => `<th>${h}</th>`).join('')}</tr></thead><tbody>${rows}</tbody></table></div></section>
+        <section class="sheet-card evolution"><h3>Evolución</h3>${evolutionSvg(season.rows.slice().reverse(), card.barKey, card.barRate)}</section></div>
+      <div class="player-col"><section class="sheet-card radar"><h3>${card.titles.radar}</h3>${card.radar}</section>
+        <section class="sheet-card goal-chart"><h3>${card.titles.grid}</h3>${goalRateSvg(card.list, card.success)}</section></div></div>`;
+  }
+  function playerEditHtml(player) {
+    const d = home.playerDraft;
+    const photoNote = d.photo === undefined ? '' : d.photo ? 'Foto nueva: pulsa «Guardar» para quedártela.' : 'Se quitará la foto al guardar.';
+    return `<section class="sheet-card player-edit"><h3>Editar ficha</h3>
+      <div class="player-fields">
+        <label class="field">Nombre en pista<input class="in" type="text" id="player-name" maxlength="${MAX_NAME_LENGTH}" value="${esc(d.name)}"></label>
+        <label class="field">Dorsal<input class="in num" type="number" inputmode="numeric" id="player-num" min="${DORSAL_RANGE[0]}" max="${DORSAL_RANGE[1]}" value="${esc(d.num)}"></label>
+        <label class="field">Nombre en el acta<input class="in" type="text" id="player-full" maxlength="${MAX_FULL_NAME_LENGTH}" value="${esc(d.fullName)}"></label>
+      </div>
+      <div class="pos-pick" role="group" aria-label="Puesto">${posButtons({ id: player.id, pos: d.pos }, 'data-player-pos')}</div>
+      <div class="row-actions"><button class="btn press" type="button" data-player-photo>Subir foto</button><button class="btn press" type="button" data-player-photo-clear>Quitar foto</button><span class="note">${photoNote}</span></div>
+      <div class="row-actions"><button class="btn primary press" type="button" data-player-save>Guardar</button></div></section>`;
+  }
+  function playerPageHtml() {
+    const player = rosterPlayer(home.playerId);
+    if (home.season === null) return '<p class="note">Cargando…</p>';
+    const season = playerSeason(home.season, player);
+    const body = season.rows.length ? playerSeasonHtml(player, season) : `<div class="player-grid"><div class="player-col">${posterHtml(player, 0)}</div></div><p class="note">Sin partidos todavía</p>`;
+    return `${statusHtml()}<div class="player-page"><div class="player-bar"><button class="btn press" type="button" data-home-view="team">‹ ${esc(team.name)}</button>
+      <button class="btn press" type="button" data-player-edit aria-pressed="${home.playerEdit}">Editar ficha</button></div>${home.playerEdit ? playerEditHtml(player) : ''}${body}</div>`;
+  }
+  function showPlayer(id) {
+    if (!rosterPlayer(id)) { showTeamPage(); return; }
+    Object.assign(home, { playerId: id, playerEdit: false, playerDraft: null });
+    showHomeView('player');
+  }
+  // Keeps what is typed in the panel before a tap re-renders it.
+  function captureDraft() {
+    if (!home.playerEdit) return;
+    Object.assign(home.playerDraft, { name: $('player-name').value, num: $('player-num').value, fullName: $('player-full').value });
+  }
+  function toggleEdit() {
+    const player = rosterPlayer(home.playerId);
+    home.playerEdit = !home.playerEdit;
+    home.playerDraft = home.playerEdit ? { name: player.name, num: String(player.num), fullName: player.fullName || '', pos: player.pos, photo: undefined } : null;
+    renderHome();
+  }
+  function editDraft(change) {
+    captureDraft();
+    Object.assign(home.playerDraft, change);
+    renderHome();
+  }
+  async function pickPhoto(file) {
+    try {
+      editDraft({ photo: await photoFromFile(file) });
+      homeStatus('Foto lista: pulsa «Guardar» para quedártela.');
+    } catch (err) {
+      homeStatus(`No se pudo usar la imagen: ${err.message}.`);
+    }
+  }
+  async function savePlayerCard() {
+    captureDraft();
+    const d = home.playerDraft;
+    const changes = { name: d.name.trim().slice(0, MAX_NAME_LENGTH), num: Number(d.num), fullName: d.fullName.trim().slice(0, MAX_FULL_NAME_LENGTH), pos: d.pos };
+    if (d.photo !== undefined) changes.photo = d.photo;
+    if (!(await saveTeamPlayer(rosterPlayer(home.playerId), changes))) return;
+    setTeamPhotos(home.roster);
+    Object.assign(home, { playerEdit: false, playerDraft: null });
+    renderHome();
+    homeStatus('Ficha guardada.');
   }
   function enterMatch(id, saved, dirty) {
     currentMatchId = id;
@@ -4825,19 +5010,22 @@ td.zero { color: var(--faint); }
     }
   }
   const rosterPlayer = (id) => home.roster.find((p) => p.id === id);
+  // Resolves to whether the player was saved; a refusal is shown through homeStatus.
   async function saveTeamPlayer(player, changes) {
     const next = { ...player, ...changes };
     const problem = dorsalProblem(home.roster, next.num, player.id);
-    if (problem) { renderHome(); homeStatus(problem); return; }
-    if (!next.name) { renderHome(); homeStatus('El nombre no puede quedar vacío.'); return; }
+    if (problem) { renderHome(); homeStatus(problem); return false; }
+    if (!next.name) { renderHome(); homeStatus('El nombre no puede quedar vacío.'); return false; }
     try {
       const saved = await backend.savePlayer(team.id, next);
       home.roster = player.id ? home.roster.map((p) => (p.id === saved.id ? saved : p)) : [...home.roster, saved];
       writeJson(CACHE_KEY_PREFIX + `players:${team.id}`, home.roster);
       renderHome();
+      return true;
     } catch (err) {
       renderHome();
       homeStatus(`No se pudo guardar: ${cloudErrorText(err)}.`);
+      return false;
     }
   }
   async function addTeamPlayer() {
@@ -5035,6 +5223,12 @@ td.zero { color: var(--faint); }
     if (b.hasAttribute('data-sign-out')) { signOut(); return; }
     if (b.dataset.homeView === 'matches') { showMatches(); return; }
     if (b.dataset.homeView === 'team') { home.crestDraft = undefined; showTeamPage(); return; }
+    if (b.dataset.player) { showPlayer(b.dataset.player); return; }
+    if (b.hasAttribute('data-player-edit')) { toggleEdit(); return; }
+    if (b.dataset.playerPos) { editDraft({ pos: b.dataset.playerPos.split(':')[1] }); return; }
+    if (b.hasAttribute('data-player-photo')) { $('photo-file').click(); return; }
+    if (b.hasAttribute('data-player-photo-clear')) { editDraft({ photo: null }); return; }
+    if (b.hasAttribute('data-player-save')) { savePlayerCard(); return; }
     if (b.dataset.leader) { home.leaderMetric = b.dataset.leader; renderHome(); return; }
     if (b.dataset.homeView === 'profile') { showProfile(); return; }
     if (b.dataset.homeView) { home.crestDraft = undefined; showHomeView(b.dataset.homeView); return; }
@@ -5078,6 +5272,12 @@ td.zero { color: var(--faint); }
     const file = ev.target.files && ev.target.files[0];
     ev.target.value = '';
     if (file) pickCrest(file);
+  });
+
+  $('photo-file').addEventListener('change', (ev) => {
+    const file = ev.target.files && ev.target.files[0];
+    ev.target.value = '';
+    if (file) pickPhoto(file);
   });
 
   // ===================== Boot =====================
