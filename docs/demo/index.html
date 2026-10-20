@@ -288,6 +288,15 @@ button.rex-chip { border: 0; cursor: pointer; position: relative; }
 .goal-face.hot { fill: var(--goal-hot); }
 /* While aiming: the whole goal lights up, the third under the pen a stronger yellow, the frame gold when the shot would hit it */
 .goal-sector { fill: var(--goal-sector); pointer-events: none; }
+.penalty-spot { fill: var(--gold); opacity: .85; pointer-events: none; }
+/* Actions panel: the armed action's possible receivers glow gold. */
+.panel-acts { display: flex; flex-direction: column; gap: 8px; margin: 8px 10px 0; }
+.panel-acts .acts { display: grid; grid-template-columns: repeat(2, 1fr); gap: 8px; }
+.panel-acts .act[aria-pressed="true"] { box-shadow: 0 0 0 4px var(--fg); }
+.panel-acts .arm-note { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin: 0; font-size: 13px; font-weight: 700; color: var(--muted); }
+.panel-acts .arm-note .btn { min-height: 36px; min-width: 36px; padding: 0; }
+.tok.target .body { stroke: var(--gold); stroke-width: 10; }
+.bench-player.target .disc, .gk-card.target { box-shadow: 0 0 0 4px var(--gold); }
 .goal-frame-hot { fill: none; stroke: var(--gold); stroke-width: 22; stroke-linejoin: round; pointer-events: none; filter: drop-shadow(0 0 6px var(--gold)); }
 .zone-tag { font-family: var(--font-display); font-weight: 800; font-size: 38px; fill: var(--fg); stroke: var(--surface); stroke-width: 8; paint-order: stroke; text-anchor: middle; }
 
@@ -318,7 +327,8 @@ button.rex-chip { border: 0; cursor: pointer; position: relative; }
 .seg button { flex: 1; min-height: 40px; border: 0; border-radius: 9px; background: transparent; font-size: 13px; font-weight: 700; color: var(--muted); }
 .seg button[aria-pressed="true"] { background: var(--surface); color: var(--fg); box-shadow: 0 1px 4px rgba(0, 0, 0, .12); }
 .team-seg button { min-height: 42px; padding: 0 6px; min-width: 0; }
-.team-seg b { display: block; font-family: var(--font-display); font-weight: 800; font-size: 18px; text-transform: uppercase; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.team-seg [data-panel-mode] b { font-size: 12px; }
+.team-seg b { display: block; font-family: var(--font-display); font-weight: 800; font-size: 14px; text-transform: uppercase; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .team-seg [data-source="US"][aria-pressed="true"] { background: var(--brand); color: var(--brand-ink); }
 .team-seg [data-source="GK"][aria-pressed="true"] { background: var(--fg); color: var(--bg); }
 .lines { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; margin: 0 10px 8px; }
@@ -334,7 +344,7 @@ button.rex-chip { border: 0; cursor: pointer; position: relative; }
 .zones { padding: 0 12px 2px; display: grid; gap: 4px; }
 .zone { display: grid; grid-template-columns: 50px 1fr 34px 42px; gap: 8px; align-items: center; font-size: 13px; }
 .zone .n { text-align: right; color: var(--muted); font-size: 12px; font-variant-numeric: tabular-nums; }
-.zone b { font-family: var(--font-display); font-weight: 800; font-size: 17px; }
+.zone b { font-family: var(--font-display); font-weight: 800; font-size: 17px; white-space: nowrap; }
 .zone .track { height: 12px; border-radius: 6px; background: var(--soft); overflow: hidden; display: flex; }
 .zone .track span { height: 100%; transition: width .4s var(--spring); }
 .zone .val { text-align: right; font-variant-numeric: tabular-nums; font-weight: 800; }
@@ -650,8 +660,9 @@ td.zero { color: var(--faint); }
     </aside>
 
     <section class="panel stage" id="stage" aria-label="Pista">
-      <svg id="court" viewBox="0 0 1000 810" preserveAspectRatio="xMidYMid meet" role="application" aria-label="Media pista: arrastra hasta la portería para registrar un lanzamiento">
+      <svg id="court" viewBox="0 0 1000 880" preserveAspectRatio="xMidYMid meet" role="application" aria-label="Media pista: arrastra hasta la portería para registrar un lanzamiento">
         <g id="court-floor"></g>
+        <rect id="penalty-spot" class="penalty-spot" x="440" y="595" width="120" height="30" rx="15" visibility="hidden"/>
         <rect id="goal-face" class="goal-face" x="320" y="20" width="360" height="240" fill="var(--goal-face)"/>
         <rect id="goal-sector" class="goal-sector" width="120" height="80" visibility="hidden"/>
         <g id="goal-net"></g>
@@ -680,11 +691,15 @@ td.zero { color: var(--faint); }
 
     <aside class="panel" aria-label="Portero, líneas de tiro y estadísticas">
       <div class="scroll">
-        <button class="gk-card press" id="gk-card" type="button" aria-label="Cambiar portero"></button>
-        <div class="seg team-seg" id="team-seg" role="group" aria-label="Equipo cuyos lanzamientos y estadísticas se ven">
+        <!-- One control for the whole panel: the actions, or one team's KPIs and shot lines. -->
+        <div class="seg team-seg" id="team-seg" role="group" aria-label="Acciones, o estadísticas y lanzamientos de un equipo">
+          <button type="button" data-panel-mode="acts" aria-pressed="true"><b>Acciones</b></button>
           <button type="button" data-source="US" aria-pressed="false"><b id="seg-us"></b></button>
-          <button type="button" data-source="GK" aria-pressed="true"><b id="seg-them">Rival</b></button>
+          <button type="button" data-source="GK" aria-pressed="false"><b id="seg-them">Rival</b></button>
         </div>
+        <button class="gk-card press" id="gk-card" type="button" aria-label="Cambiar portero"></button>
+        <div class="panel-acts" id="acts"></div>
+        <div id="kpis" hidden>
         <h2 class="opt">Líneas</h2>
         <div class="lines" role="group" aria-label="Resultados que se dibujan">
           <button class="line-chip t-parada press" type="button" data-show="PARADA" aria-pressed="false"><i style="background:var(--parada)"></i>Parada</button>
@@ -692,6 +707,7 @@ td.zero { color: var(--faint); }
           <button class="line-chip t-fallo press" type="button" data-show="FALLO" aria-pressed="false"><i style="background:var(--fallo)"></i>Fallo</button>
         </div>
         <div id="live"></div>
+        </div>
       </div>
     </aside>
   </div>
@@ -735,13 +751,20 @@ td.zero { color: var(--faint); }
     historyLimit: 300,
     tickMs: 250,
     hintMs: 2600,
+    // Shot zones by distance from the goal (m): the dashed 9 m line itself already counts as 9 m.
+    zones: { nineFromM: 8.7, elevenFromM: 11 },
+    // Who usually shoots from a spot (m): wings wide and close to the goal line, pivots close and central, centre backs central.
+    shooterZones: { wingDxM: 6, wingDyM: 5, pivotM: 7.5, pivotDxM: 4, centreDxM: 2.8 },
+    // An armed panel action waits this long for the player (twice as long while its type is still to choose).
+    armMs: 4000,
     // The strip's «Finalizar» asks «¿Seguro?» and waits this long for the second tap.
     finishConfirmMs: 4000,
     dragThresholdPx: 10,
     minShotLengthUnits: 40,
     swapRadiusUnits: 70,
     palmGuardMs: 600,
-    clockSteps: [-10, -1, 1, 10],
+    // Clock corrections, shown as a minus row and a plus row; taps add up (+30 +5 +1 = 36 s).
+    clockSteps: [-30, -10, -5, -1, 1, 5, 10, 30],
     // Turnover types grouped by what went wrong, one colour per group (coach-editable later)
     turnoverGroups: [
       { label: 'Balón', cls: 'c-to-ball', types: ['Pase', 'Recepción', 'Bote'] },
@@ -761,7 +784,7 @@ td.zero { color: var(--faint); }
     },
     // Reference values for a senior regional team: [good from, poor below]; 'lower' = lower is better.
     targets: {
-      shooting: [60, 50], '6M': [70, 55], '9M': [45, 35], CONTRA: [80, 65], '7M': [75, 60],
+      shooting: [60, 50], '6M': [70, 55], '9M': [45, 35], '11M': [45, 35], CONTRA: [80, 65], '7M': [75, 60],
       attack: [50, 40], turnovers: [12, 20, 'lower'], gk: [33, 25], defense: [55, 45]
     },
     // Key points only speak from a minimum of evidence.
@@ -792,17 +815,21 @@ td.zero { color: var(--faint); }
   const CENTER_X = 500;
   const POST_HALF_M = 1.5;
   const NINE_M = 9;
-  const COURT = { minX: 30, maxX: 970, minY: GOAL_LINE_Y + 30, maxY: 780 };
+  const ELEVEN_M = CONFIG.zones.elevenFromM;
+  // The court is drawn 11.8 m deep so that long shots (+11 m) have room; the view adds a margin below it.
+  const COURT_DEPTH_M = 11.8;
+  const COURT = { minX: 30, maxX: 970, minY: GOAL_LINE_Y + 30, maxY: GOAL_LINE_Y + COURT_DEPTH_M * UNITS_PER_M };
+  const COURT_VIEW_H = COURT.maxY + 30;
   const GOAL_FACE = { x: 320, y: 20, w: 360, h: 240 };
   const GOAL_MARGIN = 60;
   const GOAL_GRID = 3;
   const FRAME_BAND = 14;
   const GK_SPOT = { x: CENTER_X, y: GOAL_LINE_Y + 1.3 * UNITS_PER_M };
-  const SEVEN_M = { dy: 7, toleranceX: 1, toleranceY: 0.7 };
+  const SEVEN_M = { dy: 7 };
   const ZONE_TAG_OFFSET = 56;
 
-  const ZONES = { '6M': '6 m', '9M': '9 m', '7M': '7 m', CONTRA: 'Contra' };
-  const SHEET_ZONES = ['6M', '9M', 'CONTRA', '7M'];
+  const ZONES = { '6M': '6 m', '9M': '9 m', '11M': '+11 m', '7M': '7 m', CONTRA: 'Contra' };
+  const SHEET_ZONES = ['6M', '9M', '11M', 'CONTRA', '7M'];
   // Shot results and the three colour groups they belong to
   const RESULTS = {
     GOL: { label: 'Gol', group: 'GOL' },
@@ -845,6 +872,7 @@ td.zero { color: var(--faint); }
   let idSeq = 0;
   const newId = (p) => `${p}${Date.now().toString(36)}${(idSeq++).toString(36)}`;
   const m = (dx, dy) => ({ x: CENTER_X + dx * UNITS_PER_M, y: GOAL_LINE_Y + dy * UNITS_PER_M });
+  const PENALTY_SPOT = m(0, SEVEN_M.dy);
   const gf = (gx, gy) => ({ x: GOAL_FACE.x + gx * GOAL_FACE.w, y: GOAL_FACE.y + gy * GOAL_FACE.h });
   const inGoalFace = (pt) => pt.x >= GOAL_FACE.x && pt.x <= GOAL_FACE.x + GOAL_FACE.w && pt.y >= GOAL_FACE.y && pt.y <= GOAL_FACE.y + GOAL_FACE.h;
   // Posts and crossbar: a band around the red frame. Released there, the shot is "Palo" straight away.
@@ -862,13 +890,18 @@ td.zero { color: var(--faint); }
   }
   const groupOf = (result) => RESULTS[result].group;
 
-  // Zone from where the shot starts: penalty mark = 7 m, beyond the dashed 9 m line = 9 m, otherwise 6 m.
-  function zoneFrom(pt) {
+  // Distance in metres from the goal-line segment between the posts (the way the 6 m and 9 m lines are drawn).
+  function goalDistance(pt) {
     const dx = (pt.x - CENTER_X) / UNITS_PER_M;
     const dy = (pt.y - GOAL_LINE_Y) / UNITS_PER_M;
-    if (Math.abs(dx) <= SEVEN_M.toleranceX && Math.abs(dy - SEVEN_M.dy) <= SEVEN_M.toleranceY) return '7M';
-    const dist = Math.hypot(dx - clamp(dx, -POST_HALF_M, POST_HALF_M), dy);
-    return dist > NINE_M ? '9M' : '6M';
+    return Math.hypot(dx - clamp(dx, -POST_HALF_M, POST_HALF_M), dy);
+  }
+  // Zone from where the shot starts: on or beyond the dashed line = 9 m, beyond 11 m = +11 m, otherwise 6 m.
+  // A 7 m is never inferred from the spot: it comes only from a provoked or committed penalty.
+  function zoneFrom(pt) {
+    const dist = goalDistance(pt);
+    if (dist >= CONFIG.zones.elevenFromM) return '11M';
+    return dist >= CONFIG.zones.nineFromM ? '9M' : '6M';
   }
   function rate(value, key) {
     if (value == null) return 'r-none';
@@ -925,7 +958,11 @@ td.zero { color: var(--faint); }
   const ui = {
     source: 'GK', sourcePhase: null, show: new Set(), popView: null, hintTimer: null, drag: null,
     lastPenTs: 0, shooter: null, rivalNewPos: null, sheetTab: 'stats', sheetMode: 'sheet', sheetGk: null, sheetGoal: 'GK', sheetShooter: null, rosterSide: 'team', templatePick: false,
-    finishArmedTimer: null
+    finishArmedTimer: null,
+    // A provoked (us) or committed (them) 7 m waiting for its shot: { team, eventId, byId }.
+    penalty: null,
+    // Right panel: 'acts' (actions to arm) or 'kpis' (live stats). Armed action: { key, sub } until a player is tapped.
+    panelMode: 'acts', armedAction: null, armTimer: null
   };
 
   function todayIso() { return new Date().toISOString().slice(0, 10); }
@@ -948,14 +985,16 @@ td.zero { color: var(--faint); }
     };
     const E = [];
     const ev = (abs, kind, data) => E.push(Object.assign({ id: newId('e'), abs, kind }, data));
+    // A shot from the penalty mark is a 7 m in the sample (in play, only the penalty flow records one).
+    const zoneAt = (o) => (o[0] === 0 && o[1] === SEVEN_M.dy ? '7M' : zoneFrom(m(o[0], o[1])));
     const shot = (abs, playerId, o, t, result, contra) => {
       const origin = m(o[0], o[1]);
-      const zone = zoneFrom(origin);
+      const zone = zoneAt(o);
       ev(abs, 'SHOT', { playerId, origin, target: gf(t[0], t[1]), from: zone, zone: contra ? 'CONTRA' : zone, result });
     };
     const rival = (abs, o, t, result, contra) => {
       const origin = m(o[0], o[1]);
-      ev(abs, 'RIVAL_SHOT', { gkId: 'p1', origin, target: gf(t[0], t[1]), zone: zoneFrom(origin), result, contra: Boolean(contra) });
+      ev(abs, 'RIVAL_SHOT', { gkId: 'p1', origin, target: gf(t[0], t[1]), zone: zoneAt(o), result, contra: Boolean(contra) });
     };
     rival(45, [0.5, 9.6], [0.82, 0.25], 'GOL');
     shot(80, 'p8', [-4.5, 9.8], [0.15, 0.2], 'GOL');
@@ -1200,17 +1239,37 @@ td.zero { color: var(--faint); }
     const removeIds = new Set(op.removed.map((r) => r.event.id));
     state.events = state.events.filter((e) => !removeIds.has(e.id));
     state.events.push(...op.added);
+    if (op.lineup) swapInLineup(op.lineup, op.lineup.outId, op.lineup.inId);
     if (op.phase) state.phase = op.phase.after;
   }
   function revertOp(op) {
     const addIds = new Set(op.added.map((e) => e.id));
     state.events = state.events.filter((e) => !addIds.has(e.id));
     op.removed.slice().sort((a, b) => a.index - b.index).forEach((r) => state.events.splice(r.index, 0, r.event));
+    if (op.lineup) swapInLineup(op.lineup, op.lineup.inId, op.lineup.outId);
     if (op.phase) state.phase = op.phase.before;
+  }
+  function swapInLineup(swap, leaving, entering) {
+    const team = state.lineups[swap.phase];
+    delete team[leaving];
+    team[entering] = { ...swap.spot };
+    if (ui.shooter === leaving) ui.shooter = null;
+  }
+  // A bench field player who acts comes on, in the current phase, for the court player of the same position
+  // (the one furthest from goal when there are several). Null when there is nothing to swap.
+  function benchSwapFor(playerId) {
+    const p = playerById(playerId);
+    const team = lineup();
+    if (!p || p.pos === 'POR' || team[playerId] || ourOffCourt().has(playerId)) return null;
+    const same = Object.keys(team).filter((id) => playerById(id) && playerById(id).pos === p.pos);
+    if (!same.length) return null;
+    const outId = same.reduce((a, b) => (team[b].y > team[a].y ? b : a));
+    return { phase: state.phase, inId: playerId, outId, spot: { ...team[outId] } };
   }
   const lastAdded = (op) => (op.added.length ? op.added[op.added.length - 1].id : null);
   function record(op, label) {
     state.sample = false;
+    if (op.phase) disarmAction();
     applyOp(op);
     state.history.push(op);
     if (state.history.length > CONFIG.historyLimit) state.history.shift();
@@ -1219,14 +1278,42 @@ td.zero { color: var(--faint); }
     if (label) hint(label);
   }
   const makeEvent = (kind, data) => Object.assign({ id: newId('e'), abs: absSeconds(), kind }, data);
-  function addEvent(kind, data) {
+  // `opts.bringOn`: the player who acts; from the bench they come on in the same undoable step.
+  function addEvent(kind, data, opts = {}) {
     const e = makeEvent(kind, data);
     autoStartClock(kind);
     const op = { added: [e], removed: [] };
+    const benched = opts.bringOn ? isOnBench(opts.bringOn) : false;
+    if (benched) { const swap = benchSwapFor(opts.bringOn); if (swap) op.lineup = swap; }
     const next = state.autoPhase ? phaseAfter(e) : null;
     if (next && next !== state.phase) op.phase = { before: state.phase, after: next };
     record(op);
+    if (benched && !op.lineup) hint('Arrástralo a la pista si ha entrado');
+    if (kind === 'ACTION' && PENALTY_TEAM[data.action]) startPenalty(PENALTY_TEAM[data.action], e.id, data.playerId);
   }
+  // ---- Penalties: a 7 m is recorded only after it is provoked or committed; its shot starts on the mark ----
+  const PENALTY_TEAM = { PROV7: 'us', PEN7C: 'them' };
+  function startPenalty(team, eventId, byId) {
+    ui.penalty = { team, eventId, byId };
+    renderPenalty();
+  }
+  function cancelPenalty() {
+    if (!ui.penalty) return;
+    ui.penalty = null;
+    renderPenalty();
+  }
+  function renderPenalty() {
+    $('penalty-spot').setAttribute('visibility', ui.penalty ? 'visible' : 'hidden');
+    renderArmed();
+  }
+  // Our taker: whoever took our last 7 m and can still play, else the player who provoked it.
+  function penaltyShooterId() {
+    const out = ourOffCourt();
+    const last = ourShots().filter((e) => e.from === '7M' && !out.has(e.playerId)).at(-1);
+    if (last) return last.playerId;
+    return ui.penalty && !out.has(ui.penalty.byId) ? ui.penalty.byId : null;
+  }
+  const isOnBench = (playerId) => { const p = playerById(playerId); return Boolean(p) && p.pos !== 'POR' && !lineup()[playerId]; };
   // A free-text note kept with the match minute; like any event it shows in the strip and can be undone or deleted.
   const NOTE_MAX_LENGTH = 140;
   const noteRows = () => state.events.filter((e) => e.kind === 'NOTE').map((e) => [absToClock(e.abs), e.text]);
@@ -1241,11 +1328,13 @@ td.zero { color: var(--faint); }
     if (state.phase === phase) return;
     state.phase = phase;
     disarm();
+    disarmAction();
     commit();
   }
   function deleteEvent(id) {
     const index = state.events.findIndex((e) => e.id === id);
     if (index < 0) return;
+    if (ui.penalty && ui.penalty.eventId === id) cancelPenalty();
     const event = state.events[index];
     record({ added: [], removed: [{ event, index }] }, `Borrado: ${describe(event)}`);
   }
@@ -1253,6 +1342,7 @@ td.zero { color: var(--faint); }
   function undo() {
     const op = state.history.pop();
     if (!op) return;
+    if (ui.penalty && op.added.some((e) => e.id === ui.penalty.eventId)) cancelPenalty();
     revertOp(op);
     state.future.push(op);
     commit();
@@ -1445,7 +1535,7 @@ td.zero { color: var(--faint); }
   function renderAll(opts) {
     syncSourceToPhase();
     renderBar(); renderClock(); renderBench(); renderTokens(); renderShots();
-    renderGk(); renderLive(); renderAlerts(); renderArmed(); renderPhase(); renderEvents(opts && opts.freshId);
+    renderGk(); renderLive(); renderActs(); renderAlerts(); renderArmed(); renderPhase(); renderEvents(opts && opts.freshId);
     $('sample-tag').hidden = !state.sample;
     $('btn-undo').disabled = !state.history.length;
     $('btn-redo').disabled = !state.future.length;
@@ -1528,7 +1618,7 @@ td.zero { color: var(--faint); }
     const onCourt = new Set(Object.keys(lineup()));
     const bench = state.players.filter((p) => !onCourt.has(p.id) && p.id !== state.gkId).sort(benchOrder);
     const out = disqualifications();
-    const item = (p) => `<button class="bench-player press${out.has(p.id) ? ' out' : ''}" type="button" data-id="${p.id}" aria-label="#${p.num} ${esc(p.name)}, ${out.has(p.id) ? 'descalificado' : posOf(p).label}">${discHtml(p)}<span class="who"><b>${esc(p.name)}</b></span></button>`;
+    const item = (p) => `<button class="bench-player press${out.has(p.id) ? ' out' : ''}${canReceive(p.id) ? ' target' : ''}" type="button" data-id="${p.id}" aria-label="#${p.num} ${esc(p.name)}, ${out.has(p.id) ? 'descalificado' : posOf(p).label}">${discHtml(p)}<span class="who"><b>${esc(p.name)}</b></span></button>`;
     $('bench').innerHTML = bench.length ? bench.map(item).join('') : '<p class="empty">Todos en pista.</p>';
   }
   function tokenMarkup(p, pos, exRemaining, extraCls) {
@@ -1546,10 +1636,10 @@ td.zero { color: var(--faint); }
     const ex = new Map(activeExclusions().map((x) => [x.event.playerId, x.remaining]));
     const gk = playerById(state.gkId);
     const exOf = (id) => (ex.has(id) ? ex.get(id) : null);
-    $('tokens-layer').innerHTML = tokenMarkup(gk, GK_SPOT, exOf(gk.id), ' gk')
+    $('tokens-layer').innerHTML = tokenMarkup(gk, GK_SPOT, exOf(gk.id), ` gk${canReceive(gk.id) ? ' target' : ''}`)
       + Object.entries(lineup()).map(([id, pos]) => {
         const p = playerById(id);
-        return p ? tokenMarkup(p, pos, exOf(id), id === ui.shooter ? ' shooter' : '') : '';
+        return p ? tokenMarkup(p, pos, exOf(id), (id === ui.shooter ? ' shooter' : '') + (canReceive(id) ? ' target' : '')) : '';
       }).join('');
   }
   // The shot map follows the phase (defence → our goalkeeper, attack → our shooters); the manual toggle holds until the next phase change.
@@ -1570,17 +1660,19 @@ td.zero { color: var(--faint); }
   };
   const TALLY_ROW_Y = [64, 132, 200];
   // Static court drawing shared by the live court and the sheet's shot maps; each SVG needs its own clip id.
-  const courtFloorSvg = (clipId) => `<defs><clipPath id="${clipId}"><rect x="0" y="260" width="1000" height="550"/></clipPath></defs>
-    <rect x="0" y="260" width="1000" height="550" fill="var(--court)" rx="10"/>
+  const courtFloorSvg = (clipId) => `<defs><clipPath id="${clipId}"><rect x="0" y="260" width="1000" height="${COURT_VIEW_H - GOAL_LINE_Y}"/></clipPath></defs>
+    <rect x="0" y="260" width="1000" height="${COURT_VIEW_H - GOAL_LINE_Y}" fill="var(--court)" rx="10"/>
     <g clip-path="url(#${clipId})">
       <path d="M 125 260 A 300 300 0 0 0 425 560 L 575 560 A 300 300 0 0 0 875 260 Z" fill="var(--area)" stroke="var(--court-line)" stroke-width="4"/>
       <path d="M -25 260 A 450 450 0 0 0 425 710 L 575 710 A 450 450 0 0 0 1025 260" fill="none" stroke="var(--court-line)" stroke-width="3" stroke-dasharray="18 14"/>
+      <path d="M -125 260 A 550 550 0 0 0 425 810 L 575 810 A 550 550 0 0 0 1125 260" fill="none" stroke="var(--court-line)" stroke-width="2" stroke-dasharray="3 12" opacity=".55"/>
     </g>
     <line x1="0" y1="260" x2="1000" y2="260" stroke="var(--court-line)" stroke-width="4"/>
     <line x1="475" y1="610" x2="525" y2="610" stroke="var(--court-line)" stroke-width="6"/>
     <text class="court-label" x="600" y="590">6 m</text>
     <text class="court-label" x="535" y="617">7 m</text>
-    <text class="court-label" x="600" y="745">9 m</text>`;
+    <text class="court-label" x="600" y="745">9 m</text>
+    <text class="court-label" x="600" y="845">+11 m</text>`;
   const GOAL_NET_SVG = `<g stroke="var(--net)" stroke-width="2" stroke-dasharray="6 6">
       <line x1="440" y1="20" x2="440" y2="260"/><line x1="560" y1="20" x2="560" y2="260"/>
       <line x1="320" y1="100" x2="680" y2="100"/><line x1="320" y1="180" x2="680" y2="180"/>
@@ -1609,9 +1701,10 @@ td.zero { color: var(--faint); }
     const c = countGroups(gkShots(state.gkId));
     const onTarget = c.GOL + c.PARADA;
     const p = pct(c.PARADA, onTarget);
+    $('gk-card').classList.toggle('target', canReceive(gk.id));
     $('gk-card').innerHTML = `<span class="disc">${gk.num}</span><span class="who"><b>${esc(gk.name)}</b><small>Portero ›</small></span>
       <span class="pct"><strong class="${rate(p, 'gk')}">${pctText(p)}</strong><small>${c.PARADA}/${onTarget} paradas</small></span>`;
-    document.querySelectorAll('[data-source]').forEach((b) => b.setAttribute('aria-pressed', String(b.dataset.source === ui.source)));
+    document.querySelectorAll('[data-source]').forEach((b) => b.setAttribute('aria-pressed', String(ui.panelMode === 'kpis' && b.dataset.source === ui.source)));
     $('seg-us').textContent = state.us;
     $('seg-them').textContent = state.them;
     const colors = MAP_VIEWS[ui.source].colors;
@@ -1668,8 +1761,9 @@ td.zero { color: var(--faint); }
   function renderArmed() {
     const bar = $('armed-bar');
     const p = ui.shooter ? playerById(ui.shooter) : null;
-    bar.hidden = !p;
+    bar.hidden = !p && !ui.penalty;
     if (p) bar.innerHTML = `${discHtml(p)}<b>Dibuja el tiro</b><button class="btn press" type="button" data-unarm aria-label="Cancelar lanzamiento">✕</button>`;
+    else if (ui.penalty) bar.innerHTML = `<b>${ui.penalty.team === 'us' ? 'Penalti a favor' : 'Penalti en contra'} · dibuja el tiro</b><button class="btn press" type="button" data-unarm aria-label="Cancelar el penalti">✕</button>`;
   }
   function updateLiveBits() {
     const t = document.querySelector('[data-live-timeout]');
@@ -1758,10 +1852,25 @@ td.zero { color: var(--faint); }
     }
     openPop(playerPopHtml(p, ui.popView), anchor);
   }
-  // Last player of ours who shot: preselected when a shot is drawn from empty court in attack.
-  function lastShooterId() {
-    const last = ourShots().at(-1);
-    return last && playerById(last.playerId) && !ourOffCourt().has(last.playerId) ? last.playerId : null;
+  // Position that usually shoots from where a drawn shot starts.
+  function expectedPosition(pt) {
+    const z = CONFIG.shooterZones;
+    const dx = Math.abs(pt.x - CENTER_X) / UNITS_PER_M;
+    const dy = (pt.y - GOAL_LINE_Y) / UNITS_PER_M;
+    if (dx > z.wingDxM && dy < z.wingDyM) return 'EXT';
+    if (goalDistance(pt) < z.pivotM && dx < z.pivotDxM) return 'PIV';
+    if (dx < z.centreDxM) return 'CEN';
+    return 'LAT';
+  }
+  // Preselected shooter of a shot drawn in attack: the nearest available attacker of that position, else the nearest attacker.
+  function zoneShooterId(origin) {
+    const out = ourOffCourt();
+    const team = state.lineups.ATK;
+    const field = Object.keys(team).filter((id) => playerById(id) && playerById(id).pos !== 'POR' && !out.has(id));
+    const dist = (id) => Math.hypot(team[id].x - origin.x, team[id].y - origin.y);
+    const nearest = (ids) => (ids.length ? ids.reduce((a, b) => (dist(b) < dist(a) ? b : a)) : null);
+    const pos = expectedPosition(origin);
+    return nearest(field.filter((id) => playerById(id).pos === pos)) || nearest(field);
   }
   // Players on court first, bench on the right; goalkeepers only when they are in `onCourt`.
   function playerPickerHtml(view, onCourt) {
@@ -1818,12 +1927,13 @@ td.zero { color: var(--faint); }
     const results = ['GOL', 'PARADA', 'PALO', 'BLOCADO'];
     return `${head}${view.pick ? shooterPickerHtml(view) : ''}${view.rivalPick ? rivalPickerHtml(view) : ''}
       <div class="act-grid two">${results.map((r) => `<button class="act ${r === 'GOL' || r === 'PARADA' ? 'big ' : ''}${GROUP_CLASS[groupOf(r)]}" style="background:${MAP_VIEWS[ours ? 'US' : 'GK'].colors[groupOf(r)]}" type="button" data-result="${r}" ${p ? '' : 'disabled'}>${RESULTS[r].label}</button>`).join('')}
-        <button class="chip" type="button" data-contra aria-pressed="${view.contra}">Contraataque</button></div>`;
+        ${view.penalty ? '' : `<button class="chip" type="button" data-contra aria-pressed="${view.contra}">Contraataque</button>`}</div>`;
   }
   function commitShot(view, result) {
+    if (view.penalty) cancelPenalty();
     if (view.type === 'ourShot') {
       disarm();
-      addEvent('SHOT', { playerId: view.playerId, origin: view.origin, target: view.target, from: view.zone, zone: view.contra ? 'CONTRA' : view.zone, result });
+      addEvent('SHOT', { playerId: view.playerId, origin: view.origin, target: view.target, from: view.zone, zone: view.contra ? 'CONTRA' : view.zone, result }, { bringOn: view.playerId });
     } else {
       addEvent('RIVAL_SHOT', { gkId: state.gkId, rivalId: view.rivalId || null, origin: view.origin, target: view.target, zone: view.zone, result, contra: view.contra });
     }
@@ -1833,7 +1943,7 @@ td.zero { color: var(--faint); }
     hint(`${RESULTS[result].label} ${ZONES[view.zone]} · ↶ deshacer`);
   }
   function openShotPop(view, anchor) {
-    Object.assign(view, { zone: zoneFrom(view.origin), contra: false, anchor });
+    Object.assign(view, { zone: view.penalty ? '7M' : zoneFrom(view.origin), contra: false, anchor });
     // Released on a post or the crossbar, or outside the goal: no result question, only "who" if we do not know it yet.
     const direct = onGoalFrame(view.target) ? 'PALO' : (inGoalFace(view.target) ? null : 'FUERA');
     view.rivalPick = view.type === 'rivalShot' && state.rivals.length > 0;
@@ -1870,7 +1980,7 @@ td.zero { color: var(--faint); }
       <div class="big-time" id="pop-clock">${clockText()}</div>
       <div class="seg" role="group" aria-label="Sentido del reloj">${mode(false, '↑ Ascendente')}${mode(true, '↓ Descendente')}</div>
       <button class="act big ${running ? 'c-error' : 'c-gol'}" type="button" data-clock="toggle">${running ? '⏸ Parar' : '▶ Seguir'}</button>
-      <div class="act-grid four">${CONFIG.clockSteps.map((s) => `<button class="act c-neutral" type="button" data-adjust="${s}">${s > 0 ? '+' : '−'}${Math.abs(s)}s</button>`).join('')}</div>
+      ${[CONFIG.clockSteps.filter((s) => s < 0), CONFIG.clockSteps.filter((s) => s > 0)].map((row) => `<div class="act-grid four">${row.map((s) => `<button class="act c-neutral" type="button" data-adjust="${s}">${s > 0 ? '+' : '−'}${Math.abs(s)}s</button>`).join('')}</div>`).join('')}
       <form class="clock-set" id="clock-set"><input class="in time-in" id="clock-input" type="text" inputmode="numeric" maxlength="6" value="${clockText()}" aria-label="Tiempo exacto (mm:ss)"><button class="act c-dark" type="submit">Fijar</button></form>
       <div class="act-grid two"><button class="act c-neutral" type="button" data-clock="period">${state.clock.period === 1 ? 'Ir a 2ª parte' : 'Volver a 1ª parte'}</button>
         ${state.clock.period === 2 ? `<button class="act c-dark" type="button" data-clock="finish">${state.finished ? 'Resumen final' : 'Terminar partido'}</button>` : '<button class="act c-dark" type="button" data-clock="halftime">Resumen del descanso</button>'}</div>`, anchor);
@@ -1924,6 +2034,7 @@ td.zero { color: var(--faint); }
     commit();
   }
   function armShooter(playerId) {
+    disarmAction();
     ui.shooter = playerId;
     renderTokens();
     renderArmed();
@@ -1934,6 +2045,85 @@ td.zero { color: var(--faint); }
     renderTokens();
     renderArmed();
   }
+
+  // ===================== Actions panel: action first, then the player =====================
+  // TURNOVER and DEFFAULT ask for their type before the player.
+  const PANEL_ACTIONS = { ATK: ['ASIST', 'PROV7', 'TURNOVER'], DEF: ['RECUP', 'BLOC', 'PEN7C', 'DEFFAULT'] };
+  const PANEL_TYPED = {
+    TURNOVER: { label: 'Pérdida', cls: 'c-error', groups: () => CONFIG.turnoverGroups.map((g) => ({ label: g.label, cls: g.cls, subs: g.types.map((t) => [t, t]) })) },
+    DEFFAULT: { label: 'Falta def.', cls: 'c-error', groups: () => CONFIG.defFaultGroups.map((g) => ({ label: g.label, cls: g.cls, subs: g.actions.filter((k) => k !== 'PEN7C').map((k) => [k, ACTIONS[k].label]) })).filter((g) => g.subs.length) }
+  };
+  const panelLabel = (key) => (PANEL_TYPED[key] ? `${PANEL_TYPED[key].label} ›` : ACTIONS[key].label);
+  const panelClass = (key) => (PANEL_TYPED[key] ? PANEL_TYPED[key].cls : `c-${ACTIONS[key].group}`);
+  const armedReady = () => Boolean(ui.armedAction) && (!PANEL_TYPED[ui.armedAction.key] || ui.armedAction.sub != null);
+  // Who may take the armed action: anyone in play; of the goalkeepers only the one in goal, and only for an assist.
+  function canReceive(playerId) {
+    if (!armedReady()) return false;
+    const p = playerById(playerId);
+    if (!p || ourOffCourt().has(playerId)) return false;
+    if (p.pos === 'POR') return playerId === state.gkId && ui.armedAction.key === 'ASIST';
+    return true;
+  }
+  function renderActs() {
+    document.querySelectorAll('[data-panel-mode]').forEach((b) => b.setAttribute('aria-pressed', String(b.dataset.panelMode === ui.panelMode)));
+    $('acts').hidden = ui.panelMode !== 'acts';
+    $('kpis').hidden = ui.panelMode !== 'kpis';
+    const a = ui.armedAction;
+    if (a && PANEL_TYPED[a.key] && a.sub == null) {
+      const typed = PANEL_TYPED[a.key];
+      $('acts').innerHTML = `<p class="arm-note">${typed.label} · ¿de qué tipo?<button class="btn press" type="button" data-panel-cancel aria-label="Cancelar">✕</button></p>
+        ${typed.groups().map((g) => group(g.label, `t-${g.cls.slice(2)}`, g.subs.map(([k, label]) => `<button class="act ${g.cls}" type="button" data-panel-sub="${esc(k)}">${esc(label)}</button>`).join(''))).join('')}`;
+      return;
+    }
+    const note = a ? `${panelLabel(a.key).replace(' ›', '')}${a.sub ? ` · ${esc(subLabel(a))}` : ''} · toca al jugador` : 'Toca una acción y luego al jugador (en pista o banquillo).';
+    $('acts').innerHTML = `<div class="acts">${PANEL_ACTIONS[state.phase].map((k) => `<button class="act big ${panelClass(k)}" type="button" data-panel-act="${k}" aria-pressed="${Boolean(a && a.key === k)}">${panelLabel(k)}</button>`).join('')}</div>
+      <p class="arm-note">${note}</p>`;
+  }
+  const subLabel = (a) => (a.key === 'DEFFAULT' ? ACTIONS[a.sub].label : a.sub);
+  function renderTargets() { renderTokens(); renderBench(); renderGk(); renderActs(); }
+  function restartArmTimer(ms) {
+    clearTimeout(ui.armTimer);
+    ui.armTimer = setTimeout(disarmAction, ms);
+  }
+  // Tapping the armed action again disarms it.
+  function armAction(key) {
+    if (ui.armedAction && ui.armedAction.key === key) { disarmAction(); return; }
+    disarm();
+    ui.armedAction = { key, sub: null };
+    restartArmTimer(CONFIG.armMs * (PANEL_TYPED[key] ? 2 : 1));
+    renderTargets();
+  }
+  function chooseArmedSub(sub) {
+    if (!ui.armedAction) return;
+    ui.armedAction.sub = sub;
+    restartArmTimer(CONFIG.armMs);
+    renderTargets();
+  }
+  function disarmAction() {
+    clearTimeout(ui.armTimer);
+    ui.armTimer = null;
+    if (!ui.armedAction) return;
+    ui.armedAction = null;
+    renderTargets();
+  }
+  // Logs the armed action for the tapped player; false when they cannot take it (the tap is then ignored).
+  function applyArmedAction(playerId) {
+    if (!canReceive(playerId)) return false;
+    const { key, sub } = ui.armedAction;
+    const p = playerById(playerId);
+    disarmAction();
+    if (key === 'TURNOVER') addEvent('TURNOVER', { playerId, subtype: sub }, { bringOn: playerId });
+    else addEvent('ACTION', { playerId, action: key === 'DEFFAULT' ? sub : key }, { bringOn: playerId });
+    hint(`${describe(state.events.at(-1))} · ↶ deshacer`);
+    return true;
+  }
+  $('acts').addEventListener('click', (ev) => {
+    const b = ev.target.closest('button');
+    if (!b) return;
+    if (b.dataset.panelAct) armAction(b.dataset.panelAct);
+    else if (b.dataset.panelSub != null) chooseArmedSub(b.dataset.panelSub);
+    else if (b.hasAttribute('data-panel-cancel')) disarmAction();
+  });
 
   $('pop').addEventListener('click', (ev) => {
     const b = ev.target.closest('button');
@@ -1996,12 +2186,12 @@ td.zero { color: var(--faint); }
     if (setClockText($('clock-input').value)) closePop();
   });
   $('scrim').addEventListener('pointerdown', (ev) => { ev.preventDefault(); closePop(); });
-  $('armed-bar').addEventListener('click', (ev) => { if (ev.target.closest('[data-unarm]')) disarm(); });
+  $('armed-bar').addEventListener('click', (ev) => { if (!ev.target.closest('[data-unarm]')) return; if (ui.penalty && !ui.shooter) cancelPenalty(); else disarm(); });
   document.addEventListener('keydown', (ev) => {
     if (ev.key !== 'Escape') return;
     if (!$('pop').hidden) closePop();
     else if (!$('sheet').hidden) $('sheet').hidden = true;
-    else disarm();
+    else { disarm(); disarmAction(); }
   });
 
   // ===================== Court gestures (finger and pen) =====================
@@ -2022,12 +2212,12 @@ td.zero { color: var(--faint); }
   const clampCourt = (pt) => ({ x: clamp(pt.x, COURT.minX, COURT.maxX), y: clamp(pt.y, COURT.minY, COURT.maxY) });
   const DRAW_IDS = ['draw-line', 'draw-origin', 'draw-end', 'draw-zone'];
   const setDraw = (on) => DRAW_IDS.forEach((id) => $(id).setAttribute('visibility', on ? 'visible' : 'hidden'));
-  function startDraw(origin) {
+  function startDraw(origin, zone = ui.penalty ? '7M' : zoneFrom(origin)) {
     setAttrs($('draw-origin'), { cx: origin.x, cy: origin.y });
     setAttrs($('draw-line'), { x1: origin.x, y1: origin.y, x2: origin.x, y2: origin.y });
     const tag = $('draw-zone');
     setAttrs(tag, { x: origin.x, y: Math.min(origin.y + ZONE_TAG_OFFSET + 12, COURT.maxY + 20) });
-    tag.textContent = ZONES[zoneFrom(origin)];
+    tag.textContent = ZONES[zone];
   }
   function moveDraw(pt) {
     setDraw(true);
@@ -2059,7 +2249,7 @@ td.zero { color: var(--faint); }
       const start = isGk ? GK_SPOT : lineup()[id];
       ui.drag = { type: 'token', id, el: tok, isGk, start, grab: { x: pt.x, y: pt.y }, startX: ev.clientX, startY: ev.clientY, moved: false, toGoal: false, pointerId: ev.pointerId };
     } else if (pt.y > GOAL_LINE_Y) {
-      ui.drag = { type: 'shot', origin: { x: pt.x, y: pt.y }, pointerId: ev.pointerId };
+      ui.drag = { type: 'shot', origin: ui.penalty ? { ...PENALTY_SPOT } : { x: pt.x, y: pt.y }, pointerId: ev.pointerId };
       startDraw(ui.drag.origin);
     } else return;
     svg.setPointerCapture(ev.pointerId);
@@ -2072,7 +2262,7 @@ td.zero { color: var(--faint); }
     if (d.type === 'shot') { moveDraw(pt); return; }
     if (d.isGk) return; // the goalkeeper stays in goal; change it from its popup or from the bench
     if (!d.moved && Math.hypot(ev.clientX - d.startX, ev.clientY - d.startY) < CONFIG.dragThresholdPx) return;
-    if (!d.moved) { d.moved = true; startDraw(state.phase === 'DEF' ? d.grab : d.start); }
+    if (!d.moved) { d.moved = true; startDraw(ui.penalty ? PENALTY_SPOT : state.phase === 'DEF' ? d.grab : d.start); }
     d.toGoal = pt.y < GOAL_LINE_Y;
     if (d.toGoal) {
       d.el.setAttribute('transform', `translate(${d.start.x} ${d.start.y})`);
@@ -2094,11 +2284,12 @@ td.zero { color: var(--faint); }
     const pt = svgPoint(ev.clientX, ev.clientY);
     const anchor = { x: ev.clientX, y: ev.clientY };
     if (d.type === 'token') {
-      if (!d.moved) { if (d.isGk) openGkPop(anchor); else openPlayerPop(d.id, anchor); return; }
+      if (!d.moved) { if (armedReady()) applyArmedAction(d.id); else if (d.isGk) openGkPop(anchor); else openPlayerPop(d.id, anchor); return; }
       if (d.toGoal) {
         renderTokens();
         if (state.phase === 'ATK' && ourOffCourt().has(d.id)) { const p = playerById(d.id); hint(`#${p.num} ${p.name} no puede lanzar: ${isDisqualified(d.id) ? 'descalificado' : "cumple 2'"}`); return; }
         // Defending, a drag through one of our defenders is the rival's shot from that spot; attacking, it is that player's shot.
+        if (ui.penalty) { shotFromDrag(PENALTY_SPOT, pt, anchor, ui.penalty.team === 'us' ? d.id : null); return; }
         const view = state.phase === 'DEF'
           ? { type: 'rivalShot', origin: d.grab, target: goalTarget(pt) }
           : { type: 'ourShot', playerId: d.id, origin: d.start, target: goalTarget(pt) };
@@ -2113,10 +2304,23 @@ td.zero { color: var(--faint); }
     }
     const len = Math.hypot(pt.x - d.origin.x, pt.y - d.origin.y);
     if (len < CONFIG.minShotLengthUnits || pt.y > GOAL_LINE_Y) { hint('Arrastra hasta la portería'); return; }
+    shotFromDrag(d.origin, pt, anchor);
+  }
+  // A shot drawn to `pt` from empty court (or, with a pending penalty, from any token: `shooterId`).
+  // A pending penalty starts on the mark and decides whose shot it is.
+  function shotFromDrag(origin, pt, anchor, shooterId = null) {
     const target = goalTarget(pt);
+    const pen = ui.penalty;
+    if (pen) {
+      const view = pen.team === 'us'
+        ? { type: 'ourShot', playerId: shooterId || penaltyShooterId(), pick: !shooterId, origin: { ...PENALTY_SPOT }, target, penalty: true }
+        : { type: 'rivalShot', origin: { ...PENALTY_SPOT }, target, penalty: true };
+      openShotPop(view, anchor);
+      return;
+    }
     const view = ui.shooter || state.phase === 'ATK'
-      ? { type: 'ourShot', playerId: ui.shooter || lastShooterId(), pick: !ui.shooter, origin: d.origin, target }
-      : { type: 'rivalShot', origin: d.origin, target };
+      ? { type: 'ourShot', playerId: ui.shooter || zoneShooterId(origin), pick: !ui.shooter, origin, target }
+      : { type: 'rivalShot', origin, target };
     openShotPop(view, anchor);
   }
   svg.addEventListener('pointerup', (ev) => endCourtDrag(ev, false));
@@ -2151,7 +2355,7 @@ td.zero { color: var(--faint); }
     ui.drag = null;
     if (d.ghost) d.ghost.remove();
     if (cancelled) return;
-    if (!d.moved) { openPlayerPop(d.id, { x: ev.clientX, y: ev.clientY }); return; }
+    if (!d.moved) { if (armedReady()) applyArmedAction(d.id); else openPlayerPop(d.id, { x: ev.clientX, y: ev.clientY }); return; }
     if (!insideRect(svg, ev.clientX, ev.clientY)) return;
     const incoming = playerById(d.id);
     if (isDisqualified(incoming.id)) { hint(`#${incoming.num} ${incoming.name} está descalificado`); return; }
@@ -2183,13 +2387,14 @@ td.zero { color: var(--faint); }
   benchEl.addEventListener('pointercancel', (ev) => endBenchDrag(ev, true));
 
   // ===================== Wiring =====================
-  $('gk-card').addEventListener('click', (ev) => { const r = ev.currentTarget.getBoundingClientRect(); openGkPop({ x: r.left - 30, y: r.top + r.height / 2 }); });
+  $('gk-card').addEventListener('click', (ev) => { if (armedReady()) { applyArmedAction(state.gkId); return; } const r = ev.currentTarget.getBoundingClientRect(); openGkPop({ x: r.left - 30, y: r.top + r.height / 2 }); });
   $('clock-face').addEventListener('click', (ev) => { const r = ev.currentTarget.getBoundingClientRect(); openClockPop({ x: r.left + r.width / 2, y: r.bottom + 140 }); });
   $('team-seg').addEventListener('click', (ev) => {
-    const b = ev.target.closest('[data-source]');
+    const b = ev.target.closest('[data-source], [data-panel-mode]');
     if (!b) return;
-    ui.source = b.dataset.source;
-    renderShots(); renderGk(); renderLive();
+    ui.panelMode = b.dataset.panelMode || 'kpis';
+    if (b.dataset.source) ui.source = b.dataset.source;
+    renderShots(); renderGk(); renderLive(); renderActs();
   });
   document.querySelector('.lines').addEventListener('click', (ev) => {
     const b = ev.target.closest('[data-show]');
@@ -2215,7 +2420,7 @@ td.zero { color: var(--faint); }
   document.querySelector('.phase').addEventListener('click', (ev) => {
     const b = ev.target.closest('button');
     if (!b) return;
-    if (b.dataset.phase) { setPhase(b.dataset.phase); return; }
+    if (b.dataset.phase) { cancelPenalty(); setPhase(b.dataset.phase); return; }
     state.autoPhase = !state.autoPhase;
     commit();
     hint(state.autoPhase ? 'Auto: cambia sola tras cada posesión' : 'Auto desactivado: cambia tú la fase');
@@ -2252,7 +2457,7 @@ td.zero { color: var(--faint); }
   const DORSAL_RANGE = [1, 99];
   const ROSTER_FORMAT = 'hbstats-plantilla';
   const MAX_VENUE_LENGTH = 40;
-  const PLAYER_HEAD = ['Nº', 'Jugador', '6 m', '9 m', 'Contra', '7 m', 'T. bloq.', 'Bloc.', 'Recup.', 'Pase gol', 'Pérdida', 'Prov. 7 m', 'Falta', '7 m com.', 'F. táctico', 'A', "2'", 'D', 'Az'];
+  const PLAYER_HEAD = ['Nº', 'Jugador', '6 m', '9 m', '+11 m', 'Contra', '7 m', 'T. bloq.', 'Bloc.', 'Recup.', 'Pase gol', 'Pérdida', 'Prov. 7 m', 'Falta', '7 m com.', 'F. táctico', 'A', "2'", 'D', 'Az'];
   const SHOT_ZONE_HEAD = ['Zona', 'Lanz.', 'Goles', 'Parados', 'Fallados', '% gol'];
   const GK_ZONE_HEAD = ['Zona', 'Recibidos', 'A puerta', 'Detenidos', 'Encajados', '% paradas'];
   const fieldPlayers = () => state.players.filter((p) => p.pos !== 'POR').sort((a, b) => a.num - b.num);
@@ -2307,7 +2512,9 @@ td.zero { color: var(--faint); }
   const GOAL_ROWS = ['arriba', 'a media altura', 'abajo'];
   const GOAL_COLS = ['izquierda', 'centro', 'derecha'];
   const sectorName = ([row, col]) => `${GOAL_ROWS[row]} ${GOAL_COLS[col]}`;
-  const LANE_HEAD = ['Carril', '6 m', '9 m', 'Total', '% gol'];
+  const LANE_HEAD = ['Carril', '6 m', '9 m o más', 'Total', '% gol'];
+  // Lanes split penetration (6 m) from shots taken from distance (9 m and +11 m).
+  const FAR_ZONES = ['9M', '11M'];
   const SHOOTER_HEAD = ['Jugador', 'Tiros', 'Goles', '% gol'];
   const plural = (n, one, many) => `${n} ${n === 1 ? one : many}`;
   const goalsIn = (list) => list.filter((e) => e.result === 'GOL').length;
@@ -2324,12 +2531,12 @@ td.zero { color: var(--faint); }
     const field = shots.filter((e) => depthOf(e) !== '7M');
     const lanes = LANES.map((l) => {
       const inLane = field.filter((e) => laneOf(e.origin) === l.id);
-      return { ...l, list: inLane, near: inLane.filter((e) => depthOf(e) === '6M'), far: inLane.filter((e) => depthOf(e) === '9M') };
+      return { ...l, list: inLane, near: inLane.filter((e) => depthOf(e) === '6M'), far: inLane.filter((e) => FAR_ZONES.includes(depthOf(e))) };
     });
     const shooters = shooterRanking(shots).filter((g) => g.shooter).map((g) => ({ label: g.label, shots: g.list.length, goals: g.goals }))
       .sort((a, b) => b.shots - a.shots || b.goals - a.goals);
     const topScorer = shooters.slice().sort((a, b) => b.goals - a.goals || a.shots - b.shots)[0] || null;
-    const near = field.filter((e) => depthOf(e) === '6M'), far = field.filter((e) => depthOf(e) === '9M');
+    const near = field.filter((e) => depthOf(e) === '6M'), far = field.filter((e) => FAR_ZONES.includes(depthOf(e)));
     const isContra = (e) => (ours ? e.zone === 'CONTRA' : e.contra);
     return {
       ours, shots, field, lanes, shooters, topShooter: shooters[0] || null, topScorer: topScorer && topScorer.goals ? topScorer : null,
@@ -2506,7 +2713,7 @@ td.zero { color: var(--faint); }
         : `<circle cx="${x}" cy="${y}" r="9" fill="${color}"/>`;
       return `<g${focused(e) ? '' : ` opacity="${MAP_FADED_OPACITY}"`}>${shotLineSvg(e, color)}${release}</g>`;
     }).join('');
-    return `<svg class="shot-map" viewBox="0 0 1000 810" role="img" aria-label="Trayectorias de los lanzamientos con el dorsal de quien lanza">
+    return `<svg class="shot-map" viewBox="0 0 1000 ${COURT_VIEW_H}" role="img" aria-label="Trayectorias de los lanzamientos con el dorsal de quien lanza">
       ${courtFloorSvg('shot-map-clip')}<rect x="${GOAL_FACE.x}" y="${GOAL_FACE.y}" width="${GOAL_FACE.w}" height="${GOAL_FACE.h}" fill="var(--goal-face)"/>
       ${GOAL_NET_SVG}${GOAL_FRAME_SVG}${marks}</svg>`;
   }
@@ -3015,7 +3222,7 @@ td.zero { color: var(--faint); }
     const P = (pt) => [x + pt.x * k, y + pt.y * k];
     const polyline = (pts) => pts.slice(1).forEach((pt, i) => doc.line(...P(pts[i]), ...P(pt)));
     doc.setFillColor(...PDF_RGB.court);
-    doc.rect(x, y + GOAL_LINE_Y * k, w, (810 - GOAL_LINE_Y) * k, 'F');
+    doc.rect(x, y + GOAL_LINE_Y * k, w, (COURT_VIEW_H - GOAL_LINE_Y) * k, 'F');
     doc.setFillColor(255, 255, 255);
     doc.rect(...P(GOAL_FACE), GOAL_FACE.w * k, GOAL_FACE.h * k, 'F');
     doc.setDrawColor(...PDF_RGB.net);
@@ -3032,6 +3239,8 @@ td.zero { color: var(--faint); }
     polyline(areaLine(6));
     doc.setLineDashPattern([1.5, 1.2], 0);
     polyline(areaLine(NINE_M));
+    doc.setLineDashPattern([0.4, 1.4], 0);
+    polyline(areaLine(ELEVEN_M));
     doc.setLineDashPattern([], 0);
     doc.setLineWidth(0.7);
     doc.line(...P(m(-0.5, SEVEN_M.dy)), ...P(m(0.5, SEVEN_M.dy)));
@@ -3068,7 +3277,7 @@ td.zero { color: var(--faint); }
     }
     const c = countGroups(shots);
     let lx = x;
-    const ly = y + 810 * k + 6;
+    const ly = y + COURT_VIEW_H * k + 6;
     doc.setFontSize(8);
     TALLY_ORDER.forEach((g) => {
       doc.setFillColor(...view.colors[g]);
