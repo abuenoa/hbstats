@@ -295,6 +295,15 @@ button.rex-chip { border: 0; cursor: pointer; position: relative; }
 #stage[data-phase="DEF"] #draw-line { stroke: var(--red); } #stage[data-phase="DEF"] #draw-origin { fill: var(--red); }
 .tok.shooter .body { stroke: var(--gol); stroke-width: 8; }
 .court-label { font-family: var(--font-display); font-weight: 700; font-size: 21px; fill: var(--court-line); opacity: .4; }
+.chart-num { font-family: var(--font-display); font-weight: 800; fill: var(--fg); }
+.chart-cap { font-size: 13px; font-weight: 700; fill: var(--muted); }
+.zone-pct, .goal-pct { font-family: var(--font-display); font-weight: 800; }
+.zone-pct { font-size: 34px; fill: var(--fg); }
+.zone-n { font-size: 22px; font-weight: 700; fill: var(--fg); }
+.goal-pct, .goal-n { fill: var(--brand-ink); }
+.goal-pct { font-size: 28px; }
+.goal-n { font-size: 13px; font-weight: 700; }
+.zone-dot { stroke: var(--surface); stroke-width: 2; }
 .tally-label { font-family: var(--font-display); font-weight: 700; font-size: 17px; letter-spacing: .08em; fill: var(--muted); text-anchor: end; }
 .tally-owner { font-family: var(--font-display); font-weight: 800; font-size: 18px; letter-spacing: .1em; fill: var(--red); text-anchor: end; }
 .tally-num { font-family: var(--font-display); font-weight: 800; font-size: 52px; text-anchor: end; }
@@ -1761,12 +1770,14 @@ td.zero { color: var(--faint); }
     US: { owner: 'SU PORTERO', colors: GROUP_COLOR }
   };
   const TALLY_ROW_Y = [64, 132, 200];
+  const AREA_6M_PATH = 'M 125 260 A 300 300 0 0 0 425 560 L 575 560 A 300 300 0 0 0 875 260 Z';
+  const LINE_9M_PATH = 'M -25 260 A 450 450 0 0 0 425 710 L 575 710 A 450 450 0 0 0 1025 260';
   // Static court drawing shared by the live court and the sheet's shot maps; each SVG needs its own clip id.
   const courtFloorSvg = (clipId) => `<defs><clipPath id="${clipId}"><rect x="0" y="260" width="1000" height="${COURT_VIEW_H - GOAL_LINE_Y}"/></clipPath></defs>
     <rect x="0" y="260" width="1000" height="${COURT_VIEW_H - GOAL_LINE_Y}" fill="var(--court)" rx="10"/>
     <g clip-path="url(#${clipId})">
-      <path d="M 125 260 A 300 300 0 0 0 425 560 L 575 560 A 300 300 0 0 0 875 260 Z" fill="var(--area)" stroke="var(--court-line)" stroke-width="4"/>
-      <path d="M -25 260 A 450 450 0 0 0 425 710 L 575 710 A 450 450 0 0 0 1025 260" fill="none" stroke="var(--court-line)" stroke-width="3" stroke-dasharray="18 14"/>
+      <path d="${AREA_6M_PATH}" fill="var(--area)" stroke="var(--court-line)" stroke-width="4"/>
+      <path d="${LINE_9M_PATH}" fill="none" stroke="var(--court-line)" stroke-width="3" stroke-dasharray="18 14"/>
       <path d="M -125 260 A 550 550 0 0 0 425 810 L 575 810 A 550 550 0 0 0 1125 260" fill="none" stroke="var(--court-line)" stroke-width="2" stroke-dasharray="3 12" opacity=".55"/>
     </g>
     <line x1="0" y1="260" x2="1000" y2="260" stroke="var(--court-line)" stroke-width="4"/>
@@ -4428,6 +4439,97 @@ td.zero { color: var(--faint); }
     const f = clamp(fraction, 0, 1);
     const mix = (to, from, share) => `color-mix(in srgb, ${to} ${share * PERCENT}%, ${from})`;
     return f <= RATE_MIDPOINT ? mix('var(--dos)', 'var(--act-bad)', f / RATE_MIDPOINT) : mix('var(--act-good)', 'var(--dos)', (f - RATE_MIDPOINT) / (1 - RATE_MIDPOINT));
+  }
+  // ---- Season charts: inline SVG strings for the player card; ids are unique per call ----
+  let chartCount = 0;
+  const rateText = (ok, n) => `${Math.round(ratio(ok, n) * PERCENT)} %`;
+  const svgNum = (v) => Number(v.toFixed(1));
+  const RADAR = { w: 520, h: 380, radius: 110, rings: [0.25, 0.5, 0.75, 1], labelGap: 18, valueLift: 12, captionDrop: 15, edge: 0.5 };
+  function radarSvg(axes, centreText, centreLabel) {
+    const cx = RADAR.w / 2, cy = RADAR.h / 2;
+    const dir = (i) => { const a = -Math.PI / 2 + (2 * Math.PI * i) / axes.length; return [Math.cos(a), Math.sin(a)]; };
+    const at = (i, radius) => { const [dx, dy] = dir(i); return [svgNum(cx + dx * radius), svgNum(cy + dy * radius)]; };
+    const polygon = (radiusOf) => axes.map((a, i) => at(i, radiusOf(a)).join(',')).join(' ');
+    const rings = RADAR.rings.map((r) => `<polygon points="${polygon(() => RADAR.radius * r)}" fill="none" stroke="var(--line)" stroke-width="1.5"/>`).join('');
+    const spokes = axes.map((a, i) => { const [x, y] = at(i, RADAR.radius); return `<line x1="${cx}" y1="${cy}" x2="${x}" y2="${y}" stroke="var(--${a.group})" stroke-width="3" opacity=".55"/>`; }).join('');
+    const dots = axes.map((a, i) => { const [x, y] = at(i, RADAR.radius * clamp(a.fraction, 0, 1)); return `<circle cx="${x}" cy="${y}" r="6" fill="var(--${a.group})"/>`; }).join('');
+    const labels = axes.map((a, i) => {
+      const [dx, dy] = dir(i), [x, y] = at(i, RADAR.radius + RADAR.labelGap);
+      const anchor = dx > RADAR.edge ? 'start' : dx < -RADAR.edge ? 'end' : 'middle';
+      const above = dy < -RADAR.edge, below = dy > RADAR.edge;
+      const valueY = above ? y - RADAR.valueLift : below ? y + RADAR.valueLift : y;
+      const captionY = valueY + RADAR.captionDrop;
+      return `<text class="chart-num" x="${x}" y="${valueY}" font-size="20" text-anchor="${anchor}">${esc(a.text)}</text><text class="chart-cap" x="${x}" y="${captionY}" text-anchor="${anchor}">${esc(a.label)}</text>`;
+    }).join('');
+    return `<svg viewBox="0 0 ${RADAR.w} ${RADAR.h}" role="img">${rings}${spokes}
+      <polygon points="${polygon((a) => RADAR.radius * clamp(a.fraction, 0, 1))}" fill="var(--fg)" fill-opacity=".08" stroke="var(--fg)" stroke-width="2" stroke-linejoin="round"/>
+      ${dots}${labels}
+      <text class="chart-num" x="${cx}" y="${cy + 6}" font-size="30" text-anchor="middle">${esc(centreText)}</text><text class="chart-cap" x="${cx}" y="${cy + 24}" text-anchor="middle">${esc(centreLabel)}</text></svg>`;
+  }
+
+  // Lane wedges fan out from the goal centre; the angles are the lane edges seen from the attacker, left to right.
+  const WEDGE_REACH = 3000;
+  const LANE_BOUNDS_DEG = [-90, -LANE_EDGES_DEG[1], -LANE_EDGES_DEG[0], LANE_EDGES_DEG[0], LANE_EDGES_DEG[1], 90];
+  const ZONE_LABEL_RADIUS = { [RING_NEAR]: 385, [RING_FAR]: 500 };
+  const ZONE_LABEL_PAD = 60, ZONE_LABEL_GAP = 36;
+  const ZONE_FILL_OPACITY = 0.55, ZONE_NEUTRAL_OPACITY = 0.05, ZONE_DOT_R = 7, ZONE_DOT_OPACITY = 0.55;
+  const MASK_SHOW = '#fff', MASK_HIDE = '#000';
+  const COURT_WIDTH = COURT.minX + COURT.maxX, ZONE_VIEW_TOP = GOAL_LINE_Y - 10, LANE_NAME_INSET = 16;
+  function zoneMapSvg(list, success, colours) {
+    const id = ++chartCount, clip = `zone-clip-${id}`, near = `zone-near-${id}`, far = `zone-far-${id}`;
+    const rates = zoneRates(list, success);
+    const polar = (deg, radius) => { const rad = (deg * Math.PI) / 180; return [CENTER_X + radius * Math.sin(rad), GOAL_LINE_Y + radius * Math.cos(rad)]; };
+    const masks = `<mask id="${near}"><rect x="-100" y="0" width="${COURT_WIDTH + 200}" height="2000" fill="${MASK_HIDE}"/><path d="${LINE_9M_PATH} Z" fill="${MASK_SHOW}"/><path d="${AREA_6M_PATH}" fill="${MASK_HIDE}"/></mask>
+      <mask id="${far}"><rect x="-100" y="0" width="${COURT_WIDTH + 200}" height="2000" fill="${MASK_SHOW}"/><path d="${LINE_9M_PATH} Z" fill="${MASK_HIDE}"/></mask>`;
+    const zones = LANES.flatMap((lane, i) => [[RING_NEAR, near], [RING_FAR, far]].map(([ring, mask]) => {
+      const [from, to] = [LANE_BOUNDS_DEG[i], LANE_BOUNDS_DEG[i + 1]];
+      const wedge = `M ${CENTER_X} ${GOAL_LINE_Y} L ${polar(from, WEDGE_REACH).map(svgNum).join(' ')} L ${polar(to, WEDGE_REACH).map(svgNum).join(' ')} Z`;
+      const rate = rates.get(`${lane.id}:${ring}`);
+      const fill = rate ? `fill="${rateColour(rate.ok / rate.n)}" fill-opacity="${ZONE_FILL_OPACITY}"` : `fill="var(--court-line)" fill-opacity="${ZONE_NEUTRAL_OPACITY}"`;
+      const path = `<path d="${wedge}" mask="url(#${mask})" ${fill}/>`;
+      if (!rate) return { path, label: '' };
+      const [x, y] = polar((from + to) / 2, ZONE_LABEL_RADIUS[ring]);
+      const lx = svgNum(clamp(x, ZONE_LABEL_PAD, COURT_WIDTH - ZONE_LABEL_PAD)), ly = svgNum(y);
+      return { path, label: `<text class="zone-pct" x="${lx}" y="${ly}" text-anchor="middle">${rateText(rate.ok, rate.n)}</text><text class="zone-n" x="${lx}" y="${svgNum(y + ZONE_LABEL_GAP)}" text-anchor="middle">${rate.ok}/${rate.n}</text>` };
+    }));
+    const dots = list.filter((e) => e.origin && ![ZONE_P7, ZONE_CONTRA].includes(shotZone(e)))
+      .map((e) => `<circle class="zone-dot" cx="${svgNum(e.origin.x)}" cy="${svgNum(e.origin.y)}" r="${ZONE_DOT_R}" fill="${colours[groupOf(e.result)]}" fill-opacity="${ZONE_DOT_OPACITY}"/>`).join('');
+    const names = LANES.map((lane, i) => `<text class="court-label" x="${svgNum(((i + 0.5) / LANES.length) * COURT_WIDTH)}" y="${COURT_VIEW_H - LANE_NAME_INSET}" text-anchor="middle">${esc(lane.label)}</text>`).join('');
+    return `<svg viewBox="0 ${ZONE_VIEW_TOP} ${COURT_WIDTH} ${COURT_VIEW_H - ZONE_VIEW_TOP}" role="img"><defs>${masks}</defs>${courtFloorSvg(clip)}
+      <g clip-path="url(#${clip})">${zones.map((z) => z.path).join('')}</g>${dots}${zones.map((z) => z.label).join('')}${names}</svg>`;
+  }
+
+  const GOAL_CELL = { w: 108, h: 74, gap: 4, pad: 14, pctDrop: 38, nDrop: 58, corner: 8, frame: 10 };
+  function goalRateSvg(list, success) {
+    const { w, h, gap, pad } = GOAL_CELL;
+    const width = GOAL_GRID * w + (GOAL_GRID - 1) * gap + 2 * pad, height = GOAL_GRID * h + (GOAL_GRID - 1) * gap + 2 * pad;
+    const half = GOAL_CELL.frame / 2;
+    const cells = goalRates(list, success).flatMap((cols, row) => cols.map(({ ok, n }, col) => {
+      const x = pad + col * (w + gap), y = pad + row * (h + gap), mid = x + w / 2;
+      const rect = `<rect class="goal-cell" x="${x}" y="${y}" width="${w}" height="${h}" rx="${GOAL_CELL.corner}" fill="${n ? rateColour(ok / n) : 'var(--soft)'}"/>`;
+      return n ? `${rect}<text class="goal-pct" x="${mid}" y="${y + GOAL_CELL.pctDrop}" text-anchor="middle">${rateText(ok, n)}</text><text class="goal-n" x="${mid}" y="${y + GOAL_CELL.nDrop}" text-anchor="middle">${ok}/${n}</text>` : rect;
+    })).join('');
+    return `<svg viewBox="0 0 ${width} ${height}" role="img"><path d="M ${half} ${height} V ${half} H ${width - half} V ${height}" fill="none" stroke="var(--red)" stroke-width="${GOAL_CELL.frame}" stroke-linejoin="round"/>${cells}</svg>`;
+  }
+
+  const EVO = { minW: 360, pad: 24, slotW: 56, barMaxW: 40, barShare: 0.6, h: 220, top: 28, bottom: 34, dotR: 5 };
+  // One bar per match (oldest left) for barKey, and a line over them for pct(row) in 0-1; '' when there are no matches.
+  function evolutionSvg(rows, barKey, pct) {
+    if (!rows.length) return '';
+    const width = Math.max(EVO.minW, rows.length * EVO.slotW + 2 * EVO.pad), slot = (width - 2 * EVO.pad) / rows.length;
+    const base = EVO.h - EVO.bottom, plotH = base - EVO.top, peak = Math.max(...rows.map((r) => r[barKey])) || 1;
+    const barW = Math.min(EVO.barMaxW, slot * EVO.barShare);
+    const centre = (i) => svgNum(EVO.pad + slot * (i + 0.5));
+    const bars = rows.map((r, i) => {
+      const barH = svgNum((r[barKey] / peak) * plotH);
+      return `<rect class="evo-bar" x="${svgNum(centre(i) - barW / 2)}" y="${svgNum(base - barH)}" width="${svgNum(barW)}" height="${barH}" rx="4" fill="var(--act-def)" fill-opacity=".45"/>`
+        + `<text class="chart-num" x="${centre(i)}" y="${svgNum(base - barH - 6)}" font-size="16" text-anchor="middle">${esc(r[barKey])}</text>`
+        + `<text class="chart-cap" x="${centre(i)}" y="${EVO.h - 10}" font-size="11" text-anchor="middle">${esc(dateText(r.date))}</text>`;
+    }).join('');
+    const points = rows.map((r, i) => [centre(i), svgNum(base - clamp(pct(r), 0, 1) * plotH)]);
+    const dots = points.map(([x, y]) => `<circle class="evo-dot" cx="${x}" cy="${y}" r="${EVO.dotR}" fill="var(--gold)" stroke="var(--surface)" stroke-width="2"/>`).join('');
+    return `<svg viewBox="0 0 ${width} ${EVO.h}" role="img"><line x1="${EVO.pad}" y1="${base}" x2="${width - EVO.pad}" y2="${base}" stroke="var(--line)" stroke-width="2"/>${bars}
+      <polyline points="${points.map((p) => p.join(',')).join(' ')}" fill="none" stroke="var(--gold)" stroke-width="3" stroke-linejoin="round" stroke-linecap="round"/>${dots}</svg>`;
   }
   async function showMatches() {
     showHomeView('matches');

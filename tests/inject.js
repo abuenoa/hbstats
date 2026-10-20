@@ -334,6 +334,53 @@
       if (rateColour(-3) !== low || rateColour(7) !== high) throw new Error('not clamped');
       if (CONFIG.leaders.minShots !== 3) throw new Error('leaders');
     });
+    const chartAxes = (label) => ['act-good', 'act-good', 'act-def', 'act-bad', 'act-rule'].map((group, i) => ({ key: `k${i}`, label: i ? `Eje ${i}` : label, value: i, text: `${i},5`, fraction: i / 4, group }));
+    const countOf = (svg, re) => (svg.match(re) || []).length;
+    T('charts: radar labels every axis with its value and colour', () => {
+      const svg = radarSvg(chartAxes('Acierto'), '72%', 'Nota');
+      if (countOf(svg, /<text/g) !== 5 * 2 + 2) throw new Error(`texts ${countOf(svg, /<text/g)}`);
+      if (countOf(svg, /stroke="var\(--act-good\)"/g) !== 2 || countOf(svg, /fill="var\(--act-good\)"/g) !== 2) throw new Error('good spokes and dots');
+      ['var(--act-def)', 'var(--act-bad)', 'var(--act-rule)'].forEach((c) => { if (!svg.includes(`stroke="${c}"`) || !svg.includes(`fill="${c}"`)) throw new Error(`no ${c}`); });
+      if (!svg.includes('>72%<') || !svg.includes('>Nota<') || !svg.includes('>Acierto<') || !svg.includes('>3,5<')) throw new Error('texts missing');
+      if (/NaN|undefined/.test(svg)) throw new Error('bad coordinates');
+      const vb = svg.match(/viewBox="0 0 (\d+) (\d+)"/), xs = [...svg.matchAll(/<text[^>]* x="(-?[\d.]+)"/g)].map((x) => +x[1]);
+      if (!vb || xs.some((x) => x < 0 || x > +vb[1])) throw new Error('label outside the viewBox');
+    });
+    const chartShot = (over) => ({ kind: 'SHOT', from: '9M', zone: '9M', origin: m(0, 10), target: gf(0.5, 0.5), result: 'GOL', ...over });
+    T('charts: zone map labels only zones with shots and skips 7 m and counters', () => {
+      const colours = { GOL: 'var(--c-gol)', PARADA: 'var(--c-parada)', FALLO: 'var(--c-fallo)' };
+      const list = [chartShot(), chartShot({ result: 'PARADA' }), chartShot({ origin: m(-5, 6), result: 'GOL' }), chartShot({ from: '7M', zone: '7M', origin: m(0, 7) }), chartShot({ zone: 'CONTRA' }), chartShot({ origin: m(6, 10), result: 'FUERA' })];
+      const svg = zoneMapSvg(list, (e) => e.result === 'GOL', colours);
+      if (countOf(svg, /class="zone-pct"/g) !== 2 || countOf(svg, /class="zone-n"/g) !== 2) throw new Error('labels ' + countOf(svg, /class="zone-pct"/g));
+      if (!svg.includes('>50 %<') || !svg.includes('>1/2<') || !svg.includes('>100 %<') || !svg.includes('>1/1<')) throw new Error('rates');
+      if (countOf(svg, /class="zone-dot"/g) !== 4 || !svg.includes('fill="var(--c-gol)"') || !svg.includes('fill="var(--c-fallo)"')) throw new Error('dots');
+      LANES.forEach((l) => { if (!svg.includes(`>${l.label}<`)) throw new Error(`lane ${l.label}`); });
+      if (!svg.includes('>6 m<') || /NaN/.test(svg)) throw new Error('court');
+      const again = zoneMapSvg([], () => true, colours), ids = [...(svg + again).matchAll(/ id="([^"]+)"/g)].map((x) => x[1]);
+      if (new Set(ids).size !== ids.length) throw new Error('shared ids ' + ids.join());
+      if (again.includes('zone-pct')) throw new Error('labels without shots');
+    });
+    T('charts: goal grid shows rates for cells with shots', () => {
+      const list = [chartShot({ target: gf(0.1, 0.1) }), chartShot({ target: gf(0.1, 0.1), result: 'PARADA' }), chartShot({ target: gf(0.9, 0.9) }), chartShot({ target: gf(0.5, 0.5), result: 'FUERA' })];
+      const svg = goalRateSvg(list, (e) => e.result === 'GOL');
+      if (countOf(svg, /class="goal-pct"/g) !== 2 || !svg.includes('>50 %<') || !svg.includes('>1/2<') || !svg.includes('>100 %<') || !svg.includes('>1/1<')) throw new Error('labels');
+      if (countOf(svg, /class="goal-cell"/g) !== GOAL_GRID * GOAL_GRID || /NaN/.test(svg)) throw new Error('cells');
+    });
+    T('charts: user text is escaped in charts', () => {
+      const svg = radarSvg(chartAxes('<img src=x>'), '<b>1</b>', '"&"');
+      if (/<img|<b>/.test(svg) || !svg.includes('&lt;img src=x&gt;') || !svg.includes('&lt;b&gt;1&lt;/b&gt;') || !svg.includes('&quot;&amp;&quot;')) throw new Error('not escaped');
+    });
+    T('charts: evolution draws a bar per match, a single match included', () => {
+      const row = (date, goals, made) => ({ date, goals, made });
+      if (evolutionSvg([], 'goals', (r) => r.made) !== '') throw new Error('not empty');
+      const one = evolutionSvg([row('2026-10-01', 4, 0.5)], 'goals', (r) => r.made);
+      if (countOf(one, /class="evo-bar"/g) !== 1 || countOf(one, /class="evo-dot"/g) !== 1 || /NaN|Infinity/.test(one)) throw new Error('single match');
+      const zero = evolutionSvg([row('2026-10-01', 0, 0)], 'goals', (r) => r.made);
+      if (/NaN|Infinity/.test(zero)) throw new Error('all zero');
+      const three = evolutionSvg([row('2026-10-01', 2, 0.2), row('2026-10-08', 4, 0.6), row('2026-10-15', 3, 1)], 'goals', (r) => r.made);
+      const xs = [...three.matchAll(/class="evo-bar" x="([\d.]+)"/g)].map((x) => +x[1]);
+      if (xs.length !== 3 || !(xs[0] < xs[1] && xs[1] < xs[2]) || !three.includes(`>${dateText('2026-10-01')}<`) || !three.includes('<polyline')) throw new Error('order ' + xs);
+    });
     await TA('a roster file with card names and photos stores them', async () => { const a = home.roster.find((p) => p.pos === 'POR'); const file = new File([JSON.stringify({ format: ROSTER_FORMAT, players: [{ num: a.num, name: 'Ana', pos: 'POR', fullName: 'Ana Ruiz', photo: TINY_PNG }, { num: 31, name: 'Eva', pos: 'EXT', fullName: 'Eva Gil Mora', photo: TINY_PNG }] })], 'p.json', { type: 'application/json' }); await importTeamRoster(file); const list = await backend.listPlayers(team.id); const ana = list.find((p) => p.id === a.id), eva = list.find((p) => p.num === 31); if (!ana || ana.fullName !== 'Ana Ruiz' || ana.photo !== TINY_PNG || !eva || eva.fullName !== 'Eva Gil Mora' || eva.photo !== TINY_PNG) throw new Error('not stored'); await retireTeamPlayer(rosterPlayer(eva.id)); });
     await TA('the full name and photo are saved and survive a roster file', async () => { const a = home.roster.find((p) => p.pos === 'POR'); await saveTeamPlayer(a, { fullName: 'Ana Ruiz Gómez', photo: TINY_PNG }); const file = new File([JSON.stringify({ format: ROSTER_FORMAT, players: [{ num: a.num, name: 'Ana', pos: 'POR' }] })], 'p.json', { type: 'application/json' }); await importTeamRoster(file); const stored = (await backend.listPlayers(team.id)).find((p) => p.id === a.id); if (!stored || stored.name !== 'Ana' || stored.fullName !== 'Ana Ruiz Gómez' || stored.photo !== TINY_PNG) throw new Error(JSON.stringify(stored && { ...stored, photo: Boolean(stored.photo) })); });
     await TA('convocatoria: needs a goalkeeper, then opens the setup with the squad', async () => { openSquad(); if (home.squad.size !== home.roster.length) throw new Error('default squad'); home.squad = new Set(home.roster.filter((p) => p.pos !== 'POR').map((p) => p.id)); renderHome(); if (!document.querySelector('[data-squad-next]').disabled) throw new Error('no goalkeeper accepted'); const gk = home.roster.find((p) => p.pos === 'POR'); document.querySelector(`[data-squad="${gk.id}"]`).click(); if (document.querySelector('[data-squad-next]').disabled) throw new Error('still disabled'); document.querySelector('[data-squad-next]').click(); if (!currentMatchId || state.players.length !== home.squad.size || state.us !== team.name || !$('home').hidden) throw new Error('match'); if ($('sheet').hidden || ui.sheetMode !== 'setup') throw new Error('setup'); if (!localMatch(currentMatchId).dirty) throw new Error('not saved'); });
