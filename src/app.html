@@ -3790,16 +3790,15 @@ td.zero { color: var(--faint); }
         write(db);
       },
       async listMatches(teamId) { return Object.values(read().matches).filter((m) => m.teamId === teamId).map((m) => m.summary); },
-      // Matches saved before the state was kept here fall back to their device copy.
+      // States are the device copies; a match without one is skipped.
       async listMatchStates(teamId) {
-        return Object.entries(read().matches).filter(([, m]) => m.teamId === teamId)
-          .map(([id, m]) => ({ id, state: m.state || (localMatch(id) || {}).state })).filter((m) => m.state)
-          .map(({ id, state }) => ({ ...matchSummary(id, state), state }));
+        return Object.keys(read().matches).filter((id) => read().matches[id].teamId === teamId)
+          .map((id) => localMatch(id)).filter(Boolean).map((m) => ({ ...matchSummary(m.id, m.state), state: m.state }));
       },
       async loadMatch(id) { const m = localMatch(id); return m ? m.state : null; },
       async saveMatch(teamId, id, s) {
         const db = read();
-        db.matches[id] = { teamId, summary: matchSummary(id, s), state: s };
+        db.matches[id] = { teamId, summary: matchSummary(id, s) };
         write(db);
       },
       async deleteMatch(id) {
@@ -4237,9 +4236,15 @@ td.zero { color: var(--faint); }
   const GOALKEEPER_ROW_TOTALS = ['saves', 'onTarget', 'assists'];
   const sumOf = (list, pick) => list.reduce((n, x) => n + pick(x), 0);
   async function loadSeason() {
-    let list = [], offline = false;
-    try { ({ value: list, offline } = await cachedRead(`season:${team.id}`, () => backend.listMatchStates(team.id))); }
-    catch (err) { offline = true; console.warn(`Season not available: ${cloudErrorText(err)}`); }
+    const withState = (m) => ({ ...matchSummary(m.id, m.state), state: m.state });
+    let list, offline = false;
+    // Full states are not cached on the device (they compete with the match autosave): without coverage, the device copies answer.
+    try { list = await backend.listMatchStates(team.id); }
+    catch (err) {
+      offline = true;
+      list = localMatches().filter((m) => m.teamId === team.id).map(withState);
+      console.warn(`Season from the device copies: ${cloudErrorText(err)}`);
+    }
     const matches = withLocalChanges(list, (m) => ({ state: m.state })).filter((m) => SEASON_STATUSES.includes(m.status) && !m.state.sample);
     home.season = matches;
     return { matches, offline };

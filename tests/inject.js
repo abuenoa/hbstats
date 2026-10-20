@@ -200,13 +200,13 @@
     await TA('season: local backend lists match states with their summary', async () => {
       const local = localBackend();
       const a = seasonState({ them: 'A', events: [seasonShot('sp2', 'GOL')] }), b = seasonState({ them: 'B', events: [seasonRivalShot('sp1', 'PARADA')] });
-      await local.saveMatch('season-team', 'sm1', a); await local.saveMatch('season-team', 'sm2', b); await local.saveMatch('other-team', 'sm3', a);
+      for (const [teamId, id, st] of [['season-team', 'sm1', a], ['season-team', 'sm2', b], ['other-team', 'sm3', a]]) { await local.saveMatch(teamId, id, st); writeJson(MATCH_KEY_PREFIX + id, { id, teamId, state: st, dirty: false }); }
       try {
         const listed = await local.listMatchStates('season-team');
         if (listed.length !== 2 || !listed.every((x) => Array.isArray(x.state.events) && x.state.events.length === 1)) throw new Error(JSON.stringify(listed.map((x) => x.id)));
         const first = listed.find((x) => x.id === 'sm1');
         if (first.them !== 'A' || first.status !== 'finished' || first.scoreUs !== 1) throw new Error(JSON.stringify(first));
-      } finally { for (const id of ['sm1', 'sm2', 'sm3']) await local.deleteMatch(id); }
+      } finally { for (const id of ['sm1', 'sm2', 'sm3']) { await local.deleteMatch(id); removeKey(MATCH_KEY_PREFIX + id); } }
     });
     await TA('season: only live and finished matches, sample excluded, local changes merged', async () => {
       const real = backend, savedId = team.id;
@@ -222,16 +222,21 @@
         const ids = matches.map((x) => x.id).join();
         if (offline || ids !== `${dirtyId},s-live,s-old` || home.season !== matches) throw new Error(ids + ' offline ' + offline);
         if (matches[0].them !== 'New copy' || !matches[0].state) throw new Error('local copy not merged');
-      } finally { backend = real; team.id = savedId; removeKey(MATCH_KEY_PREFIX + dirtyId); removeKey(CACHE_KEY_PREFIX + 'season:season-team'); }
+      } finally { backend = real; team.id = savedId; removeKey(MATCH_KEY_PREFIX + dirtyId); }
     });
-    await TA('season: no coverage and no copy gives an empty season, offline', async () => {
+    await TA('season: no coverage builds the season from device copies, none gives an empty season, offline', async () => {
       const real = backend, savedId = team.id;
       team.id = 'season-empty-team';
       try {
         backend = { listMatchStates: async () => { throw new Error('Failed to fetch'); } };
-        const { matches, offline } = await loadSeason();
-        if (matches.length || !offline || home.season.length) throw new Error(matches.length + ' ' + offline);
-      } finally { backend = real; team.id = savedId; }
+        const none = await loadSeason();
+        if (none.matches.length || !none.offline || home.season.length) throw new Error(none.matches.length + ' ' + none.offline);
+        writeJson(MATCH_KEY_PREFIX + 'sd1', { id: 'sd1', teamId: team.id, state: seasonState({ date: '2026-09-01' }), dirty: false });
+        writeJson(MATCH_KEY_PREFIX + 'sd2', { id: 'sd2', teamId: team.id, state: seasonState({ date: '2026-09-08', setupDone: false }), dirty: false });
+        writeJson(MATCH_KEY_PREFIX + 'sd3', { id: 'sd3', teamId: 'other-team', state: seasonState(), dirty: false });
+        const copies = await loadSeason();
+        if (!copies.offline || copies.matches.map((x) => x.id).join() !== 'sd1' || !copies.matches[0].state) throw new Error(copies.matches.map((x) => x.id).join());
+      } finally { backend = real; team.id = savedId; ['sd1', 'sd2', 'sd3'].forEach((id) => removeKey(MATCH_KEY_PREFIX + id)); }
     });
     T('season: team record uses finished matches only', () => {
       const finished = seasonRow('f1', { events: [seasonShot('sp2', 'GOL')] }), live = seasonRow('l1', { finished: false, events: [seasonShot('sp2', 'FALLO')] });
