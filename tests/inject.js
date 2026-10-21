@@ -2047,6 +2047,76 @@
         if (home.view !== 'attendance' || !document.querySelector('[data-att]')) throw new Error(home.view);
       });
     });
+    // Attendance rates: pure rows first, then the three pages that show them.
+    const ratePlayers = [1, 2, 3].map((n) => ({ id: 'ra' + n, num: n, name: 'Jugador ' + n, pos: n === 1 ? 'POR' : 'LI' }));
+    const rateMatch = (id, date, ids, status = 'finished') => ({ id, date, status, state: { players: ids.map((x) => ({ id: x })) } });
+    const rateSession = (date, kind, marks = {}, matchId = null) => ({ ...emptySession(date, kind), matchId, marks });
+    const rowOf = (rows, id) => rows.find((r) => r.player.id === id);
+    await TA('attendance: match convocados count present, non-convocados are not counted', async () => {
+      const matches = [rateMatch('rm1', '2026-10-17', ['ra1', 'ra2']), rateMatch('rm2', '2026-10-24', ['ra1'], 'setup')];
+      const derived = attendanceRows([], matches, ratePlayers);
+      const r1 = rowOf(derived, 'ra1'), r3 = rowOf(derived, 'ra3');
+      if (r1.P !== 1 || r1.counted !== 1 || r1.pct !== 100 || r1.byKind.PARTIDO.counted !== 1 || r1.byKind.ENTRENO.counted !== 0) throw new Error('convocado: ' + JSON.stringify(r1));
+      if (r3.counted !== 0 || r3.F + r3.P + r3.J + r3.L !== 0) throw new Error('non-convocado counted (or a setup match derived): ' + JSON.stringify(r3));
+      // A stored «Partido» session replaces the derived one: the convocados stay present (once) and a non-convocado marked F counts.
+      const stored = attendanceRows([rateSession('2026-10-17', 'PARTIDO', { ra3: { s: 'F' } }, 'rm1')], matches, ratePlayers);
+      if (rowOf(stored, 'ra1').counted !== 1 || rowOf(stored, 'ra3').F !== 1 || rowOf(stored, 'ra3').pct !== 0) throw new Error('stored match day: ' + JSON.stringify(stored.map((r) => [r.P, r.F, r.counted])));
+      // Found by date when the stored session has no match id yet.
+      if (rowOf(attendanceRows([rateSession('2026-10-17', 'PARTIDO')], matches, ratePlayers), 'ra1').counted !== 1) throw new Error('date link');
+    });
+    await TA('attendance: injured sessions leave the rate, absences and justified lower it', async () => {
+      const days = [['2026-10-01', { ra1: { s: 'L' } }], ['2026-10-02', { ra1: { s: 'F' } }], ['2026-10-03', { ra1: { s: 'J' } }], ['2026-10-04', {}]];
+      const r = rowOf(attendanceRows(days.map(([d, marks]) => rateSession(d, 'ENTRENO', marks)), [], ratePlayers), 'ra1');
+      if (r.P !== 1 || r.F !== 1 || r.J !== 1 || r.L !== 1 || r.counted !== 3 || r.pct !== 33 || r.byKind.ENTRENO.pct !== 33 || r.byKind.PARTIDO.pct !== null) throw new Error(JSON.stringify(r));
+    });
+    await TA('attendance: a player with no counted session reads – and no NaN', async () => {
+      const onlyInjured = rateSession('2026-10-01', 'ENTRENO', { ra2: { s: 'L' } });
+      const rows = attendanceRows([onlyInjured], [], ratePlayers);
+      if (rowOf(rows, 'ra2').pct !== null || attendanceRows([], [], ratePlayers).some((r) => r.pct !== null)) throw new Error('pct must be null');
+      await withAttendanceView(async () => {
+        home.roster = ratePlayers; home.sessions = [onlyInjured]; home.stateMatches = []; home.season = [];
+        showHomeView('team');
+        const text = $('home').textContent;
+        if (/NaN|undefined/.test(text) || !document.querySelector('.squad [data-player="ra2"] .face-att') || document.querySelector('[data-player="ra2"] .face-att').textContent.trim() !== '–') throw new Error('squad: ' + text.slice(0, 200));
+        home.sessions = []; showHomeView('team');
+        if (document.querySelector('.attendance-card') || document.querySelector('.face-att')) throw new Error('rates shown without sessions');
+      });
+    });
+    await TA('player card: attendance tile with percent and counts', async () => {
+      await withAttendanceView(async () => {
+        home.sessions = [rateSession('2026-10-01', 'ENTRENO'), rateSession('2026-10-02', 'ENTRENO', { ca: { s: 'F' } }), rateSession('2026-10-03', 'ENTRENO', { ca: { s: 'J' } }), rateSession('2026-10-04', 'ENTRENO', { ca: { s: 'L' } })];
+        openCard('ca', [cardMatch()]);
+        home.stateMatches = home.season;
+        showPlayer('ca');
+        const tile = document.querySelector('.att-tile'), text = tile && tile.textContent.replace(/\s+/g, ' ').trim();
+        if (!text || !text.includes('Asistencia · 50 %') || !text.includes('2 de 4 · 1 falta · 1 justificada · 1 lesionado') || !text.includes('Entrenos 33 % · Partidos 100 %') || /NaN|undefined/.test(text)) throw new Error(text);
+        if (document.querySelector('.att-tile .att-low') === null) throw new Error('50 % is below warnPct and needs the «!»');
+      });
+    });
+    await TA('team page: most absences ranked by faltas, then justificadas', async () => {
+      await withAttendanceView(async () => {
+        const marks = (...codes) => Object.fromEntries(codes.map(([id, s]) => [id, { s }]));
+        home.roster = [1, 2, 3, 4, 5].map((n) => ({ id: 'rt' + n, num: n, name: 'Jugador ' + n, pos: 'LI' }));
+        home.stateMatches = []; home.season = [];
+        home.sessions = [rateSession('2026-10-01', 'ENTRENO', marks(['rt1', 'F'], ['rt2', 'J'], ['rt3', 'F'], ['rt4', 'J'])), rateSession('2026-10-02', 'ENTRENO', marks(['rt3', 'F'], ['rt2', 'J'], ['rt1', 'J']))];
+        showHomeView('team');
+        const card = document.querySelector('.attendance-card');
+        if (!card || !/Más faltas/.test(card.textContent) || !card.textContent.includes('2 entrenos · 0 partidos')) throw new Error(card && card.textContent);
+        const order = [...card.querySelectorAll('[data-player]')].map((b) => b.dataset.player).join();
+        if (order !== 'rt3,rt1,rt2') throw new Error('order: ' + order);
+        if (card.querySelector('[data-player="rt5"]') || card.querySelector('[data-player="rt4"]')) throw new Error('only the top 3 with absences');
+      });
+    });
+    await TA('squad: low attendance is marked with text, not colour only', async () => {
+      await withAttendanceView(async () => {
+        home.roster = ratePlayers; home.stateMatches = []; home.season = [];
+        home.sessions = [rateSession('2026-10-01', 'ENTRENO', { ra1: { s: 'F' } }), rateSession('2026-10-02', 'ENTRENO')];
+        showHomeView('team');
+        const low = document.querySelector('.squad [data-player="ra1"]'), fine = document.querySelector('.squad [data-player="ra2"]');
+        if (!low.textContent.includes('50 %') || !low.querySelector('.att-low[aria-label]') || low.querySelector('.att-low').textContent !== '!' || !/baja/.test(low.getAttribute('aria-label'))) throw new Error('low: ' + low.outerHTML.slice(0, 300));
+        if (!fine.textContent.includes('100 %') || fine.querySelector('.att-low')) throw new Error('fine marked');
+      });
+    });
     await TA('calendar: deleting a team removes its calendar copy from the device', async () => {
       const gone = { id: 'cal-gone', club: 'Gone', name: 'Gone', brand: '#1a4a8a', brand2: '#ffffff', brandInk: '#ffffff', crest: null };
       const real = backend, previous = team, savedTeams = home.teams;

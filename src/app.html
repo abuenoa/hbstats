@@ -854,6 +854,14 @@ span.att-foot { visibility: hidden; }
 .tile.lead-field { background: var(--brand); color: var(--brand-ink); }
 .tile.lead-keeper { background: var(--rating-top); color: var(--rating-ink-top); }
 .tile.lead-field span, .tile.lead-keeper span { color: inherit; }
+.att-tile { grid-column: 1 / -1; }
+.att-head { margin: 0; font: var(--type-caption); color: var(--muted); }
+.att-head b { font: var(--type-kpi); font-variant-numeric: tabular-nums; color: var(--fg); white-space: nowrap; }
+.att-low { display: inline-grid; place-items: center; width: 1.25em; height: 1.25em; border-radius: var(--radius-full); background: var(--color-warning-text); color: var(--bg); font: var(--type-caption); font-style: normal; font-weight: 800; vertical-align: middle; }
+.att-sub { margin: var(--space-4) 0 var(--space-2); font: var(--type-caption); font-weight: 700; letter-spacing: .1em; text-transform: uppercase; color: var(--color-text-secondary); }
+.face .face-att { font-size: .75rem; font-weight: 700; color: var(--muted); font-variant-numeric: tabular-nums; }
+.face .face-att.warn { color: var(--color-warning-text); }
+.face .face-att .att-low { width: 1.3em; height: 1.3em; font-size: .7rem; }
 .mvp-tile { display: flex; align-items: center; gap: var(--space-3); margin-top: var(--space-2); padding: var(--space-3); border-radius: var(--inner-radius, var(--radius-sm)); border: 1px solid var(--gold); background: color-mix(in srgb, var(--gold) 14%, transparent); }
 .mvp-tile svg { width: 52px; height: auto; flex: none; }
 .mvp-tile b { color: var(--fg); }
@@ -4458,6 +4466,37 @@ span.att-foot { visibility: hidden; }
     return match.state.players.some((p) => p.id === playerId) ? 'P' : marked || 'NC';
   }
 
+  // ---- Attendance rates: pct = presentes ÷ contadas; «No convocado» and CONFIG.attendance.excludeFromRate (Lesionado) are not counted ----
+  const ABSENCE_LEADERS = 3;
+  // Every session day of the team: the stored sessions, plus a derived «Partido» (convocados present) for each season match without a stored one.
+  function attendanceDays(sessions, matches) {
+    const matchOf = (s) => matches.find((m) => m.id === s.matchId) || matches.find((m) => m.date === s.date) || null;
+    const stored = sessions.map((session) => ({ session, match: session.kind === SESSION_KINDS.MATCH ? matchOf(session) : null }));
+    const covered = new Set(stored.map((day) => day.match));
+    const derived = matches.filter((m) => SEASON_STATUSES.includes(m.status) && !covered.has(m))
+      .map((m) => ({ session: { date: m.date, kind: SESSION_KINDS.MATCH, matchId: m.id, marks: {} }, match: m }));
+    return [...stored, ...derived];
+  }
+  function attendanceRows(sessions, matches, roster) {
+    const days = attendanceDays(sessions, matches);
+    return roster.map((player) => {
+      const row = { player, P: 0, F: 0, J: 0, L: 0, counted: 0, pct: null, byKind: {} };
+      Object.values(SESSION_KINDS).forEach((kind) => { row.byKind[kind] = { P: 0, counted: 0, pct: null }; });
+      days.forEach(({ session, match }) => {
+        const code = sessionStatus(session, player.id, match);
+        if (code === 'NC') return;
+        row[code] += 1;
+        if (CONFIG.attendance.excludeFromRate.includes(code)) return;
+        const kind = row.byKind[session.kind];
+        row.counted += 1; kind.counted += 1;
+        if (code === 'P') kind.P += 1;
+      });
+      row.pct = pct(row.P, row.counted);
+      Object.values(row.byKind).forEach((k) => { k.pct = pct(k.P, k.counted); });
+      return row;
+    });
+  }
+
   // ---- Colour ----
   // Rating bands from best to worst: the --rating-<band> and --rating-ink-<band> tokens.
   const RATING_BANDS = ['top', 'good', 'mid', 'low', 'bad'];
@@ -5311,10 +5350,38 @@ span.att-foot { visibility: hidden; }
       return players.length ? `<div class="pos-group"><h4 style="--pos:${pos === 'POR' ? 'var(--fg)' : CONFIG.positions[pos].color}">${POSITION_GROUPS[pos]}</h4><div class="faces">${players.map(faceOf).join('')}</div></div>` : '';
     }).join('');
   }
+  const attendanceText = (v) => (v == null ? '–' : `${v} %`);
+  const lowAttendance = (v) => v != null && v < CONFIG.attendance.warnPct;
+  const hasSessions = () => Boolean(home.sessions && home.sessions.length);
+  const attendanceRowsNow = () => (hasSessions() ? attendanceRows(home.sessions, home.stateMatches, home.roster) : null);
+  // The «!» says it in text; the warn colour only backs it up.
+  const lowAttendanceMark = '<i class="att-low" role="img" aria-label="Asistencia baja">!</i>';
+  function squadFaceHtml(rows) {
+    return (p) => {
+      const row = rows && rows.find((r) => r.player.id === p.id), low = row && lowAttendance(row.pct);
+      const rate = row ? `<small class="face-att${low ? ' warn' : ''}">${low ? `${lowAttendanceMark} ` : ''}${attendanceText(row.pct)}</small>` : '';
+      const said = row ? `, asistencia ${attendanceText(row.pct)}${low ? ', baja' : ''}` : '';
+      return `<button class="face press" type="button" data-player="${esc(p.id)}" style="--pos:${posOf(p).color}" aria-label="#${p.num} ${esc(p.name)}${said}">${discHtml(p)}<span>${esc(p.name)}</span>${rate}</button>`;
+    };
+  }
   function squadCardHtml() {
-    const groups = positionGroupsHtml((p) => `<button class="face press" type="button" data-player="${esc(p.id)}" style="--pos:${posOf(p).color}" aria-label="#${p.num} ${esc(p.name)}">${discHtml(p)}<span>${esc(p.name)}</span></button>`);
+    const groups = positionGroupsHtml(squadFaceHtml(attendanceRowsNow()));
     return `<section class="sheet-card squad"><h3>Plantilla · ${home.roster.length}</h3>${groups || '<p class="note">Todavía no hay jugadores.</p>'}
       <div class="row-actions"><button class="btn press" type="button" data-home-view="team-edit">Editar equipo</button><button class="btn press" type="button" data-home-view="attendance">Asistencia</button></div></section>`;
+  }
+  // The team rate, the sessions behind it and the players with most absences (faltas, then justificadas).
+  function attendanceCardHtml() {
+    const rows = attendanceRowsNow();
+    if (!rows) return '';
+    const days = attendanceDays(home.sessions, home.stateMatches);
+    const countOf = (kind) => days.filter((d) => d.session.kind === kind).length;
+    const rate = pct(rows.reduce((n, r) => n + r.P, 0), rows.reduce((n, r) => n + r.counted, 0));
+    const worst = rows.filter((r) => r.F || r.J).sort((a, b) => b.F - a.F || b.J - a.J || a.player.num - b.player.num).slice(0, ABSENCE_LEADERS);
+    const list = worst.map((r, i) => `<li><button class="leader press" type="button" data-player="${esc(r.player.id)}"><i class="rank">${i + 1}</i>${discHtml(r.player)}
+        <span class="who"><b>${esc(r.player.name)}</b><small>${plural(r.F, 'falta', 'faltas')} · ${plural(r.J, 'justificada', 'justificadas')}</small></span><strong class="value">${r.F}</strong></button></li>`).join('');
+    return `<section class="sheet-card attendance-card"><h3>Asistencia</h3>
+      <div class="record"><b>${attendanceText(rate)}${lowAttendance(rate) ? ` ${lowAttendanceMark}` : ''}</b><small>${plural(countOf(SESSION_KINDS.TRAINING), 'entreno', 'entrenos')} · ${plural(countOf(SESSION_KINDS.MATCH), 'partido', 'partidos')}</small></div>
+      <h4 class="att-sub">Más faltas</h4>${list ? `<ol class="leader-list">${list}</ol>` : '<p class="note">Nadie ha faltado.</p>'}</section>`;
   }
   const homeAwayBadge = (f) => `<span class="venue-badge">${f.home ? 'Casa' : 'Fuera'}</span>`;
   function fixtureEditorHtml(f) {
@@ -5374,7 +5441,7 @@ span.att-foot { visibility: hidden; }
     const fixtures = home.fixtures || [];
     const links = linkFixtures(fixtures, home.teamMatches);
     return `${statusHtml()}${note}
-      <div class="team-page">${nextFixtureCardHtml(fixtures, links)}${seasonCardHtml(home.season)}${leadersCardHtml(home.season)}${squadCardHtml()}${calendarCardHtml(fixtures, links)}</div>`;
+      <div class="team-page">${nextFixtureCardHtml(fixtures, links)}${seasonCardHtml(home.season)}${leadersCardHtml(home.season)}${attendanceCardHtml()}${squadCardHtml()}${calendarCardHtml(fixtures, links)}</div>`;
   }
   // The season stays loaded while the coach moves between the team pages; anything that changes it clears it.
   async function ensureSeason() {
@@ -5394,9 +5461,21 @@ span.att-foot { visibility: hidden; }
     }
     if (['team', 'player', 'player-match'].includes(home.view)) renderHome();
   }
+  // The attendance sessions feed the rates of the team page and the player card; they load once per team.
+  async function ensureSessions() {
+    if (home.sessions !== null) return;
+    const teamId = team.id;
+    try { await loadAttendance(); }
+    catch (err) {
+      if (team.id !== teamId) return;
+      home.sessions = withLocalSessions([]);
+      console.warn(`Attendance not available: ${cloudErrorText(err)}`);
+    }
+    if (team.id === teamId && ['team', 'player', 'player-match'].includes(home.view)) renderHome();
+  }
   async function showTeamPage() {
     showHomeView('team');
-    await ensureSeason();
+    await Promise.all([ensureSeason(), ensureSessions()]);
   }
 
   // ---- Attendance: today's session by faces; a tap cycles the status ----
@@ -5570,6 +5649,15 @@ span.att-foot { visibility: hidden; }
       <h2 class="poster-name">${esc(player.name)}</h2>
       <p class="poster-sub">${player.fullName ? `${esc(player.fullName)} · ` : ''}${pos.label} · #${player.num}</p>${body}</section>`;
   }
+  // «Asistencia · 92 %», the counts behind it and the split between trainings and matches.
+  function attendanceTileHtml(player) {
+    const rows = attendanceRowsNow(), row = rows && rows.find((r) => r.player.id === player.id);
+    if (!row) return '';
+    const low = lowAttendance(row.pct), [training, match] = [SESSION_KINDS.TRAINING, SESSION_KINDS.MATCH].map((k) => attendanceText(row.byKind[k].pct));
+    const counts = row.counted ? `${row.P} de ${row.counted} · ${plural(row.F, 'falta', 'faltas')} · ${plural(row.J, 'justificada', 'justificadas')} · ${plural(row.L, 'lesionado', 'lesionados')}` : 'Sin sesiones contadas';
+    return `<div class="tile att-tile${low ? ' warn' : ''}"><p class="att-head">Asistencia · <b>${attendanceText(row.pct)}</b>${low ? ` ${lowAttendanceMark}` : ''}</p>
+      <span>${counts}</span><span>Entrenos ${training} · Partidos ${match}</span></div>`;
+  }
   function playerSeasonHtml(player, season) {
     const best = teamBest(home.season, home.roster);
     const keeper = player.pos === 'POR';
@@ -5578,7 +5666,7 @@ span.att-foot { visibility: hidden; }
     const mvp = season.mvps ? `<div class="mvp-tile">${crownSvg()}<b>${season.mvps}</b> <span>MVP del partido · ${season.mvps} de ${season.rows.length} partidos</span></div>` : '';
     const body = `<div class="sentences">${card.sentences.map((x) => `<p>${x}</p>`).join('')}</div>
       <div class="tiles"><div class="tile ${card.lead.cls}"><b>${card.lead.figure}</b><span>${card.lead.label}${card.lead.leads ? ' · el mejor del equipo' : ''}</span></div>
-        <div class="tile"><b>${card.second.figure}</b><span>${card.second.label}</span></div></div>${mvp}`;
+        <div class="tile"><b>${card.second.figure}</b><span>${card.second.label}</span></div>${attendanceTileHtml(player)}</div>${mvp}`;
     return `<div class="player-grid"><div class="player-col">${posterHtml(player, season.mvps, body)}</div>
       <div class="player-col"><section class="sheet-card zone-map"><h3>${card.titles.map}</h3>${zoneMapSvg(card.list, card.success, card.colours, card.counts)}
           <div class="rate-tiles">${card.tiles.map(([label, rate]) => rateTileHtml(label, rate)).join('')}</div></section>
