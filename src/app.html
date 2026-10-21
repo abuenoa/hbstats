@@ -1255,15 +1255,15 @@ span.att-foot { visibility: hidden; }
       autoPhase: from.autoPhase, clockDown: Boolean(from.clockDown), reportEmail: from.reportEmail || '', mvpId: null,
       them: prefill.them || 'Rival', rivals: [], venue: prefill.venue || '', date: prefill.date || todayIso(), phase: DEFAULT_PHASE,
       clock: { period: 1, elapsedMs: 0, runningSince: null }, timeoutsUsed: 0, timeoutsUsedThem: 0, timeout: null,
-      events: [], fired: [], alerts: [], history: [], future: [], court: []
+      events: [], fired: [], alerts: [], history: [], future: [], court: [], courtSets: []
     };
   }
-  // The same match back at 0:00: squad, rival and setup kept; clock, time-outs, log and court log cleared.
+  // The same match back at 0:00: squad, rival and setup kept; clock, time-outs, log and court log cleared (the lineup table starts again too).
   function restartedMatch(from) {
     return {
       ...from, finished: false, mvpId: null, phase: DEFAULT_PHASE,
       clock: { period: 1, elapsedMs: 0, runningSince: null }, timeoutsUsed: 0, timeoutsUsedThem: 0, timeout: null,
-      events: [], fired: [], alerts: [], history: [], future: [], court: []
+      events: [], fired: [], alerts: [], history: [], future: [], court: [], courtSets: []
     };
   }
   // The sample match sits behind the home screen until a real match is opened.
@@ -1623,7 +1623,7 @@ span.att-foot { visibility: hidden; }
     const op = { added: [e], removed: [] };
     const benched = opts.bringOn ? isOnBench(opts.bringOn) : false;
     if (benched) { const swap = benchSwapFor(opts.bringOn); if (swap) op.lineup = swap; }
-    if (Array.isArray(state.court) && isOnCourtStamped(e)) e.on = onCourtIds(courtAfter(op.lineup));
+    if (Array.isArray(state.court) && isOnCourtStamped(e)) e.on = internCourtSet(playingIds(courtAfter(op.lineup)));
     if (opts.penalty) op.penalty = opts.penalty;
     const next = state.autoPhase ? phaseAfter(e) : null;
     if (next && next !== state.phase) op.phase = { before: state.phase, after: next };
@@ -1708,29 +1708,42 @@ span.att-foot { visibility: hidden; }
 
   // ===================== Court log: who is on court, and when (recorded from the substitutions already made) =====================
   // Only matches created or restarted with a `court` array keep one; old matches, the sample and setup log nothing.
-  // `on` is the field players of the phase being played plus the goalkeeper, sorted; `on: []` is a break (half-time).
+  // Lineups are interned: `state.courtSets` is an append-only table of sorted id arrays (field players of the phase being
+  // played plus the goalkeeper). A log entry `{ abs, set }` (`set: null` is a break, e.g. half-time) and an event stamp
+  // `on` hold an index into it, so undo, redo and clock edits never invalidate one. Read them with `courtSetOf`.
+  // The stamp is who played the action (a player serving a 2' is not in it); the log is who is on court from that second
+  // (a 2' stays in the lineup: minutes subtract its window). Attribute an event by its stamp, never by looking up the log.
   const ON_COURT_STAMPED = ['SHOT', 'RIVAL_SHOT'];
   const isOnCourtStamped = (e) => ON_COURT_STAMPED.includes(e.kind) || (e.kind === 'ACTION' && e.playerId == null);
+  const keepsCourtLog = () => Array.isArray(state.court) && state.setupDone && !state.sample && !state.finished;
   const onCourtIds = (s = state) => [...Object.keys(s.lineups[s.phase]), s.gkId].sort();
+  const sameIds = (a, b) => a.length === b.length && a.every((id, i) => id === b[i]);
+  function internCourtSet(ids) {
+    const found = state.courtSets.findIndex((set) => sameIds(set, ids));
+    if (found >= 0) return found;
+    state.courtSets.push(ids);
+    return state.courtSets.length - 1;
+  }
+  // The ids of a stamp or log entry's set index (a break and a missing index have nobody).
+  const courtSetOf = (index, s = state) => (index == null || !s.courtSets ? [] : s.courtSets[index] || []);
   // The court once an event's own bench swaps are made (before they are applied to the lineup).
   function courtAfter(swaps = []) {
     const team = { ...lineup() };
     swaps.filter((swap) => swap.phase === state.phase).forEach((swap) => { delete team[swap.outId]; team[swap.inId] = true; });
     return { phase: state.phase, gkId: state.gkId, lineups: { [state.phase]: team } };
   }
-  const sameIds = (a, b) => a.length === b.length && a.every((id, i) => id === b[i]);
+  const playingIds = (court) => { const off = ourOffCourt(); return onCourtIds(court).filter((id) => !off.has(id)); };
   // An entry at the same second as the last one replaces it (a break is kept); a clock moved back is clamped to it.
-  function logCourt(on) {
+  function logCourt(set) {
     const log = state.court;
     const abs = Math.max(absSeconds(), log.length ? log.at(-1).abs : 0);
-    if (log.length && sameIds(log.at(-1).on, on)) return;
-    if (log.length && log.at(-1).abs === abs && log.at(-1).on.length) log.pop();
-    if (log.length && sameIds(log.at(-1).on, on)) return;
-    log.push({ abs, on });
+    if (log.length && log.at(-1).set === set) return;
+    if (log.length && log.at(-1).abs === abs && log.at(-1).set !== null) log.pop();
+    if (log.length && log.at(-1).set === set) return;
+    log.push({ abs, set });
   }
   function noteCourt() {
-    if (!Array.isArray(state.court) || !state.setupDone || state.sample || state.finished) return;
-    logCourt(onCourtIds());
+    if (keepsCourtLog()) logCourt(internCourtSet(onCourtIds()));
   }
 
   // ===================== Audio, vibration, wake lock =====================
@@ -1805,7 +1818,7 @@ span.att-foot { visibility: hidden; }
     commit();
   }
   function startPeriod(n) {
-    if (Array.isArray(state.court)) logCourt([]);
+    if (keepsCourtLog()) logCourt(null);
     state.clock = { period: n, elapsedMs: 0, runningSince: null };
     rearmPeriodEnd();
     commit();
