@@ -535,7 +535,7 @@ button.rex-chip { border: 0; cursor: pointer; position: relative; }
 .final-card td:first-child { text-align: left; font-weight: 600; }
 /* Summary KPIs: our value (coloured against theirs) beside the rival's, details folded underneath */
 .kpi-tiles { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; }
-.kpi-tile { background: var(--surface); border: 1px solid var(--line); border-radius: 14px; padding: 10px 12px; min-width: 0; }
+.kpi-tile { background: var(--surface); border: 1px solid var(--line); border-radius: var(--inner-radius, var(--radius-sm)); padding: 10px 12px; min-width: 0; }
 .kpi-tile > span { font-size: 11px; font-weight: 700; color: var(--muted); text-transform: uppercase; letter-spacing: .08em; }
 .kpi-tile .vs { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-top: 2px; }
 .kpi-tile .vs > div { min-width: 0; }
@@ -566,7 +566,8 @@ td.name { text-align: left; font-weight: 600; }
 td.name span { display: inline-block; width: 10px; height: 10px; border-radius: 50%; margin-right: 8px; }
 td.zero { color: var(--faint); }
 .sheet-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 12px; margin-top: 12px; }
-.sheet-card { background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius); padding: 14px; min-width: 0; }
+/* Outer radius = tile radius + padding + border (--inner-radius), so tiles inside a card sit concentric with it */
+.sheet-card { --inner-radius: calc(var(--radius-lg) - var(--space-2) - 1px); background: var(--surface); border: 1px solid transparent; border-radius: var(--radius-lg); box-shadow: var(--ring); padding: var(--space-2); min-width: 0; }
 .sheet-card h3 { margin: 0 0 8px; font-size: 12px; letter-spacing: .1em; text-transform: uppercase; color: var(--muted); }
 .sheet-card ul { margin: 0; padding: 0; list-style: none; display: grid; gap: 4px; font-size: 14px; }
 .sheet-card li { display: flex; justify-content: space-between; gap: 8px; }
@@ -651,6 +652,18 @@ td.zero { color: var(--faint); }
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { animation: none !important; transition: none !important; }
 }
+/* ---------- Design system: photo outline, press, hover and focus (home, «Hoja» and final; the live screen keeps its own) ---------- */
+.home .disc.photo, #sheet .disc.photo, #final .disc.photo { outline: 1px solid var(--photo-outline); outline-offset: -1px; }
+.home .press:active:not(:disabled), #sheet .press:active:not(:disabled), #final .press:active:not(:disabled) { transform: none; }
+@media (prefers-reduced-motion: no-preference) {
+  .home .press, #sheet .press, #final .press { transition: transform var(--dur-press) var(--ease-out); }
+  .home .press:active:not(:disabled), #sheet .press:active:not(:disabled), #final .press:active:not(:disabled) { transform: scale(.96); }
+}
+@media (hover: hover) {
+  .home .team-card:hover, .home .face:hover { box-shadow: var(--ring-hover); }
+  .home .leader:hover { background: var(--color-bg-subtle); }
+}
+a:focus-visible, input:focus-visible, select:focus-visible, summary:focus-visible, [tabindex]:focus-visible, .chip:focus-visible { outline: var(--focus-ring); outline-offset: 2px; }
 /* ---------- Home: sign-in, team and matches (outside a match) ---------- */
 .home { position: fixed; inset: 0; z-index: 40; overflow: auto; background: var(--bg); padding-block: 16px; padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); }
 .home-wrap { max-width: 1120px; margin: 0 auto; display: grid; gap: 14px; }
@@ -671,7 +684,7 @@ td.zero { color: var(--faint); }
 .home-title small { color: var(--muted); }
 .home-head .head-actions { margin-left: auto; display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
 .team-cards { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 10px; }
-.team-card { display: flex; align-items: center; gap: 12px; min-height: 64px; padding: 8px 14px 8px 10px; border-radius: 14px; border: 1px solid var(--line); background: var(--surface); color: var(--fg); font: inherit; text-align: left; cursor: pointer; }
+.team-card { display: flex; align-items: center; gap: 12px; min-height: 64px; padding: 8px 14px 8px 10px; border-radius: var(--inner-radius, var(--radius-sm)); border: 1px solid transparent; box-shadow: var(--ring); background: var(--surface); color: var(--fg); font: inherit; text-align: left; cursor: pointer; }
 .team-card span { display: grid; min-width: 0; }
 .team-card b { font-size: 16px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .team-card small { color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
@@ -706,7 +719,7 @@ td.zero { color: var(--faint); }
 .last-score.res-E { color: var(--dos); background: none; }
 .last-score.res-P { color: var(--act-bad); background: none; }
 .season-kpis { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-bottom: 14px; }
-.season-kpi { display: grid; gap: 2px; align-content: start; padding: 10px 12px; border-radius: 12px; background: var(--soft); min-width: 0; }
+.season-kpi { display: grid; gap: 2px; align-content: start; padding: 10px 12px; border-radius: var(--inner-radius, var(--radius-sm)); background: var(--soft); min-width: 0; }
 .season-kpi b { font-family: var(--font-display); font-weight: 800; font-size: 28px; line-height: 1.1; font-variant-numeric: tabular-nums; }
 .season-kpi span { font-size: 12px; color: var(--muted); }
 .season-kpi.hot { background: var(--brand); color: var(--brand-ink); }
@@ -727,9 +740,10 @@ td.zero { color: var(--faint); }
 .leader .value { font-family: var(--font-display); font-weight: 800; font-size: 26px; font-variant-numeric: tabular-nums; }
 .squad h4 { margin: 14px 0 6px; font-size: 12px; letter-spacing: .1em; text-transform: uppercase; }
 .faces { display: grid; grid-template-columns: repeat(auto-fill, minmax(76px, 1fr)); gap: 8px; }
-.face { display: grid; justify-items: center; gap: 4px; min-height: var(--tap); padding: 4px; border: 0; background: none; color: var(--fg); font: inherit; font-size: 12px; font-weight: 700; }
+.face, .last-match { --face-disc: 56px; }
+.face { display: grid; justify-items: center; gap: 4px; min-height: var(--tap); padding: var(--space-1); border: 1px solid transparent; border-radius: calc(var(--face-disc) / 2 + var(--space-1) + 1px); box-shadow: var(--ring); background: var(--surface); color: var(--fg); font: inherit; font-size: 12px; font-weight: 700; }
 .face span:not(.disc) { max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.face .disc, .last-match .disc { width: 56px; height: 56px; font-size: 22px; }
+.face .disc, .last-match .disc { width: var(--face-disc); height: var(--face-disc); font-size: 22px; }
 .face .disc { box-shadow: 0 0 0 3px var(--pos); }
 .squad .row-actions { margin-top: 14px; }
 /* Player card: poster, sentences, charts, per-match table, edit panel */
@@ -751,17 +765,17 @@ td.zero { color: var(--faint); }
 .sentences p { margin: 0; }
 .sentences b { font-family: var(--font-display); font-weight: 800; font-size: 30px; color: var(--gold); font-variant-numeric: tabular-nums; }
 .tiles { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-top: 14px; }
-.tile { display: grid; gap: 2px; align-content: start; padding: 12px; border-radius: 14px; background: var(--soft); min-width: 0; }
+.tile { display: grid; gap: 2px; align-content: start; padding: 12px; border-radius: var(--inner-radius, var(--radius-sm)); background: var(--soft); min-width: 0; }
 .tile b, .rate-tile b, .mvp-tile b { font-family: var(--font-display); font-weight: 800; font-size: 34px; line-height: 1.1; font-variant-numeric: tabular-nums; }
 .tile span, .rate-tile span, .mvp-tile span { font-size: 12px; color: var(--muted); }
 .tile.lead-field { background: var(--brand); color: var(--brand-ink); }
 .tile.lead-keeper { background: var(--parada); color: #fff; }
 .tile.lead-field span, .tile.lead-keeper span { color: inherit; opacity: .9; }
-.mvp-tile { display: flex; align-items: center; gap: 10px; margin-top: 8px; padding: 10px 12px; border-radius: 14px; border: 1px solid var(--gold); background: color-mix(in srgb, var(--gold) 14%, transparent); }
+.mvp-tile { display: flex; align-items: center; gap: 10px; margin-top: 8px; padding: 10px 12px; border-radius: var(--inner-radius, var(--radius-sm)); border: 1px solid var(--gold); background: color-mix(in srgb, var(--gold) 14%, transparent); }
 .mvp-tile svg { width: 52px; height: auto; flex: none; }
 .mvp-tile b { color: var(--gold); }
 .rate-tiles { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-top: 10px; }
-.rate-tile { display: grid; gap: 2px; padding: 12px 14px; border-radius: 14px; background: var(--soft); color: #fff; }
+.rate-tile { display: grid; gap: 2px; padding: 12px 14px; border-radius: var(--inner-radius, var(--radius-sm)); background: var(--soft); color: #fff; }
 .rate-tile span { color: inherit; opacity: .9; }
 .rate-tile.none { color: var(--muted); }
 .zone-map svg, .goal-chart svg, .radar svg, .evolution svg { display: block; width: 100%; height: auto; }
@@ -1114,8 +1128,19 @@ td.zero { color: var(--faint); }
     try { saved = localStorage.getItem(THEME_KEY); } catch (err) { saved = null; }
     applyTheme(saved === 'dark' || saved === 'light' ? saved : currentTheme());
   }
+  const THEME_SWITCH_STYLE_ID = 'theme-switch-style';
+  // The colours swap at once: transitions are off until two frames after the switch, so nothing fades between themes.
+  function suppressThemeTransitions() {
+    const style = document.createElement('style');
+    style.id = THEME_SWITCH_STYLE_ID;
+    style.textContent = '*, *::before, *::after { transition: none !important; }';
+    document.head.append(style);
+    void document.documentElement.offsetHeight; // reflow, so the rule is in force before the theme changes
+    requestAnimationFrame(() => requestAnimationFrame(() => style.remove()));
+  }
   $('btn-theme').addEventListener('click', () => {
     const next = currentTheme() === 'dark' ? 'light' : 'dark';
+    suppressThemeTransitions();
     applyTheme(next);
     try { localStorage.setItem(THEME_KEY, next); } catch (err) { /* preference not stored on this device */ }
   });

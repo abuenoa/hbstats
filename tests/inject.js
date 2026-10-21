@@ -129,6 +129,100 @@
       if (getComputedStyle(probe).fontVariantNumeric !== 'tabular-nums') throw new Error('num ' + getComputedStyle(probe).fontVariantNumeric);
     } finally { probe.remove(); }
   });
+  // ---- Rings, radii, motion and focus (M0b) ----
+  const withHost = (html, fn) => {
+    const host = document.createElement('div');
+    host.innerHTML = html;
+    document.body.append(host);
+    try { return fn(host); } finally { host.remove(); }
+  };
+  // Calls visit(rule, inHover) for every style rule, nested media rules included; inHover is true inside «@media (hover: hover)».
+  const walkRules = (rules, inHover, visit) => [...rules].forEach((rule) => {
+    const hovering = inHover || Boolean(rule.media && /\(hover:\s*hover\)/.test(rule.media.mediaText));
+    if (rule.selectorText !== undefined) visit(rule, hovering);
+    if (rule.cssRules) walkRules(rule.cssRules, hovering, visit);
+  });
+  // The web-fonts stylesheet is cross-origin, so its rules cannot be read (and are not ours).
+  const ownSheets = () => [...document.styleSheets].filter((sheet) => { try { return Boolean(sheet.cssRules); } catch (err) { return false; } });
+  const outerRadius = (el) => {
+    const radius = getComputedStyle(el).borderTopLeftRadius;
+    return radius.endsWith('%') ? parseFloat(radius) / 100 * Math.min(el.offsetWidth, el.offsetHeight) : parseFloat(radius);
+  };
+  const CONCENTRIC_TOLERANCE_PX = 1;
+  T('design: nested radii are concentric', () => withHost('<section class="sheet-card"><div class="kpi-tile">1</div></section><button class="face"><span class="disc">7</span></button>', (host) => {
+    const off = [];
+    [['.sheet-card', '.kpi-tile'], ['.face', '.disc']].forEach(([outerSel, innerSel]) => {
+      const outer = host.querySelector(outerSel), inner = host.querySelector(innerSel), css = getComputedStyle(outer);
+      const want = outerRadius(inner) + parseFloat(css.paddingTop) + parseFloat(css.borderTopWidth), got = outerRadius(outer);
+      if (Math.abs(got - want) > CONCENTRIC_TOLERANCE_PX) off.push(`${outerSel} > ${innerSel}: outer ${got}px, inner + padding + border ${want}px`);
+    });
+    if (off.length) throw new Error(off.join('; '));
+  }));
+  T('design: cards outside the live screen carry the ring on a transparent border', () => withHost('<section class="sheet-card"></section>', (host) => {
+    const css = getComputedStyle(host.firstChild);
+    if (css.borderTopColor !== 'rgba(0, 0, 0, 0)' || css.borderTopWidth !== '1px') throw new Error(`border ${css.borderTopWidth} ${css.borderTopColor}`);
+    if (css.boxShadow === 'none' || css.borderTopLeftRadius !== '16px') throw new Error(`ring ${css.boxShadow} radius ${css.borderTopLeftRadius}`);
+  }));
+  T('design: no transition: all and every hover is gated', () => {
+    const ungated = [], everything = [];
+    let gated = 0;
+    ownSheets().forEach((sheet) => walkRules(sheet.cssRules, false, (rule, inHover) => {
+      if (rule.selectorText.includes(':hover') && !rule.selectorText.includes('.rex-chip:hover .x')) { if (inHover) gated += 1; else ungated.push(rule.selectorText); }
+      const transition = rule.style.getPropertyValue('transition-property') || rule.style.getPropertyValue('transition');
+      if (/(^|[\s,])all([\s,]|$)/.test(transition)) everything.push(rule.selectorText);
+    }));
+    if (ungated.length) throw new Error('ungated hover: ' + ungated.join(' | '));
+    if (everything.length) throw new Error('transition all: ' + everything.join(' | '));
+    if (!gated) throw new Error('no hover rule found inside (hover: hover)');
+  });
+  // The transition that wins for el when the page prefers reduced motion or not: later rules win, !important beats the rest.
+  const winningTransition = (el, reduce) => {
+    let winner = '', winnerImportant = false;
+    const applies = (media) => (/prefers-reduced-motion:\s*reduce/.test(media) ? reduce : /prefers-reduced-motion:\s*no-preference/.test(media) ? !reduce : matchMedia(media).matches);
+    const visit = (rules) => [...rules].forEach((rule) => {
+      if (rule.media && !applies(rule.media.mediaText)) return;
+      const value = rule.selectorText !== undefined && el.matches(rule.selectorText) ? rule.style.getPropertyValue('transition') : '';
+      const important = value !== '' && rule.style.getPropertyPriority('transition') === 'important';
+      if (value && (important || !winnerImportant)) { winner = value; winnerImportant = important; }
+      if (rule.cssRules) visit(rule.cssRules);
+    });
+    ownSheets().forEach((sheet) => visit(sheet.cssRules));
+    return winner;
+  };
+  T('design: reduced motion leaves no transform transition', () => withHost('<div class="home"><button class="press" type="button">x</button></div>', (host) => {
+    const press = host.querySelector('.press');
+    const reduced = winningTransition(press, true), moving = winningTransition(press, false);
+    if (/transform|\ball\b/.test(reduced)) throw new Error('reduced: ' + reduced);
+    if (!moving.includes('transform') || !moving.includes('var(--dur-press)') || !moving.includes('var(--ease-out)')) throw new Error('no-preference: ' + moving);
+  }));
+  T('design: photos get a neutral outline outside the live screen only', () => {
+    const bench = document.createElement('div');
+    bench.className = 'bench-player';
+    document.body.append(bench);
+    try {
+      ['home', 'sheet', 'final'].forEach((id) => {
+        const host = $(id), disc = document.createElement('span');
+        disc.className = 'disc photo';
+        host.append(disc);
+        try {
+          const css = getComputedStyle(disc);
+          if (css.outlineStyle !== 'solid' || css.outlineWidth !== '1px' || css.outlineOffset !== '-1px') throw new Error(`#${id}: ${css.outlineStyle} ${css.outlineWidth} offset ${css.outlineOffset}`);
+          if (inTheme('light', () => css.outlineColor) !== 'rgba(0, 0, 0, 0.1)') throw new Error(`#${id}: colour ${css.outlineColor}`);
+        } finally { disc.remove(); }
+      });
+      const benchDisc = document.createElement('span');
+      benchDisc.className = 'disc photo';
+      bench.append(benchDisc);
+      if (getComputedStyle(benchDisc).outlineStyle !== 'none') throw new Error('bench disc outlined');
+    } finally { bench.remove(); }
+  });
+  T('design: focus ring covers links, fields, summaries and chips', () => {
+    const wanted = ['a:focus-visible', 'input:focus-visible', 'select:focus-visible', 'summary:focus-visible', '[tabindex]:focus-visible', '.chip:focus-visible'];
+    let ring = '';
+    ownSheets().forEach((sheet) => walkRules(sheet.cssRules, false, (rule) => { if (rule.style.getPropertyValue('outline') === 'var(--focus-ring)') ring += rule.selectorText + ','; }));
+    const missing = wanted.filter((selector) => !ring.includes(selector));
+    if (missing.length) throw new Error('no focus ring on ' + missing.join());
+  });
   T('render all tabs', () => { Object.keys(SHEET_TABS).forEach((t) => { ui.sheetTab = t; renderSheet(); }); ui.sheetGk = state.gkId; ui.sheetTab = 'gk'; renderSheet(); ui.sheetGk = null; });
   T('score pop', () => { openScorePop({ x: 100, y: 100 }); closePop(); });
   T('score fix +1 and undo', () => { const b = score().us; addEvent('SCORE_FIX', { team: 'us', delta: 1 }); if (score().us !== b + 1) throw new Error('no +1'); undo(); if (score().us !== b) throw new Error('undo'); });
@@ -333,6 +427,19 @@
   const TA = async (name, fn) => { try { await fn(); __results.push('OK ' + name); } catch (e) { __results.push('FAIL ' + name + ': ' + (e && e.message || e) + ' ' + ((e && e.stack) || '').split('\n')[1]); } };
   const tick0 = () => new Promise((r) => setTimeout(r, 0));
   const accountTests = async () => {
+    await TA('design: theme switch suppresses transitions for two frames', async () => {
+      const frame = () => new Promise((resolve) => requestAnimationFrame(resolve));
+      const switchStyle = () => document.getElementById('theme-switch-style');
+      const before = currentTheme();
+      $('btn-theme').click();
+      try {
+        if (!switchStyle() || !/transition:\s*none\s*!important/.test(switchStyle().textContent)) throw new Error('no suppression right after the switch');
+        await frame();
+        if (!switchStyle()) throw new Error('removed after one frame');
+        await frame();
+        if (switchStyle()) throw new Error('still there after two frames');
+      } finally { applyTheme(before); }
+    });
     await TA('home opens on team creation when the device has no team', async () => { await startHome(); if (home.view !== 'team-new' || $('home').hidden || !document.querySelector('[data-form="team-new"]')) throw new Error(home.view); });
     await TA('create team: name, colours and initials crest applied', async () => { $('team-club').value = 'CB Ejemplo'; $('team-name').value = 'Ejemplo Sur'; $('team-brand').value = '#1d4ed8'; $('team-brand2').value = '#facc15'; await submitTeam(document.querySelector('[data-form="team-new"]'), true); if (home.view !== 'team' || team.name !== 'Ejemplo Sur' || !team.id) throw new Error(home.view + ' ' + team.name); if (getComputedStyle($('score-us')).color !== 'rgb(29, 78, 216)') throw new Error('score colour ' + getComputedStyle($('score-us')).color); if (PDF_RGB.brand.join() !== '29,78,216' || team.brandInk !== '#ffffff') throw new Error('pdf/ink'); if (!decodeURIComponent($('bar-crest').src).includes('>ES<')) throw new Error('initials'); if (inkFor('#facc15') !== '#151515') throw new Error('ink for light'); });
     await TA('team form refuses empty names', async () => { showHomeView('team-edit'); $('team-name').value = '  '; await submitTeam(document.querySelector('[data-form="team"]'), false); if (team.name !== 'Ejemplo Sur' || !$('home-status').textContent.includes('vacíos')) throw new Error($('home-status').textContent); });
