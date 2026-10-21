@@ -3322,7 +3322,7 @@ span.att-foot { visibility: hidden; }
   const DORSAL_RANGE = [1, 99];
   const ROSTER_FORMAT = 'hbstats-plantilla';
   const MAX_VENUE_LENGTH = 40;
-  const PLAYER_HEAD = ['Nº', 'Jugador', '6 m', '9 m', '+11 m', 'Contra', '7 m', 'T. bloq.', 'Bloc.', 'Recup.', 'Pase gol', 'Pérdida', 'Prov. 7 m', 'Falta', '7 m com.', 'F. táctico', 'A', "2'", 'D', 'Az'];
+  const PLAYER_HEAD = ['Nº', 'Jugador', 'Min', '+/−', 'Nota', '6 m', '9 m', '+11 m', 'Contra', '7 m', 'T. bloq.', 'Bloc.', 'Recup.', 'Pase gol', 'Pérdida', 'Prov. 7 m', 'Falta', '7 m com.', 'F. táctico', 'A', "2'", 'D', 'Az'];
   const SHOT_ZONE_HEAD = ['Zona', 'Lanz.', 'Goles', 'Parados', 'Fallados', '% gol'];
   const GK_ZONE_HEAD = ['Zona', 'Recibidos', 'A puerta', 'Detenidos', 'Encajados', '% paradas'];
   const fieldPlayers = () => state.players.filter((p) => p.pos !== 'POR').sort((a, b) => a.num - b.num);
@@ -3337,13 +3337,15 @@ span.att-foot { visibility: hidden; }
   const turnoverCounts = (events) => countBy(events.filter((e) => e.kind === 'TURNOVER'), (e) => e.subtype);
   const defFaultCounts = (events) => countBy(events.filter((e) => e.kind === 'ACTION' && DEFENSIVE_FAULTS.includes(e.action)), (e) => ACTIONS[e.action].label);
   const eventsOf = (id, events = state.events) => events.filter((e) => e.playerId === id);
-  // The screen table shows the minutes and the +/− after the name; the PDF keeps PLAYER_HEAD.
-  const SCREEN_PLAYER_HEAD = [...PLAYER_HEAD.slice(0, 2), 'Min', '+/−', ...PLAYER_HEAD.slice(2)];
-  function playerRow(p) {
-    const s = playerStats(p.id);
+  // The sheet's own table keeps its width: the rating is only in the PDF.
+  const SCREEN_PLAYER_HEAD = PLAYER_HEAD.filter((h) => h !== 'Nota');
+  const screenPlayerCells = (row) => row.filter((_, i) => PLAYER_HEAD[i] !== 'Nota');
+  // One row of the player table, as PLAYER_HEAD; Min and +/− read «–» when the match logged no court, Nota «S/C» under the minimum minutes.
+  function playerRow(p, s = state, ratings = matchRatings(s)) {
+    const stats = playerStats(p.id, s.events), court = courtFiguresOf(s, p.id);
     // Team faults count too: matches logged before they became team faults have them per player.
-    const tactical = [...TACTICAL_FAULTS, ...TEAM_FAULTS].reduce((n, k) => n + s[k], 0);
-    return [p.num, p.name, ...SHEET_ZONES.map((z) => `${s.shots[z]}/${s.goals[z]}`), s.blocked, s.BLOC, s.RECUP, s.ASIST, s.TURNOVER, s.PROV7, s.FALTA + s.GOLPE, s.PEN7C, tactical, s.A, s['2M'], s.D, s.AZ];
+    const tactical = [...TACTICAL_FAULTS, ...TEAM_FAULTS].reduce((n, k) => n + stats[k], 0);
+    return [p.num, p.name, minutesText(court.seconds), plusMinusText(court.plusMinus), ratingText(ratingValue(ratings, p)), ...SHEET_ZONES.map((z) => `${stats.goals[z]}/${stats.shots[z]}`), stats.blocked, stats.BLOC, stats.RECUP, stats.ASIST, stats.TURNOVER, stats.PROV7, stats.FALTA + stats.GOLPE, stats.PEN7C, tactical, stats.A, stats['2M'], stats.D, stats.AZ];
   }
   function shotZoneRows(shots) {
     const row = (label, list) => { const c = countGroups(list); return [label, list.length, c.GOL, c.PARADA, c.FALLO, pctText(pct(c.GOL, list.length))]; };
@@ -3353,6 +3355,23 @@ span.att-foot { visibility: hidden; }
   function gkZoneRows(shots) {
     const row = (label, list) => { const c = countGroups(list); const on = c.GOL + c.PARADA; return [label, list.length, on, c.PARADA, c.GOL, pctText(pct(c.PARADA, on))]; };
     return [...SHEET_ZONES.map((z) => row(ZONES[z], shots.filter((e) => gkZoneOf(e) === z))), row('Total', shots)];
+  }
+  const ATTACK_TYPE_HEAD = ['Tipo', 'Nuestro ataque', '% gol', 'Ataque rival', '% gol'];
+  // Goals/shots of each attack type for both teams, and the total, which equals the shots of each team.
+  function attackTypeTableRows(events = state.events) {
+    const us = attackTypeRows(events, 'us'), them = attackTypeRows(events, 'them');
+    const cells = ({ goals, shots }) => [`${goals}/${shots}`, pctText(pct(goals, shots))];
+    const totalOf = (rows) => ({ goals: sumOf(rows, (r) => r.goals), shots: sumOf(rows, (r) => r.shots) });
+    return [...us.map((r, i) => [ATTACK_TYPES[r.type], ...cells(r), ...cells(them[i])]), ['Total', ...cells(totalOf(us)), ...cells(totalOf(them))]];
+  }
+  const TURNOVER_PLAYER_HEAD = ['Nº', 'Jugador', ...CONFIG.turnoverGroups.map((g) => g.label), 'Total'];
+  // Turnovers of each player by group, most first, and the total of the squad; one row saying so when there are none.
+  function turnoverPlayerRows(s = state) {
+    const groups = CONFIG.turnoverGroups;
+    const lost = turnoversByPlayer([{ state: s }], s.players);
+    if (!lost.length) return [[PDF_EMPTY, 'Sin pérdidas', ...groups.map(() => 0), 0]];
+    const rows = lost.map(({ player, total, byType }) => [player.num, player.name, ...groups.map((g) => sumOf(g.types, (t) => byType[t] || 0)), total]);
+    return [...rows, ['', 'Total', ...groups.map((g, i) => sumOf(rows, (r) => r[i + 2])), sumOf(rows, (r) => r.at(-1))]];
   }
   const gkPool = (gkId) => (gkId ? gkShots(gkId) : rivalShots());
   function goalGrid(shots, group) {
@@ -3452,16 +3471,19 @@ span.att-foot { visibility: hidden; }
     if (us.topScorer && us.topScorer.goals >= k.minGoals) good(attack, `Máximo goleador: ${us.topScorer.label}, ${us.topScorer.goals} de ${us.topScorer.shots}.`);
     return { defence, attack };
   }
-  function gkFigures(shots) {
+  function gkCounts(shots) {
     const c = countGroups(shots);
-    const on = c.GOL + c.PARADA;
     const pens = countGroups(shots.filter((e) => e.zone === '7M'));
+    return { saved: c.PARADA, onTarget: c.GOL + c.PARADA, conceded: c.GOL, missed: c.FALLO, pensSaved: pens.PARADA, pensOnTarget: pens.GOL + pens.PARADA };
+  }
+  function gkFigures(shots) {
+    const k = gkCounts(shots);
     return [
-      ['Paradas', pctText(pct(c.PARADA, on)), `${c.PARADA}/${on} a puerta`],
-      ['Detenidos', c.PARADA, ''],
-      ['Encajados', c.GOL, ''],
-      ['Fuera · palo · bloq.', c.FALLO, 'sin ir a puerta'],
-      ['7 m parados', `${pens.PARADA}/${pens.GOL + pens.PARADA}`, '']
+      ['Paradas', pctText(pct(k.saved, k.onTarget)), `${k.saved}/${k.onTarget} a puerta`],
+      ['Detenidos', k.saved, ''],
+      ['Encajados', k.conceded, ''],
+      ['Fuera · palo · bloq.', k.missed, 'sin ir a puerta'],
+      ['7 m parados', `${k.pensSaved}/${k.pensOnTarget}`, '']
     ];
   }
   function teamFigures() {
@@ -3486,7 +3508,7 @@ span.att-foot { visibility: hidden; }
     const faults = DEFENSIVE_FAULTS.reduce((n, k) => n + stats[k], 0);
     const cards = Object.entries(SANCTIONS).filter(([k]) => stats[k]).map(([k, v]) => `${stats[k]} ${v.short}`).join(' · ') || '–';
     return [
-      ['Goles', `${c.GOL}/${shots.length}`, `${pctText(pct(c.GOL, shots.length))} de acierto`],
+      ['Goles', `${c.GOL}/${shots.length}`, shots.length ? `${pctText(pct(c.GOL, shots.length))} de acierto` : 'sin lanzamientos'],
       ['Parados', c.PARADA, 'por el portero rival'],
       ['Fallados', c.FALLO, 'fuera · palo · bloqueado'],
       ['Pases de gol', stats.ASIST, ''],
@@ -3520,10 +3542,10 @@ span.att-foot { visibility: hidden; }
   const card = (title, inner) => `<div class="sheet-card"><h3>${title}</h3>${inner}</div>`;
 
   function sheetStatsHtml() {
+    const ratings = matchRatings(state);
     const rows = fieldPlayers().map((p) => {
-      const [num, name, ...rest] = playerRow(p);
-      const figures = courtFiguresOf(state, p.id);
-      return `<tr><td>${num}</td><td class="name"><span style="background:${posOf(p).color}"></span>${esc(name)}</td>${[minutesText(figures.seconds), plusMinusText(figures.plusMinus), ...rest].map(td).join('')}</tr>`;
+      const [num, name, ...rest] = screenPlayerCells(playerRow(p, state, ratings));
+      return `<tr><td>${num}</td><td class="name"><span style="background:${posOf(p).color}"></span>${esc(name)}</td>${rest.map(td).join('')}</tr>`;
     }).join('');
     const checks = scoreCheckRows();
     return `${figuresHtml(teamFigures())}
@@ -4069,8 +4091,17 @@ span.att-foot { visibility: hidden; }
   };
   const PDF_DASH = { GOL: [], PARADA: [1.6, 1], FALLO: [0.5, 1] };
   const PDF_PAGE = { w: 297, h: 210, margin: 12, top: 26, chartW: 120, rightX: 140 };
-  // Plain-text dashes: the built-in PDF fonts lack some typographic characters.
-  const pdfText = (v) => String(v).replace(/[–—]/g, '-').replace(/[↑↓↶↷›]/g, '');
+  // The empty cell of a table, the same dash as on the screen.
+  const PDF_EMPTY = '–';
+  // The built-in PDF fonts keep the en and em dashes but lack the minus sign, the prime and the arrows.
+  const pdfText = (v) => String(v).replace(/−/g, '-').replace(/′/g, "'").replace(/[↑↓↶↷›]/g, '');
+  // What a titled table needs below its title to start on the same page: the gap, the head row and the first row.
+  const PDF_ROW_MM = 5.6, PDF_TITLE_GAP_MM = 2;
+  const PDF_TITLE_KEEP_MM = PDF_TITLE_GAP_MM + 2 * PDF_ROW_MM;
+  // The width of an average character of a table cell, to leave the name column room for a full name.
+  const PDF_NAME_CHAR_MM = 1.5;
+  // Fixed widths (mm) of the columns of PLAYER_HEAD; the name column takes the rest of the page.
+  const PLAYER_PDF_WIDTHS = [7, null, 9, 9, 10, 10, 10, 11, 11, 10, 14, 10, 12, 14, 13, 16, 10, 14, 15, 7, 7, 7, 8];
   let pdfLibsPromise = null;
   function loadScript(src) {
     return new Promise((resolve, reject) => {
@@ -4104,7 +4135,7 @@ span.att-foot { visibility: hidden; }
     doc.setFontSize(14);
     doc.text(pdfText(title), PDF_PAGE.margin, 10);
     doc.setFontSize(12);
-    doc.text(pdfText(`${state.us} ${s.us} - ${s.them} ${state.them}`), PDF_PAGE.w - PDF_PAGE.margin, 10, { align: 'right' });
+    doc.text(pdfText(`${state.us} ${s.us} – ${s.them} ${state.them}`), PDF_PAGE.w - PDF_PAGE.margin, 10, { align: 'right' });
     doc.setTextColor(...PDF_RGB.muted);
     doc.setFont('helvetica', 'normal');
     doc.setFontSize(9);
@@ -4113,6 +4144,7 @@ span.att-foot { visibility: hidden; }
   function pdfTable(doc, { title, head, body, startY, left = PDF_PAGE.margin, width, columnStyles = {} }) {
     let y = startY;
     if (title) {
+      if (y + PDF_TITLE_KEEP_MM > PDF_PAGE.h - PDF_PAGE.margin) { doc.addPage(); y = PDF_PAGE.margin; }
       doc.setTextColor(...PDF_RGB.ink);
       doc.setFont('helvetica', 'bold');
       doc.setFontSize(10);
@@ -4124,7 +4156,7 @@ span.att-foot { visibility: hidden; }
       margin: { left, right: width ? PDF_PAGE.w - left - width : PDF_PAGE.margin }, tableWidth: width || 'auto',
       styles: { fontSize: 7.5, cellPadding: 1.2, halign: 'center', lineColor: [220, 220, 220], textColor: PDF_RGB.ink },
       headStyles: { fillColor: PDF_RGB.ink, textColor: 255, fontStyle: 'bold' },
-      alternateRowStyles: { fillColor: PDF_RGB.soft }, columnStyles
+      alternateRowStyles: { fillColor: PDF_RGB.soft }, columnStyles, rowPageBreak: 'avoid'
     });
     return doc.lastAutoTable.finalY + 6;
   }
@@ -4238,7 +4270,7 @@ span.att-foot { visibility: hidden; }
   // The shooters on one goal, most damaging first, under its shot chart.
   function pdfGoalShooters(doc, title, shots, viewKey, startY) {
     const rows = goalShooterRows(shots, viewKey);
-    return pdfTable(doc, { title, head: GOAL_SHOOTER_HEAD, body: rows.length ? rows : [['-', 'Sin lanzamientos', 0, 0, 0, 0, '-']], startY, left: PDF_PAGE.margin, width: PDF_PAGE.chartW });
+    return pdfTable(doc, { title, head: GOAL_SHOOTER_HEAD, body: rows.length ? rows : [[PDF_EMPTY, 'Sin lanzamientos', 0, 0, 0, 0, PDF_EMPTY]], startY, left: PDF_PAGE.margin, width: PDF_PAGE.chartW });
   }
   const gridRows = (grid) => grid.map((r, i) => [['Arriba', 'Medio', 'Abajo'][i], ...r]);
   const GRID_HEAD = ['', 'Izq.', 'Centro', 'Der.'];
@@ -4254,7 +4286,9 @@ span.att-foot { visibility: hidden; }
     pdfHeader(doc, 'Informe del partido', `${state.clock.period === 1 ? '1ª' : '2ª'} parte · ${absToClock(absSeconds())}`);
     const figures = teamFigures();
     let y = pdfTable(doc, { title: 'Resumen del equipo', head: figures.map((f) => f[0]), body: [figures.map((f) => f[1]), figures.map((f) => f[2])], startY: PDF_PAGE.top + 4 });
-    y = pdfTable(doc, { title: 'Jugadores (lanz./gol por zona)', head: PLAYER_HEAD, body: fieldPlayers().map(playerRow), startY: y });
+    const ratings = matchRatings(state);
+    const widths = Object.fromEntries(PLAYER_PDF_WIDTHS.map((cellWidth, i) => [i, cellWidth ? { cellWidth } : { halign: 'left' }]));
+    y = pdfTable(doc, { title: 'Jugadores (goles/tiros por zona)', head: PLAYER_HEAD, body: fieldPlayers().map((p) => playerRow(p, state, ratings)), startY: y, width: PDF_PAGE.w - 2 * PDF_PAGE.margin, columnStyles: widths });
     if (noteRows().length) pdfTable(doc, { title: 'Notas', head: ['Min', 'Nota'], body: noteRows(), startY: y, columnStyles: { 0: { cellWidth: 14 }, 1: { halign: 'left' } } });
 
     doc.addPage();
@@ -4265,15 +4299,15 @@ span.att-foot { visibility: hidden; }
       const x = PDF_PAGE.margin + i * (colW + 10);
       let yy = pdfKeyPoints(doc, title, points, x, PDF_PAGE.top + 4, colW);
       yy = pdfTable(doc, { title: 'Por carril (goles/tiros)', head: LANE_HEAD, body: laneRows(a), startY: yy, left: x, width: colW });
-      pdfTable(doc, { title: 'Lanzadores', head: SHOOTER_HEAD, body: a.shooters.length ? shooterRows(a) : [['Sin identificar', '-', '-', '-']], startY: yy, left: x, width: colW });
+      pdfTable(doc, { title: 'Lanzadores', head: SHOOTER_HEAD, body: a.shooters.length ? shooterRows(a) : [['Sin identificar', PDF_EMPTY, PDF_EMPTY, PDF_EMPTY]], startY: yy, left: x, width: colW });
     });
 
     doc.addPage();
     pdfHeader(doc, 'Portería', 'Tiros del rival a nuestros porteros');
     pdfGoalShooters(doc, `Lanzadores de ${state.them} (más goles primero)`, rivalShots(), 'GK', pdfShotChart(doc, PDF_PAGE.margin, PDF_PAGE.top, PDF_PAGE.chartW, rivalShots(), 'GK', true));
     y = figuresTable(doc, gkFigures(rivalShots()), PDF_PAGE.top + 4, PDF_PAGE.rightX, 70);
-    const perGk = goalkeepers().map((g) => { const f = gkFigures(gkShots(g.id)); return [`#${g.num} ${g.name}`, f[0][1], f[0][2], f[2][1], f[4][1]]; });
-    pdfTable(doc, { title: 'Por portero', head: ['Portero', 'Paradas', 'A puerta', 'Encajados', '7 m'], body: perGk, startY: PDF_PAGE.top + 4, left: PDF_PAGE.rightX + 76 });
+    const perGk = goalkeepers().map((g) => { const k = gkCounts(gkShots(g.id)); return [`#${g.num} ${g.name}`, pctText(pct(k.saved, k.onTarget)), `${k.saved}/${k.onTarget}`, k.conceded, `${k.pensSaved}/${k.pensOnTarget}`]; });
+    pdfTable(doc, { title: 'Por portero', head: ['Portero', '% paradas', 'Paradas/a puerta', 'Encajados', '7 m parados'], body: perGk, startY: PDF_PAGE.top + 4, left: PDF_PAGE.rightX + 76 });
     pdfGkBlock(doc, rivalShots(), y);
 
 
@@ -4283,13 +4317,18 @@ span.att-foot { visibility: hidden; }
     let right = pdfTable(doc, { title: 'Por zona', head: SHOT_ZONE_HEAD, body: shotZoneRows(ourShots()), startY: PDF_PAGE.top + 4, left: PDF_PAGE.rightX });
     const third = (PDF_PAGE.w - PDF_PAGE.rightX - PDF_PAGE.margin - 12) / 3;
     const cols = [
-      { title: "Marcador cada 5'", head: ['Min', 'Res.'], body: scoreCheckRows().length ? scoreCheckRows() : [['-', '-']] },
+      { title: "Marcador cada 5'", head: ['Min', 'Res.'], body: scoreCheckRows().length ? scoreCheckRows() : [[PDF_EMPTY, PDF_EMPTY]] },
       { title: 'Pérdidas por tipo', head: ['Tipo', 'N'], body: countRows(turnoverCounts(state.events)) },
       { title: 'Fallos defensivos', head: ['Tipo', 'N'], body: countRows(defFaultCounts(state.events)) }
     ];
     right = Math.max(...cols.map((c, i) => pdfTable(doc, { ...c, startY: right, left: PDF_PAGE.rightX + i * (third + 6), width: third })));
     const sanctions = sanctionRows();
-    pdfTable(doc, { title: 'Sanciones', head: ['Min', 'Quién', 'Sanción'], body: sanctions.length ? sanctions : [['-', '-', 'Sin sanciones']], startY: right, left: PDF_PAGE.rightX });
+    pdfTable(doc, { title: 'Sanciones', head: ['Min', 'Quién', 'Sanción'], body: sanctions.length ? sanctions : [[PDF_EMPTY, PDF_EMPTY, 'Sin sanciones']], startY: right, left: PDF_PAGE.rightX });
+
+    doc.addPage();
+    pdfHeader(doc, 'Ataque y pérdidas', 'Tipos de ataque y quién pierde el balón');
+    pdfTable(doc, { title: 'Tipos de ataque (goles/tiros)', head: ATTACK_TYPE_HEAD, body: attackTypeTableRows(), startY: PDF_PAGE.top + 4, left: PDF_PAGE.margin, width: colW });
+    pdfTable(doc, { title: 'Pérdidas por jugador', head: TURNOVER_PLAYER_HEAD, body: turnoverPlayerRows(), startY: PDF_PAGE.top + 4, left: PDF_PAGE.margin + colW + 10, width: colW });
   }
   // Everything one player's page shows, from the events of any saved match. A goalkeeper has only the shots he faced.
   // The turnover, fault and timeline rows of a goalkeeper are not drawn by the PDF.
@@ -4325,7 +4364,7 @@ span.att-foot { visibility: hidden; }
     const yT = pdfTable(doc, { title: 'Pérdidas por tipo', head: ['Tipo', 'N'], body: report.turnoverRows, startY: y, left: PDF_PAGE.rightX, width: half });
     const yD = pdfTable(doc, { title: 'Fallos defensivos', head: ['Tipo', 'N'], body: report.faultRows, startY: y, left: PDF_PAGE.rightX + half + 6, width: half });
     y = Math.max(yT, yD);
-    pdfTable(doc, { title: 'Cronología', head: ['Min', 'Acción'], body: report.timeline.length ? report.timeline : [['-', 'Sin acciones']], startY: y, left: PDF_PAGE.rightX });
+    pdfTable(doc, { title: 'Cronología', head: ['Min', 'Acción'], body: report.timeline.length ? report.timeline : [[PDF_EMPTY, 'Sin acciones']], startY: y, left: PDF_PAGE.rightX });
   }
   function buildPdf(kind) {
     const doc = pdfNewDoc();
