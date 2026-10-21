@@ -937,6 +937,90 @@
     } finally { chip.remove(); }
   });
 
+  // ---- Final screen: every convocado's rating and the provisional MVP (M2) ----
+  const FULL_MATCH_CLOCK = { period: 2, elapsedMs: CONFIG.halfSeconds * 1000, runningSince: null };
+  const goalAtZone = (id, zone, n, tag) => rShots(id, zone, n, 0).map((e, i) => ({ ...e, id: `${tag}${i}`, abs: 50 + i }));
+  // Opens the final screen on the sample squad with these events and court log; the sample's own match is restored afterwards.
+  const placed = (e) => (e.kind === 'SHOT' || e.kind === 'RIVAL_SHOT' ? { origin: m(0, 6), target: gf(0.5, 0.5), from: e.zone, ...e } : e);
+  const onFinal = (over, fn) => () => {
+    const snap = snapshot();
+    try {
+      Object.assign(state, { mvpId: null, history: [], court: undefined, courtSets: undefined, clock: FULL_MATCH_CLOCK, ...over, events: (over.events || []).map(placed) });
+      openFinal(); fn();
+    } finally { restore(snap); }
+  };
+  const ratingRows = () => [...$('final').querySelectorAll('.rating-row')];
+  const rowIds = () => ratingRows().map((r) => r.dataset.ratingPlayer);
+  const crownedIds = () => [...$('final').querySelectorAll('.mvp-face')].filter((b) => b.querySelector('.crown-face')).map((b) => b.dataset.mvp);
+  // p22 plays the second half only (30 min, 7/8 from 6 m and a recovery); p8 plays the whole match (5/9 from 9 m, 2 assists, 1 turnover).
+  const secondHalfStar = () => ({
+    courtSets: [['p8', 'p1'], ['p8', 'p22', 'p1']], court: [{ abs: 0, set: 0 }, { abs: CONFIG.halfSeconds, set: 1 }],
+    events: [...goalAtZone('p22', '6M', 7, 'sg'), rShot('p22', '6M', 'FUERA', 90), rAct('p22', 'RECUP', 91),
+      ...goalAtZone('p8', '9M', 5, 'bg'), ...[0, 1, 2, 3].map((i) => rShot('p8', '9M', 'FUERA', 60 + i)), rAct('p8', 'ASIST', 70), rAct('p8', 'ASIST', 71), rTurnover('p8', 'Pase', 72)]
+  });
+  const playedFew = () => ({
+    courtSets: [['p22', 'p8', 'p1']], court: [{ abs: 0, set: 0 }],
+    events: [...goalAtZone('p22', '6M', 3, 'g'), rTurnover('p8', 'Pase', 1), rTurnover('p8', 'Bote', 2)]
+  });
+  T('final: ratings list sorted with S/C last and no NaN', onFinal(playedFew(), () => {
+    const ids = rowIds(), chips = ratingRows().map((r) => r.querySelector('.rating-chip').textContent);
+    if (ids.length !== state.players.length || ids.slice(0, 3).join() !== 'p22,p1,p8') throw new Error(ids.join());
+    if (chips.slice(0, 3).some((c) => c === 'S/C') || chips.slice(3).some((c) => c !== 'S/C')) throw new Error(chips.join());
+    if (/NaN|undefined/.test($('final').textContent) || !$('final').textContent.includes('Puntuaciones')) throw new Error('text');
+    const first = ratingRows()[0];
+    if (!first.textContent.includes('3/3') || !first.querySelector('.disc') || !first.textContent.includes('Diego')) throw new Error('row: ' + first.textContent);
+    const keeper = ratingRows()[1];
+    if (!keeper.textContent.includes('0/0')) throw new Error('keeper row: ' + keeper.textContent);
+  }));
+  T('final: the provisional MVP is the top rating', onFinal(playedFew(), () => {
+    const mvp = matchMvp(state, matchRatings(state));
+    if (mvp.id !== 'p22' || mvp.source !== 'rating' || state.mvpId !== null) throw new Error(JSON.stringify(mvp));
+    if (crownedIds().join() !== 'p22' || !$('final').querySelector('.mvp-pick').textContent.includes('MVP provisional')) throw new Error('crown or label');
+    if (document.querySelector('[data-mvp="p22"]').getAttribute('aria-pressed') !== 'false') throw new Error('provisional is not the coach pick');
+  }));
+  T('final: provisional MVP ties go to more minutes, then more goals or saves', () => {
+    const player = (id, num, pos = 'EXT') => ({ id, num, pos });
+    const goals = (id, n) => rShots(id, '6M', n, 0).map((e, i) => ({ ...e, id: `${id}${i}` }));
+    const saved = (n) => Array.from({ length: n }, (_, i) => ({ id: 'sv' + i, abs: i, kind: 'RIVAL_SHOT', gkId: 'k', zone: '9M', result: 'PARADA' }));
+    const rate = (...ids) => new Map(ids.map((id) => [id, { value: 7, rated: true }]));
+    const s = { players: [player('a', 9), player('b', 4), player('c', 6), player('k', 1, 'POR')], events: [...goals('a', 2), ...goals('b', 2), ...goals('c', 3), ...saved(5)], mvpId: null };
+    const pick = (seconds, ...ids) => matchMvp(s, rate(...ids), seconds).id;
+    if (pick(new Map([['a', 1800], ['b', 2400]]), 'a', 'b') !== 'b') throw new Error('minutes');
+    if (pick(null, 'a', 'c') !== 'c' || pick(new Map(), 'a', 'c') !== 'c') throw new Error('goals, unknown minutes count as equal');
+    if (pick(new Map([['a', 600], ['c', 600]]), 'a', 'c') !== 'c') throw new Error('goals at equal minutes');
+    if (pick(null, 'a', 'b') !== 'b') throw new Error('lower dorsal');
+    if (pick(null, 'a', 'k') !== 'k') throw new Error('a goalkeeper counts saves');
+    const higher = new Map([['a', { value: 7.1, rated: true }], ['b', { value: 7, rated: true }]]);
+    if (matchMvp(s, higher, new Map([['b', 3600]])).id !== 'a') throw new Error('rating first');
+    const none = new Map(s.players.map((p) => [p.id, { value: null, rated: false }]));
+    if (JSON.stringify(matchMvp(s, none, null)) !== '{"id":null,"source":null}') throw new Error('nobody rated');
+    if (matchMvp({ ...s, mvpId: 'zz' }, rate('a'), null).source !== 'rating') throw new Error('a pick outside the squad is ignored');
+    if (JSON.stringify(matchMvp({ ...s, mvpId: 'b' }, rate('a'), null)) !== '{"id":"b","source":"coach"}') throw new Error('coach');
+  });
+  T('final: a second-half player with the top rating is the provisional MVP', onFinal(secondHalfStar(), () => {
+    const ratings = matchRatings(state), star = ratings.get('p22'), full = ratings.get('p8');
+    if (!(star.confidence < 1) || star.value !== 7.8 || full.value !== 7.7) throw new Error([star.confidence, star.value, full.value].join());
+    if (matchMvp(state, ratings).id !== 'p22' || rowIds()[0] !== 'p22' || crownedIds().join() !== 'p22') throw new Error('second-half player not MVP: ' + rowIds().slice(0, 2));
+  }));
+  T('final: the coach\'s pick overrides and clears', onFinal(playedFew(), () => {
+    const click = (id) => document.querySelector(`[data-mvp="${id}"]`).click();
+    click('p8');
+    if (state.mvpId !== 'p8' || crownedIds().join() !== 'p8' || $('final').querySelector('.mvp-pick').textContent.includes('MVP provisional')) throw new Error('coach pick');
+    if (matchMvp(state, matchRatings(state)).source !== 'coach') throw new Error('source');
+    click('p8');
+    if (state.mvpId !== null || crownedIds().join() !== 'p22' || !$('final').querySelector('.mvp-pick').textContent.includes('MVP provisional')) throw new Error('clearing returns to the provisional MVP');
+    const before = JSON.stringify([liveStats(), score(), state.history]);
+    matchMvp(state, matchRatings(state)); openFinal();
+    if (JSON.stringify([liveStats(), score(), state.history]) !== before || state.mvpId !== null) throw new Error('the provisional MVP must write nothing');
+  }));
+  T('final: the breakdown lists only non-zero features', onFinal({ events: [rTurnover('p22', 'Pase', 1), rTurnover('p22', 'Bote', 2), rAct('p22', 'ASIST', 3)] }, () => {
+    const row = ratingRows().find((r) => r.dataset.ratingPlayer === 'p22'), items = [...row.querySelectorAll('details li')].map((li) => li.textContent);
+    if (items.join('|') !== 'Pérdidas ×2 −0,8|Asistencias ×1 +0,3') throw new Error(items.join('|'));
+    const idle = ratingRows().find((r) => r.dataset.ratingPlayer === 'p5');
+    if (idle.querySelector('details') || /NaN|undefined/.test($('final').textContent)) throw new Error('a player without events has no breakdown');
+    if (matchRatings(state).get('p22').confidence !== 1) throw new Error('premise: no court log rates with confidence 1');
+  }));
+
   // ---- Drill-down: the per-match drawing helpers work over any saved state (M0c) ----
   // Runs buildPdf('players') with the drawing primitives replaced by recorders, so the player pages can be compared as data.
   const recordPlayerPages = () => {

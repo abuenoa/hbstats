@@ -573,10 +573,27 @@ button.rex-chip { border: 0; cursor: pointer; position: relative; }
 .halftime-points .acta-h { margin-top: 0; }
 @media (max-width: 700px) { .kpi-tiles { grid-template-columns: repeat(2, minmax(0, 1fr)); } .halftime-points { grid-template-columns: 1fr; } }
 .mvp-pick { display: grid; gap: var(--space-2); }
-.mvp-pick h3 { margin: 0; font: var(--type-caption); font-weight: 700; color: var(--muted); text-transform: uppercase; letter-spacing: .06em; }
+.mvp-pick h3, .ratings h3 { margin: 0; font: var(--type-caption); font-weight: 700; color: var(--muted); text-transform: uppercase; letter-spacing: .06em; }
 .mvp-faces { display: flex; flex-wrap: wrap; gap: var(--space-4) var(--space-3); padding-top: var(--space-6); }
 .mvp-face { position: relative; display: grid; justify-items: center; gap: 4px; min-width: var(--tap); min-height: var(--tap); padding: 4px 6px; border: 2px solid transparent; border-radius: var(--radius-md); background: transparent; color: var(--fg); font: var(--type-caption); font-weight: 600; }
 .mvp-face[aria-pressed="true"] { border-color: var(--gold); background: var(--glow-gold); }
+.mvp-face.provisional { border-style: dashed; border-color: var(--gold); }
+.mvp-tag { font: var(--type-caption); font-weight: 800; color: var(--fg); }
+.ratings { display: grid; gap: var(--space-2); }
+.rating-list { margin: 0; padding: 0; list-style: none; }
+.rating-row { --face-disc: 40px; border-bottom: 1px solid var(--line); }
+.rating-line { display: flex; align-items: center; gap: var(--space-3); min-height: 52px; padding: var(--space-1) 0; }
+.rating-line .disc { flex: none; width: var(--face-disc); height: var(--face-disc); font-size: 16px; }
+.rating-line .rating-chip { min-width: 3.5ch; }
+.rating-name { flex: 1; min-width: 0; overflow-wrap: anywhere; }
+.rating-kpi { display: grid; justify-items: end; min-width: 5ch; font-variant-numeric: tabular-nums; }
+.rating-kpi small { font: var(--type-caption); color: var(--muted); }
+.rating-more > summary { list-style: none; cursor: pointer; }
+.rating-more > summary::-webkit-details-marker { display: none; }
+.rating-more > summary::after { content: "▾"; color: var(--muted); }
+.rating-more[open] > summary::after { content: "▴"; }
+.rating-more ul { margin: 0 0 var(--space-2); padding-left: calc(var(--face-disc) + var(--space-3)); font: var(--type-caption); }
+.rating-more li b { font-variant-numeric: tabular-nums; }
 .crown-face { position: absolute; left: -6px; top: -22px; width: 38px; height: auto; transform: rotate(-34deg); pointer-events: none; filter: drop-shadow(0 3px 4px rgba(0, 0, 0, .5)); }
 .final-mail { display: grid; gap: var(--space-1); font: var(--type-caption); font-weight: 700; color: var(--muted); text-transform: uppercase; letter-spacing: .06em; }
 .sheet-head { display: flex; align-items: center; gap: var(--space-3); flex-wrap: wrap; margin-bottom: var(--space-3); }
@@ -761,6 +778,12 @@ a:focus-visible, input:focus-visible, select:focus-visible, summary:focus-visibl
 .res-G { background: var(--rating-good); color: var(--rating-ink-good); }
 .res-E { background: var(--rating-mid); color: var(--rating-ink-mid); }
 .res-P { background: var(--rating-bad); color: var(--rating-ink-bad); }
+.rating-chip { display: inline-block; min-width: 2.75ch; padding: 0 var(--space-2); border-radius: var(--radius-sm); font: var(--type-caption); font-weight: 800; line-height: 28px; text-align: center; white-space: nowrap; font-variant-numeric: tabular-nums; background: var(--soft); color: var(--fg); }
+.rating-chip.rt-top { background: var(--rating-top); color: var(--rating-ink-top); }
+.rating-chip.rt-good { background: var(--rating-good); color: var(--rating-ink-good); }
+.rating-chip.rt-mid { background: var(--rating-mid); color: var(--rating-ink-mid); }
+.rating-chip.rt-low { background: var(--rating-low); color: var(--rating-ink-low); }
+.rating-chip.rt-bad { background: var(--rating-bad); color: var(--rating-ink-bad); }
 .last-score.res-G, .match-table .res-G { background: none; color: var(--color-success-text); }
 .last-score.res-E, .match-table .res-E { background: none; color: var(--color-warning-text); }
 .last-score.res-P, .match-table .res-P { background: none; color: var(--color-danger-text); }
@@ -845,7 +868,7 @@ span.att-foot { visibility: hidden; }
 .player-page { display: grid; gap: var(--space-4); }
 .player-bar { display: flex; justify-content: space-between; gap: var(--space-3); }
 .player-bar [data-player-edit][aria-pressed="true"] { background: var(--gold); border-color: var(--gold); color: #151515; }
-.player-grid { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.25fr) minmax(0, 1fr); gap: var(--space-4); align-items: start; }
+.player-grid { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.7fr) minmax(0, 1fr); gap: var(--space-4); align-items: start; }
 .player-col { display: grid; gap: var(--space-4); min-width: 0; }
 .poster { position: relative; overflow: hidden; display: grid; gap: var(--space-2); background: linear-gradient(160deg, color-mix(in srgb, var(--pos) var(--poster-tint), var(--surface)), var(--surface) 60%); }
 .poster > :not(.poster-dorsal) { position: relative; }
@@ -856,6 +879,8 @@ span.att-foot { visibility: hidden; }
 .poster-face .crown-face { left: -14px; top: -28px; width: 70px; }
 .poster-name { margin: var(--space-3) 0 0; font: var(--type-display); text-transform: uppercase; letter-spacing: .01em; overflow-wrap: anywhere; }
 .poster-sub { margin: 0; font: var(--type-body); color: var(--muted); }
+.poster-rating { display: flex; align-items: center; gap: var(--space-2); margin: var(--space-1) 0 0; font: var(--type-caption); color: var(--muted); }
+.poster-rating .rating-chip { font: var(--type-heading); font-weight: 800; line-height: 36px; }
 .sentences { display: grid; gap: var(--space-1); margin-top: var(--space-3); font: var(--type-heading); font-weight: 400; color: var(--muted); }
 .sentences p { margin: 0; }
 .sentences b { font: var(--type-kpi); color: var(--fg); text-decoration: underline var(--gold) 3px; text-underline-offset: 4px; font-variant-numeric: tabular-nums; }
@@ -885,10 +910,11 @@ span.att-foot { visibility: hidden; }
 .rate-tile.none b, .rate-tile.none span { color: var(--color-text-secondary); }
 .zone-map svg, .goal-chart svg, .radar svg, .evolution svg { display: block; width: 100%; height: auto; }
 .match-table th, .match-table td { padding: var(--space-2) calc(var(--space-1) / 2); }
-.match-table th { letter-spacing: 0; padding-inline: 0; }
+.match-table th { letter-spacing: 0; padding-inline: calc(var(--space-1) / 2); }
 .match-table .row-btn { padding: 0; }
 .match-table td:nth-child(2) { min-width: 96px; white-space: normal; overflow-wrap: anywhere; }
 .match-table abbr { text-decoration: none; }
+.match-table .rating-chip { min-width: 0; padding-inline: var(--space-1); }
 .match-table .res-G, .match-table .res-E, .match-table .res-P { font-weight: 800; }
 .row-link { cursor: pointer; }
 .row-btn { min-height: var(--target); min-width: var(--target); padding: 0 var(--space-1); border: 0; background: none; color: inherit; font: inherit; font-weight: 700; text-align: left; cursor: pointer; }
@@ -1055,8 +1081,8 @@ span.att-foot { visibility: hidden; }
     hintMs: 2600,
     // Shot zones by distance from the goal (m): the dashed 9 m line itself already counts as 9 m.
     zones: { nineFromM: 8.7, elevenFromM: 11 },
-    // A leaderboard needs this many shots before a player is ranked on shooting accuracy.
-    leaders: { minShots: 3 },
+    // A leaderboard needs this many shots before a player is ranked on shooting accuracy, and this many rated matches on rating.
+    leaders: { minShots: 3, minRated: 2 },
     // Player photos are kept as small square JPEGs this wide.
     photoSizePx: 128,
     // Who usually shoots from a spot (m): wings wide and close to the goal line, pivots close and central, centre backs central.
@@ -1100,7 +1126,23 @@ span.att-foot { visibility: hidden; }
     insights: { minShots: 3, minGoals: 2, penetrationShare: 50, minBlocked: 3, minRepeats: 2 },
     // Attendance: a rate under warnPct warns; the excluded codes count neither for nor against; a player's note is
     // cut at noteMax characters; changes reach the cloud after syncDelayMs without further taps.
-    attendance: { warnPct: 75, excludeFromRate: ['L'], noteMax: 60, syncDelayMs: 2000 }
+    attendance: { warnPct: 75, excludeFromRate: ['L'], noteMax: 60, syncDelayMs: 2000 },
+    // Rating: base 6.5 for a player who does nothing of note, clamped to min–max and rounded to `decimals` (half up).
+    // Under minMinutes on court a player is «S/C»; confidence = min(1, (minutes / fullMatchMinutes) ** minutesExponent)
+    // scales the weighted features, so a short spell stays near the base (fullMatchMinutes is set from halfSeconds below).
+    // The weights are per unit of each feature; oneOnOne counts as +provoked 7 m, −beaten 1x1, −7 m committed.
+    rating: {
+      base: 6.5, min: 3, max: 10, decimals: 1, minMinutes: 10, minutesExponent: 0.5,
+      weights: {
+        shot: 0.8, save: 0.35, turnover: -0.40, forcedTurnover: -0.30, ruleTurnover: -0.15, ruleFault: -0.15,
+        oneOnOne: 0.30, tactical: -0.15, assist: 0.25, recovery: 0.30, block: 0.20, teamFaultField: -0.10,
+        teamFaultKeeper: -0.05, yellow: -0.10, twoMin: -0.30, red: -1.00, blue: -0.50
+      },
+      // The share of on-target rival shots an average goalkeeper saves, by zone.
+      expectedSave: { '6M': 0.25, '9M': 0.40, '11M': 0.45, CONTRA: 0.20, '7M': 0.25 },
+      // Lower bound of each band, best first: the chip class that reads the --rating-<band> tokens.
+      bands: [[8, 'rt-top'], [7, 'rt-good'], [6.5, 'rt-mid'], [6, 'rt-low'], [-Infinity, 'rt-bad']]
+    }
   };
   /* CLOUD — tools/build_site.py sets this from config/cloud.json ({ url, anonKey } of the Supabase project).
      null = no accounts: teams and matches stay on this device (tests, previews). */
@@ -1815,6 +1857,149 @@ span.att-foot { visibility: hidden; }
   function courtFiguresOf(s, id) {
     const minutes = minutesOnCourt(s), balance = plusMinus(s);
     return { seconds: minutes ? minutes.get(id) || 0 : null, plusMinus: balance ? balance.get(id) || 0 : null };
+  }
+
+  // ===================== Rating (derived from the events and the minutes, never stored) =====================
+  // A pure function of a match state: `ratingFeatures` counts what a player did and reads only `s.events`; the weights
+  // in `CONFIG.rating` turn the counts into a rating, scaled by the minutes on court (see the design's Rating formula).
+  CONFIG.rating.fullMatchMinutes = (2 * CONFIG.halfSeconds) / SECONDS_PER_MINUTE;
+  const RATING_ROUNDING_EPSILON = 1e-9;
+  const RATING_TURNOVER_FEATURES = { Balón: 'turnovers', Regla: 'ruleTurnovers', Rival: 'forcedTurnovers' };
+  const RATING_RULE_FAULTS = ['FALTA', 'GOLPE'];
+  const RATING_TACTICAL_FAULTS = TACTICAL_FAULTS.filter((action) => action !== 'BEATEN');
+  const RATING_ACTION_FEATURES = { PROV7: 'prov7', BEATEN: 'beaten', PEN7C: 'pen7c', ASIST: 'assists', RECUP: 'recoveries', BLOC: 'blocks' };
+  const RATING_CARD_FEATURES = { A: 'yellow', '2M': 'twoMin', D: 'red', AZ: 'blue' };
+  // The terms of the rating, in the order the match breakdown lists them: the weight of each feature (before the minutes
+  // scaling) and its label. A term that `counts` reads «×n»; shot and save values are fractions of a goal and do not.
+  const RATING_TERMS = [
+    { key: 'shotValue', label: 'Acierto en tiro', counts: false, weight: (w) => w.shot },
+    { key: 'saveValue', label: 'Paradas sobre lo esperado', counts: false, weight: (w) => w.save },
+    { key: 'turnovers', label: 'Pérdidas', weight: (w) => w.turnover },
+    { key: 'forcedTurnovers', label: 'Pérdidas forzadas', weight: (w) => w.forcedTurnover },
+    { key: 'ruleTurnovers', label: 'Pérdidas de regla', weight: (w) => w.ruleTurnover },
+    { key: 'ruleFaults', label: 'Faltas', weight: (w) => w.ruleFault },
+    { key: 'prov7', label: '7 m provocados', weight: (w) => w.oneOnOne },
+    { key: 'beaten', label: 'Superado 1x1', weight: (w) => -w.oneOnOne },
+    { key: 'pen7c', label: '7 m cometidos', weight: (w) => -w.oneOnOne },
+    { key: 'tactical', label: 'Fallos tácticos', weight: (w) => w.tactical },
+    { key: 'assists', label: 'Asistencias', weight: (w) => w.assist },
+    { key: 'recoveries', label: 'Recuperaciones', weight: (w) => w.recovery },
+    { key: 'blocks', label: 'Bloqueos', weight: (w) => w.block },
+    { key: 'teamFaults', label: 'Falta de contundencia', weight: (w, keeper) => (keeper ? w.teamFaultKeeper : w.teamFaultField) },
+    { key: 'yellow', label: 'Amarilla', weight: (w) => w.yellow },
+    { key: 'twoMin', label: '2 minutos', weight: (w) => w.twoMin },
+    { key: 'red', label: 'Roja', weight: (w) => w.red },
+    { key: 'blue', label: 'Azul', weight: (w) => w.blue }
+  ];
+  // The share of shots from a zone that go in, from the middle of the zone's reference range.
+  const expectedGoal = (zone) => {
+    const [good, poor] = CONFIG.targets[zone] || CONFIG.targets.shooting;
+    return (good + poor) / 2 / PERCENT;
+  };
+  const turnoverFeature = (e) => {
+    const group = CONFIG.turnoverGroups.find((g) => g.types.includes(e.subtype));
+    return RATING_TURNOVER_FEATURES[group && group.label] || 'turnovers';
+  };
+  // A team fault (no player) is on everyone in its court stamp; a legacy one named a player and counts for him only.
+  const isTeamFaultOf = (e, player, s) => e.kind === 'ACTION' && TEAM_FAULTS.includes(e.action)
+    && (e.playerId == null ? courtSetOf(e.on, s).includes(player.id) : e.playerId === player.id);
+  // What one player did in the match, from its events alone: shot and save values are goals above what the zone expects.
+  function ratingFeatures(s, player) {
+    const f = Object.fromEntries(RATING_TERMS.map((term) => [term.key, 0]));
+    s.events.forEach((e) => {
+      if (isTeamFaultOf(e, player, s)) { f.teamFaults++; return; }
+      if (e.kind === 'RIVAL_SHOT') {
+        const expected = CONFIG.rating.expectedSave[e.contra ? 'CONTRA' : e.zone];
+        if (e.gkId === player.id && onTarget(e) && expected != null) f.saveValue += (groupOf(e.result) === 'PARADA' ? 1 : 0) - expected;
+        return;
+      }
+      if (e.playerId !== player.id) return;
+      if (e.kind === 'SHOT') f.shotValue += (e.result === 'GOL' ? 1 : 0) - expectedGoal(e.zone);
+      else if (e.kind === 'TURNOVER') f[turnoverFeature(e)]++;
+      else if (e.kind === 'SANCTION' && RATING_CARD_FEATURES[e.card]) f[RATING_CARD_FEATURES[e.card]]++;
+      else if (e.kind === 'ACTION') {
+        if (RATING_ACTION_FEATURES[e.action]) f[RATING_ACTION_FEATURES[e.action]]++;
+        else if (RATING_RULE_FAULTS.includes(e.action)) f.ruleFaults++;
+        else if (RATING_TACTICAL_FAULTS.includes(e.action)) f.tactical++;
+      }
+    });
+    return f;
+  }
+  const roundHalfUp = (v, decimals) => Math.round(v * 10 ** decimals + RATING_ROUNDING_EPSILON) / 10 ** decimals;
+  // The weighted features around the base. `raw` is before the clamp and the rounding.
+  function ratingFromFeatures(f, { keeper, weights = CONFIG.rating.weights, confidence = 1 }) {
+    const r = CONFIG.rating, sum = sumOf(RATING_TERMS, (term) => term.weight(weights, keeper) * f[term.key]);
+    const raw = r.base + confidence * sum;
+    return { value: roundHalfUp(clamp(raw, r.min, r.max), r.decimals), raw };
+  }
+  // How far the minutes on court can be trusted: 1 from a full match, and when the minutes are unknown (null).
+  const ratingConfidence = (seconds) => (seconds == null ? 1
+    : Math.min(1, (seconds / SECONDS_PER_MINUTE / CONFIG.rating.fullMatchMinutes) ** CONFIG.rating.minutesExponent));
+  // `value` is null («S/C») when the minutes are known and under the minimum.
+  function playerRating(s, player, { seconds = null, weights } = {}) {
+    const features = ratingFeatures(s, player), confidence = ratingConfidence(seconds);
+    if (seconds != null && seconds / SECONDS_PER_MINUTE < CONFIG.rating.minMinutes) return { value: null, raw: null, features, confidence, rated: false };
+    return { ...ratingFromFeatures(features, { keeper: player.pos === 'POR', weights, confidence }), features, confidence, rated: true };
+  }
+  // Every player's rating by id; minutes unknown (no court log) rates with confidence 1.
+  function matchRatings(s, players = s.players) {
+    const minutes = minutesOnCourt(s);
+    return new Map(players.map((p) => [p.id, playerRating(s, p, { seconds: minutes ? minutes.get(p.id) || 0 : null })]));
+  }
+  // «S/C» (no rating) reads in the neutral `rt-none` chip, never in a band.
+  const RATING_NONE_BAND = 'rt-none';
+  const ratingText = (value) => (value == null ? 'S/C' : decimalText(value));
+  const ratingBand = (value) => (value == null ? RATING_NONE_BAND : CONFIG.rating.bands.find(([from]) => value >= from)[1]);
+  const ratingChipHtml = (value) => `<span class="rating-chip ${ratingBand(value)}">${ratingText(value)}</span>`;
+
+  // ---- Match MVP and the end-of-match ratings ----
+  const ratingValue = (ratings, player) => ratings.get(player.id)?.value ?? null;
+  // Goals out of shots, or (a goalkeeper) saves out of the on-target shots faced.
+  function outcomeOf(s, player) {
+    if (player.pos === 'POR') {
+      const faced = countGroups(s.events.filter((e) => e.kind === 'RIVAL_SHOT' && e.gkId === player.id));
+      return { made: faced.PARADA, tried: faced.GOL + faced.PARADA };
+    }
+    const stats = playerStats(player.id, s.events);
+    return { made: sumOf(SHEET_ZONES, (z) => stats.goals[z]), tried: sumOf(SHEET_ZONES, (z) => stats.shots[z]) };
+  }
+  // The squad by rating, best first, «S/C» last. Ties go to more minutes (unknown minutes count as equal), then more
+  // goals (saves for goalkeepers), then the lower dorsal.
+  function rankedByRating(s, ratings, seconds) {
+    const made = new Map(s.players.map((p) => [p.id, outcomeOf(s, p).made]));
+    const secondsOf = (p) => (seconds ? seconds.get(p.id) || 0 : 0);
+    return s.players.slice().sort((a, b) => (ratingValue(ratings, a) == null) - (ratingValue(ratings, b) == null)
+      || (ratingValue(ratings, b) ?? 0) - (ratingValue(ratings, a) ?? 0)
+      || secondsOf(b) - secondsOf(a) || made.get(b.id) - made.get(a.id) || a.num - b.num);
+  }
+  const MVP_SOURCE = { coach: 'coach', rating: 'rating' };
+  // The coach's pick wins; otherwise the top rating is only a provisional MVP and is never stored.
+  function matchMvp(s, ratings, seconds = minutesOnCourt(s)) {
+    if (s.players.some((p) => p.id === s.mvpId)) return { id: s.mvpId, source: MVP_SOURCE.coach };
+    const [top] = rankedByRating(s, ratings, seconds);
+    return top && ratingValue(ratings, top) != null ? { id: top.id, source: MVP_SOURCE.rating } : { id: null, source: null };
+  }
+  const signedText = (v) => (v < 0 ? `−${decimalText(-v)}` : `+${decimalText(v)}`);
+  // What moved the rating: each non-zero feature with its share of the points (scaled by the minutes, like the rating).
+  function ratingItemsHtml(rating, keeper) {
+    if (!rating.rated) return '';
+    return RATING_TERMS.filter((t) => Math.abs(rating.features[t.key]) > RATING_ROUNDING_EPSILON).map((t) => {
+      const count = rating.features[t.key];
+      const points = roundHalfUp(t.weight(CONFIG.rating.weights, keeper) * count * rating.confidence, CONFIG.rating.decimals);
+      return `<li>${t.label}${t.counts === false ? '' : ` ×${count}`} <b>${signedText(points)}</b></li>`;
+    }).join('');
+  }
+  function ratingRowHtml(s, player, rating, seconds) {
+    const { made, tried } = outcomeOf(s, player), keeper = player.pos === 'POR';
+    const kpi = (value, label) => `<span class="rating-kpi"><b>${value}</b><small>${label}</small></span>`;
+    const line = `${discHtml(player)}<b class="rating-name">${esc(player.name)}</b>${ratingChipHtml(rating.value)}
+      ${kpi(minutesText(seconds ? seconds.get(player.id) || 0 : null), 'Min')}${kpi(`${made}/${tried}`, keeper ? 'Paradas' : 'Goles')}${kpi(pctText(pct(made, tried)), '%')}`;
+    const items = ratingItemsHtml(rating, keeper);
+    return `<li class="rating-row" data-rating-player="${esc(player.id)}">${items ? `<details class="rating-more"><summary class="rating-line">${line}</summary><ul>${items}</ul></details>` : `<div class="rating-line">${line}</div>`}</li>`;
+  }
+  function ratingsListHtml(s, ratings, seconds = minutesOnCourt(s)) {
+    const rows = rankedByRating(s, ratings, seconds).map((p) => ratingRowHtml(s, p, ratings.get(p.id), seconds)).join('');
+    return `<section class="ratings"><h3>Puntuaciones</h3><ol class="rating-list">${rows}</ol></section>`;
   }
 
   // ===================== Audio, vibration, wake lock =====================
@@ -4034,8 +4219,13 @@ span.att-foot { visibility: hidden; }
     </div>`;
     $('final').hidden = false;
   }
-  function mvpPickHtml() {
-    const faces = state.players.slice().sort(byPosition).map((p) => `<button class="mvp-face press" type="button" data-mvp="${esc(p.id)}" aria-pressed="${p.id === state.mvpId}" aria-label="${esc(p.name)}, MVP del partido">${discHtml(p)}<span>${esc(p.name)}</span>${p.id === state.mvpId ? crownSvg('crown-face') : ''}</button>`).join('');
+  // The crown goes to the coach's pick, or to the top rating, labelled as provisional; only a tap ever sets `state.mvpId`.
+  function mvpPickHtml(mvp) {
+    const face = (p) => {
+      const provisional = p.id === mvp.id && mvp.source === MVP_SOURCE.rating;
+      return `<button class="mvp-face press${provisional ? ' provisional' : ''}" type="button" data-mvp="${esc(p.id)}" aria-pressed="${p.id === state.mvpId}" aria-label="${esc(p.name)}, MVP del partido${provisional ? ' provisional' : ''}">${discHtml(p)}<span>${esc(p.name)}</span>${provisional ? '<small class="mvp-tag">MVP provisional</small>' : ''}${p.id === mvp.id ? crownSvg('crown-face') : ''}</button>`;
+    };
+    const faces = state.players.slice().sort(byPosition).map(face).join('');
     return `<section class="mvp-pick"><h3>MVP del partido</h3><div class="mvp-faces">${faces}</div></section>`;
   }
   // Not an event: picking the MVP is neither undoable nor part of any statistic.
@@ -4046,10 +4236,12 @@ span.att-foot { visibility: hidden; }
     openFinal(typed ? typed.value : undefined);
   }
   function openFinal(email = state.reportEmail) {
+    const seconds = minutesOnCourt(state), ratings = matchRatings(state);
     $('final').innerHTML = `<div class="final-card glass">
       <h2>Final · ${esc(finalTitle())}</h2>
       ${kpiTilesHtml()}
-      ${mvpPickHtml()}
+      ${ratingsListHtml(state, ratings, seconds)}
+      ${mvpPickHtml(matchMvp(state, ratings, seconds))}
       ${summaryDetailHtml()}
       <label class="final-mail">Enviar los PDF a<input class="in" id="final-email" type="email" inputmode="email" autocomplete="email" placeholder="entrenador@club.es, otro@club.es" value="${esc(email || '')}"></label>
       <div class="row-actions">
@@ -5180,8 +5372,8 @@ span.att-foot { visibility: hidden; }
   function playerMatchRow(m, player) {
     if (!m.state.players.some((p) => p.id === player.id)) return null;
     const { events } = m.state;
-    const s = playerStats(player.id, events);
-    const row = { id: m.id, date: m.date, them: m.them, scoreUs: m.scoreUs, scoreThem: m.scoreThem, result: matchResult(m), mvp: m.state.mvpId === player.id, assists: s.ASIST, ...courtFiguresOf(m.state, player.id) };
+    const s = playerStats(player.id, events), court = courtFiguresOf(m.state, player.id);
+    const row = { id: m.id, date: m.date, them: m.them, scoreUs: m.scoreUs, scoreThem: m.scoreThem, result: matchResult(m), mvp: m.state.mvpId === player.id, assists: s.ASIST, ...court, rating: playerRating(m.state, player, { seconds: court.seconds }).value };
     if (player.pos === 'POR') {
       const facedList = events.filter((e) => e.kind === 'RIVAL_SHOT' && e.gkId === player.id);
       const c = countGroups(facedList);
@@ -5194,11 +5386,19 @@ span.att-foot { visibility: hidden; }
       shotsList: events.filter((e) => e.kind === 'SHOT' && e.playerId === player.id)
     };
   }
+  const ratedRows = (rows) => rows.filter((r) => r.rating != null);
+  // The mean of the rated matches, weighted by the minutes on court, or the plain mean when any of them has unknown minutes.
+  function seasonRating(rows) {
+    const rated = ratedRows(rows);
+    if (!rated.length) return null;
+    const weight = rated.every((r) => r.seconds != null) ? (r) => r.seconds : () => 1;
+    return roundHalfUp(sumOf(rated, (r) => r.rating * weight(r)) / sumOf(rated, weight), CONFIG.rating.decimals);
+  }
   function playerSeason(matches, player) {
     const rows = matches.map((m) => playerMatchRow(m, player)).filter(Boolean);
     const fields = player.pos === 'POR' ? GOALKEEPER_ROW_TOTALS : FIELD_ROW_TOTALS;
     const known = (f) => sumOf(rows, (r) => r[f] ?? 0);
-    return { rows, totals: { ...Object.fromEntries(fields.map((f) => [f, sumOf(rows, (r) => r[f])])), seconds: known('seconds'), plusMinus: known('plusMinus') }, mvps: rows.filter((r) => r.mvp).length };
+    return { rows, totals: { ...Object.fromEntries(fields.map((f) => [f, sumOf(rows, (r) => r[f])])), seconds: known('seconds'), plusMinus: known('plusMinus') }, mvps: rows.filter((r) => r.mvp).length, rating: seasonRating(rows) };
   }
   // ---- Season figures: zones, rates and radar axes ----
   const ZONE_P7 = 'P7', ZONE_CONTRA = 'CONTRA', ZONE_UNKNOWN = 'NA';
@@ -5413,7 +5613,7 @@ span.att-foot { visibility: hidden; }
   const LEADER_LIMIT = 7;
   const LEADER_METRICS = [
     { key: 'goals', label: 'Goles' }, { key: 'pct', label: '% tiro' }, { key: 'saves', label: 'Paradas' },
-    { key: 'recoveries', label: 'Recuperaciones' }, { key: 'assists', label: 'Pases de gol' }, { key: 'mvps', label: 'MVPs' }
+    { key: 'recoveries', label: 'Recuperaciones' }, { key: 'assists', label: 'Pases de gol' }, { key: 'mvps', label: 'MVPs' }, { key: 'rating', label: 'Nota' }
   ];
   const POSITION_GROUPS = { POR: 'Porteros', EXT: 'Extremos', LAT: 'Laterales', CEN: 'Centrales', PIV: 'Pivotes' };
   const SQUAD_GROUP_ORDER = ['POR', ...POSITION_ORDER.filter((k) => k !== 'POR')];
@@ -5421,6 +5621,10 @@ span.att-foot { visibility: hidden; }
   function leaderFigure(player, season, metric) {
     const t = season.totals, keeper = player.pos === 'POR', who = `#${player.num}`;
     const shotLine = `${t.goals}/${t.shots} tiros`;
+    if (metric === 'rating') {
+      const rated = ratedRows(season.rows).length;
+      return rated >= CONFIG.leaders.minRated ? { value: season.rating, detail: `${who} · ${plural(rated, 'partido', 'partidos')} con nota` } : null;
+    }
     if (metric === 'mvps') return { value: season.mvps, detail: `${who} · ${plural(season.rows.length, 'partido', 'partidos')}` };
     if (metric === 'assists') return { value: t.assists, detail: `${who} · ${plural(season.rows.length, 'partido', 'partidos')}` };
     if (metric === 'saves') return keeper ? { value: t.saves, detail: `${who} · ${t.saves}/${t.onTarget} · ${pctText(pct(t.saves, t.onTarget))}` } : null;
@@ -5462,7 +5666,7 @@ span.att-foot { visibility: hidden; }
     const chips = LEADER_METRICS.map(({ key, label }) => `<button class="chip press" type="button" data-leader="${key}" aria-pressed="${home.leaderMetric === key}">${label}</button>`).join('');
     const rows = (matches && matches.length ? leaders(matches, home.roster, home.leaderMetric) : []);
     const list = rows.map((r, i) => `<li><button class="leader press" type="button" data-player="${esc(r.player.id)}"><i class="rank">${i + 1}</i>${discHtml(r.player)}
-        <span class="who"><b>${esc(r.player.name)}</b><small>${esc(r.detail)}</small></span><strong class="value">${r.value}${home.leaderMetric === 'pct' ? '%' : ''}</strong></button></li>`).join('');
+        <span class="who"><b>${esc(r.player.name)}</b><small>${esc(r.detail)}</small></span><strong class="value">${home.leaderMetric === 'rating' ? ratingChipHtml(r.value) : `${r.value}${home.leaderMetric === 'pct' ? '%' : ''}`}</strong></button></li>`).join('');
     const body = !matches || !matches.length ? '' : list ? `<ol class="leader-list">${list}</ol>` : '<p class="note">Nadie con datos en esta categoría.</p>';
     return `<section class="sheet-card leaders"><h3>Líderes</h3><div class="chips">${chips}</div>${body}</section>`;
   }
@@ -5752,8 +5956,8 @@ span.att-foot { visibility: hidden; }
       radar: radarSvg(fieldRadar(season, best), pctText(pct(t.goals, t.shots)), '% tiro'),
       titles: { map: 'Mapa de tiros · temporada', radar: 'Perfil frente al equipo', grid: 'Dónde marca' },
       list: shots, success: isGoal, counts: anyShot, colours: CARD_ZONE_COLOURS.field, tiles: [['7 m', rates.get(ZONE_P7)], ['Contraataque', rates.get(ZONE_CONTRA)]],
-      heads: ['Fecha', 'Rival', 'Res.', 'Min', ['Gol', 'Goles'], '%', ['Pas', 'Pases'], ['Pér', 'Pérdidas'], '+/−'],
-      cells: (r) => `<td>${minutesText(r.seconds)}</td><td>${r.goals}/${r.shots}</td><td>${pctText(pct(r.goals, r.shots))}</td><td>${r.assists}</td><td>${r.turnovers}</td><td>${plusMinusText(r.plusMinus)}</td>`,
+      heads: ['Fecha', 'Rival', 'Res.', 'Nota', 'Min', ['Gol', 'Goles'], '%', ['Pas', 'Pases'], ['Pér', 'Pérdidas'], '+/−'],
+      cells: (r) => `<td>${ratingChipHtml(r.rating)}</td><td>${minutesText(r.seconds)}</td><td>${r.goals}/${r.shots}</td><td>${pctText(pct(r.goals, r.shots))}</td><td>${r.assists}</td><td>${r.turnovers}</td><td>${plusMinusText(r.plusMinus)}</td>`,
       barKey: 'goals', barRate: (r) => ratio(r.goals, r.shots)
     };
   }
@@ -5766,19 +5970,20 @@ span.att-foot { visibility: hidden; }
       radar: radarSvg(keeperRadar(season, best), pctText(pct(t.saves, t.onTarget)), '% paradas'),
       titles: { map: 'Paradas por zona de lanzamiento', radar: 'Perfil de portero', grid: 'Dónde para · % por zona de portería' },
       list: faced, success: isSave, counts: onTarget, colours: CARD_ZONE_COLOURS.keeper, tiles: [['7 m', rates.get(ZONE_P7)], ['Contraataque', rates.get(ZONE_CONTRA)]],
-      heads: ['Fecha', 'Rival', 'Res.', 'Min', ['Par', 'Paradas'], '%', '7 m', ['Gol', 'Goles']],
-      cells: (r) => { const p7 = zoneRates(r.facedList, isSave).get(ZONE_P7); return `<td>${minutesText(r.seconds)}</td><td>${r.saves}/${r.onTarget}</td><td>${pctText(pct(r.saves, r.onTarget))}</td><td>${p7 ? `${p7.ok}/${p7.n}` : '–'}</td><td>${r.onTarget - r.saves}</td>`; },
+      heads: ['Fecha', 'Rival', 'Res.', 'Nota', 'Min', ['Par', 'Paradas'], '%', '7 m', ['Gol', 'Goles']],
+      cells: (r) => { const p7 = zoneRates(r.facedList, isSave).get(ZONE_P7); return `<td>${ratingChipHtml(r.rating)}</td><td>${minutesText(r.seconds)}</td><td>${r.saves}/${r.onTarget}</td><td>${pctText(pct(r.saves, r.onTarget))}</td><td>${p7 ? `${p7.ok}/${p7.n}` : '–'}</td><td>${r.onTarget - r.saves}</td>`; },
       barKey: 'saves', barRate: (r) => ratio(r.saves, r.onTarget)
     };
   }
   // The player leads a rate when it is above zero and nobody who played has a higher one.
   const leadsTeam = (own, best) => own > 0 && own >= best;
-  function posterHtml(player, mvps, body = '') {
+  function posterHtml(player, mvps, body = '', rating = null) {
     const pos = posOf(player);
     return `<section class="sheet-card poster" style="--pos:${pos.color}"><span class="poster-dorsal" aria-hidden="true" data-contrast-skip>${player.num}</span>
       <span class="poster-face">${discHtml(player, pos)}${mvps ? crownSvg('crown-face') : ''}</span>
       <h2 class="poster-name">${esc(player.name)}</h2>
-      <p class="poster-sub">${player.fullName ? `${esc(player.fullName)} · ` : ''}${pos.label} · #${player.num}</p>${body}</section>`;
+      <p class="poster-sub">${player.fullName ? `${esc(player.fullName)} · ` : ''}${pos.label} · #${player.num}</p>
+      ${rating == null ? '' : `<p class="poster-rating">${ratingChipHtml(rating)}<span>nota de la temporada</span></p>`}${body}</section>`;
   }
   // «Asistencia · 92 %», the counts behind it and the split between trainings and matches.
   function attendanceTileHtml(player) {
@@ -5798,7 +6003,7 @@ span.att-foot { visibility: hidden; }
     const body = `<div class="sentences">${card.sentences.map((x) => `<p>${x}</p>`).join('')}</div>
       <div class="tiles"><div class="tile ${card.lead.cls}"><b>${card.lead.figure}</b><span>${card.lead.label}${card.lead.leads ? ' · el mejor del equipo' : ''}</span></div>
         <div class="tile"><b>${card.second.figure}</b><span>${card.second.label}</span></div>${attendanceTileHtml(player)}</div>${mvp}`;
-    return `<div class="player-grid"><div class="player-col">${posterHtml(player, season.mvps, body)}</div>
+    return `<div class="player-grid"><div class="player-col">${posterHtml(player, season.mvps, body, season.rating)}</div>
       <div class="player-col"><section class="sheet-card zone-map"><h3>${card.titles.map}</h3>${zoneMapSvg(card.list, card.success, card.colours, card.counts)}
           <div class="rate-tiles">${card.tiles.map(([label, rate]) => rateTileHtml(label, rate)).join('')}</div></section>
         <section class="sheet-card"><h3>Partidos</h3><div class="table-wrap"><table class="match-table"><thead><tr>${card.heads.map((h) => `<th>${Array.isArray(h) ? `<abbr title="${h[1]}">${h[0]}</abbr>` : h}</th>`).join('')}</tr></thead><tbody>${rows}</tbody></table></div></section>
@@ -5856,7 +6061,7 @@ span.att-foot { visibility: hidden; }
         <button class="btn primary press" type="button" data-player-match-open="${match.id}">Abrir el partido</button></div>
       <section class="sheet-card match-head"><div class="last-match"><span class="mvp-face-static">${discHtml(player)}${crown}</span>
         <span class="last-who"><b>${esc(player.name)} · ${esc(match.them)}</b><small>${esc(dateText(match.date))}${match.venue ? ` · ${esc(match.venue)}` : ''}</small></span>
-        <span class="res-chip ${resultClass(row)}">${RESULT_LABEL[matchResult(row)]}</span>
+        <span class="res-chip ${resultClass(row)}">${RESULT_LABEL[matchResult(row)]}</span>${ratingChipHtml(row.rating)}
         <strong class="last-score ${resultClass(row)}">${row.scoreUs}–${row.scoreThem}</strong></div></section>
       ${figuresHtml(keeper ? gkFigures(row.facedList) : [...courtFigures(row), ...playerFigures(player, s)])}
       ${maps}</div>`;

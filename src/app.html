@@ -560,10 +560,27 @@ button.rex-chip { border: 0; cursor: pointer; position: relative; }
 .halftime-points .acta-h { margin-top: 0; }
 @media (max-width: 700px) { .kpi-tiles { grid-template-columns: repeat(2, minmax(0, 1fr)); } .halftime-points { grid-template-columns: 1fr; } }
 .mvp-pick { display: grid; gap: var(--space-2); }
-.mvp-pick h3 { margin: 0; font: var(--type-caption); font-weight: 700; color: var(--muted); text-transform: uppercase; letter-spacing: .06em; }
+.mvp-pick h3, .ratings h3 { margin: 0; font: var(--type-caption); font-weight: 700; color: var(--muted); text-transform: uppercase; letter-spacing: .06em; }
 .mvp-faces { display: flex; flex-wrap: wrap; gap: var(--space-4) var(--space-3); padding-top: var(--space-6); }
 .mvp-face { position: relative; display: grid; justify-items: center; gap: 4px; min-width: var(--tap); min-height: var(--tap); padding: 4px 6px; border: 2px solid transparent; border-radius: var(--radius-md); background: transparent; color: var(--fg); font: var(--type-caption); font-weight: 600; }
 .mvp-face[aria-pressed="true"] { border-color: var(--gold); background: var(--glow-gold); }
+.mvp-face.provisional { border-style: dashed; border-color: var(--gold); }
+.mvp-tag { font: var(--type-caption); font-weight: 800; color: var(--fg); }
+.ratings { display: grid; gap: var(--space-2); }
+.rating-list { margin: 0; padding: 0; list-style: none; }
+.rating-row { --face-disc: 40px; border-bottom: 1px solid var(--line); }
+.rating-line { display: flex; align-items: center; gap: var(--space-3); min-height: 52px; padding: var(--space-1) 0; }
+.rating-line .disc { flex: none; width: var(--face-disc); height: var(--face-disc); font-size: 16px; }
+.rating-line .rating-chip { min-width: 3.5ch; }
+.rating-name { flex: 1; min-width: 0; overflow-wrap: anywhere; }
+.rating-kpi { display: grid; justify-items: end; min-width: 5ch; font-variant-numeric: tabular-nums; }
+.rating-kpi small { font: var(--type-caption); color: var(--muted); }
+.rating-more > summary { list-style: none; cursor: pointer; }
+.rating-more > summary::-webkit-details-marker { display: none; }
+.rating-more > summary::after { content: "▾"; color: var(--muted); }
+.rating-more[open] > summary::after { content: "▴"; }
+.rating-more ul { margin: 0 0 var(--space-2); padding-left: calc(var(--face-disc) + var(--space-3)); font: var(--type-caption); }
+.rating-more li b { font-variant-numeric: tabular-nums; }
 .crown-face { position: absolute; left: -6px; top: -22px; width: 38px; height: auto; transform: rotate(-34deg); pointer-events: none; filter: drop-shadow(0 3px 4px rgba(0, 0, 0, .5)); }
 .final-mail { display: grid; gap: var(--space-1); font: var(--type-caption); font-weight: 700; color: var(--muted); text-transform: uppercase; letter-spacing: .06em; }
 .sheet-head { display: flex; align-items: center; gap: var(--space-3); flex-wrap: wrap; margin-bottom: var(--space-3); }
@@ -1837,8 +1854,28 @@ span.att-foot { visibility: hidden; }
   const RATING_TACTICAL_FAULTS = TACTICAL_FAULTS.filter((action) => action !== 'BEATEN');
   const RATING_ACTION_FEATURES = { PROV7: 'prov7', BEATEN: 'beaten', PEN7C: 'pen7c', ASIST: 'assists', RECUP: 'recoveries', BLOC: 'blocks' };
   const RATING_CARD_FEATURES = { A: 'yellow', '2M': 'twoMin', D: 'red', AZ: 'blue' };
-  const RATING_FEATURE_NAMES = ['shotValue', 'saveValue', 'turnovers', 'forcedTurnovers', 'ruleTurnovers', 'ruleFaults', 'prov7', 'beaten', 'pen7c',
-    'tactical', 'assists', 'recoveries', 'blocks', 'teamFaults', 'yellow', 'twoMin', 'red', 'blue'];
+  // The terms of the rating, in the order the match breakdown lists them: the weight of each feature (before the minutes
+  // scaling) and its label. A term that `counts` reads «×n»; shot and save values are fractions of a goal and do not.
+  const RATING_TERMS = [
+    { key: 'shotValue', label: 'Acierto en tiro', counts: false, weight: (w) => w.shot },
+    { key: 'saveValue', label: 'Paradas sobre lo esperado', counts: false, weight: (w) => w.save },
+    { key: 'turnovers', label: 'Pérdidas', weight: (w) => w.turnover },
+    { key: 'forcedTurnovers', label: 'Pérdidas forzadas', weight: (w) => w.forcedTurnover },
+    { key: 'ruleTurnovers', label: 'Pérdidas de regla', weight: (w) => w.ruleTurnover },
+    { key: 'ruleFaults', label: 'Faltas', weight: (w) => w.ruleFault },
+    { key: 'prov7', label: '7 m provocados', weight: (w) => w.oneOnOne },
+    { key: 'beaten', label: 'Superado 1x1', weight: (w) => -w.oneOnOne },
+    { key: 'pen7c', label: '7 m cometidos', weight: (w) => -w.oneOnOne },
+    { key: 'tactical', label: 'Fallos tácticos', weight: (w) => w.tactical },
+    { key: 'assists', label: 'Asistencias', weight: (w) => w.assist },
+    { key: 'recoveries', label: 'Recuperaciones', weight: (w) => w.recovery },
+    { key: 'blocks', label: 'Bloqueos', weight: (w) => w.block },
+    { key: 'teamFaults', label: 'Falta de contundencia', weight: (w, keeper) => (keeper ? w.teamFaultKeeper : w.teamFaultField) },
+    { key: 'yellow', label: 'Amarilla', weight: (w) => w.yellow },
+    { key: 'twoMin', label: '2 minutos', weight: (w) => w.twoMin },
+    { key: 'red', label: 'Roja', weight: (w) => w.red },
+    { key: 'blue', label: 'Azul', weight: (w) => w.blue }
+  ];
   // The share of shots from a zone that go in, from the middle of the zone's reference range.
   const expectedGoal = (zone) => {
     const [good, poor] = CONFIG.targets[zone] || CONFIG.targets.shooting;
@@ -1853,7 +1890,7 @@ span.att-foot { visibility: hidden; }
     && (e.playerId == null ? courtSetOf(e.on, s).includes(player.id) : e.playerId === player.id);
   // What one player did in the match, from its events alone: shot and save values are goals above what the zone expects.
   function ratingFeatures(s, player) {
-    const f = Object.fromEntries(RATING_FEATURE_NAMES.map((name) => [name, 0]));
+    const f = Object.fromEntries(RATING_TERMS.map((term) => [term.key, 0]));
     s.events.forEach((e) => {
       if (isTeamFaultOf(e, player, s)) { f.teamFaults++; return; }
       if (e.kind === 'RIVAL_SHOT') {
@@ -1876,13 +1913,7 @@ span.att-foot { visibility: hidden; }
   const roundHalfUp = (v, decimals) => Math.round(v * 10 ** decimals + RATING_ROUNDING_EPSILON) / 10 ** decimals;
   // The weighted features around the base. `raw` is before the clamp and the rounding.
   function ratingFromFeatures(f, { keeper, weights = CONFIG.rating.weights, confidence = 1 }) {
-    const w = weights, r = CONFIG.rating;
-    const sum = w.shot * f.shotValue + w.save * f.saveValue
-      + w.turnover * f.turnovers + w.forcedTurnover * f.forcedTurnovers + w.ruleTurnover * f.ruleTurnovers + w.ruleFault * f.ruleFaults
-      + w.oneOnOne * (f.prov7 - f.beaten - f.pen7c) + w.tactical * f.tactical
-      + w.assist * f.assists + w.recovery * f.recoveries + w.block * f.blocks
-      + (keeper ? w.teamFaultKeeper : w.teamFaultField) * f.teamFaults
-      + w.yellow * f.yellow + w.twoMin * f.twoMin + w.red * f.red + w.blue * f.blue;
+    const r = CONFIG.rating, sum = sumOf(RATING_TERMS, (term) => term.weight(weights, keeper) * f[term.key]);
     const raw = r.base + confidence * sum;
     return { value: roundHalfUp(clamp(raw, r.min, r.max), r.decimals), raw };
   }
@@ -1905,6 +1936,56 @@ span.att-foot { visibility: hidden; }
   const ratingText = (value) => (value == null ? 'S/C' : decimalText(value));
   const ratingBand = (value) => (value == null ? RATING_NONE_BAND : CONFIG.rating.bands.find(([from]) => value >= from)[1]);
   const ratingChipHtml = (value) => `<span class="rating-chip ${ratingBand(value)}">${ratingText(value)}</span>`;
+
+  // ---- Match MVP and the end-of-match ratings ----
+  const ratingValue = (ratings, player) => ratings.get(player.id)?.value ?? null;
+  // Goals out of shots, or (a goalkeeper) saves out of the on-target shots faced.
+  function outcomeOf(s, player) {
+    if (player.pos === 'POR') {
+      const faced = countGroups(s.events.filter((e) => e.kind === 'RIVAL_SHOT' && e.gkId === player.id));
+      return { made: faced.PARADA, tried: faced.GOL + faced.PARADA };
+    }
+    const stats = playerStats(player.id, s.events);
+    return { made: sumOf(SHEET_ZONES, (z) => stats.goals[z]), tried: sumOf(SHEET_ZONES, (z) => stats.shots[z]) };
+  }
+  // The squad by rating, best first, «S/C» last. Ties go to more minutes (unknown minutes count as equal), then more
+  // goals (saves for goalkeepers), then the lower dorsal.
+  function rankedByRating(s, ratings, seconds) {
+    const made = new Map(s.players.map((p) => [p.id, outcomeOf(s, p).made]));
+    const secondsOf = (p) => (seconds ? seconds.get(p.id) || 0 : 0);
+    return s.players.slice().sort((a, b) => (ratingValue(ratings, a) == null) - (ratingValue(ratings, b) == null)
+      || (ratingValue(ratings, b) ?? 0) - (ratingValue(ratings, a) ?? 0)
+      || secondsOf(b) - secondsOf(a) || made.get(b.id) - made.get(a.id) || a.num - b.num);
+  }
+  const MVP_SOURCE = { coach: 'coach', rating: 'rating' };
+  // The coach's pick wins; otherwise the top rating is only a provisional MVP and is never stored.
+  function matchMvp(s, ratings, seconds = minutesOnCourt(s)) {
+    if (s.players.some((p) => p.id === s.mvpId)) return { id: s.mvpId, source: MVP_SOURCE.coach };
+    const [top] = rankedByRating(s, ratings, seconds);
+    return top && ratingValue(ratings, top) != null ? { id: top.id, source: MVP_SOURCE.rating } : { id: null, source: null };
+  }
+  const signedText = (v) => (v < 0 ? `−${decimalText(-v)}` : `+${decimalText(v)}`);
+  // What moved the rating: each non-zero feature with its share of the points (scaled by the minutes, like the rating).
+  function ratingItemsHtml(rating, keeper) {
+    if (!rating.rated) return '';
+    return RATING_TERMS.filter((t) => Math.abs(rating.features[t.key]) > RATING_ROUNDING_EPSILON).map((t) => {
+      const count = rating.features[t.key];
+      const points = roundHalfUp(t.weight(CONFIG.rating.weights, keeper) * count * rating.confidence, CONFIG.rating.decimals);
+      return `<li>${t.label}${t.counts === false ? '' : ` ×${count}`} <b>${signedText(points)}</b></li>`;
+    }).join('');
+  }
+  function ratingRowHtml(s, player, rating, seconds) {
+    const { made, tried } = outcomeOf(s, player), keeper = player.pos === 'POR';
+    const kpi = (value, label) => `<span class="rating-kpi"><b>${value}</b><small>${label}</small></span>`;
+    const line = `${discHtml(player)}<b class="rating-name">${esc(player.name)}</b>${ratingChipHtml(rating.value)}
+      ${kpi(minutesText(seconds ? seconds.get(player.id) || 0 : null), 'Min')}${kpi(`${made}/${tried}`, keeper ? 'Paradas' : 'Goles')}${kpi(pctText(pct(made, tried)), '%')}`;
+    const items = ratingItemsHtml(rating, keeper);
+    return `<li class="rating-row" data-rating-player="${esc(player.id)}">${items ? `<details class="rating-more"><summary class="rating-line">${line}</summary><ul>${items}</ul></details>` : `<div class="rating-line">${line}</div>`}</li>`;
+  }
+  function ratingsListHtml(s, ratings, seconds = minutesOnCourt(s)) {
+    const rows = rankedByRating(s, ratings, seconds).map((p) => ratingRowHtml(s, p, ratings.get(p.id), seconds)).join('');
+    return `<section class="ratings"><h3>Puntuaciones</h3><ol class="rating-list">${rows}</ol></section>`;
+  }
 
   // ===================== Audio, vibration, wake lock =====================
   let audioCtx = null;
@@ -4123,8 +4204,13 @@ span.att-foot { visibility: hidden; }
     </div>`;
     $('final').hidden = false;
   }
-  function mvpPickHtml() {
-    const faces = state.players.slice().sort(byPosition).map((p) => `<button class="mvp-face press" type="button" data-mvp="${esc(p.id)}" aria-pressed="${p.id === state.mvpId}" aria-label="${esc(p.name)}, MVP del partido">${discHtml(p)}<span>${esc(p.name)}</span>${p.id === state.mvpId ? crownSvg('crown-face') : ''}</button>`).join('');
+  // The crown goes to the coach's pick, or to the top rating, labelled as provisional; only a tap ever sets `state.mvpId`.
+  function mvpPickHtml(mvp) {
+    const face = (p) => {
+      const provisional = p.id === mvp.id && mvp.source === MVP_SOURCE.rating;
+      return `<button class="mvp-face press${provisional ? ' provisional' : ''}" type="button" data-mvp="${esc(p.id)}" aria-pressed="${p.id === state.mvpId}" aria-label="${esc(p.name)}, MVP del partido${provisional ? ' provisional' : ''}">${discHtml(p)}<span>${esc(p.name)}</span>${provisional ? '<small class="mvp-tag">MVP provisional</small>' : ''}${p.id === mvp.id ? crownSvg('crown-face') : ''}</button>`;
+    };
+    const faces = state.players.slice().sort(byPosition).map(face).join('');
     return `<section class="mvp-pick"><h3>MVP del partido</h3><div class="mvp-faces">${faces}</div></section>`;
   }
   // Not an event: picking the MVP is neither undoable nor part of any statistic.
@@ -4135,10 +4221,12 @@ span.att-foot { visibility: hidden; }
     openFinal(typed ? typed.value : undefined);
   }
   function openFinal(email = state.reportEmail) {
+    const seconds = minutesOnCourt(state), ratings = matchRatings(state);
     $('final').innerHTML = `<div class="final-card glass">
       <h2>Final · ${esc(finalTitle())}</h2>
       ${kpiTilesHtml()}
-      ${mvpPickHtml()}
+      ${ratingsListHtml(state, ratings, seconds)}
+      ${mvpPickHtml(matchMvp(state, ratings, seconds))}
       ${summaryDetailHtml()}
       <label class="final-mail">Enviar los PDF a<input class="in" id="final-email" type="email" inputmode="email" autocomplete="email" placeholder="entrenador@club.es, otro@club.es" value="${esc(email || '')}"></label>
       <div class="row-actions">
