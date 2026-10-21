@@ -82,6 +82,37 @@
   --radius: 18px;
   --tap: 56px;
   --spring: cubic-bezier(.2, .9, .25, 1);
+
+  /* Design tokens (outside the live screen, which keeps reading the properties above). Dark values sit in both dark blocks. */
+  --color-bg-page: var(--bg);
+  --color-bg-surface: var(--surface);
+  --color-bg-subtle: var(--soft);
+  --color-border: var(--line);
+  --color-text: var(--fg);
+  --color-text-secondary: var(--muted);
+  --color-text-tertiary: #75706b;
+  --color-accent: var(--brand);
+  --color-on-accent: var(--brand-ink);
+  --type-display: 600 2.25rem/1.1 var(--font-body);
+  --type-title: 600 1.5rem/1.2 var(--font-body);
+  --type-heading: 600 1.125rem/1.3 var(--font-body);
+  --type-body: 400 1rem/1.5 var(--font-body);
+  --type-caption: 400 0.8125rem/1.4 var(--font-body);
+  --type-kpi: 800 2.125rem/1.05 var(--font-display);
+  --space-1: 4px; --space-2: 8px; --space-3: 12px; --space-4: 16px; --space-5: 20px; --space-6: 24px; --space-8: 32px; --space-10: 40px; --space-12: 48px;
+  --radius-sm: 8px; --radius-md: 12px; --radius-lg: 16px; --radius-xl: 24px; --radius-full: 9999px;
+  --ring: 0 0 0 1px rgba(0, 0, 0, .06), 0 1px 2px -1px rgba(0, 0, 0, .06), 0 2px 4px 0 rgba(0, 0, 0, .04);
+  --ring-hover: 0 0 0 1px rgba(0, 0, 0, .08), 0 1px 2px -1px rgba(0, 0, 0, .08), 0 2px 4px 0 rgba(0, 0, 0, .06);
+  --photo-outline: rgba(0, 0, 0, .1);
+  --dur-press: 150ms; --dur-state: 200ms; --dur-enter: 300ms; --dur-exit: 150ms;
+  --ease-out: cubic-bezier(0.2, 0, 0, 1);
+  --focus-ring: 2px solid var(--parada);
+  /* Rating bands: the fill and the ink of the numerals on it */
+  --rating-top: #1d4ed8; --rating-ink-top: #ffffff;
+  --rating-good: #15803d; --rating-ink-good: #ffffff;
+  --rating-mid: #bf8003; --rating-ink-mid: #151515;
+  --rating-low: #c2410c; --rating-ink-low: #ffffff;
+  --rating-bad: #991b1b; --rating-ink-bad: #ffffff;
 }
 @media (prefers-color-scheme: dark) {
   :root:not([data-theme="light"]) {
@@ -96,6 +127,10 @@
     --court: #1d242b; --area: #3b3215; --court-line: #e6e6e6; --goal-face: #121417; --goal-hot: #2e2a14; --goal-sector: #7a6412; --net: #2c3238;
     --parada: #4f8bff; --fallo: #7d838c; --gol: #2fbf71; --ataque: #9461ff;
     --act-good: #2fbf71; --act-def: #4f8bff; --act-bad: #ef4444; --act-rival: #9461ff;
+    --color-text-tertiary: #928d88;
+    --ring: 0 0 0 1px rgba(255, 255, 255, .08); --ring-hover: 0 0 0 1px rgba(255, 255, 255, .13); --photo-outline: rgba(255, 255, 255, .1);
+    --rating-top: #5b8cff; --rating-ink-top: #0e0e10; --rating-good: #2fbf71; --rating-ink-good: #0e0e10; --rating-mid: #f5c542; --rating-ink-mid: #0e0e10;
+    --rating-low: #ea7a2e; --rating-ink-low: #0e0e10; --rating-bad: #c53030; --rating-ink-bad: #ffffff;
   }
 }
 :root[data-theme="dark"] {
@@ -110,7 +145,19 @@
   --court: #1d242b; --area: #3b3215; --court-line: #e6e6e6; --goal-face: #121417; --goal-hot: #2e2a14; --goal-sector: #7a6412; --net: #2c3238;
   --parada: #4f8bff; --fallo: #7d838c; --gol: #2fbf71; --ataque: #9461ff;
     --act-good: #2fbf71; --act-def: #4f8bff; --act-bad: #ef4444; --act-rival: #9461ff;
+  --color-text-tertiary: #928d88;
+  --ring: 0 0 0 1px rgba(255, 255, 255, .08); --ring-hover: 0 0 0 1px rgba(255, 255, 255, .13); --photo-outline: rgba(255, 255, 255, .1);
+  --rating-top: #5b8cff; --rating-ink-top: #0e0e10; --rating-good: #2fbf71; --rating-ink-good: #0e0e10; --rating-mid: #f5c542; --rating-ink-mid: #0e0e10;
+  --rating-low: #ea7a2e; --rating-ink-low: #0e0e10; --rating-bad: #c53030; --rating-ink-bad: #ffffff;
 }
+
+/* Type roles for pages outside the live screen */
+.t-display { font: var(--type-display); }
+.t-title { font: var(--type-title); }
+.t-heading { font: var(--type-heading); }
+.t-body { font: var(--type-body); }
+.t-caption { font: var(--type-caption); }
+.num { font-variant-numeric: tabular-nums; }
 
 html, body { height: 100%; }
 body {
@@ -4101,6 +4148,8 @@ td.zero { color: var(--faint); }
   window.addEventListener('online', syncMatches);
 
   // ---- Colour ----
+  // Rating bands from best to worst: the --rating-<band> and --rating-ink-<band> tokens.
+  const RATING_BANDS = ['top', 'good', 'mid', 'low', 'bad'];
   const LINEAR_RGB_KNEE = 0.03928, LINEAR_RGB_SLOPE = 12.92, LINEAR_RGB_OFFSET = 0.055, LINEAR_RGB_SCALE = 1.055, LINEAR_RGB_GAMMA = 2.4;
   const LUMINANCE_WEIGHTS = [0.2126, 0.7152, 0.0722];
   const CONTRAST_FLARE = 0.05;

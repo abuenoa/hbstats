@@ -53,6 +53,82 @@
     if (extra.length) drift.push('unrecorded: ' + extra.join());
     if (drift.length) throw new Error(drift.join('; '));
   });
+  // ---- Design tokens (M0b) ----
+  const inTheme = (theme, fn) => {
+    const saved = document.documentElement.getAttribute('data-theme');
+    document.documentElement.setAttribute('data-theme', theme);
+    try { return fn(getComputedStyle(document.documentElement)); } finally { saved === null ? document.documentElement.removeAttribute('data-theme') : document.documentElement.setAttribute('data-theme', saved); }
+  };
+  const tokenValue = (css, name) => css.getPropertyValue(name).trim();
+  const SEMANTIC_TOKENS = [
+    ...['bg-page', 'bg-surface', 'bg-subtle', 'border', 'text', 'text-secondary', 'text-tertiary', 'accent', 'on-accent'].map((n) => `--color-${n}`),
+    ...['display', 'title', 'heading', 'body', 'caption', 'kpi'].map((n) => `--type-${n}`),
+    ...[1, 2, 3, 4, 5, 6, 8, 10, 12].map((n) => `--space-${n}`),
+    ...['sm', 'md', 'lg', 'xl', 'full'].map((n) => `--radius-${n}`),
+    '--ring', '--ring-hover', '--photo-outline', '--dur-press', '--dur-state', '--dur-enter', '--dur-exit', '--ease-out', '--focus-ring',
+    ...RATING_BANDS.flatMap((b) => [`--rating-${b}`, `--rating-ink-${b}`]),
+  ];
+  T('design: every semantic token resolves in both themes', () => {
+    ['light', 'dark'].forEach((theme) => inTheme(theme, (css) => {
+      const missing = SEMANTIC_TOKENS.filter((name) => !tokenValue(css, name));
+      if (missing.length) throw new Error(`${theme}: ${missing.join()}`);
+    }));
+    if (RATING_BANDS.join() !== 'top,good,mid,low,bad') throw new Error('bands ' + RATING_BANDS);
+  });
+  T('design: semantic colours alias the existing ones', () => {
+    ['light', 'dark'].forEach((theme) => inTheme(theme, (css) => {
+      [['--color-bg-page', '--bg'], ['--color-bg-surface', '--surface'], ['--color-bg-subtle', '--soft'], ['--color-border', '--line'], ['--color-text', '--fg'], ['--color-text-secondary', '--muted'], ['--color-accent', '--brand'], ['--color-on-accent', '--brand-ink']]
+        .forEach(([alias, base]) => { if (tokenValue(css, alias) !== tokenValue(css, base)) throw new Error(`${theme} ${alias} ${tokenValue(css, alias)} vs ${base} ${tokenValue(css, base)}`); });
+    }));
+  });
+  T('design: tertiary text passes 4.5:1 on the surface in both themes', () => {
+    ['light', 'dark'].forEach((theme) => inTheme(theme, (css) => {
+      const ratio = contrastRatio(tokenValue(css, '--color-text-tertiary'), tokenValue(css, '--surface'));
+      if (ratio < 4.5) throw new Error(`${theme} ${ratio.toFixed(2)}`);
+    }));
+  });
+  T('design: rating band numerals pass 4.5:1 and fills 3:1 on the surface in both themes', () => {
+    const weak = [];
+    ['light', 'dark'].forEach((theme) => inTheme(theme, (css) => RATING_BANDS.forEach((band) => {
+      const fill = tokenValue(css, `--rating-${band}`), ink = tokenValue(css, `--rating-ink-${band}`);
+      const numerals = contrastRatio(fill, ink), edge = contrastRatio(fill, tokenValue(css, '--surface'));
+      if (numerals < 4.5) weak.push(`${theme} ${band} numerals ${numerals.toFixed(2)}`);
+      if (edge < 3) weak.push(`${theme} ${band} fill ${edge.toFixed(2)}`);
+    })));
+    if (weak.length) throw new Error(weak.join('; '));
+  });
+  T('design: adjacent rating bands differ in lightness', () => {
+    const close = [];
+    ['light', 'dark'].forEach((theme) => inTheme(theme, (css) => RATING_BANDS.slice(1).forEach((band, i) => {
+      const ratio = contrastRatio(tokenValue(css, `--rating-${RATING_BANDS[i]}`), tokenValue(css, `--rating-${band}`));
+      if (ratio < 1.3) close.push(`${theme} ${RATING_BANDS[i]}/${band} ${ratio.toFixed(2)}`);
+    })));
+    if (close.length) throw new Error(close.join('; '));
+  });
+  // The live screen reads these; recorded before the design pass (M0b).
+  const LIVE_TOKENS = {
+    light: { '--act-good': '#1f9d55', '--act-def': '#2563eb', '--act-bad': '#d4202a', '--act-rule': '#f08a1c', '--act-rival': '#7c3aed', '--gol': '#1f9d55', '--parada': '#2563eb', '--fallo': '#8a8f98', '--radius': '18px', '--tap': '56px' },
+    dark: { '--act-good': '#2fbf71', '--act-def': '#4f8bff', '--act-bad': '#ef4444', '--act-rule': '#f08a1c', '--act-rival': '#9461ff', '--gol': '#2fbf71', '--parada': '#4f8bff', '--fallo': '#7d838c', '--radius': '18px', '--tap': '56px' },
+  };
+  T('design: live tokens keep their values', () => {
+    const drift = [];
+    Object.entries(LIVE_TOKENS).forEach(([theme, tokens]) => inTheme(theme, (css) => Object.entries(tokens).forEach(([name, want]) => {
+      if (tokenValue(css, name) !== want) drift.push(`${theme} ${name} ${tokenValue(css, name)} vs ${want}`);
+    })));
+    if (drift.length) throw new Error(drift.join('; '));
+  });
+  T('design: type roles and the number utility apply', () => {
+    const probe = document.createElement('p');
+    document.body.append(probe);
+    try {
+      [['t-display', '36px'], ['t-title', '24px'], ['t-heading', '18px'], ['t-body', '16px'], ['t-caption', '13px']].forEach(([cls, size]) => {
+        probe.className = cls;
+        if (getComputedStyle(probe).fontSize !== size) throw new Error(`${cls} ${getComputedStyle(probe).fontSize}`);
+      });
+      probe.className = 'num';
+      if (getComputedStyle(probe).fontVariantNumeric !== 'tabular-nums') throw new Error('num ' + getComputedStyle(probe).fontVariantNumeric);
+    } finally { probe.remove(); }
+  });
   T('render all tabs', () => { Object.keys(SHEET_TABS).forEach((t) => { ui.sheetTab = t; renderSheet(); }); ui.sheetGk = state.gkId; ui.sheetTab = 'gk'; renderSheet(); ui.sheetGk = null; });
   T('score pop', () => { openScorePop({ x: 100, y: 100 }); closePop(); });
   T('score fix +1 and undo', () => { const b = score().us; addEvent('SCORE_FIX', { team: 'us', delta: 1 }); if (score().us !== b + 1) throw new Error('no +1'); undo(); if (score().us !== b) throw new Error('undo'); });
