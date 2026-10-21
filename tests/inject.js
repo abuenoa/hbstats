@@ -313,6 +313,22 @@
       const [row] = season.rows;
       if (row.saves !== 2 || row.onTarget !== 3 || row.facedList.length !== 4 || 'shots' in row || season.totals.saves !== 2 || season.totals.onTarget !== 3) throw new Error(JSON.stringify(row));
     });
+    const seasonTurnovers = () => ({ id: newId('e'), abs: 30, kind: 'TURNOVER', playerId: 'sp2', subtype: 'Pase' });
+    T('season: player rows count blocks, 7 m provoked, recoveries and turnovers', () => {
+      const action = (name, n) => Array.from({ length: n }, () => ({ id: newId('e'), abs: 5, kind: 'ACTION', playerId: 'sp2', action: name }));
+      const match = seasonRow('pr1', { events: [...action('BLOC', 2), ...action('PROV7', 3), ...action('RECUP', 4), seasonTurnovers(), seasonTurnovers()] });
+      const season = playerSeason([match], seasonPlayers[1]), [row] = season.rows;
+      if (row.blocks !== 2 || row.prov7 !== 3 || row.recoveries !== 4 || row.turnovers !== 2) throw new Error(JSON.stringify(row));
+      const t = season.totals;
+      if (t.blocks !== 2 || t.prov7 !== 3 || t.recoveries !== 4 || t.turnovers !== 2) throw new Error(JSON.stringify(t));
+    });
+    T('season: team totals count turnovers, recoveries and saves', () => {
+      const recovery = { id: newId('e'), abs: 5, kind: 'ACTION', playerId: 'sp2', action: 'RECUP' };
+      const a = seasonRow('tt1', { events: [seasonTurnovers(), recovery, seasonRivalShot('sp1', 'PARADA'), seasonRivalShot('sp1', 'GOL')] });
+      const b = seasonRow('tt2', { events: [seasonTurnovers(), seasonTurnovers(), recovery, recovery, seasonRivalShot('sp1', 'PARADA'), seasonRivalShot('sp1', 'FUERA')] });
+      const t = teamSeason([a, b]);
+      if (t.turnovers !== 3 || t.recoveries !== 3 || t.saves !== 2 || t.onTarget !== 3) throw new Error(JSON.stringify(t));
+    });
     T('zones: lane and ring from the origin, 7 m and counters apart', () => {
       const shot = (over) => ({ kind: 'SHOT', from: '9M', zone: '9M', origin: m(0, 10), ...over });
       const zones = [shotZone(shot({ origin: m(-8, 2) })), shotZone(shot()), shotZone(shot({ from: '7M', zone: '7M' })), shotZone(shot({ zone: 'CONTRA' }))];
@@ -320,6 +336,14 @@
       const rival = (over) => ({ kind: 'RIVAL_SHOT', zone: '9M', contra: false, origin: m(0, 10), ...over });
       const theirs = [shotZone(rival({ zone: '7M' })), shotZone(rival({ contra: true })), shotZone(rival({ origin: m(8, 4) }))];
       if (theirs.join() !== 'P7,CONTRA,EXT_D:near') throw new Error(theirs.join());
+    });
+    T('zones: a shot without origin is skipped by the map', () => {
+      const lost = { kind: 'SHOT', from: '9M', zone: '9M', result: 'GOL' };
+      if (shotZone(lost) !== ZONE_UNKNOWN || shotZone({ kind: 'RIVAL_SHOT', zone: '9M', contra: false, result: 'GOL' }) !== ZONE_UNKNOWN) throw new Error('zone ' + shotZone(lost));
+      const rates = zoneRates([lost], (e) => e.result === 'GOL');
+      if (rates.size !== 1 || JSON.stringify(rates.get(ZONE_UNKNOWN)) !== '{"ok":1,"n":1}') throw new Error(JSON.stringify([...rates]));
+      const svg = zoneMapSvg([lost], () => true, { GOL: 'x', PARADA: 'x', FALLO: 'x' });
+      if (/class="zone-(pct|n|dot)"/.test(svg) || /NaN|undefined/.test(svg)) throw new Error('the map drew a shot without origin');
     });
     T('zones: rates count shots on target unless told to count every shot', () => {
       const shots = ['GOL', 'PARADA', 'FUERA', 'PALO'].map((result) => ({ kind: 'SHOT', from: '9M', zone: '9M', origin: m(0, 10), target: gf(0.1, 0.1), result }));
@@ -330,13 +354,12 @@
       const grid = goalRates([...shots, { ...shots[0], target: { x: 0, y: 0 } }], (e) => e.result === 'GOL');
       if (grid.length !== GOAL_GRID || JSON.stringify(grid[0][0]) !== '{"ok":1,"n":2}' || grid.flat().reduce((n, c) => n + c.n, 0) !== 2) throw new Error(JSON.stringify(grid));
     });
-    const seasonTurnovers = () => ({ id: newId('e'), abs: 30, kind: 'TURNOVER', playerId: 'sp2', subtype: 'Pase' });
     const RADAR_KEYS = { field: 'pct,goals,assists,prov7,recoveries,blocks,security,discipline', keeper: 'pct,near,far,p7,contra,assists' };
     const bestOf = (keys, value) => Object.fromEntries(keys.split(',').map((k) => [k, value]));
     T('radar: fractions against the team best, inverted axes', () => {
       const lost = () => seasonRow(newId('r'), { events: [seasonTurnovers(), seasonTurnovers(), seasonShot('sp2', 'GOL')] });
       const season = playerSeason([lost(), lost()], seasonPlayers[1]);
-      const axes = fieldRadar(season, { ...bestOf(RADAR_KEYS.field, 4) });
+      const axes = fieldRadar(season, bestOf(RADAR_KEYS.field, 4));
       if (axes.map((a) => a.key).join() !== RADAR_KEYS.field) throw new Error(axes.map((a) => a.key).join());
       const by = Object.fromEntries(axes.map((a) => [a.key, a]));
       if (by.security.value !== 2 || by.security.fraction !== 0.5 || by.goals.value !== 1 || by.goals.fraction !== 0.25 || by.pct.value !== 1 || by.pct.fraction !== 0.25) throw new Error(JSON.stringify(axes));
@@ -364,11 +387,19 @@
       const none = teamBest([match], []);
       if (Object.values(none.field).some((v) => v !== 0) || Object.values(none.keeper).some((v) => v !== 0)) throw new Error('empty roster');
     });
+    T('radar: shooting axis falls back when nobody reaches the minimum shots', () => {
+      if (CONFIG.leaders.minShots !== 3) throw new Error('premise: minimum shots ' + CONFIG.leaders.minShots);
+      const second = { id: 'sp3', num: 3, name: 'Back', pos: 'LAT' };
+      const match = seasonRow(newId('f'), { players: [...seasonPlayers, second], events: [seasonShot('sp2', 'GOL'), seasonShot('sp2', 'FALLO'), seasonShot('sp3', 'FALLO')] });
+      const best = teamBest([match], [...seasonPlayers, second]);
+      if (best.field.pct !== 0.5) throw new Error('fallback ' + best.field.pct);
+      const enough = seasonRow(newId('f'), { players: [...seasonPlayers, second], events: [seasonShot('sp3', 'GOL'), seasonShot('sp3', 'FALLO'), seasonShot('sp3', 'FALLO'), seasonShot('sp2', 'GOL')] });
+      if (teamBest([enough], [...seasonPlayers, second]).field.pct !== 1 / 3) throw new Error('a one-shot 100% beat the qualified players');
+    });
     T('radar: rate colour runs red to amber to green over the theme tokens', () => {
       const [low, mid, high] = [rateColour(0), rateColour(0.5), rateColour(1)];
       if (!low.startsWith('color-mix(in srgb') || !low.includes('var(--act-bad)') || !mid.includes('var(--dos)') || !high.includes('var(--act-good)')) throw new Error([low, mid, high].join(' | '));
       if (rateColour(-3) !== low || rateColour(7) !== high) throw new Error('not clamped');
-      if (CONFIG.leaders.minShots !== 3) throw new Error('leaders');
     });
     const chartAxes = (label) => ['act-good', 'act-good', 'act-def', 'act-bad', 'act-rule'].map((group, i) => ({ key: `k${i}`, label: i ? `Eje ${i}` : label, value: i, text: `${i},5`, fraction: i / 4, group }));
     const countOf = (svg, re) => (svg.match(re) || []).length;
@@ -405,14 +436,22 @@
       if (!(labelX(wingL) < CENTER_X && labelX(latL) < CENTER_X && labelX(wingR) > CENTER_X && labelX(latR) > CENTER_X)) throw new Error('map mirrored against the lane keys');
     });
     T('charts: near-ring labels keep clear of the 6 m and 9 m lines', () => {
-      const colours = { GOL: 'x', PARADA: 'x', FALLO: 'x' }, CLEARANCE = 40, SIX_M_PX = 300, NINE_M_PX = 450, LABEL_MIDDLE = 10;
-      // The 6 m and 9 m lines are the points 300 and 450 px from the goal-line segment between the posts of the area.
-      const lineDistance = (x, y) => Math.hypot(Math.max(425 - x, 0, x - 575), y - GOAL_LINE_Y);
+      const colours = { GOL: 'x', PARADA: 'x', FALLO: 'x' }, CLEARANCE = 40, SIX_M_PX = 6 * UNITS_PER_M, NINE_M_PX = 9 * UNITS_PER_M, LABEL_MIDDLE = 10;
+      // The 6 m and 9 m lines are the points 6 and 9 m from the goal-line segment between the posts.
+      const lineDistance = (x, y) => Math.hypot(Math.max(CENTER_X - POST_HALF_M * UNITS_PER_M - x, 0, x - CENTER_X - POST_HALF_M * UNITS_PER_M), y - GOAL_LINE_Y);
       [m(-8, 3), m(-5, 6), m(0, 8), m(5, 6), m(8, 3)].forEach((origin) => {
         const svg = zoneMapSvg([chartShot({ origin })], () => true, colours), [, x, y] = svg.match(/class="zone-pct" x="(-?[\d.]+)" y="(-?[\d.]+)"/);
         const d = lineDistance(+x, +y + LABEL_MIDDLE);
         if (d - SIX_M_PX < CLEARANCE || NINE_M_PX - d < CLEARANCE) throw new Error(`${laneOf(origin)} label ${Math.round(d)} px from the goal, lines at ${SIX_M_PX} and ${NINE_M_PX}`);
       });
+    });
+    T('charts: no NaN with empty axes or missing rates', () => {
+      const bad = (svg) => /NaN|undefined/.test(svg);
+      if (bad(radarSvg([], '–', 'Nota'))) throw new Error('empty radar');
+      const rows = [{ date: '2026-10-01', goals: 2, made: 0.5 }, { date: '2026-10-08', goals: 3, made: NaN }, { date: '2026-10-15', goals: 1, made: null }];
+      const svg = evolutionSvg(rows, 'goals', (r) => r.made);
+      if (bad(svg) || countOf(svg, /class="evo-dot"/g) !== 1 || countOf(svg, /class="evo-bar"/g) !== 3) throw new Error('missing rates: dots ' + countOf(svg, /class="evo-dot"/g));
+      if (bad(evolutionSvg(rows.slice(1), 'goals', (r) => r.made)) || evolutionSvg(rows.slice(1), 'goals', (r) => r.made).includes('class="evo-dot"')) throw new Error('only missing rates');
     });
     T('charts: goal grid shows rates for cells with shots', () => {
       const list = [chartShot({ target: gf(0.1, 0.1) }), chartShot({ target: gf(0.1, 0.1), result: 'PARADA' }), chartShot({ target: gf(0.9, 0.9) }), chartShot({ target: gf(0.5, 0.5), result: 'FUERA' })];
