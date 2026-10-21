@@ -147,3 +147,38 @@ create policy rival_templates_own on public.rival_templates for all to authentic
   using (user_id = (select auth.uid())) with check (user_id = (select auth.uid()));
 
 drop function if exists public.is_team_member(uuid);
+
+-- Match calendar: one row per round of a season, entered from the federation's calendar (tools/calendar_sql.py).
+-- `weekend` is the round's reference Sunday; `kickoff` is set during the match week. A fixture links to a played
+-- match through `match_id` (the match must belong to the same team).
+create table if not exists public.fixtures (
+  id uuid primary key default gen_random_uuid(),
+  team_id uuid not null references public.teams (id) on delete cascade,
+  season text not null check (char_length(season) between 4 and 9),
+  competition text not null default '' check (char_length(competition) <= 120),
+  round int not null check (round between 1 and 60),
+  weekend date not null,
+  home boolean not null,
+  opponent text not null check (char_length(opponent) between 1 and 60),
+  kickoff timestamptz,
+  venue text check (venue is null or char_length(venue) <= 80),
+  match_id uuid references public.matches (id) on delete set null,
+  updated_at timestamptz not null default now(),
+  updated_by uuid default auth.uid() references auth.users (id) on delete set null,
+  unique (team_id, season, competition, round)
+);
+create index if not exists fixtures_team_weekend on public.fixtures (team_id, weekend);
+create index if not exists fixtures_match on public.fixtures (match_id);
+create index if not exists fixtures_updated_by on public.fixtures (updated_by);
+drop trigger if exists fixtures_touch on public.fixtures;
+create trigger fixtures_touch before update on public.fixtures for each row execute function public.touch_updated_at();
+
+alter table public.fixtures enable row level security;
+revoke all on table public.fixtures from anon;
+drop policy if exists fixtures_all on public.fixtures;
+create policy fixtures_all on public.fixtures for all to authenticated
+  using (private.is_team_member(team_id))
+  with check (
+    private.is_team_member(team_id)
+    and (match_id is null or exists (select 1 from public.matches m where m.id = match_id and m.team_id = fixtures.team_id))
+  );

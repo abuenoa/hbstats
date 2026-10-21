@@ -50,6 +50,9 @@ owner (whoever created it) can delete it, which also deletes its roster and matc
 | `team_members` | Which users belong to which team (`owner` creates it, `coach` is added). |
 | `players` | The team roster. Players who leave are kept as inactive so past matches still make sense. |
 | `matches` | One row per match: listing columns (date, rival, venue, status, score) and the whole match state as JSON. |
+| `fixtures` | The season calendar: one row per round (reference Sunday, home or away, opponent, kickoff, venue) and the match played in it. Load a calendar file with `python3 tools/calendar_sql.py FILE TEAM_ID`. |
+
+`supabase/checks/*.sql` test the row level security of these tables; each runs in a transaction that is rolled back.
 
 The app keeps a copy of every match it opens on the device and uploads changes a couple of seconds after each
 one (and when the connection comes back), so a match goes on in a sports hall without coverage. Signing out waits
