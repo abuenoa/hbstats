@@ -502,6 +502,18 @@
     commitShot({ type: 'rivalShot', rivalId: null, origin: m(0, 8), target: { x: 500, y: 120 }, zone: '6M' }, 'PARADA');
     if (!stampOn(state.events.at(-1)).includes(state.gkId)) throw new Error('rival shot without the goalkeeper');
   }));
+  T('court: an unplaced bench shooter is on his own stamp and his goal counts for him', withCourtMatch(() => {
+    setPhase('ATK'); state.autoPhase = false; atSecond(130);
+    const p = benchFieldPlayer();
+    Object.keys(lineup()).filter((id) => playerById(id).pos === p.pos).forEach((id) => delete lineup()[id]);
+    const before = Object.keys(lineup()).length;
+    commitShot({ type: 'ourShot', playerId: p.id, origin: m(0, 8), target: { x: 500, y: 120 }, zone: '9M' }, 'GOL');
+    const e = state.events.at(-1);
+    if (Object.keys(lineup()).length !== before || lineup()[p.id]) throw new Error('the case must be unplaced');
+    if (!stampOn(e).includes(p.id)) throw new Error('shooter missing ' + JSON.stringify(stampOn(e)));
+    const plusMinus = (id) => state.events.reduce((sum, x) => sum + (x.kind === 'SHOT' && x.result === 'GOL' && courtSetOf(x.on).includes(id) ? 1 : 0), 0);
+    if (plusMinus(p.id) !== 1) throw new Error('goal not counted for him');
+  }));
   T('court: team fault stamps the players on court', withCourtMatch(() => {
     setPhase('ATK'); atSecond(150);
     addEvent('ACTION', { playerId: null, action: 'NOATK' });

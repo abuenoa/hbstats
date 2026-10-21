@@ -1623,7 +1623,7 @@ span.att-foot { visibility: hidden; }
     const op = { added: [e], removed: [] };
     const benched = opts.bringOn ? isOnBench(opts.bringOn) : false;
     if (benched) { const swap = benchSwapFor(opts.bringOn); if (swap) op.lineup = swap; }
-    if (Array.isArray(state.court) && isOnCourtStamped(e)) e.on = internCourtSet(playingIds(courtAfter(op.lineup)));
+    if (Array.isArray(state.court) && isOnCourtStamped(e)) e.on = internCourtSet(playingIds(courtAfter(op.lineup, benched && !op.lineup ? opts.bringOn : null)));
     if (opts.penalty) op.penalty = opts.penalty;
     const next = state.autoPhase ? phaseAfter(e) : null;
     if (next && next !== state.phase) op.phase = { before: state.phase, after: next };
@@ -1726,9 +1726,11 @@ span.att-foot { visibility: hidden; }
   }
   // The ids of a stamp or log entry's set index (a break and a missing index have nobody).
   const courtSetOf = (index, s = state) => (index == null || !s.courtSets ? [] : s.courtSets[index] || []);
-  // The court once an event's own bench swaps are made (before they are applied to the lineup).
-  function courtAfter(swaps = []) {
+  // The court once an event's own bench swaps are made (before they are applied to the lineup). `unplacedId` is a bench
+  // player who acts with nobody of his position to swap with: he still counts as on court.
+  function courtAfter(swaps = [], unplacedId = null) {
     const team = { ...lineup() };
+    if (unplacedId) team[unplacedId] = true;
     swaps.filter((swap) => swap.phase === state.phase).forEach((swap) => { delete team[swap.outId]; team[swap.inId] = true; });
     return { phase: state.phase, gkId: state.gkId, lineups: { [state.phase]: team } };
   }
