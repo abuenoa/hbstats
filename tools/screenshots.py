@@ -71,12 +71,25 @@ MVP_SAMPLE_PHOTO = (
 )
 # The sample match logs no court, so its minutes are unknown: the field card gets a 4th tile, the keeper card keeps three.
 MVP_SAMPLE_MINUTES = " data.kpis.push(['Min', '52']);"
-# Card scenes: one scene name writes several files, each a card at its own size.
+# The ratings card of the 16-player sample squad: eleven played (the other five are «S/C»), two photos, two long names.
+RATINGS_CARD_WIDTH, RATINGS_CARD_HEAD, RATINGS_CARD_ROW, SAMPLE_SQUAD = 1080, 300, 120, 16
+RATINGS_CARD_SIZE = f"{RATINGS_CARD_WIDTH},{RATINGS_CARD_HEAD + SAMPLE_SQUAD * RATINGS_CARD_ROW}"
+RATINGS_CARD_SNIPPET = (
+    f"{SAMPLE} state.courtSets = [state.players.slice(0, 11).map((p) => p.id)]; state.court = [{{ abs: 0, set: 0 }}];"
+    " state.clock = { period: 2, elapsedMs: CONFIG.halfSeconds * 1000, runningSince: null }; commit(); (async () => { await document.fonts.ready;"
+    " const data = ratingsCardData(state, matchRatings(state));"
+    f" {MVP_SAMPLE_PHOTO} data.rows[0].photo = data.rows[3].photo = data.photo;"
+    f" data.rows[0].name = '{MVP_FIELD_NAME}'; data.rows[2].name = '{MVP_KEEPER_NAME}';"
+    " const canvas = document.createElement('canvas'); document.body.replaceChildren(canvas); document.body.style.margin = '0';"
+    " drawRatingsCard(canvas, data, { crest: await loadImage(data.crest), faces: await Promise.all(data.rows.map((r) => (r.photo ? loadImage(r.photo) : null))) }); })();"
+)
+# Card scenes: one scene name writes several files, each a card with its own snippet and window size.
 CARD_SCENES = {
     "mvp-image": {
-        "mvp-field": MVP_CARD_SNIPPET % ("p17", MVP_FIELD_NAME, MVP_SAMPLE_PHOTO + MVP_SAMPLE_MINUTES),
-        "mvp-keeper": MVP_CARD_SNIPPET % ("p1", MVP_KEEPER_NAME, ""),
+        "mvp-field": (MVP_CARD_SNIPPET % ("p17", MVP_FIELD_NAME, MVP_SAMPLE_PHOTO + MVP_SAMPLE_MINUTES), MVP_CARD_SIZE),
+        "mvp-keeper": (MVP_CARD_SNIPPET % ("p1", MVP_KEEPER_NAME, ""), MVP_CARD_SIZE),
     },
+    "ratings-image": {"ratings-card": (RATINGS_CARD_SNIPPET, RATINGS_CARD_SIZE)},
 }
 # Matrix-only scenes: the season fixture (tools/scenes/season.js) puts the app in the team pages of a club with four matches.
 SHEET_STATS = f"{SAMPLE} commit(); ui.sheetMode = 'sheet'; ui.sheetTab = 'stats'; renderSheet(); $('sheet').hidden = false;"
@@ -325,7 +338,7 @@ def main() -> None:
     out_dir = args.out or OUT_DIR
     out_dir.mkdir(parents=True, exist_ok=True)
     for name in names:
-        for file, snippet, size in [(name, SCENES[name], TABLET_SIZE)] if name in SCENES else [(f, s, MVP_CARD_SIZE) for f, s in CARD_SCENES[name].items()]:
+        for file, snippet, size in [(name, SCENES[name], TABLET_SIZE)] if name in SCENES else [(f, *card) for f, card in CARD_SCENES[name].items()]:
             out = out_dir / f"{file}.png"
             capture(app, snippet, out, size)
             print(shown(out))

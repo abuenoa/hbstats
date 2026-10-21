@@ -1261,6 +1261,62 @@
       const blob = await mvpCardBlob({ ...mvpCardData(state, 'p17', cardRatings()), photo: broken });
       if (blob.type !== 'image/png' || blob.size < 1000) throw new Error(blob.type + ' ' + blob.size);
     });
+    // ---- The ratings card for the group (M3) ----
+    const pngSize = async (blob) => {
+      const header = new DataView(await blob.slice(0, PNG_HEADER_BYTES).arrayBuffer());
+      return [header.getUint32(PNG_WIDTH_OFFSET), header.getUint32(PNG_HEIGHT_OFFSET)];
+    };
+    const drawnRatings = (data) => {
+      const canvas = document.createElement('canvas'), ctx = canvas.getContext('2d'), texts = [], fillText = ctx.fillText.bind(ctx);
+      ctx.fillText = (text, ...rest) => { texts.push({ text, font: ctx.font }); fillText(text, ...rest); };
+      drawRatingsCard(canvas, data);
+      return { texts, ctx, canvas };
+    };
+    const fontPx = (font) => Number(/(\d+(?:\.\d+)?)px/.exec(font)[1]);
+    await TA('ratings image: one row per convocado, S/C last', async () => {
+      const done = withFinal(playedFew());
+      let data, expected;
+      try {
+        expected = state.players.length;
+        data = ratingsCardData(state, matchRatings(state));
+        if (data.title !== state.them || data.score !== `${score().us}–${score().them}`) throw new Error(`${data.title} ${data.score}`);
+      } finally { done(); }
+      if (data.rows.length !== expected) throw new Error(`${data.rows.length} rows for ${expected} convocados`);
+      const chips = data.rows.map((r) => r.rating);
+      if (chips.slice(0, 3).some((c) => c === 'S/C') || chips.slice(3).some((c) => c !== 'S/C')) throw new Error(chips.join());
+      if (data.rows.slice(3).some((r) => r.band !== RATING_NONE_BAND)) throw new Error('S/C is not neutral');
+      if (data.rows[0].name !== 'Diego' || !data.rows[0].line.includes('3/3') || /NaN|undefined/.test(JSON.stringify(data))) throw new Error(JSON.stringify(data.rows[0]));
+      if (!data.rows[1].line.includes('Paradas')) throw new Error('keeper line: ' + data.rows[1].line);
+      // Every name is drawn at 36 px or more, whole when it fits and cut with an ellipsis only beyond the floor; nothing leaves the card.
+      const long = 'Maximiliano Fernández Lo', huge = 'Maximiliano '.repeat(12).trim();
+      const rows = data.rows.map((r, i) => (i === 0 ? { ...r, name: long } : i === 1 ? { ...r, name: huge } : r));
+      const { texts, ctx } = drawnRatings({ ...data, rows });
+      rows.forEach((r, i) => {
+        const drawn = texts.find((t) => t.text === r.name || (i === 1 && t.text.startsWith('Maximiliano') && t.text.endsWith('…')));
+        if (!drawn) throw new Error('name not drawn: ' + r.name);
+        if (fontPx(drawn.font) < RATINGS_CARD.nameFloor) throw new Error(`name at ${fontPx(drawn.font)} px`);
+      });
+      if (texts.filter((t) => t.text === 'S/C').length !== rows.length - 3) throw new Error('S/C chips');
+      rows.forEach((r) => texts.filter((t) => t.text.startsWith(r.name.slice(0, 6))).forEach((t) => { ctx.font = t.font; if (ctx.measureText(t.text).width > ratingsTextColumn().w + 0.5) throw new Error('overflow: ' + t.text); }));
+      texts.forEach((t) => { ctx.font = t.font; if (ctx.measureText(t.text).width > RATINGS_CARD.w) throw new Error('overflow: ' + t.text); });
+    });
+    await TA('ratings image: height grows with the squad', async () => {
+      const done = withFinal(playedFew());
+      const heights = [];
+      try {
+        for (const extra of [0, 4]) {
+          const s = { ...state, players: [...state.players, ...Array.from({ length: extra }, (_, i) => ({ id: 'x' + i, num: 60 + i, name: 'Extra ' + i, pos: 'EXT' }))] };
+          const data = ratingsCardData(s, matchRatings(s)), expected = RATINGS_CARD.head + s.players.length * RATINGS_CARD.row;
+          const canvas = document.createElement('canvas');
+          drawRatingsCard(canvas, data);
+          if (canvas.height !== expected || canvas.width !== RATINGS_CARD.w) throw new Error(`canvas ${canvas.width}×${canvas.height}, expected ${expected}`);
+          const blob = await ratingsCardBlob(data), [w, h] = await pngSize(blob);
+          if (blob.type !== 'image/png' || w !== RATINGS_CARD.w || h !== expected) throw new Error(`png ${w}×${h}, expected ${expected}`);
+          heights.push(h);
+        }
+      } finally { done(); }
+      if (heights[1] - heights[0] !== 4 * RATINGS_CARD.row) throw new Error(heights.join());
+    });
     // ---- The MVP card at the end of the match, and the share sheet (M3) ----
     await TA('final: finishing a match shows the MVP preview', async () => {
       const done = withFinal({ ...playedFew(), finished: false });
@@ -1327,6 +1383,17 @@
         await tap();
         if (!/No se pudo compartir: boom/.test($('final-status').textContent)) throw new Error('failure: ' + $('final-status').textContent);
       } finally { unstub(); HTMLAnchorElement.prototype.click = click; spy.stop(); done(); }
+    });
+    await TA('final: the ratings button shares the ratings image', async () => {
+      const done = withFinal(playedFew()), shared = [];
+      const unstub = sheetStubs(() => true, async (data) => { shared.push(data); });
+      try {
+        await ui.mvpCardReady;
+        $('final').querySelector('[data-final-ratings-share]').click();
+        for (let i = 0; i < 1000 && !shared.length; i++) await new Promise((r) => setTimeout(r, 10));
+        if (shared.length !== 1 || !/^puntuaciones-.+\.png$/.test(shared[0].files[0].name) || shared[0].files[0].type !== 'image/png') throw new Error(JSON.stringify(shared.map((d) => d.files[0].name)));
+        if (!shared[0].title.startsWith('Puntuaciones')) throw new Error(shared[0].title);
+      } finally { unstub(); done(); }
     });
     await TA('shareFiles: shared, cancelled, unsupported and failures', async () => {
       const file = new File(['x'], 'a.png', { type: 'image/png' });

@@ -138,7 +138,7 @@
     --line: rgba(255, 255, 255, .10); --fg: #f2f1ef; --muted: #aca6a0; --faint: #6d6863;
     --shadow: 0 1px 0 rgba(255, 255, 255, .06) inset, 0 10px 30px rgba(0, 0, 0, .4);
     --pop-shadow: 0 1px 0 rgba(255, 255, 255, .08) inset, 0 24px 60px rgba(0, 0, 0, .6);
-    --black: #f2f1ef; --por: #2a2a2e;
+    --black: #f2f1ef; --por: #2a2a2e; --crown-edge: #e8b923;
     --court: #1d242b; --area: #3b3215; --court-line: #e6e6e6; --goal-face: #121417; --goal-hot: #2e2a14; --goal-sector: #7a6412; --net: #2c3238;
     --parada: #4f8bff; --fallo: #7d838c; --gol: #2fbf71; --ataque: #9461ff;
     --act-good: #2fbf71; --act-def: #4f8bff; --act-bad: #ef4444; --act-rival: #9461ff;
@@ -158,7 +158,7 @@
   --line: rgba(255, 255, 255, .10); --fg: #f2f1ef; --muted: #aca6a0; --faint: #6d6863;
   --shadow: 0 1px 0 rgba(255, 255, 255, .06) inset, 0 10px 30px rgba(0, 0, 0, .4);
   --pop-shadow: 0 1px 0 rgba(255, 255, 255, .08) inset, 0 24px 60px rgba(0, 0, 0, .6);
-  --black: #f2f1ef; --por: #2a2a2e;
+  --black: #f2f1ef; --por: #2a2a2e; --crown-edge: #e8b923;
   --court: #1d242b; --area: #3b3215; --court-line: #e6e6e6; --goal-face: #121417; --goal-hot: #2e2a14; --goal-sector: #7a6412; --net: #2c3238;
   --parada: #4f8bff; --fallo: #7d838c; --gol: #2fbf71; --ataque: #9461ff;
     --act-good: #2fbf71; --act-def: #4f8bff; --act-bad: #ef4444; --act-rival: #9461ff;
@@ -573,6 +573,10 @@ button.rex-chip { border: 0; cursor: pointer; position: relative; }
 .mvp-face { position: relative; display: grid; justify-items: center; gap: 4px; min-width: var(--tap); min-height: var(--tap); padding: 4px 6px; border: 2px solid transparent; border-radius: var(--radius-md); background: transparent; color: var(--fg); font: var(--type-caption); font-weight: 600; }
 .mvp-face[aria-pressed="true"] { border-color: var(--gold); background: var(--glow-gold); }
 .mvp-tag { font: var(--type-caption); font-weight: 800; color: var(--fg); }
+.mvp-share { display: grid; gap: var(--space-2); }
+.mvp-share h3 { margin: 0; font: var(--type-caption); font-weight: 700; color: var(--muted); text-transform: uppercase; letter-spacing: .06em; }
+.mvp-preview { font: var(--type-caption); color: var(--muted); }
+.mvp-preview-img { display: block; width: min(100%, 260px); height: auto; aspect-ratio: 1080 / 1350; border-radius: var(--radius-md); }
 .ratings { display: grid; gap: var(--space-2); }
 .rating-list { margin: 0; padding: 0; list-style: none; }
 .rating-row { --face-disc: 40px; border-bottom: 1px solid var(--line); }
@@ -1328,6 +1332,9 @@ span.att-foot { visibility: hidden; }
     lastPenTs: 0, shooter: null, rivalNewPos: null, sheetTab: 'stats', sheetMode: 'sheet', sheetGk: null, sheetGoal: 'GK', sheetShooter: null, sheetPlayer: null, sheetReturn: null, rosterSide: 'team', templatePick: false,
     // The final screen lists every rating, not just the top rows.
     ratingsAll: false,
+    // The MVP card shown on the final screen: its PNG and object URL (revoked when the screen re-renders or closes), the
+    // promise of the render in flight and a ticket that retires a render the screen has left behind.
+    mvpCardBlob: null, mvpCardUrl: null, mvpCardReady: null, mvpCardTicket: 0,
     finishArmedTimer: null,
     // Team photos by player id (see setTeamPhotos).
     photos: new Map(),
@@ -2088,7 +2095,7 @@ span.att-foot { visibility: hidden; }
   }
   function startSecondHalf() {
     state.alerts = state.alerts.filter((a) => !(a.kind === 'period' && a.period === 1));
-    $('final').hidden = true;
+    hideFinal();
     startPeriod(2);
   }
   // Logging a play with the clock stopped means the game is on: start it (not for sanctions or score fixes,
@@ -2267,27 +2274,44 @@ span.att-foot { visibility: hidden; }
     ui.photos = new Map(roster.filter((p) => p.photo && IMAGE_DATA_URL.test(p.photo)).map((p) => [p.id, p.photo]));
   }
   const photoOf = (id) => ui.photos.get(id) || null;
+  // The crown's geometry in its 120×92 box, shared by the SVG (crownSvg) and the canvas (drawMvpCard). Colours are CSS
+  // tokens; the canvas resolves them from CARD_PALETTE. Jewels are [cx, cy, token, r].
+  const CROWN = {
+    viewBox: '0 0 120 92',
+    body: 'M10 70 L4 22 Q4 18 8 20 L34 40 L56 8 Q60 3 64 8 L86 40 L112 20 Q116 18 116 22 L110 70 Z',
+    bodyStops: [[0, '--crown-light'], [0.45, '--gold'], [1, '--crown-deep']],
+    band: { x: 8, y: 66, w: 104, h: 18, rx: 6 },
+    bandStops: [[0, '--gold'], [1, '--crown-band-deep']],
+    pearls: [[6, 18], [60, 5], [114, 18]],
+    pearlR: 6,
+    jewels: [[60, 75, '--red', 5], [34, 75, '--parada', 4], [86, 75, '--gol', 4]],
+    // The body's vertical extent, for the canvas gradient (the SVG's objectBoundingBox).
+    bodyY: [5, 70],
+    shine: 'M22 58 L30 48 M44 56 L50 44',
+    edgeWidth: 3, pearlEdgeWidth: 2, shineWidth: 4, shineOpacity: '.7'
+  };
   // Gradients get a fresh id per crown: several crowns can share one document.
   let crownCount = 0;
-  const crownStop = (offset, token) => `<stop offset="${offset}" style="stop-color:var(${token})"/>`;
-  const crownPearl = (cx, cy) => `<circle cx="${cx}" cy="${cy}" r="6" style="fill:var(--crown-light);stroke:var(--crown-edge)" stroke-width="2"/>`;
-  const crownJewel = (cx, r, token) => `<circle cx="${cx}" cy="75" r="${r}" style="fill:var(${token})"/>`;
+  const crownStops = (stops) => stops.map(([offset, token]) => `<stop offset="${offset}" style="stop-color:var(${token})"/>`).join('');
+  const crownPearl = ([cx, cy]) => `<circle cx="${cx}" cy="${cy}" r="${CROWN.pearlR}" style="fill:var(--crown-light);stroke:var(--crown-edge)" stroke-width="${CROWN.pearlEdgeWidth}"/>`;
+  const crownJewel = ([cx, cy, token, r]) => `<circle cx="${cx}" cy="${cy}" r="${r}" style="fill:var(${token})"/>`;
   function crownSvg(cls = '') {
     const n = ++crownCount;
-    const body = `crown-body-${n}`, band = `crown-band-${n}`;
-    const edge = 'style="stroke:var(--crown-edge)" stroke-width="3"';
-    return `<svg class="${esc(cls)}" viewBox="0 0 120 92" aria-hidden="true"><defs>
-      <linearGradient id="${body}" x1="0" y1="0" x2="0" y2="1">${crownStop(0, '--crown-light')}${crownStop(0.45, '--gold')}${crownStop(1, '--crown-deep')}</linearGradient>
-      <linearGradient id="${band}" x1="0" y1="0" x2="0" y2="1">${crownStop(0, '--gold')}${crownStop(1, '--crown-band-deep')}</linearGradient></defs>
-      <path d="M10 70 L4 22 Q4 18 8 20 L34 40 L56 8 Q60 3 64 8 L86 40 L112 20 Q116 18 116 22 L110 70 Z" fill="url(#${body})" ${edge} stroke-linejoin="round"/>
-      <rect x="8" y="66" width="104" height="18" rx="6" fill="url(#${band})" ${edge}/>
-      ${crownPearl(6, 18)}${crownPearl(60, 5)}${crownPearl(114, 18)}
-      ${crownJewel(60, 5, '--red')}${crownJewel(34, 4, '--parada')}${crownJewel(86, 4, '--gol')}
-      <path d="M22 58 L30 48 M44 56 L50 44" style="stroke:var(--crown-shine)" stroke-width="4" stroke-linecap="round" opacity=".7"/></svg>`;
+    const body = `crown-body-${n}`, band = `crown-band-${n}`, { x, y, w, h, rx } = CROWN.band;
+    const edge = `style="stroke:var(--crown-edge)" stroke-width="${CROWN.edgeWidth}"`;
+    return `<svg class="${esc(cls)}" viewBox="${CROWN.viewBox}" aria-hidden="true"><defs>
+      <linearGradient id="${body}" x1="0" y1="0" x2="0" y2="1">${crownStops(CROWN.bodyStops)}</linearGradient>
+      <linearGradient id="${band}" x1="0" y1="0" x2="0" y2="1">${crownStops(CROWN.bandStops)}</linearGradient></defs>
+      <path d="${CROWN.body}" fill="url(#${body})" ${edge} stroke-linejoin="round"/>
+      <rect x="${x}" y="${y}" width="${w}" height="${h}" rx="${rx}" fill="url(#${band})" ${edge}/>
+      ${CROWN.pearls.map(crownPearl).join('')}
+      ${CROWN.jewels.map(crownJewel).join('')}
+      <path d="${CROWN.shine}" style="stroke:var(--crown-shine)" stroke-width="${CROWN.shineWidth}" stroke-linecap="round" opacity="${CROWN.shineOpacity}"/></svg>`;
   }
+  // A roster player carries their photo; match players are looked up in the team photos.
+  const facePhoto = (p) => (p.photo && IMAGE_DATA_URL.test(p.photo) ? p.photo : photoOf(p.id));
   function discHtml(p, pos = posOf(p)) {
-    // A roster player carries their photo; match players are looked up in the team photos.
-    const photo = p.photo && IMAGE_DATA_URL.test(p.photo) ? p.photo : photoOf(p.id);
+    const photo = facePhoto(p);
     if (photo) return `<span class="disc photo" style="background:${pos.color} url('${photo}') center/cover"><b class="${pos.darkText ? 'light-text' : ''}" style="background:${pos.color}">${p.num}</b></span>`;
     return `<span class="disc${pos.darkText ? ' light-text' : ''}" style="background:${pos.color}">${p.num}</span>`;
   }
@@ -4157,6 +4181,289 @@ span.att-foot { visibility: hidden; }
     }
   }
 
+  // ---- Share images: Canvas 2D cards for the share sheet; canvas inherits no CSS, so fonts and colours are set here ----
+  // Shared by the share-image cards. A face without a photo shows the initials on its position colour.
+  const CARD_WEIGHTS = { heavy: 800, semi: 600, regular: 400 };
+  const CARD_FIT_STEP = 2, CARD_FACE = { initialsScale: 0.9, initialsBaseline: 0.3 };
+  // Every size of the MVP card, in px of its 1080×1350 canvas. The face circle sits over a brand-to-dark gradient, the crown
+  // rests on its upper-left rim like a hat and the rating badge on its lower-right one; then the name, the KPI tiles and
+  // the score line. Text shrinks to fit its box (down to a floor) before it is cut with an ellipsis.
+  const MVP_CARD = {
+    w: 1080, h: 1350, pad: 72, fadeEnd: 0.6,
+    weights: CARD_WEIGHTS,
+    headerY: 104, headerSize: 72,
+    faceCy: 440, faceR: 215, ringWidth: 14,
+    crownAngleDeg: -34, crownRimDeg: -135, crownW: 240, crownShadowBlur: 24, crownShadowDy: 8,
+    badge: { w: 200, h: 124, radius: 30, rimDeg: 45, edge: 8, size: 88, baseline: 90 },
+    name: { y: 770, size: 96, minSize: 72, twoLineSize: 64, floorSize: 40, firstLineDy: -30, secondLineDy: 34 },
+    subY: 832, subSize: 40, subTwoLineDy: 20,
+    tiles: { y: 905, h: 200, gap: 20, radius: 28, inner: 12, valueSize: 72, valueBaseline: 115, labelSize: 24, labelBaseline: 168 },
+    footer: { crestSize: 132, crestY: 1135, gap: 36, scoreY: 1185, scoreSize: 84, vsY: 1235, vsSize: 38, vsMinSize: 30, metaY: 1282, metaSize: 28 },
+    minAccentContrast: 3
+  };
+  // Theme-independent colours: the card is shared outside the app, so it never follows the theme. The values are the light
+  // theme's tokens (crown, rating bands, positions); the team's own colours come from the match data.
+  const CARD_PALETTE = {
+    base: '#101014', ink: '#ffffff', inkSoft: 'rgba(255, 255, 255, .72)', tile: 'rgba(255, 255, 255, .12)', badgeEdge: '#101014',
+    crownShadow: 'rgba(0, 0, 0, .35)',
+    crown: { '--crown-light': '#fff3a6', '--gold': '#f5c400', '--crown-deep': '#b8860b', '--crown-band-deep': '#8a6400', '--crown-edge': '#7a5500',
+      '--crown-shine': '#fffbe0', '--red': '#d4202a', '--parada': '#2563eb', '--gol': '#1f9d55' },
+    bands: { 'rt-top': ['#1d4ed8', '#ffffff'], 'rt-good': ['#15803d', '#ffffff'], 'rt-mid': ['#bf8003', '#151515'], 'rt-low': ['#c2410c', '#ffffff'],
+      'rt-bad': ['#991b1b', '#ffffff'], [RATING_NONE_BAND]: ['#6d6863', '#ffffff'] },
+    positions: { EXT: '#14b8a6', LAT: '#8b5cf6', CEN: '#ec4899', PIV: '#f5b400', POR: '#151515' },
+    darkInk: '#151515'
+  };
+  const MVP_PROVISIONAL_TITLE = 'MVP provisional', MVP_TITLE = 'MVP';
+  const CARD_ELLIPSIS = '…';
+  const CARD_FONT_TOKENS = { display: '--font-display', body: '--font-body' };
+  // The canvas does not inherit CSS: the font shorthand uses the same stacks as the page.
+  const cardFont = (weight, size, family) => `${weight} ${size}px ${getComputedStyle(document.documentElement).getPropertyValue(CARD_FONT_TOKENS[family]).trim()}`;
+  // What the MVP card shows about one player; `ratings` is matchRatings(s). The 4th tile is the minutes on court, left out
+  // when they are unknown (a match with no court log): the rating itself is the badge. `t` is the team that played.
+  function mvpCardData(s, playerId, ratings, t = team, seconds = minutesOnCourt(s)) {
+    const player = s.players.find((p) => p.id === playerId);
+    if (!player) throw new Error(`mvpCardData: no player with id ${playerId} in the match`);
+    const keeper = player.pos === 'POR', { made, tried } = outcomeOf(s, player), value = ratingValue(ratings, player);
+    const pens = countGroups(s.events.filter((e) => e.kind === 'RIVAL_SHOT' && e.gkId === playerId && e.zone === '7M'));
+    const kpis = keeper
+      ? [['Paradas', `${made}/${tried}`], ['% paradas', pctText(pct(made, tried))], ['7 m parados', `${pens.PARADA}/${pens.GOL + pens.PARADA}`]]
+      : [['Goles', `${made}/${tried}`], ['% tiro', pctText(pct(made, tried))], ['Pases de gol', playerStats(playerId, s.events).ASIST]];
+    if (seconds) kpis.push(['Min', minutesText(seconds.get(playerId) || 0)]);
+    const mvp = matchMvp(s, ratings, seconds), sc = score(s.events);
+    return {
+      name: player.name, num: player.num, pos: player.pos, photo: facePhoto(player), rating: ratingText(value), band: ratingBand(value), kpis,
+      us: s.us, title: s.them, score: `${sc.us}–${sc.them}`, date: dateText(s.date), venue: s.venue,
+      crest: crestSrc(t), brand: t.brand, brand2: t.brand2, brandInk: t.brandInk,
+      provisional: mvp.id === playerId && mvp.source === MVP_SOURCE.rating
+    };
+  }
+  const IMAGE_ERROR_SRC_CHARS = 40;
+  // Rejects with a clear error when the image cannot be decoded (a corrupt photo, a blocked URL).
+  const loadImage = (src) => new Promise((resolve, reject) => {
+    const image = new Image();
+    image.onload = () => resolve(image);
+    image.onerror = () => reject(new Error(`Image could not be loaded: ${String(src).slice(0, IMAGE_ERROR_SRC_CHARS)}`));
+    image.src = src;
+  });
+  // The text that fits `maxWidth` in the context's current font: itself, or its start and an ellipsis.
+  function fitText(ctx, text, maxWidth) {
+    if (ctx.measureText(text).width <= maxWidth) return text;
+    let cut = text.length;
+    while (cut > 0 && ctx.measureText(text.slice(0, cut).trimEnd() + CARD_ELLIPSIS).width > maxWidth) cut--;
+    return text.slice(0, cut).trimEnd() + CARD_ELLIPSIS;
+  }
+  // The largest size from `size` down to `minSize` at which `text` fits `maxWidth` (`minSize` when none does); `specOf(size)` is the font.
+  function fitFont(ctx, text, maxWidth, size, minSize, specOf) {
+    let fitted = size;
+    ctx.font = specOf(fitted);
+    while (fitted > minSize && ctx.measureText(text).width > maxWidth) {
+      fitted = Math.max(minSize, fitted - CARD_FIT_STEP);
+      ctx.font = specOf(fitted);
+    }
+    return fitted;
+  }
+  // The name as one line at 96 down to 72 px; else two lines (split at the space nearest the middle) at up to 64 px; else
+  // one line shrunk to the floor. The caller cuts with an ellipsis what still does not fit.
+  function fitName(ctx, name, maxWidth, specOf) {
+    const N = MVP_CARD.name, one = fitFont(ctx, name, maxWidth, N.size, N.minSize, specOf);
+    if (ctx.measureText(name).width <= maxWidth) return { lines: [name], size: one };
+    const spaces = [...name.matchAll(/ /g)].map((m) => m.index), middle = name.length / 2;
+    if (!spaces.length) return { lines: [name], size: fitFont(ctx, name, maxWidth, N.minSize, N.floorSize, specOf) };
+    const at = spaces.reduce((best, i) => (Math.abs(i - middle) < Math.abs(best - middle) ? i : best));
+    const lines = [name.slice(0, at), name.slice(at + 1)], longest = lines.reduce((a, b) => (b.length > a.length ? b : a));
+    return { lines, size: fitFont(ctx, longest, maxWidth, N.twoLineSize, N.floorSize, specOf) };
+  }
+  const rimPoint = (cx, cy, r, deg) => [cx + r * Math.cos(deg * Math.PI / 180), cy + r * Math.sin(deg * Math.PI / 180)];
+  const cardGradient = (ctx, stops, y0, y1) => {
+    const g = ctx.createLinearGradient(0, y0, 0, y1);
+    stops.forEach(([offset, token]) => g.addColorStop(offset, CARD_PALETTE.crown[token]));
+    return g;
+  };
+  // Where the crown goes: its band's bottom-centre on (x, y), `width` wide, tilted by `angleDeg`; maps the crown's own box to the card.
+  function crownMatrix(x, y, width, angleDeg) {
+    const [, , boxW] = CROWN.viewBox.split(' ').map(Number), scale = width / boxW;
+    return new DOMMatrix().translate(x, y).rotate(angleDeg).scale(scale).translate(-boxW / 2, -(CROWN.band.y + CROWN.band.h));
+  }
+  // The crown on the face's upper-left rim, resting on it like a hat.
+  const crownPlacement = () => crownMatrix(...rimPoint(MVP_CARD.w / 2, MVP_CARD.faceCy, MVP_CARD.faceR - MVP_CARD.ringWidth, MVP_CARD.crownRimDeg), MVP_CARD.crownW, MVP_CARD.crownAngleDeg);
+  function drawCrown(ctx) {
+    const c = CARD_PALETTE.crown, { band } = CROWN;
+    ctx.save();
+    ctx.setTransform(crownPlacement());
+    ctx.lineJoin = 'round';
+    ctx.strokeStyle = c['--crown-edge'];
+    ctx.lineWidth = CROWN.edgeWidth;
+    ctx.shadowColor = CARD_PALETTE.crownShadow; ctx.shadowBlur = MVP_CARD.crownShadowBlur; ctx.shadowOffsetY = MVP_CARD.crownShadowDy;
+    const body = new Path2D(CROWN.body);
+    ctx.fillStyle = cardGradient(ctx, CROWN.bodyStops, ...CROWN.bodyY);
+    ctx.fill(body); ctx.shadowColor = 'transparent'; ctx.stroke(body);
+    ctx.fillStyle = cardGradient(ctx, CROWN.bandStops, band.y, band.y + band.h);
+    ctx.beginPath(); ctx.roundRect(band.x, band.y, band.w, band.h, band.rx); ctx.fill(); ctx.stroke();
+    ctx.lineWidth = CROWN.pearlEdgeWidth; ctx.fillStyle = c['--crown-light'];
+    CROWN.pearls.forEach(([px, py]) => { ctx.beginPath(); ctx.arc(px, py, CROWN.pearlR, 0, 2 * Math.PI); ctx.fill(); ctx.stroke(); });
+    CROWN.jewels.forEach(([jx, jy, token, r]) => { ctx.fillStyle = c[token]; ctx.beginPath(); ctx.arc(jx, jy, r, 0, 2 * Math.PI); ctx.fill(); });
+    ctx.strokeStyle = c['--crown-shine']; ctx.lineWidth = CROWN.shineWidth; ctx.lineCap = 'round'; ctx.globalAlpha = Number(CROWN.shineOpacity);
+    ctx.stroke(new Path2D(CROWN.shine));
+    ctx.restore();
+  }
+  // Circle clip for a face or a crest, drawn with `paint(cx, cy, r)` inside it.
+  function inCircle(ctx, cx, cy, r, paint) {
+    ctx.save();
+    ctx.beginPath(); ctx.arc(cx, cy, r, 0, 2 * Math.PI); ctx.clip();
+    paint();
+    ctx.restore();
+  }
+  const cardDisplay = (size) => cardFont(CARD_WEIGHTS.heavy, size, 'display');
+  const cardBody = (weight) => (size) => cardFont(weight, size, 'body');
+  // The text writer of one card: `write(value, x, y, align, ink, specOf, size, width, minSize)` draws `value` in the font
+  // `specOf(size)`, shrunk from `size` to `minSize` and then cut with an ellipsis to fit `width` (default `maxWidth`).
+  const cardWriter = (ctx, maxWidth) => (value, x, y, align, ink, specOf, size, width = maxWidth, minSize = size) => {
+    ctx.textAlign = align; ctx.fillStyle = ink;
+    fitFont(ctx, value, width, size, minSize, specOf);
+    ctx.fillText(fitText(ctx, value, width), x, y);
+  };
+  // The team colour for the card's accents: its second colour, or white when that one is too dim on the card's base.
+  const cardAccent = (data, minContrast) => (contrastRatio(data.brand2, CARD_PALETTE.base) >= minContrast ? data.brand2 : CARD_PALETTE.ink);
+  // The card's base, with the team colour fading into it over the first `fadeHeight` px.
+  function paintCardBackground(ctx, w, h, brand, fadeHeight) {
+    const background = ctx.createLinearGradient(0, 0, 0, fadeHeight);
+    background.addColorStop(0, brand); background.addColorStop(1, CARD_PALETTE.base);
+    ctx.fillStyle = CARD_PALETTE.base; ctx.fillRect(0, 0, w, h);
+    ctx.fillStyle = background; ctx.fillRect(0, 0, w, fadeHeight);
+  }
+  // A player's face centred on (cx, cy): the photo, or the initials on the position colour (as the dorsal disc does in the app).
+  function drawFace(ctx, write, player, photo, cx, cy, r) {
+    const P = CARD_PALETTE, pos = posOf(player), posColor = P.positions[player.pos] || P.positions.CEN;
+    inCircle(ctx, cx, cy, r, () => {
+      if (photo) { ctx.drawImage(photo, cx - r, cy - r, 2 * r, 2 * r); return; }
+      ctx.fillStyle = posColor; ctx.fillRect(cx - r, cy - r, 2 * r, 2 * r);
+      write(initialsOf(player.name), cx, cy + r * CARD_FACE.initialsBaseline, 'center', pos.darkText ? P.darkInk : P.ink, cardDisplay, r * CARD_FACE.initialsScale);
+    });
+  }
+  // The rating in its band colour, in a rounded badge centred on (cx, cy); `badge` holds its size and text metrics.
+  function drawRatingBadge(ctx, write, badge, cx, cy, rating, band) {
+    const [fill, ink] = CARD_PALETTE.bands[band];
+    ctx.beginPath(); ctx.roundRect(cx - badge.w / 2, cy - badge.h / 2, badge.w, badge.h, badge.radius);
+    ctx.fillStyle = fill; ctx.fill(); ctx.strokeStyle = CARD_PALETTE.badgeEdge; ctx.lineWidth = badge.edge; ctx.stroke();
+    write(rating, cx, cy - badge.h / 2 + badge.baseline, 'center', ink, cardDisplay, badge.size, badge.w);
+  }
+  // Draws the MVP card on `canvas`; `images` are the loaded { photo, crest } (null when missing or broken).
+  function drawMvpCard(canvas, data, images) {
+    const M = MVP_CARD, P = CARD_PALETTE, { badge, tiles, footer, name } = M, { semi, regular } = CARD_WEIGHTS, ctx = canvas.getContext('2d'), cx = M.w / 2;
+    const maxText = M.w - 2 * M.pad, display = cardDisplay, body = cardBody, text = cardWriter(ctx, maxText);
+    canvas.width = M.w; canvas.height = M.h;
+    const accent = cardAccent(data, M.minAccentContrast);
+    paintCardBackground(ctx, M.w, M.h, data.brand, M.h * M.fadeEnd);
+    text(data.provisional ? MVP_PROVISIONAL_TITLE : MVP_TITLE, cx, M.headerY, 'center', data.brandInk, display, M.headerSize);
+    drawFace(ctx, text, data, images.photo, cx, M.faceCy, M.faceR);
+    ctx.beginPath(); ctx.arc(cx, M.faceCy, M.faceR + M.ringWidth / 2, 0, 2 * Math.PI);
+    ctx.strokeStyle = accent; ctx.lineWidth = M.ringWidth; ctx.stroke();
+    drawCrown(ctx);
+    // The rating badge on the lower-right rim.
+    const [bx, by] = rimPoint(cx, M.faceCy, M.faceR, badge.rimDeg);
+    drawRatingBadge(ctx, text, badge, bx, by, data.rating, data.band);
+    // The court name: one line, or two when it is long; the dorsal line moves down with the second line.
+    const shown = data.name.toUpperCase(), fitted = fitName(ctx, shown, maxText, display), two = fitted.lines.length === 2;
+    fitted.lines.forEach((line, i) => text(line, cx, name.y + (two ? (i ? name.secondLineDy : name.firstLineDy) : 0), 'center', P.ink, display, fitted.size, maxText, name.floorSize));
+    text(`#${data.num} · ${posOf(data).label}`, cx, M.subY + (two ? M.subTwoLineDy : 0), 'center', P.inkSoft, body(semi), M.subSize);
+    // The KPI tiles.
+    const tileW = (maxText - (data.kpis.length - 1) * tiles.gap) / data.kpis.length;
+    data.kpis.forEach(([label, value], i) => {
+      const x = M.pad + i * (tileW + tiles.gap), mid = x + tileW / 2, inner = tileW - 2 * tiles.inner;
+      ctx.beginPath(); ctx.roundRect(x, tiles.y, tileW, tiles.h, tiles.radius); ctx.fillStyle = P.tile; ctx.fill();
+      text(String(value), mid, tiles.y + tiles.valueBaseline, 'center', P.ink, display, tiles.valueSize, inner);
+      text(label, mid, tiles.y + tiles.labelBaseline, 'center', P.inkSoft, body(semi), tiles.labelSize, inner);
+    });
+    // The score line: our crest, the score, the match and where and when.
+    const textX = images.crest ? M.pad + footer.crestSize + footer.gap : M.pad, textW = M.w - M.pad - textX;
+    if (images.crest) inCircle(ctx, M.pad + footer.crestSize / 2, footer.crestY + footer.crestSize / 2, footer.crestSize / 2,
+      () => ctx.drawImage(images.crest, M.pad, footer.crestY, footer.crestSize, footer.crestSize));
+    text(data.score, textX, footer.scoreY, 'left', accent, display, footer.scoreSize, textW);
+    text(`${data.us} vs ${data.title}`, textX, footer.vsY, 'left', P.ink, body(semi), footer.vsSize, textW, footer.vsMinSize);
+    text([data.date, data.venue].filter(Boolean).join(' · '), textX, footer.metaY, 'left', P.inkSoft, body(regular), footer.metaSize, textW);
+  }
+  // A face that nothing on screen has used is not loaded yet, and the canvas would bake in the fallback.
+  async function loadCardFonts(specs) {
+    await Promise.all(specs.map((spec) => document.fonts.load(spec)));
+    await document.fonts.ready;
+  }
+  // The loaded images of `sources`; one that is missing or cannot load gives null.
+  const loadCardImages = (sources) => Promise.all(sources.map((src) => (src ? loadImage(src).catch(() => null) : null)));
+  // The canvas as a PNG blob, releasing its pixels.
+  const canvasPng = (canvas, label) => new Promise((resolve, reject) => canvas.toBlob((blob) => {
+    canvas.width = canvas.height = 0;
+    if (blob) resolve(blob); else reject(new Error(`${label} could not be encoded as a PNG`));
+  }, 'image/png'));
+  // The card as a PNG. A photo or crest that cannot load is left out: the face falls back to the initials.
+  async function mvpCardBlob(data) {
+    const { heavy, semi, regular } = CARD_WEIGHTS;
+    await loadCardFonts([cardFont(heavy, MVP_CARD.name.size, 'display'), cardFont(semi, MVP_CARD.subSize, 'body'), cardFont(regular, MVP_CARD.footer.metaSize, 'body')]);
+    const [photo, crest] = await loadCardImages([data.photo, data.crest]);
+    const canvas = document.createElement('canvas');
+    drawMvpCard(canvas, data, { photo, crest });
+    return canvasPng(canvas, 'The MVP card');
+  }
+
+  // The ratings card for the team's group: the match on a team-colour header, then one row per convocado (dorsal, face,
+  // name and a line of numbers, the rating in its band colour). It is as tall as its rows: head + rows × row px.
+  const RATINGS_CARD = {
+    w: 1080, head: 300, row: 120, pad: 48, fadeEnd: 1,
+    crest: { x: 48, y: 48, size: 120 },
+    titleY: 112, titleSize: 72, matchY: 184, matchSize: 44, matchMinSize: 32, metaY: 240, metaSize: 28,
+    numW: 64, numSize: 44, faceR: 40, gap: 20,
+    nameSize: 44, nameFloor: 36, nameBaseline: 58, lineSize: 30, lineMinSize: 26, lineBaseline: 100,
+    badge: { w: 168, h: 84, radius: 24, edge: 6, size: 60, baseline: 62 },
+    minAccentContrast: 3
+  };
+  const RATINGS_TITLE = 'Puntuaciones';
+  // Where a row's name and line start and how wide they may be, between the face and the rating badge.
+  const ratingsTextColumn = () => {
+    const R = RATINGS_CARD, x = R.pad + R.numW + R.gap + 2 * R.faceR + R.gap;
+    return { x, w: R.w - R.pad - R.badge.w - R.gap - x };
+  };
+  // What the ratings card shows: one row per player, sorted like the final list (rating, then S/C last); `ratings` is matchRatings(s).
+  function ratingsCardData(s, ratings, t = team, seconds = minutesOnCourt(s)) {
+    const sc = score(s.events);
+    const rows = rankedByRating(s, ratings, seconds).map((player) => {
+      const value = ratingValue(ratings, player), { made, tried } = outcomeOf(s, player);
+      const line = [`${player.pos === 'POR' ? 'Paradas' : 'Goles'} ${made}/${tried}`, seconds ? `${minutesText(seconds.get(player.id) || 0)} min` : null].filter(Boolean).join(' · ');
+      return { num: player.num, name: player.name, pos: player.pos, photo: facePhoto(player), rating: ratingText(value), band: ratingBand(value), line };
+    });
+    return {
+      title: s.them, us: s.us, score: `${sc.us}–${sc.them}`, date: dateText(s.date), venue: s.venue, rows,
+      crest: crestSrc(t), brand: t.brand, brand2: t.brand2, brandInk: t.brandInk
+    };
+  }
+  // Draws the ratings card on `canvas`; `images` are the loaded { crest, faces } (null when missing or broken; faces by row).
+  function drawRatingsCard(canvas, data, images = { crest: null, faces: [] }) {
+    const R = RATINGS_CARD, P = CARD_PALETTE, { semi, regular } = CARD_WEIGHTS, ctx = canvas.getContext('2d'), cx = R.w / 2;
+    const text = cardWriter(ctx, R.w - 2 * R.pad), column = ratingsTextColumn(), height = R.head + data.rows.length * R.row;
+    canvas.width = R.w; canvas.height = height;
+    paintCardBackground(ctx, R.w, height, data.brand, R.head * R.fadeEnd);
+    const accent = cardAccent(data, R.minAccentContrast), { crest } = R, headW = R.w - 2 * (crest.x + crest.size + R.gap);
+    if (images.crest) inCircle(ctx, crest.x + crest.size / 2, crest.y + crest.size / 2, crest.size / 2, () => ctx.drawImage(images.crest, crest.x, crest.y, crest.size, crest.size));
+    text(RATINGS_TITLE.toUpperCase(), cx, R.titleY, 'center', data.brandInk, cardDisplay, R.titleSize, headW);
+    text(`${data.us} ${data.score} ${data.title}`, cx, R.matchY, 'center', accent, cardDisplay, R.matchSize, headW, R.matchMinSize);
+    text([data.date, data.venue].filter(Boolean).join(' · '), cx, R.metaY, 'center', P.inkSoft, cardBody(regular), R.metaSize, headW);
+    data.rows.forEach((row, i) => {
+      const top = R.head + i * R.row, mid = top + R.row / 2, faceX = R.pad + R.numW + R.gap + R.faceR;
+      if (i % 2) { ctx.fillStyle = P.tile; ctx.fillRect(0, top, R.w, R.row); }
+      text(String(row.num), R.pad + R.numW / 2, top + R.nameBaseline, 'center', P.inkSoft, cardDisplay, R.numSize, R.numW);
+      drawFace(ctx, text, row, images.faces[i], faceX, mid, R.faceR);
+      text(row.name, column.x, top + R.nameBaseline, 'left', P.ink, cardDisplay, R.nameSize, column.w, R.nameFloor);
+      text(row.line, column.x, top + R.lineBaseline, 'left', P.inkSoft, cardBody(semi), R.lineSize, column.w, R.lineMinSize);
+      drawRatingBadge(ctx, text, R.badge, R.w - R.pad - R.badge.w / 2, mid, row.rating, row.band);
+    });
+  }
+  async function ratingsCardBlob(data) {
+    const { heavy, semi, regular } = CARD_WEIGHTS;
+    await loadCardFonts([cardFont(heavy, RATINGS_CARD.nameSize, 'display'), cardFont(semi, RATINGS_CARD.lineSize, 'body'), cardFont(regular, RATINGS_CARD.metaSize, 'body')]);
+    const [crest, ...faces] = await loadCardImages([data.crest, ...data.rows.map((row) => row.photo)]);
+    const canvas = document.createElement('canvas');
+    drawRatingsCard(canvas, data, { crest, faces });
+    return canvasPng(canvas, 'The ratings card');
+  }
+
   // ---- Final summary: both teams side by side, and the reports by e-mail or share sheet ----
   const EMAIL_PATTERN = /^[^\s@,;]+@[^\s@,;]+\.[^\s@,;]+$/;
   // "a@x.es, b@y.es" → ['a@x.es', 'b@y.es']; null if any address is not valid.
@@ -4211,6 +4518,7 @@ span.att-foot { visibility: hidden; }
   }
   const summaryDetailHtml = () => `<details class="more"><summary>Ver más detalle</summary>${tableHtml(['', state.us, state.them], finalRows().map((r) => r.map(String)))}</details>`;
   function openHalftime() {
+    releaseMvpCard();
     const k = keyPoints();
     const block = (title, items) => `<section><h3 class="acta-h">${title}</h3>${keyPointsHtml(items)}</section>`;
     $('final').innerHTML = `<div class="final-card glass">
@@ -4239,12 +4547,20 @@ span.att-foot { visibility: hidden; }
     openFinal(typed ? typed.value : undefined);
   }
   function openFinal(email = state.reportEmail) {
+    releaseMvpCard();
     const seconds = minutesOnCourt(state), ratings = matchRatings(state);
     $('final').innerHTML = `<div class="final-card glass">
       <h2>Final · ${esc(finalTitle())}</h2>
       ${kpiTilesHtml()}
       ${ratingsListHtml(state, ratings, seconds)}
       ${mvpPickHtml()}
+      <section class="mvp-share"><h3>Imágenes para compartir</h3>
+        <div class="mvp-preview" id="mvp-preview" aria-live="polite"></div>
+        <div class="row-actions">
+          <button class="btn primary press" type="button" data-final-mvp-share>Compartir MVP</button>
+          <button class="btn press" type="button" data-final-ratings-share>Compartir puntuaciones</button>
+        </div>
+      </section>
       ${summaryDetailHtml()}
       <label class="final-mail">Enviar los PDF a<input class="in" id="final-email" type="email" inputmode="email" autocomplete="email" placeholder="entrenador@club.es, otro@club.es" value="${esc(email || '')}"></label>
       <div class="row-actions">
@@ -4256,8 +4572,76 @@ span.att-foot { visibility: hidden; }
       <p class="note" id="final-status" aria-live="polite">Correo: descarga los PDF y abre el correo con el resumen; adjúntalos desde Descargas. Compartir: envía los PDF ya adjuntos (Gmail, WhatsApp, Drive…).</p>
     </div>`;
     $('final').hidden = false;
+    ui.mvpCardReady = renderMvpPreview();
   }
   const finalStatus = (text) => sheetStatus('final-status', text);
+  function hideFinal() {
+    releaseMvpCard();
+    $('final').hidden = true;
+  }
+  // Frees the preview's object URL and retires any render still in flight.
+  function releaseMvpCard() {
+    ui.mvpCardTicket++;
+    if (ui.mvpCardUrl) URL.revokeObjectURL(ui.mvpCardUrl);
+    ui.mvpCardUrl = ui.mvpCardBlob = null;
+  }
+  const MVP_PREVIEW_TEXT = { none: 'Elige el MVP para generar la imagen.', busy: 'Generando la imagen…', failed: 'No se pudo generar la imagen del MVP.' };
+  // The MVP card of the match (the coach's pick, else the provisional MVP), drawn on every final screen so it is always ready to share.
+  async function renderMvpPreview() {
+    const ticket = ui.mvpCardTicket, ratings = matchRatings(state), seconds = minutesOnCourt(state), mvp = matchMvp(state, ratings, seconds);
+    const show = (html) => { const slot = $('mvp-preview'); if (slot) slot.innerHTML = html; };
+    if (!mvp.id) { show(esc(MVP_PREVIEW_TEXT.none)); return; }
+    show(esc(MVP_PREVIEW_TEXT.busy));
+    try {
+      const data = mvpCardData(state, mvp.id, ratings, team, seconds), blob = await mvpCardBlob(data);
+      if (ticket !== ui.mvpCardTicket) return;
+      ui.mvpCardBlob = blob;
+      ui.mvpCardUrl = URL.createObjectURL(blob);
+      show(`<img class="mvp-preview-img" src="${ui.mvpCardUrl}" alt="Tarjeta del MVP: ${esc(data.name)}">`);
+    } catch (err) {
+      console.error('MVP card failed', err);
+      if (ticket === ui.mvpCardTicket) show(esc(MVP_PREVIEW_TEXT.failed));
+    }
+  }
+  // 'shared', 'cancelled' (the coach closed the sheet) or 'unsupported'; any other failure is thrown for the caller to report.
+  async function shareFiles(files, title, text) {
+    if (!navigator.canShare || !navigator.canShare({ files })) return 'unsupported';
+    try {
+      await navigator.share({ files, title, text });
+      return 'shared';
+    } catch (err) {
+      if (err && err.name === 'AbortError') return 'cancelled';
+      throw err;
+    }
+  }
+  const SHARE_STATUS = { shared: 'Compartido.', cancelled: 'Compartir cancelado.' };
+  // An image through the share sheet; a device that cannot share files gets a download instead.
+  async function shareImage(blob, filename, title) {
+    try {
+      const result = await shareFiles([new File([blob], filename, { type: blob.type })], title, title);
+      if (result !== 'unsupported') { finalStatus(SHARE_STATUS[result]); return; }
+      await offerFile(filename, blob);
+      finalStatus(`Imagen descargada: ${filename}.`);
+    } catch (err) {
+      console.error('Image share failed', err);
+      finalStatus(err instanceof Error ? `No se pudo compartir: ${err.message}.` : fileErrorText(err));
+    }
+  }
+  const shareFilename = (prefix) => `${prefix}-${slug(state.us)}-${slug(state.them)}.png`;
+  async function shareRatingsCard() {
+    finalStatus('Preparando la imagen…');
+    try {
+      await shareImage(await ratingsCardBlob(ratingsCardData(state, matchRatings(state))), shareFilename('puntuaciones'), `Puntuaciones ${finalTitle()}`);
+    } catch (err) {
+      console.error('Ratings card failed', err);
+      finalStatus(`No se pudo generar la imagen: ${err.message}.`);
+    }
+  }
+  async function shareMvpCard() {
+    await ui.mvpCardReady;
+    if (!ui.mvpCardBlob) { finalStatus(MVP_PREVIEW_TEXT.none); return; }
+    await shareImage(ui.mvpCardBlob, shareFilename('mvp'), `MVP ${finalTitle()}`);
+  }
   async function reportFiles() {
     await loadPdfLibs();
     return ['match', 'players'].map((kind) => { const { doc, filename } = buildPdf(kind); return { filename, blob: doc.output('blob') }; });
@@ -4282,11 +4666,9 @@ span.att-foot { visibility: hidden; }
     finalStatus('Preparando los PDF…');
     try {
       const files = (await reportFiles()).map((f) => new File([f.blob], f.filename, { type: 'application/pdf' }));
-      if (!navigator.canShare || !navigator.canShare({ files })) { finalStatus('Este dispositivo no permite compartir archivos: usa «Enviar por correo».'); return; }
-      await navigator.share({ files, title: `Informe ${finalTitle()}`, text: finalText() });
-      finalStatus('Compartido.');
+      const result = await shareFiles(files, `Informe ${finalTitle()}`, finalText());
+      finalStatus(result === 'unsupported' ? 'Este dispositivo no permite compartir archivos: usa «Enviar por correo».' : SHARE_STATUS[result]);
     } catch (err) {
-      if (err && err.name === 'AbortError') { finalStatus('Compartir cancelado.'); return; }
       console.error('Report share failed', err);
       finalStatus(`No se pudo compartir: ${(err && err.message) || 'error desconocido'}.`);
     }
@@ -4296,11 +4678,13 @@ span.att-foot { visibility: hidden; }
     if (!b) return;
     if (b.dataset.mvp) { setMvp(b.dataset.mvp); return; }
     if (b.hasAttribute('data-ratings-all')) { ui.ratingsAll = !ui.ratingsAll; openFinal($('final-email').value); return; }
-    if (b.hasAttribute('data-final-close')) { $('final').hidden = true; return; }
-    if (b.hasAttribute('data-final-sheet')) { $('final').hidden = true; ui.sheetMode = 'sheet'; ui.sheetTab = 'stats'; renderSheet(); $('sheet').hidden = false; return; }
+    if (b.hasAttribute('data-final-close')) { hideFinal(); return; }
+    if (b.hasAttribute('data-final-sheet')) { hideFinal(); ui.sheetMode = 'sheet'; ui.sheetTab = 'stats'; renderSheet(); $('sheet').hidden = false; return; }
     if (b.hasAttribute('data-second-half')) { startSecondHalf(); return; }
     if (b.hasAttribute('data-final-mail')) { sendReportsByMail(); return; }
     if (b.hasAttribute('data-final-share')) shareReports();
+    if (b.hasAttribute('data-final-mvp-share')) shareMvpCard();
+    if (b.hasAttribute('data-final-ratings-share')) shareRatingsCard();
   });
 
   // ---- Sheet wiring ----
@@ -4840,9 +5224,10 @@ span.att-foot { visibility: hidden; }
     return 0.2126 * r + 0.7152 * g + 0.0722 * b > LIGHT_BRAND_LUMINANCE ? INK_DARK : INK_LIGHT;
   }
   // The uploaded crest, or the team's initials on its colours.
+  const initialsOf = (name) => name.split(/\s+/).filter(Boolean).map((w) => w[0]).join('').slice(0, 2).toUpperCase();
   function crestSrc(t) {
     if (t.crest && IMAGE_DATA_URL.test(t.crest)) return t.crest;
-    const initials = t.name.split(/\s+/).filter(Boolean).map((w) => w[0]).join('').slice(0, 2).toUpperCase();
+    const initials = initialsOf(t.name);
     const svg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 96 96"><circle cx="48" cy="48" r="45" fill="${t.brand}" stroke="${t.brand2}" stroke-width="6"/>`
       + `<text x="48" y="61" font-family="system-ui,sans-serif" font-weight="800" font-size="36" text-anchor="middle" fill="${t.brandInk}">${esc(initials)}</text></svg>`;
     return `data:image/svg+xml,${encodeURIComponent(svg)}`;
