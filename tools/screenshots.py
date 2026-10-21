@@ -55,7 +55,8 @@ SCENES = {
 }
 # The MVP card is drawn on a canvas of its own size; the window is that size, so the screenshot is the card's PNG.
 MVP_CARD_SIZE = "1080,1350"
-MVP_LONG_NAME = "Maximiliano Fernández-Quintero de la Vega"
+MVP_FIELD_NAME = "Maximiliano Fernández Lo"
+MVP_KEEPER_NAME = "Wolfeschlegelsteinhausen"
 MVP_CARD_SNIPPET = (
     f"{SAMPLE} commit(); (async () => {{ await document.fonts.ready;"
     " const data = mvpCardData(state, '%s', matchRatings(state)); data.name = '%s';"
@@ -68,11 +69,13 @@ MVP_SAMPLE_PHOTO = (
     " f.fillStyle = '#b7c4d6'; f.fillRect(0, 0, 160, 160); f.fillStyle = '#e0b48f'; f.beginPath(); f.arc(80, 70, 36, 0, 7); f.fill();"
     " f.fillStyle = '#34495e'; f.beginPath(); f.arc(80, 190, 70, 0, 7); f.fill(); data.photo = face.toDataURL('image/png');"
 )
+# The sample match logs no court, so its minutes are unknown: the field card gets a 4th tile, the keeper card keeps three.
+MVP_SAMPLE_MINUTES = " data.kpis.push(['Min', '52']);"
 # Card scenes: one scene name writes several files, each a card at its own size.
 CARD_SCENES = {
     "mvp-image": {
-        "mvp-field": MVP_CARD_SNIPPET % ("p17", MVP_LONG_NAME, MVP_SAMPLE_PHOTO),
-        "mvp-keeper": MVP_CARD_SNIPPET % ("p1", MVP_LONG_NAME, ""),
+        "mvp-field": MVP_CARD_SNIPPET % ("p17", MVP_FIELD_NAME, MVP_SAMPLE_PHOTO + MVP_SAMPLE_MINUTES),
+        "mvp-keeper": MVP_CARD_SNIPPET % ("p1", MVP_KEEPER_NAME, ""),
     },
 }
 # Matrix-only scenes: the season fixture (tools/scenes/season.js) puts the app in the team pages of a club with four matches.

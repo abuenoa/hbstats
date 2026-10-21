@@ -1129,7 +1129,7 @@
   const TA = async (name, fn) => { try { await fn(); __results.push('OK ' + name); } catch (e) { __results.push('FAIL ' + name + ': ' + (e && e.message || e) + ' ' + ((e && e.stack) || '').split('\n')[1]); } };
   const tick0 = () => new Promise((r) => setTimeout(r, 0));
   const accountTests = async () => {
-    // ---- MVP card (M3): the data, the drawing and the PNG ----
+    // Awaits requestAnimationFrame under the runner's virtual time, which stalls after heavy canvas work: keep it before the card tests.
     await TA('design: theme switch suppresses transitions for two frames', async () => {
       const frame = () => new Promise((resolve) => requestAnimationFrame(resolve));
       const switchStyle = () => document.getElementById('theme-switch-style');
@@ -1143,6 +1143,7 @@
         if (switchStyle()) throw new Error('still there after two frames');
       } finally { applyTheme(before); }
     });
+    // ---- MVP card (M3): the data, the drawing and the PNG ----
     const PNG_HEADER_BYTES = 24, PNG_SIGNATURE_HEAD = 0x89504e47, PNG_WIDTH_OFFSET = 16, PNG_HEIGHT_OFFSET = 20;
     const cardRatings = () => matchRatings(state);
     const drawnTexts = (data, images) => {
@@ -1157,17 +1158,23 @@
       const shots = state.events.filter((e) => e.kind === 'SHOT' && e.playerId === 'p17').length;
       const assists = state.events.filter((e) => e.kind === 'ACTION' && e.playerId === 'p17' && e.action === 'ASIST').length;
       if (!shots) throw new Error('fixture has no shots for p17');
-      const field = mvpCardData(state, 'p17', cardRatings());
+      const minutes = new Map([['p17', 25 * 60 + 10], ['p1', 60 * 60]]);
+      const field = mvpCardData(state, 'p17', cardRatings(), team, minutes);
       const rating = ratingText(cardRatings().get('p17').value);
-      if (field.kpis.map((k) => k[0]).join() !== 'Goles,% tiro,Pases de gol,Nota') throw new Error(field.kpis.map((k) => k[0]).join());
-      if (field.kpis.map((k) => k[1]).join() !== `${goals}/${shots},${Math.round(goals * 100 / shots)}%,${assists},${rating}`) throw new Error(field.kpis.map((k) => k[1]).join());
+      if (field.kpis.map((k) => k[0]).join() !== 'Goles,% tiro,Pases de gol,Min') throw new Error(field.kpis.map((k) => k[0]).join());
+      if (field.kpis.map((k) => k[1]).join() !== `${goals}/${shots},${Math.round(goals * 100 / shots)}%,${assists},25`) throw new Error(field.kpis.map((k) => k[1]).join());
       if (field.title !== state.them || field.score !== `${score().us}–${score().them}` || field.name !== 'Jenny' || field.num !== 17 || field.rating !== rating) throw new Error(JSON.stringify(field));
       const faced = state.events.filter((e) => e.kind === 'RIVAL_SHOT' && e.gkId === 'p1');
       const saved = faced.filter((e) => groupOf(e.result) === 'PARADA').length, onGoal = faced.filter((e) => ['GOL', 'PARADA'].includes(groupOf(e.result))).length;
       const pens = faced.filter((e) => e.zone === '7M' && ['GOL', 'PARADA'].includes(groupOf(e.result))), pensSaved = pens.filter((e) => groupOf(e.result) === 'PARADA').length;
-      const keeper = mvpCardData(state, 'p1', cardRatings());
-      if (keeper.kpis.map((k) => k[0]).join() !== 'Paradas,% paradas,7 m parados,Nota') throw new Error(keeper.kpis.map((k) => k[0]).join());
-      if (keeper.kpis[0][1] !== `${saved}/${onGoal}` || keeper.kpis[2][1] !== `${pensSaved}/${pens.length}` || keeper.kpis[1][1] !== (onGoal ? `${Math.round(saved * 100 / onGoal)}%` : '–')) throw new Error(JSON.stringify(keeper.kpis));
+      const keeper = mvpCardData(state, 'p1', cardRatings(), team, minutes);
+      if (keeper.kpis.map((k) => k[0]).join() !== 'Paradas,% paradas,7 m parados,Min') throw new Error(keeper.kpis.map((k) => k[0]).join());
+      if (keeper.kpis[0][1] !== `${saved}/${onGoal}` || keeper.kpis[2][1] !== `${pensSaved}/${pens.length}` || keeper.kpis[3][1] !== '60' || keeper.kpis[1][1] !== (onGoal ? `${Math.round(saved * 100 / onGoal)}%` : '–')) throw new Error(JSON.stringify(keeper.kpis));
+      const unknown = mvpCardData(state, 'p17', cardRatings(), team, null);
+      if (unknown.kpis.length !== 3 || unknown.kpis.some((k) => k[0] === 'Min' || k[0] === 'Nota')) throw new Error('unknown minutes: ' + JSON.stringify(unknown.kpis));
+      const other = mvpCardData(state, 'p17', cardRatings(), { ...team, brand: '#123456', name: 'Otro' }, null);
+      if (other.brand !== '#123456') throw new Error('team argument ignored');
+      throws(() => mvpCardData(state, 'nobody', cardRatings()), /nobody/);
       const picked = state.mvpId;
       try {
         state.mvpId = 'p17';
@@ -1193,13 +1200,40 @@
       if (drawnTexts(data, { photo: cardFace(), crest: null }).texts.some((t) => t.text === 'AP')) throw new Error('initials over a photo');
     });
     await TA('mvp image: a long name is fitted', async () => {
-      const long = 'Maximiliano '.repeat(12).trim(), data = { ...mvpCardData(state, 'p17', cardRatings()), name: long, title: long, venue: long };
-      const { texts, ctx } = drawnTexts(data, { photo: null, crest: null });
-      const nameText = texts.find((t) => t.text.startsWith('MAXIMILIANO') || t.text.startsWith('Maximiliano'));
-      if (!nameText || !nameText.text.endsWith('…')) throw new Error('name not cut: ' + (nameText && nameText.text));
-      texts.forEach((t) => { ctx.font = t.font; if (ctx.measureText(t.text).width > MVP_CARD.w - 2 * MVP_CARD.pad) throw new Error(`overflow: ${t.text}`); });
-      if (fitText(ctx, 'Jose', MVP_CARD.w) !== 'Jose') throw new Error('short text changed');
-      if (fitText(ctx, long, 0) !== '…') throw new Error('zero width');
+      const base = mvpCardData(state, 'p17', cardRatings()), noImages = { photo: null, crest: null };
+      const inBox = (texts, ctx) => texts.forEach((t) => { ctx.font = t.font; if (ctx.measureText(t.text).width > MVP_CARD.w - 2 * MVP_CARD.pad + 0.5) throw new Error(`overflow: ${t.text}`); });
+      // A 24-character name with a space is drawn whole, on one line or two, with no ellipsis.
+      const spaced = 'Maximiliano Fernández Lo', drawn = drawnTexts({ ...base, name: spaced }, noImages);
+      if (drawn.texts.some((t) => t.text.includes('…'))) throw new Error('ellipsis: ' + drawn.texts.map((t) => t.text));
+      const lines = drawn.texts.filter((t) => spaced.toUpperCase().includes(t.text) && t.text.length > 3).map((t) => t.text);
+      if (lines.join(' ') !== spaced.toUpperCase()) throw new Error('name not whole: ' + lines);
+      inBox(drawn.texts, drawn.ctx);
+      // A 24-character rival fits the «us vs rival» line by shrinking.
+      const rival = 'Club Deportivo Balonmano', vs = drawnTexts({ ...base, title: rival }, noImages).texts.find((t) => t.text.includes(rival));
+      if (!vs || vs.text.includes('…')) throw new Error('rival cut: ' + (vs && vs.text));
+      // A name with no space shrinks to the floor before any ellipsis; beyond the floor it is cut and still fits.
+      const solid = drawnTexts({ ...base, name: 'X'.repeat(MAX_NAME_LENGTH) }, noImages);
+      if (solid.texts.some((t) => t.text.includes('…'))) throw new Error('24 characters without a space were cut');
+      const huge = 'Maximiliano '.repeat(12).trim(), cut = drawnTexts({ ...base, name: huge, title: huge, venue: huge }, noImages);
+      if (!cut.texts.some((t) => t.text.endsWith('…'))) throw new Error('nothing was cut');
+      inBox(cut.texts, cut.ctx);
+      if (fitText(cut.ctx, 'Jose', MVP_CARD.w) !== 'Jose') throw new Error('short text changed');
+      if (fitText(cut.ctx, huge, 0) !== '…') throw new Error('zero width');
+    });
+    await TA('mvp image: the crown rests on the rim and clears the title', async () => {
+      const matrix = crownPlacement(), M = MVP_CARD, cx = M.w / 2;
+      const at = ([x, y]) => { const p = matrix.transformPoint({ x, y }); return [p.x, p.y]; };
+      const { band } = CROWN, [bandX, bandY] = at([CROWN.viewBox.split(' ')[2] / 2, band.y + band.h]);
+      const fromCentre = Math.hypot(bandX - cx, bandY - M.faceCy);
+      if (fromCentre < M.faceR - M.ringWidth - 1 || fromCentre > M.faceR) throw new Error('band bottom-centre off the rim: ' + fromCentre);
+      const points = [...CROWN.pearls.flatMap(([x, y]) => [[x - CROWN.pearlR, y - CROWN.pearlR], [x + CROWN.pearlR, y - CROWN.pearlR]]), [4, 22], [116, 22]].map(at);
+      const ctx = document.createElement('canvas').getContext('2d');
+      [MVP_TITLE, MVP_PROVISIONAL_TITLE].forEach((title) => {
+        ctx.font = cardFont(M.weights.heavy, M.headerSize, 'display');
+        const half = ctx.measureText(title).width / 2;
+        points.forEach(([x, y]) => { if (x >= cx - half && x <= cx + half && y >= M.headerY - M.headerSize && y <= M.headerY) throw new Error(`crown point (${x | 0}, ${y | 0}) in the «${title}» box`); });
+      });
+      points.forEach(([x, y]) => { if (x < 0 || y < 0 || x > M.w) throw new Error(`crown point off the card: ${x | 0}, ${y | 0}`); });
     });
     await TA('mvp image: a broken photo still gives an image', async () => {
       const broken = 'data:image/png;base64,AAAA';

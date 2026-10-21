@@ -4166,22 +4166,27 @@ span.att-foot { visibility: hidden; }
 
   // ---- Share images: Canvas 2D cards for the share sheet; canvas inherits no CSS, so fonts and colours are set here ----
   // Every size of the MVP card, in px of its 1080×1350 canvas. The face circle sits over a brand-to-dark gradient, the crown
-  // on its upper-left rim and the rating badge on its lower-right one; then the name, the KPI tiles and the score line.
+  // rests on its upper-left rim like a hat and the rating badge on its lower-right one; then the name, the KPI tiles and
+  // the score line. Text shrinks to fit its box (down to a floor) before it is cut with an ellipsis.
   const MVP_CARD = {
     w: 1080, h: 1350, pad: 72, fadeEnd: 0.6,
-    headerY: 150, headerSize: 84,
-    faceCy: 460, faceR: 230, ringWidth: 14,
-    crownAngleDeg: -34, crownRimDeg: -135, crownW: 290, crownShadowBlur: 24, crownShadowDy: 8,
+    weights: { heavy: 800, semi: 600, regular: 400 }, fitStep: 2,
+    headerY: 104, headerSize: 72,
+    faceCy: 440, faceR: 215, ringWidth: 14,
+    crownAngleDeg: -34, crownRimDeg: -135, crownW: 240, crownShadowBlur: 24, crownShadowDy: 8,
     badge: { w: 200, h: 124, radius: 30, rimDeg: 45, edge: 8, size: 88, baseline: 90 },
     initialsScale: 0.9, initialsBaseline: 0.3,
-    nameY: 810, nameSize: 96, subY: 872, subSize: 40,
-    tiles: { y: 935, h: 210, gap: 20, radius: 28, inner: 12, valueSize: 72, valueBaseline: 120, labelSize: 24, labelBaseline: 176 },
-    footer: { crestSize: 132, crestY: 1172, gap: 36, scoreY: 1222, scoreSize: 84, vsY: 1272, vsSize: 38, metaY: 1318, metaSize: 28 }
+    name: { y: 770, size: 96, minSize: 72, twoLineSize: 64, floorSize: 40, firstLineDy: -30, secondLineDy: 34 },
+    subY: 832, subSize: 40, subTwoLineDy: 20,
+    tiles: { y: 905, h: 200, gap: 20, radius: 28, inner: 12, valueSize: 72, valueBaseline: 115, labelSize: 24, labelBaseline: 168 },
+    footer: { crestSize: 132, crestY: 1135, gap: 36, scoreY: 1185, scoreSize: 84, vsY: 1235, vsSize: 38, vsMinSize: 30, metaY: 1282, metaSize: 28 },
+    minAccentContrast: 3
   };
   // Theme-independent colours: the card is shared outside the app, so it never follows the theme. The values are the light
   // theme's tokens (crown, rating bands, positions); the team's own colours come from the match data.
   const CARD_PALETTE = {
     base: '#101014', ink: '#ffffff', inkSoft: 'rgba(255, 255, 255, .72)', tile: 'rgba(255, 255, 255, .12)', badgeEdge: '#101014',
+    crownShadow: 'rgba(0, 0, 0, .35)',
     crown: { '--crown-light': '#fff3a6', '--gold': '#f5c400', '--crown-deep': '#b8860b', '--crown-band-deep': '#8a6400', '--crown-edge': '#7a5500',
       '--crown-shine': '#fffbe0', '--red': '#d4202a', '--parada': '#2563eb', '--gol': '#1f9d55' },
     bands: { 'rt-top': ['#1d4ed8', '#ffffff'], 'rt-good': ['#15803d', '#ffffff'], 'rt-mid': ['#bf8003', '#151515'], 'rt-low': ['#c2410c', '#ffffff'],
@@ -4191,20 +4196,25 @@ span.att-foot { visibility: hidden; }
   };
   const MVP_PROVISIONAL_TITLE = 'MVP provisional', MVP_TITLE = 'MVP';
   const CARD_ELLIPSIS = '…';
-  // What the MVP card shows about one player; `ratings` is matchRatings(s) (or the same for the season's helpers).
-  function mvpCardData(s, playerId, ratings) {
+  const CARD_FONT_TOKENS = { display: '--font-display', body: '--font-body' };
+  // The canvas does not inherit CSS: the font shorthand uses the same stacks as the page.
+  const cardFont = (weight, size, family) => `${weight} ${size}px ${getComputedStyle(document.documentElement).getPropertyValue(CARD_FONT_TOKENS[family]).trim()}`;
+  // What the MVP card shows about one player; `ratings` is matchRatings(s). The 4th tile is the minutes on court, left out
+  // when they are unknown (a match with no court log): the rating itself is the badge. `t` is the team that played.
+  function mvpCardData(s, playerId, ratings, t = team, seconds = minutesOnCourt(s)) {
     const player = s.players.find((p) => p.id === playerId);
+    if (!player) throw new Error(`mvpCardData: no player with id ${playerId} in the match`);
     const keeper = player.pos === 'POR', { made, tried } = outcomeOf(s, player), value = ratingValue(ratings, player);
     const pens = countGroups(s.events.filter((e) => e.kind === 'RIVAL_SHOT' && e.gkId === playerId && e.zone === '7M'));
     const kpis = keeper
       ? [['Paradas', `${made}/${tried}`], ['% paradas', pctText(pct(made, tried))], ['7 m parados', `${pens.PARADA}/${pens.GOL + pens.PARADA}`]]
       : [['Goles', `${made}/${tried}`], ['% tiro', pctText(pct(made, tried))], ['Pases de gol', playerStats(playerId, s.events).ASIST]];
-    const mvp = matchMvp(s, ratings), sc = score(s.events);
+    if (seconds) kpis.push(['Min', minutesText(seconds.get(playerId) || 0)]);
+    const mvp = matchMvp(s, ratings, seconds), sc = score(s.events);
     return {
-      name: player.name, num: player.num, pos: player.pos, photo: facePhoto(player), rating: ratingText(value), band: ratingBand(value),
-      kpis: [...kpis, ['Nota', ratingText(value)]],
+      name: player.name, num: player.num, pos: player.pos, photo: facePhoto(player), rating: ratingText(value), band: ratingBand(value), kpis,
       us: s.us, title: s.them, score: `${sc.us}–${sc.them}`, date: dateText(s.date), venue: s.venue,
-      crest: crestSrc(team), brand: team.brand, brand2: team.brand2, brandInk: team.brandInk,
+      crest: crestSrc(t), brand: t.brand, brand2: t.brand2, brandInk: t.brandInk,
       provisional: mvp.id === playerId && mvp.source === MVP_SOURCE.rating
     };
   }
@@ -4223,24 +4233,48 @@ span.att-foot { visibility: hidden; }
     while (cut > 0 && ctx.measureText(text.slice(0, cut).trimEnd() + CARD_ELLIPSIS).width > maxWidth) cut--;
     return text.slice(0, cut).trimEnd() + CARD_ELLIPSIS;
   }
+  // The largest size from `size` down to `minSize` at which `text` fits `maxWidth` (`minSize` when none does); `specOf(size)` is the font.
+  function fitFont(ctx, text, maxWidth, size, minSize, specOf) {
+    let fitted = size;
+    ctx.font = specOf(fitted);
+    while (fitted > minSize && ctx.measureText(text).width > maxWidth) {
+      fitted = Math.max(minSize, fitted - MVP_CARD.fitStep);
+      ctx.font = specOf(fitted);
+    }
+    return fitted;
+  }
+  // The name as one line at 96 down to 72 px; else two lines (split at the space nearest the middle) at up to 64 px; else
+  // one line shrunk to the floor. The caller cuts with an ellipsis what still does not fit.
+  function fitName(ctx, name, maxWidth, specOf) {
+    const N = MVP_CARD.name, one = fitFont(ctx, name, maxWidth, N.size, N.minSize, specOf);
+    if (ctx.measureText(name).width <= maxWidth) return { lines: [name], size: one };
+    const spaces = [...name.matchAll(/ /g)].map((m) => m.index), middle = name.length / 2;
+    if (!spaces.length) return { lines: [name], size: fitFont(ctx, name, maxWidth, N.minSize, N.floorSize, specOf) };
+    const at = spaces.reduce((best, i) => (Math.abs(i - middle) < Math.abs(best - middle) ? i : best));
+    const lines = [name.slice(0, at), name.slice(at + 1)], longest = lines.reduce((a, b) => (b.length > a.length ? b : a));
+    return { lines, size: fitFont(ctx, longest, maxWidth, N.twoLineSize, N.floorSize, specOf) };
+  }
   const rimPoint = (cx, cy, r, deg) => [cx + r * Math.cos(deg * Math.PI / 180), cy + r * Math.sin(deg * Math.PI / 180)];
   const cardGradient = (ctx, stops, y0, y1) => {
     const g = ctx.createLinearGradient(0, y0, 0, y1);
     stops.forEach(([offset, token]) => g.addColorStop(offset, CARD_PALETTE.crown[token]));
     return g;
   };
-  // The crown from the SVG's own geometry: its box is centred on (cx, cy), `width` wide, tilted by `angleDeg`.
-  function drawCrown(ctx, cx, cy, width, angleDeg) {
-    const [, , boxW, boxH] = CROWN.viewBox.split(' ').map(Number), c = CARD_PALETTE.crown, { band } = CROWN;
+  // Where the crown goes: its band's bottom-centre on (x, y), `width` wide, tilted by `angleDeg`; maps the crown's own box to the card.
+  function crownMatrix(x, y, width, angleDeg) {
+    const [, , boxW] = CROWN.viewBox.split(' ').map(Number), scale = width / boxW;
+    return new DOMMatrix().translate(x, y).rotate(angleDeg).scale(scale).translate(-boxW / 2, -(CROWN.band.y + CROWN.band.h));
+  }
+  // The crown on the face's upper-left rim, resting on it like a hat.
+  const crownPlacement = () => crownMatrix(...rimPoint(MVP_CARD.w / 2, MVP_CARD.faceCy, MVP_CARD.faceR - MVP_CARD.ringWidth, MVP_CARD.crownRimDeg), MVP_CARD.crownW, MVP_CARD.crownAngleDeg);
+  function drawCrown(ctx) {
+    const c = CARD_PALETTE.crown, { band } = CROWN;
     ctx.save();
-    ctx.translate(cx, cy);
-    ctx.rotate(angleDeg * Math.PI / 180);
-    ctx.scale(width / boxW, width / boxW);
-    ctx.translate(-boxW / 2, -boxH / 2);
+    ctx.setTransform(crownPlacement());
     ctx.lineJoin = 'round';
     ctx.strokeStyle = c['--crown-edge'];
     ctx.lineWidth = CROWN.edgeWidth;
-    ctx.shadowColor = 'rgba(0, 0, 0, .35)'; ctx.shadowBlur = MVP_CARD.crownShadowBlur; ctx.shadowOffsetY = MVP_CARD.crownShadowDy;
+    ctx.shadowColor = CARD_PALETTE.crownShadow; ctx.shadowBlur = MVP_CARD.crownShadowBlur; ctx.shadowOffsetY = MVP_CARD.crownShadowDy;
     const body = new Path2D(CROWN.body);
     ctx.fillStyle = cardGradient(ctx, CROWN.bodyStops, ...CROWN.bodyY);
     ctx.fill(body); ctx.shadowColor = 'transparent'; ctx.stroke(body);
@@ -4262,61 +4296,70 @@ span.att-foot { visibility: hidden; }
   }
   // Draws the MVP card on `canvas`; `images` are the loaded { photo, crest } (null when missing or broken).
   function drawMvpCard(canvas, data, images) {
-    const M = MVP_CARD, P = CARD_PALETTE, { badge, tiles, footer } = M, ctx = canvas.getContext('2d'), cx = M.w / 2;
-    const root = getComputedStyle(document.documentElement);
-    const font = (weight, size, token) => `${weight} ${size}px ${root.getPropertyValue(token).trim()}`;
-    const DISPLAY = '--font-display', BODY = '--font-body', HEAVY = 800, SEMI = 600;
-    const maxText = M.w - 2 * M.pad;
-    const text = (value, x, y, align, ink, fontSpec, width = maxText) => {
-      ctx.font = fontSpec; ctx.textAlign = align; ctx.fillStyle = ink;
+    const M = MVP_CARD, P = CARD_PALETTE, { badge, tiles, footer, name } = M, { heavy, semi, regular } = M.weights, ctx = canvas.getContext('2d'), cx = M.w / 2;
+    const maxText = M.w - 2 * M.pad, display = (size) => cardFont(heavy, size, 'display'), body = (weight) => (size) => cardFont(weight, size, 'body');
+    // Draws `value` in the font `specOf(size)`, shrunk from `size` to `minSize` and then cut with an ellipsis to fit `width`.
+    const text = (value, x, y, align, ink, specOf, size, width = maxText, minSize = size) => {
+      ctx.textAlign = align; ctx.fillStyle = ink;
+      fitFont(ctx, value, width, size, minSize, specOf);
       ctx.fillText(fitText(ctx, value, width), x, y);
     };
     canvas.width = M.w; canvas.height = M.h;
+    const accent = contrastRatio(data.brand2, P.base) >= M.minAccentContrast ? data.brand2 : P.ink;
     const background = ctx.createLinearGradient(0, 0, 0, M.h * M.fadeEnd);
     background.addColorStop(0, data.brand); background.addColorStop(1, P.base);
     ctx.fillStyle = P.base; ctx.fillRect(0, 0, M.w, M.h);
     ctx.fillStyle = background; ctx.fillRect(0, 0, M.w, M.h * M.fadeEnd);
-    text(data.provisional ? MVP_PROVISIONAL_TITLE : MVP_TITLE, cx, M.headerY, 'center', data.brandInk, font(HEAVY, M.headerSize, DISPLAY));
+    text(data.provisional ? MVP_PROVISIONAL_TITLE : MVP_TITLE, cx, M.headerY, 'center', data.brandInk, display, M.headerSize);
     // The face: the photo, or the initials on the position colour (as the dorsal disc does in the app).
     const pos = posOf(data), posColor = P.positions[data.pos] || P.positions.CEN;
     inCircle(ctx, cx, M.faceCy, M.faceR, () => {
       if (images.photo) { ctx.drawImage(images.photo, cx - M.faceR, M.faceCy - M.faceR, 2 * M.faceR, 2 * M.faceR); return; }
       ctx.fillStyle = posColor; ctx.fillRect(cx - M.faceR, M.faceCy - M.faceR, 2 * M.faceR, 2 * M.faceR);
-      text(initialsOf(data.name), cx, M.faceCy + M.faceR * M.initialsBaseline, 'center', pos.darkText ? P.darkInk : P.ink, font(HEAVY, M.faceR * M.initialsScale, DISPLAY));
+      text(initialsOf(data.name), cx, M.faceCy + M.faceR * M.initialsBaseline, 'center', pos.darkText ? P.darkInk : P.ink, display, M.faceR * M.initialsScale);
     });
     ctx.beginPath(); ctx.arc(cx, M.faceCy, M.faceR + M.ringWidth / 2, 0, 2 * Math.PI);
-    ctx.strokeStyle = data.brand2; ctx.lineWidth = M.ringWidth; ctx.stroke();
-    drawCrown(ctx, ...rimPoint(cx, M.faceCy, M.faceR, M.crownRimDeg), M.crownW, M.crownAngleDeg);
+    ctx.strokeStyle = accent; ctx.lineWidth = M.ringWidth; ctx.stroke();
+    drawCrown(ctx);
     // The rating badge in its band colour, on the lower-right rim.
     const [bx, by] = rimPoint(cx, M.faceCy, M.faceR, badge.rimDeg), [fill, ink] = P.bands[data.band];
     ctx.beginPath(); ctx.roundRect(bx - badge.w / 2, by - badge.h / 2, badge.w, badge.h, badge.radius);
     ctx.fillStyle = fill; ctx.fill(); ctx.strokeStyle = P.badgeEdge; ctx.lineWidth = badge.edge; ctx.stroke();
-    text(data.rating, bx, by - badge.h / 2 + badge.baseline, 'center', ink, font(HEAVY, badge.size, DISPLAY), badge.w);
-    text(data.name.toUpperCase(), cx, M.nameY, 'center', P.ink, font(HEAVY, M.nameSize, DISPLAY));
-    text(`#${data.num} · ${pos.label}`, cx, M.subY, 'center', P.inkSoft, font(SEMI, M.subSize, BODY));
+    text(data.rating, bx, by - badge.h / 2 + badge.baseline, 'center', ink, display, badge.size, badge.w);
+    // The court name: one line, or two when it is long; the dorsal line moves down with the second line.
+    const shown = data.name.toUpperCase(), fitted = fitName(ctx, shown, maxText, display), two = fitted.lines.length === 2;
+    fitted.lines.forEach((line, i) => text(line, cx, name.y + (two ? (i ? name.secondLineDy : name.firstLineDy) : 0), 'center', P.ink, display, fitted.size, maxText, name.floorSize));
+    text(`#${data.num} · ${pos.label}`, cx, M.subY + (two ? M.subTwoLineDy : 0), 'center', P.inkSoft, body(semi), M.subSize);
     // The KPI tiles.
     const tileW = (maxText - (data.kpis.length - 1) * tiles.gap) / data.kpis.length;
     data.kpis.forEach(([label, value], i) => {
       const x = M.pad + i * (tileW + tiles.gap), mid = x + tileW / 2, inner = tileW - 2 * tiles.inner;
       ctx.beginPath(); ctx.roundRect(x, tiles.y, tileW, tiles.h, tiles.radius); ctx.fillStyle = P.tile; ctx.fill();
-      text(String(value), mid, tiles.y + tiles.valueBaseline, 'center', P.ink, font(HEAVY, tiles.valueSize, DISPLAY), inner);
-      text(label, mid, tiles.y + tiles.labelBaseline, 'center', P.inkSoft, font(SEMI, tiles.labelSize, BODY), inner);
+      text(String(value), mid, tiles.y + tiles.valueBaseline, 'center', P.ink, display, tiles.valueSize, inner);
+      text(label, mid, tiles.y + tiles.labelBaseline, 'center', P.inkSoft, body(semi), tiles.labelSize, inner);
     });
     // The score line: our crest, the score, the match and where and when.
     const textX = images.crest ? M.pad + footer.crestSize + footer.gap : M.pad, textW = M.w - M.pad - textX;
     if (images.crest) inCircle(ctx, M.pad + footer.crestSize / 2, footer.crestY + footer.crestSize / 2, footer.crestSize / 2,
       () => ctx.drawImage(images.crest, M.pad, footer.crestY, footer.crestSize, footer.crestSize));
-    text(data.score, textX, footer.scoreY, 'left', data.brand2, font(HEAVY, footer.scoreSize, DISPLAY), textW);
-    text(`${data.us} vs ${data.title}`, textX, footer.vsY, 'left', P.ink, font(SEMI, footer.vsSize, BODY), textW);
-    text([data.date, data.venue].filter(Boolean).join(' · '), textX, footer.metaY, 'left', P.inkSoft, font(400, footer.metaSize, BODY), textW);
+    text(data.score, textX, footer.scoreY, 'left', accent, display, footer.scoreSize, textW);
+    text(`${data.us} vs ${data.title}`, textX, footer.vsY, 'left', P.ink, body(semi), footer.vsSize, textW, footer.vsMinSize);
+    text([data.date, data.venue].filter(Boolean).join(' · '), textX, footer.metaY, 'left', P.inkSoft, body(regular), footer.metaSize, textW);
   }
-  // The card as a PNG. A photo or crest that cannot load is left out: the face falls back to the initials.
+  // The card as a PNG. The fonts are requested first (a face that nothing on screen has used is not loaded yet, and the
+  // canvas would bake in the fallback). A photo or crest that cannot load is left out: the face falls back to the initials.
   async function mvpCardBlob(data) {
+    const { heavy, semi, regular } = MVP_CARD.weights;
+    await Promise.all([cardFont(heavy, MVP_CARD.name.size, 'display'), cardFont(semi, MVP_CARD.subSize, 'body'), cardFont(regular, MVP_CARD.footer.metaSize, 'body')]
+      .map((spec) => document.fonts.load(spec)));
     await document.fonts.ready;
     const [photo, crest] = await Promise.all([data.photo, data.crest].map((src) => (src ? loadImage(src).catch(() => null) : null)));
     const canvas = document.createElement('canvas');
     drawMvpCard(canvas, data, { photo, crest });
-    return new Promise((resolve, reject) => canvas.toBlob((blob) => (blob ? resolve(blob) : reject(new Error('The MVP card could not be encoded as a PNG'))), 'image/png'));
+    return new Promise((resolve, reject) => canvas.toBlob((blob) => {
+      canvas.width = canvas.height = 0;
+      if (blob) resolve(blob); else reject(new Error('The MVP card could not be encoded as a PNG'));
+    }, 'image/png'));
   }
 
   // ---- Final summary: both teams side by side, and the reports by e-mail or share sheet ----
