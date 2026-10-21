@@ -2089,7 +2089,7 @@
         home.stateMatches = home.season;
         showPlayer('ca');
         const tile = document.querySelector('.att-tile'), text = tile && tile.textContent.replace(/\s+/g, ' ').trim();
-        if (!text || !text.includes('Asistencia · 50 %') || !text.includes('2 de 4 · 1 falta · 1 justificada · 1 lesionado') || !text.includes('Entrenos 33 % · Partidos 100 %') || /NaN|undefined/.test(text)) throw new Error(text);
+        if (!text || !text.includes('Asistencia · 50%') || !text.includes('2 de 4 · 1 falta · 1 justificada · 1 lesionado') || !text.includes('Entrenos 33% · Partidos 100%') || /NaN|undefined/.test(text)) throw new Error(text);
         if (document.querySelector('.att-tile .att-low') === null) throw new Error('50 % is below warnPct and needs the «!»');
       });
     });
@@ -2113,8 +2113,41 @@
         home.sessions = [rateSession('2026-10-01', 'ENTRENO', { ra1: { s: 'F' } }), rateSession('2026-10-02', 'ENTRENO')];
         showHomeView('team');
         const low = document.querySelector('.squad [data-player="ra1"]'), fine = document.querySelector('.squad [data-player="ra2"]');
-        if (!low.textContent.includes('50 %') || !low.querySelector('.att-low[aria-label]') || low.querySelector('.att-low').textContent !== '!' || !/baja/.test(low.getAttribute('aria-label'))) throw new Error('low: ' + low.outerHTML.slice(0, 300));
-        if (!fine.textContent.includes('100 %') || fine.querySelector('.att-low')) throw new Error('fine marked');
+        if (!low.textContent.includes('50%') || !low.querySelector('.att-low[aria-label]') || low.querySelector('.att-low').textContent !== '!' || !/baja/.test(low.getAttribute('aria-label'))) throw new Error('low: ' + low.outerHTML.slice(0, 300));
+        if (!fine.textContent.includes('100%') || fine.querySelector('.att-low')) throw new Error('fine marked');
+      });
+    });
+    await TA('attendance: a team switch forgets the other team\'s matches before its season loads', async () => {
+      await withAttendanceView(async () => {
+        const day = todayIso(), other = { id: 'cal-other', club: 'Other', name: 'Other', brand: '#1a4a8a', brand2: '#ffffff', brandInk: '#ffffff', crest: null };
+        const real = backend, previous = team;
+        try {
+          home.stateMatches = [{ id: 'foreign', date: day, them: 'Rival', status: 'finished', state: { players: [] } }];
+          backend = { ...real, listMatchStates: () => new Promise(() => {}), listPlayers: async () => [], listFixtures: async () => [], listSessions: async () => [] };
+          selectTeam(other);
+          if (attendanceMatch(day) !== null || home.stateMatches.length) throw new Error('the old team\'s matches are still there');
+          showAttendance(); home.attendanceKind = 'PARTIDO'; renderHome();
+          if (localSessions('cal-other').some((x) => x.matchId === 'foreign')) throw new Error('foreign match id stored');
+        } finally { backend = real; applyTeam(previous); home.stateMatches = []; }
+      });
+    });
+    await TA('attendance: sessions load once per team, fall back to the device copy and reload when back online', async () => {
+      await withAttendanceView(async () => {
+        const real = backend;
+        let reads = 0;
+        try {
+          backend = { ...real, listSessions: async () => { reads += 1; return []; } };
+          home.sessions = null; await ensureSessions(); await ensureSessions();
+          if (reads !== 1 || !Array.isArray(home.sessions)) throw new Error('reads ' + reads);
+          backend = { ...real, listSessions: async () => { throw new Error('sin conexión'); } };
+          removeKey(CACHE_KEY_PREFIX + 'attendance:' + team.id);
+          home.sessions = null; await ensureSessions();
+          if (!Array.isArray(home.sessions)) throw new Error('no fallback');
+          backend = { ...real, listSessions: async () => { reads += 1; return [rateSession('2026-10-01', 'ENTRENO')]; } };
+          showHomeView('team'); window.dispatchEvent(new Event('online'));
+          for (let i = 0; i < 5; i++) await tick0();
+          if (reads !== 2 || home.sessions.length !== 1) throw new Error('not reloaded: ' + reads);
+        } finally { backend = real; }
       });
     });
     await TA('calendar: deleting a team removes its calendar copy from the device', async () => {

@@ -868,6 +868,7 @@ span.att-foot { visibility: hidden; }
 .att-low { display: inline-grid; place-items: center; width: 1.25em; height: 1.25em; border-radius: var(--radius-full); background: var(--color-warning-text); color: var(--bg); font: var(--type-caption); font-style: normal; font-weight: 800; vertical-align: middle; }
 .att-sub { margin: var(--space-4) 0 var(--space-2); font: var(--type-caption); font-weight: 700; letter-spacing: .1em; text-transform: uppercase; color: var(--color-text-secondary); }
 .face .face-att { font-size: .75rem; font-weight: 700; color: var(--muted); font-variant-numeric: tabular-nums; }
+.att-tile.warn .att-head b { color: var(--color-warning-text); }
 .face .face-att.warn { color: var(--color-warning-text); }
 .face .face-att .att-low { width: 1.3em; height: 1.3em; font-size: .7rem; }
 .mvp-tile { display: flex; align-items: center; gap: var(--space-3); margin-top: var(--space-2); padding: var(--space-3); border-radius: var(--inner-radius, var(--radius-sm)); border: 1px solid var(--gold); background: color-mix(in srgb, var(--gold) 14%, transparent); }
@@ -4818,6 +4819,7 @@ span.att-foot { visibility: hidden; }
     home.fixtures = null;
     home.fixtureEdit = null;
     home.teamMatches = [];
+    home.stateMatches = [];
     try { home.roster = (await cachedRead(`players:${t.id}`, () => backend.listPlayers(t.id))).value; }
     catch (err) { home.roster = []; console.warn(`Roster not available: ${cloudErrorText(err)}`); }
     try { await loadFixtures(); }
@@ -5360,7 +5362,7 @@ span.att-foot { visibility: hidden; }
       return players.length ? `<div class="pos-group"><h4 style="--pos:${pos === 'POR' ? 'var(--fg)' : CONFIG.positions[pos].color}">${POSITION_GROUPS[pos]}</h4><div class="faces">${players.map(faceOf).join('')}</div></div>` : '';
     }).join('');
   }
-  const attendanceText = (v) => (v == null ? '–' : `${v} %`);
+  const attendanceText = pctText;
   const lowAttendance = (v) => v != null && v < CONFIG.attendance.warnPct;
   const hasSessions = () => Boolean(home.sessions && home.sessions.length);
   const attendanceRowsNow = () => (hasSessions() ? attendanceRows(home.sessions, home.stateMatches, home.roster) : null);
@@ -5603,6 +5605,12 @@ span.att-foot { visibility: hidden; }
     renderHome();
   }
   // A season built from this tablet's copies is replaced by the full one as soon as the connection is back.
+  // Back online, the attendance of the other tablets replaces a set read without a connection; changes not uploaded stay.
+  window.addEventListener('online', () => {
+    if (!['team', 'player', 'player-match'].includes(home.view) || home.sessions === null) return;
+    home.sessions = null;
+    ensureSessions();
+  });
   window.addEventListener('online', () => {
     if (!home.seasonOffline) return;
     home.season = null;
@@ -6151,7 +6159,7 @@ span.att-foot { visibility: hidden; }
     try { await backend.signOut(); }
     catch (err) { homeStatus(`No se pudo salir: ${cloudErrorText(err)}.`); return; }
     [...storedKeys(MATCH_KEY_PREFIX), ...storedKeys(ATTENDANCE_KEY_PREFIX), ...storedKeys(CACHE_KEY_PREFIX), ...storedKeys(SQUAD_KEY_PREFIX), CURRENT_MATCH_KEY].forEach(removeKey);
-    Object.assign(home, { user: null, teams: [], roster: [], matches: [], sessions: null, templates: [] });
+    Object.assign(home, { user: null, teams: [], roster: [], matches: [], sessions: null, stateMatches: [], templates: [] });
     applyTeam(DEFAULT_TEAM);
     showHomeView('login');
   }
