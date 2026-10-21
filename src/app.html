@@ -874,7 +874,8 @@ span.att-foot { visibility: hidden; }
 .match-table th, .match-table td { padding: var(--space-2) calc(var(--space-1) / 2); }
 .match-table th { letter-spacing: 0; padding-inline: 0; }
 .match-table .row-btn { padding: 0; }
-.match-table td:nth-child(2) { max-width: 0; min-width: 24px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.match-table td:nth-child(2) { min-width: 96px; white-space: normal; overflow-wrap: anywhere; }
+.match-table abbr { text-decoration: none; }
 .match-table .res-G, .match-table .res-E, .match-table .res-P { font-weight: 800; }
 .row-link { cursor: pointer; }
 .row-btn { min-height: var(--target); min-width: var(--target); padding: 0 var(--space-1); border: 0; background: none; color: inherit; font: inherit; font-weight: 700; text-align: left; cursor: pointer; }
@@ -5736,7 +5737,7 @@ span.att-foot { visibility: hidden; }
       radar: radarSvg(fieldRadar(season, best), pctText(pct(t.goals, t.shots)), '% tiro'),
       titles: { map: 'Mapa de tiros · temporada', radar: 'Perfil frente al equipo', grid: 'Dónde marca' },
       list: shots, success: isGoal, counts: anyShot, colours: CARD_ZONE_COLOURS.field, tiles: [['7 m', rates.get(ZONE_P7)], ['Contraataque', rates.get(ZONE_CONTRA)]],
-      heads: ['Fecha', 'Rival', 'Res.', 'Min', 'Goles', '%', 'Pases', 'Pérd.', '+/−'],
+      heads: ['Fecha', 'Rival', 'Res.', 'Min', ['Gol', 'Goles'], '%', ['Pas', 'Pases'], ['Pér', 'Pérdidas'], '+/−'],
       cells: (r) => `<td>${minutesText(r.seconds)}</td><td>${r.goals}/${r.shots}</td><td>${pctText(pct(r.goals, r.shots))}</td><td>${r.assists}</td><td>${r.turnovers}</td><td>${plusMinusText(r.plusMinus)}</td>`,
       barKey: 'goals', barRate: (r) => ratio(r.goals, r.shots)
     };
@@ -5750,7 +5751,7 @@ span.att-foot { visibility: hidden; }
       radar: radarSvg(keeperRadar(season, best), pctText(pct(t.saves, t.onTarget)), '% paradas'),
       titles: { map: 'Paradas por zona de lanzamiento', radar: 'Perfil de portero', grid: 'Dónde para · % por zona de portería' },
       list: faced, success: isSave, counts: onTarget, colours: CARD_ZONE_COLOURS.keeper, tiles: [['7 m', rates.get(ZONE_P7)], ['Contraataque', rates.get(ZONE_CONTRA)]],
-      heads: ['Fecha', 'Rival', 'Res.', 'Min', 'Paradas', '%', '7 m', 'Goles'],
+      heads: ['Fecha', 'Rival', 'Res.', 'Min', ['Par', 'Paradas'], '%', '7 m', ['Gol', 'Goles']],
       cells: (r) => { const p7 = zoneRates(r.facedList, isSave).get(ZONE_P7); return `<td>${minutesText(r.seconds)}</td><td>${r.saves}/${r.onTarget}</td><td>${pctText(pct(r.saves, r.onTarget))}</td><td>${p7 ? `${p7.ok}/${p7.n}` : '–'}</td><td>${r.onTarget - r.saves}</td>`; },
       barKey: 'saves', barRate: (r) => ratio(r.saves, r.onTarget)
     };
@@ -5777,7 +5778,7 @@ span.att-foot { visibility: hidden; }
     const best = teamBest(home.season, home.roster);
     const keeper = player.pos === 'POR';
     const card = keeper ? keeperCard(season, best.keeper) : fieldCard(season, best.field);
-    const rows = season.rows.map((r) => `<tr class="row-link${r.mvp ? ' mvp-row' : ''}" data-player-match="${r.id}"><td>${r.mvp ? crownSvg('crown-face') : ''}<button class="row-btn press" type="button" data-player-match="${r.id}">${esc(shortDateText(r.date))}</button></td><td title="${esc(r.them)}">${esc(r.them)}</td><td class="${resultClass(r)}">${r.scoreUs}–${r.scoreThem}</td>${card.cells(r)}</tr>`).join('');
+    const rows = season.rows.map((r) => `<tr class="row-link${r.mvp ? ' mvp-row' : ''}" data-player-match="${r.id}"><td>${r.mvp ? crownSvg('crown-face') : ''}<button class="row-btn press" type="button" data-player-match="${r.id}">${esc(shortDateText(r.date))}</button></td><td>${esc(r.them)}</td><td class="${resultClass(r)}">${r.scoreUs}–${r.scoreThem}</td>${card.cells(r)}</tr>`).join('');
     const mvp = season.mvps ? `<div class="mvp-tile">${crownSvg()}<b>${season.mvps}</b> <span>MVP del partido · ${season.mvps} de ${season.rows.length} partidos</span></div>` : '';
     const body = `<div class="sentences">${card.sentences.map((x) => `<p>${x}</p>`).join('')}</div>
       <div class="tiles"><div class="tile ${card.lead.cls}"><b>${card.lead.figure}</b><span>${card.lead.label}${card.lead.leads ? ' · el mejor del equipo' : ''}</span></div>
@@ -5785,7 +5786,7 @@ span.att-foot { visibility: hidden; }
     return `<div class="player-grid"><div class="player-col">${posterHtml(player, season.mvps, body)}</div>
       <div class="player-col"><section class="sheet-card zone-map"><h3>${card.titles.map}</h3>${zoneMapSvg(card.list, card.success, card.colours, card.counts)}
           <div class="rate-tiles">${card.tiles.map(([label, rate]) => rateTileHtml(label, rate)).join('')}</div></section>
-        <section class="sheet-card"><h3>Partidos</h3><div class="table-wrap"><table class="match-table"><thead><tr>${card.heads.map((h) => `<th>${h}</th>`).join('')}</tr></thead><tbody>${rows}</tbody></table></div></section>
+        <section class="sheet-card"><h3>Partidos</h3><div class="table-wrap"><table class="match-table"><thead><tr>${card.heads.map((h) => `<th>${Array.isArray(h) ? `<abbr title="${h[1]}">${h[0]}</abbr>` : h}</th>`).join('')}</tr></thead><tbody>${rows}</tbody></table></div></section>
         <section class="sheet-card evolution"><h3>Evolución</h3>${evolutionSvg(season.rows.slice().reverse(), card.barKey, card.barRate)}</section></div>
       <div class="player-col"><section class="sheet-card radar"><h3>${card.titles.radar}</h3>${card.radar}</section>
         <section class="sheet-card goal-chart"><h3>${card.titles.grid}</h3>${goalRateSvg(card.list, card.success)}</section></div></div>`;

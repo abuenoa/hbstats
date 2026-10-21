@@ -1260,7 +1260,7 @@
         ['3 paradas de 5 a puerta', '1 de 2 penaltis parados', '2 goles encajados', '1 partido jugado'].forEach((s) => { if (!text.includes(s)) throw new Error('missing «' + s + '»: ' + text.slice(0, 400)); });
         if (!document.querySelector('.tile.lead-keeper') || !document.querySelector('.radar').textContent.includes('60%') || !document.querySelector('.radar').textContent.includes('Cerca')) throw new Error('keeper radar');
         const heads = [...document.querySelectorAll('.match-table th')].map((th) => th.textContent).join();
-        if (!heads.includes('Paradas') || !heads.includes('7 m') || heads.includes('Pérd.')) throw new Error(heads);
+        if (!heads.includes('Par') || !heads.includes('7 m') || heads.includes('Pérd.')) throw new Error(heads);
         if (document.querySelectorAll('.rate-tile').length !== 2) throw new Error('7 m and counter tiles');
       } finally { Object.assign(home, keep); }
     });
@@ -1293,6 +1293,13 @@
         openCard('ca', matches); overflow('field card');
         const fieldWrap = document.querySelector('.match-table').parentElement;
         if (fieldWrap.scrollWidth > fieldWrap.clientWidth) throw new Error(`field table scrolls sideways by ${fieldWrap.scrollWidth - fieldWrap.clientWidth}px`);
+        const rivals = [...document.querySelectorAll('.match-table tbody td:nth-child(2)')];
+        ['Atlético Bormujos', 'BM Dos Hermanas', 'Un rival con un nombre largo'].forEach((name) => {
+          const cell = rivals.find((c) => c.textContent === name);
+          if (!cell || cell.scrollWidth > cell.clientWidth || cell.scrollHeight > cell.clientHeight || getComputedStyle(cell).textOverflow !== 'clip') throw new Error('rival cut: ' + name);
+          const range = document.createRange(); range.selectNodeContents(cell);
+          if (new Set([...range.getClientRects()].map((r) => Math.round(r.top))).size > 2) throw new Error('rival over two lines: ' + name);
+        });
         showHomeView('team'); overflow('team page');
         openCard('cg', matches); overflow('goalkeeper card');
         const wrap = document.querySelector('.match-table').parentElement;
@@ -1309,13 +1316,13 @@
         openCard('ca', [logged, cardMatch({ id: 'cm9' })]);
         const cells = [...document.querySelectorAll('.match-table tbody tr')].map((tr) => [...tr.children].map((c) => c.textContent));
         const heads = [...document.querySelectorAll('.match-table th')].map((c) => c.textContent);
-        if (heads.join() !== 'Fecha,Rival,Res.,Min,Goles,%,Pases,Pérd.,+/−') throw new Error(heads.join());
+        if (heads.join() !== 'Fecha,Rival,Res.,Min,Gol,%,Pas,Pér,+/−') throw new Error(heads.join());
         const logRow = cells.find((r) => r[3] === '47'), oldRow = cells.find((r) => r[3] === '–');
         if (!logRow || logRow.at(-1) !== plusMinusText(balance) || !oldRow || oldRow.at(-1) !== '–') throw new Error(JSON.stringify(cells));
         const wrap = document.querySelector('.match-table').parentElement;
         if (wrap.scrollWidth > wrap.clientWidth) throw new Error(`field table scrolls sideways by ${wrap.scrollWidth - wrap.clientWidth}px`);
         openCard('cg', [logged]);
-        if ([...document.querySelectorAll('.match-table th')].map((c) => c.textContent).join() !== 'Fecha,Rival,Res.,Min,Paradas,%,7 m,Goles' || !document.querySelector('.match-table tbody td:nth-child(4)').textContent.includes('47')) throw new Error('keeper table');
+        if ([...document.querySelectorAll('.match-table th')].map((c) => c.textContent).join() !== 'Fecha,Rival,Res.,Min,Par,%,7 m,Gol' || !document.querySelector('.match-table tbody td:nth-child(4)').textContent.includes('47')) throw new Error('keeper table');
         if (/NaN|undefined/.test($('home').textContent)) throw new Error('NaN or undefined');
         const old = playerMatchRow(seasonRow('old', { events: [seasonShot('sp2', 'GOL')] }), seasonPlayers[1]);
         if (old.seconds !== null || old.plusMinus !== null || playerSeason([seasonRow('old')], seasonPlayers[1]).totals.seconds !== 0) throw new Error('a match without a log must stay unknown');
