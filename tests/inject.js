@@ -1055,14 +1055,16 @@
     const snap = snapshot();
     try { Object.assign(state, over); Object.assign(ui, { sheetMode: 'sheet', sheetTab: 'summary' }); renderSheet(); $('sheet').hidden = false; fn(); } finally { restore(snap); ui.sheetTab = 'summary'; }
   };
+  // Tile labels keep «6 m», «9 m+» and «2'» together with non-breaking spaces; compare them as plain spaces.
+  const labelText = (t) => t.querySelector('span').textContent.replace(/\u00a0/g, ' ');
   const statTiles = (root = $('sheet')) => [...root.querySelectorAll('.stat-tile')];
-  const tileValue = (tiles, label) => tiles.find((t) => t.querySelector('span').textContent === label).querySelector('strong').textContent;
+  const tileValue = (tiles, label) => tiles.find((t) => labelText(t) === label).querySelector('strong').textContent;
   const nameOf = (id) => state.players.find((p) => p.id === id).name;
   T('sheet: Resumen is the first tab and shows the seven KPIs', onSummary(sampleState(), () => {
     if (Object.keys(SHEET_TABS)[0] !== 'summary' || SHEET_TABS.summary !== 'Resumen' || SHEET_TABS.stats !== 'Tablas') throw new Error(JSON.stringify(SHEET_TABS));
     const first = document.querySelector('#sheet .tabs button');
     if (first.textContent !== 'Resumen' || first.getAttribute('aria-pressed') !== 'true') throw new Error('first tab');
-    const labels = statTiles().map((t) => t.querySelector('span').textContent);
+    const labels = statTiles().map((t) => labelText(t));
     if (labels.join('|') !== SUMMARY_KPI_LABELS.join('|')) throw new Error(labels.join('|'));
     if ($('sheet').querySelectorAll('.zone-map svg').length !== 2 || $('sheet').querySelectorAll('.goal-chart svg').length !== 2) throw new Error('maps and goal grids');
     const strip = [...$('sheet').querySelectorAll('[data-pdf-pick]')];
@@ -1123,7 +1125,7 @@
     try {
       state.events = [dShot('SHOT', '6M', 'GOL', 1)]; state.history = []; openHalftime();
       const tiles = [...$('final').querySelectorAll('.kpi-tile')];
-      const far = tiles.find((t) => t.querySelector('span').textContent === '% tiro 9 m+');
+      const far = tiles.find((t) => labelText(t) === '% tiro 9 m+');
       if (far.querySelector('.us strong').textContent !== '–' || far.querySelector('.us small').textContent.includes('NaN') || $('final').textContent.includes('NaN')) throw new Error(far.textContent);
     } finally { restore(snap); }
   });
@@ -1135,7 +1137,7 @@
       [openHalftime, openFinal].forEach((open) => {
         open();
         const tiles = [...$('final').querySelectorAll('.kpi-tile')];
-        if (tiles.map((t) => t.querySelector('span').textContent).join('|') !== labels.join('|')) throw new Error(tiles.map((t) => t.querySelector('span').textContent).join('|'));
+        if (tiles.map((t) => labelText(t)).join('|') !== labels.join('|')) throw new Error(tiles.map((t) => labelText(t)).join('|'));
         const near = tiles[1], saves = tiles[4];
         if (near.querySelector('.us strong').textContent !== '67%' || !near.querySelector('.us small').textContent.endsWith('2/3') || !near.querySelector('.them small').textContent.endsWith('1/4')) throw new Error(near.textContent);
         if (saves.querySelector('.us strong').textContent !== '67%' || !saves.querySelector('.us small').textContent.endsWith('2/3') || !saves.querySelector('.them small').textContent.endsWith('1/3')) throw new Error(saves.textContent);
