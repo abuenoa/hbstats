@@ -1385,10 +1385,10 @@ span.att-foot { visibility: hidden; }
   // The same rules for both teams: ours by player, the rival's by dorsal (a rival card may have no dorsal).
   const DISQUALIFYING_CARDS = ['D', 'AZ'];
   const SANCTION_TARGETS = { SANCTION: (e) => e.playerId, RIVAL_SANCTION: (e) => e.rivalId || null };
-  function sendOffsOf(kind) {
+  function sendOffsOf(kind, events = state.events) {
     const who = SANCTION_TARGETS[kind];
     const twos = {}, out = new Map();
-    state.events.forEach((e) => {
+    events.forEach((e) => {
       const id = e.kind === kind && who(e);
       if (!id || out.has(id)) return;
       if (e.card === '2M') {
@@ -1399,10 +1399,10 @@ span.att-foot { visibility: hidden; }
     return out;
   }
   // Every 2', plus the red or blue card that sends a player off (a later card to the same player adds no time).
-  function exclusionsOf(kind) {
+  function exclusionsOf(kind, events = state.events) {
     const who = SANCTION_TARGETS[kind];
-    const out = sendOffsOf(kind);
-    return state.events.filter((e) => e.kind === kind && (e.card === '2M' || (DISQUALIFYING_CARDS.includes(e.card) && (!who(e) || out.get(who(e)) === e))));
+    const out = sendOffsOf(kind, events);
+    return events.filter((e) => e.kind === kind && (e.card === '2M' || (DISQUALIFYING_CARDS.includes(e.card) && (!who(e) || out.get(who(e)) === e))));
   }
   const disqualifications = () => sendOffsOf('SANCTION');
   const isDisqualified = (id) => disqualifications().has(id);
@@ -1410,9 +1410,9 @@ span.att-foot { visibility: hidden; }
   const rivalDisqualifications = () => sendOffsOf('RIVAL_SANCTION');
   const rivalExclusionEvents = () => exclusionsOf('RIVAL_SANCTION');
   // A 2' can be ended early (logged late, or the player is already back): an EXCLUSION_END event cuts its window.
-  const earlyEndOf = (e) => state.events.find((x) => x.kind === 'EXCLUSION_END' && x.sanctionId === e.id) || null;
-  function exclusionEnd(e) {
-    const early = earlyEndOf(e);
+  const earlyEndOf = (e, events = state.events) => events.find((x) => x.kind === 'EXCLUSION_END' && x.sanctionId === e.id) || null;
+  function exclusionEnd(e, events = state.events) {
+    const early = earlyEndOf(e, events);
     return Math.min(early ? early.abs : Infinity, e.abs + CONFIG.exclusionSeconds);
   }
   function runningExclusions(events) {
