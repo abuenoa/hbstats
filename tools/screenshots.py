@@ -109,6 +109,8 @@ MATRIX_SCENES = {
     "player-match": f"showPlayer((await seedSeason()).get('{TOP_SCORER_SAMPLE_ID}')); showPlayerMatch(home.season[0].id);",
     "keeper-match": "await seedSeason(); showPlayer(home.roster.find((p) => p.pos === 'POR').id); showPlayerMatch(home.season[0].id);",
     "matches": "await seedSeason(); await showMatches();",
+    "stats": "await seedSeason(); await showStats();",
+    "stats-empty": "await seedSeason(); home.season = []; showHomeView('stats');",
     "team-edit": "await seedSeason(); showHomeView('team-edit');",
     "profile": "await seedSeason(); await showProfile();",
     "attendance": "await seedSeason(); await showAttendance();",

@@ -809,7 +809,7 @@
   const rateMatch = (events, over) => ({ players: [], events, gkId: 'g', courtSets: [['a', 'b', 'g']], ...over });
   const rShot = (playerId, zone, result, i) => ({ id: 's' + playerId + zone + result + i, abs: i, kind: 'SHOT', playerId, zone, result });
   const rShots = (playerId, zone, goals, misses) => [...Array(goals).keys()].map((i) => rShot(playerId, zone, 'GOL', i))
-    .concat([...Array(misses).keys()].map((i) => rShot(playerId, zone, 'FUERA', 100 + i)));
+    .concat([...Array(misses).keys()].map((i) => rShot(playerId, zone, 'FALLO', 100 + i)));
   const rAct = (playerId, action, i = 0) => ({ id: 'a' + playerId + action + i, abs: i, kind: 'ACTION', playerId, action });
   const rMany = (n, make) => [...Array(n).keys()].map(make);
   const rTurnover = (playerId, subtype, i = 0) => ({ id: 't' + playerId + subtype + i, abs: i, kind: 'TURNOVER', playerId, subtype });
@@ -1914,7 +1914,7 @@
       if (afterOurTurnover(goal, [atkLoss(40), atkRecovery(45), goal])) throw new Error('a recovery ended the possession in between');
       if (afterOurTurnover(goal, [atkLoss(40), atkRival(45, 'PARADA'), goal])) throw new Error('the rival shot before');
       if (afterOurTurnover(goal, [goal])) throw new Error('first event of the match');
-      const rows = attackTypeRows([atkLoss(10), atkRival(20), atkRival(30, 'FALLO')], 'them');
+      const rows = attackTypeRows([atkLoss(10), atkRival(20), atkRival(30, 'FUERA')], 'them');
       if (rows.map((r) => r.type).join() !== 'POS,CONTRA,SAQUE' || rows[0].shots !== 2 || rows[0].goals !== 1 || rows[0].pct !== 50 || rows[1].pct !== null) throw new Error(JSON.stringify(rows));
     });
     T('attack types: works on the sample and an old match without new fields', () => {
@@ -1926,6 +1926,92 @@
       const old = sample.map(({ contra, origin, ...rest }) => rest);
       if (sumOf(attackTypeRows(old, 'us'), (r) => r.shots) !== ourShots(sample).length || attackTypeRows([], 'us').some((r) => r.shots !== 0 || r.pct !== null)) throw new Error('old match');
       if (afterOurTurnover(rivalShots(old)[0], old) !== false || attackTypeRows(old, 'them').length !== 3) throw new Error('old match, rival');
+    });
+    // ---- «Estadísticas»: the season dashboards of the team ----
+    const statsPlayers = [...seasonPlayers, { id: 'sp3', num: 3, name: 'Back', pos: 'LAT' }];
+    const statsMatchA = () => seasonRow('st-a', { date: '2026-10-01', players: statsPlayers, events: [atkLoss(10), atkRival(20, 'GOL'), atkShot(30, 'GOL'), atkRival(40, 'PARADA'), atkShot(50, 'FUERA', { zone: '6M' })] });
+    const statsMatchB = () => seasonRow('st-b', { date: '2026-10-08', players: statsPlayers, events: [atkShot(10, 'FUERA'), atkRival(20, 'GOL'), atkLoss(30), atkRival(31, 'GOL', { gkId: 'other' }), { ...atkLoss(60), playerId: 'sp3', subtype: 'Pasos' }] });
+    const withStatsPage = async (matches, fn) => {
+      const keep = { season: home.season, roster: home.roster, statsSort: home.statsSort };
+      try { home.season = matches; home.roster = statsPlayers; showHomeView('team'); await fn(); }
+      finally { Object.assign(home, keep); showHomeView('team'); }
+    };
+    await TA('stats: tab opens the dashboard', async () => {
+      await withStatsPage([statsMatchA(), statsMatchB()], async () => {
+        const tab = document.querySelector('[data-home-view="stats"]');
+        if (!tab || tab.textContent !== 'Estadísticas' || tab.getAttribute('aria-pressed') !== 'false') throw new Error('tab');
+        tab.click(); await tick0();
+        if (home.view !== 'stats' || document.querySelector('[data-home-view="stats"]').getAttribute('aria-pressed') !== 'true') throw new Error('view ' + home.view);
+        const titles = [...document.querySelectorAll('.stats-page > section > h3')].map((h) => h.textContent).join('|');
+        if (titles !== 'Tendencia|Tiro|Tipos de ataque|Goles tras pérdida|Portería|Pérdidas por jugador|Jugadores') throw new Error(titles);
+        if (/NaN|undefined/.test($('home').textContent) || !document.querySelector('.stats-page svg')) throw new Error('content');
+      });
+    });
+    T('stats: per-match rows add up to the season totals of teamSeason', () => {
+      const matches = [statsMatchA(), statsMatchB()], rows = matches.map(teamMatchRow), t = teamSeason(matches);
+      const total = (pick) => sumOf(rows, pick);
+      if (rows[0].id !== 'st-a' || rows[0].date !== '2026-10-01' || rows[0].them !== 'Rival' || rows[0].result !== matchResult(matches[0])) throw new Error(JSON.stringify(rows[0]).slice(0, 200));
+      if (total((r) => r.scoreUs) !== t.goalsFor || total((r) => r.scoreThem) !== t.goalsAgainst || total((r) => r.shots) !== t.shots || total((r) => r.goals) !== t.shotGoals) throw new Error('goals and shots');
+      if (total((r) => r.turnovers) !== t.turnovers || total((r) => r.recoveries) !== t.recoveries || total((r) => r.saves) !== t.saves || total((r) => r.onTarget) !== t.onTarget) throw new Error('turnovers and saves');
+      if (total((r) => sumOf(r.keepers, (k) => k.saves)) !== t.saves || total((r) => sumOf(r.keepers, (k) => k.onTarget)) !== t.onTarget) throw new Error('keepers');
+      if (total((r) => sumOf(r.attack, (a) => a.shots)) !== t.shots || total((r) => sumOf(r.against, (a) => a.shots)) !== 4) throw new Error('attack types');
+      if (rows.map((r) => r.afterTurnoverGoals).join() !== '1,1') throw new Error('after turnovers ' + rows.map((r) => r.afterTurnoverGoals));
+      if (rows[1].keepers.map((k) => k.id).join() !== 'sp1,other') throw new Error('keepers of B');
+    });
+    T('stats: turnovers belong to the player who lost the ball', () => {
+      const loss = (playerId, subtype) => ({ ...atkLoss(5), playerId, subtype });
+      const match = seasonRow('st-t', { players: statsPlayers, events: [loss('sp2', 'Pasos'), loss('sp2', 'Pasos'), loss('sp2', 'Pase'), loss('sp3', 'Bote'), loss('gone', 'Pase'), atkRecovery(9)] });
+      const rows = turnoversByPlayer([match, statsMatchB()], statsPlayers);
+      if (rows.map((r) => r.player.id).join() !== 'sp2,sp3') throw new Error(rows.map((r) => r.player.id + ':' + r.total).join());
+      if (rows[0].total !== 4 || rows[0].byType.Pasos !== 2 || rows[0].byType.Pase !== 2 || rows[1].total !== 2 || rows[1].byType.Bote !== 1 || rows[1].byType.Pasos !== 1) throw new Error(JSON.stringify(rows.map((r) => [r.player.id, r.total, r.byType])));
+      if (turnoversByPlayer([], statsPlayers).length) throw new Error('empty season');
+    });
+    await TA('stats: player table shows – for unknown minutes and plus-minus', async () => {
+      const old = statsMatchA();
+      const logged = seasonRow('st-c', { players: statsPlayers, clock: HALF_CLOCK, courtSets: [['sp2', 'sp1']], court: [{ abs: 0, set: 0 }], events: [{ ...atkShot(10, 'GOL'), on: 0 }, atkRival(20, 'GOL')] });
+      const unknown = seasonPlayerTable([old], statsPlayers), wing = unknown.find((r) => r.player.id === 'sp2');
+      if (wing.seconds !== null || wing.plusMinus !== null || wing.played !== 1 || wing.rating == null) throw new Error(JSON.stringify(wing));
+      const known = seasonPlayerTable([old, logged], statsPlayers).find((r) => r.player.id === 'sp2');
+      if (known.seconds !== courtFiguresOf(logged.state, 'sp2').seconds || !(known.seconds > 0) || known.played !== 2) throw new Error(JSON.stringify(known));
+      if (seasonPlayerTable([old], statsPlayers).some((r) => r.played === 0) || seasonPlayerTable([], statsPlayers).length) throw new Error('players who did not play');
+      await withStatsPage([old], async () => {
+        showHomeView('stats');
+        const cells = (col) => [...document.querySelectorAll(`.stats-players [data-col="${col}"]`)].map((c) => c.textContent);
+        if (!cells('seconds').length || cells('seconds').some((x) => x !== '–') || cells('plusMinus').some((x) => x !== '–')) throw new Error(cells('seconds') + ' / ' + cells('plusMinus'));
+      });
+    });
+    await TA('stats: player table sorts by the clicked column', async () => {
+      const goals = (n) => Array.from({ length: n }, (_, i) => atkShot(10 + i, 'GOL'));
+      const match = seasonRow('st-s', { players: statsPlayers, events: [...goals(1), ...goals(3).map((e) => ({ ...e, playerId: 'sp3' }))] });
+      await withStatsPage([match], async () => {
+        showHomeView('stats');
+        const order = () => [...document.querySelectorAll('.stats-players tbody tr')].map((r) => r.dataset.playerRow).join();
+        document.querySelector('[data-sort="goals"]').click();
+        if (home.statsSort.key !== 'goals' || order() !== 'sp3,sp2,sp1') throw new Error('descending ' + order());
+        document.querySelector('[data-sort="goals"]').click();
+        if (order() !== 'sp1,sp2,sp3') throw new Error('ascending ' + order());
+      });
+    });
+    await TA('stats: no matches shows the empty text and no NaN', async () => {
+      await withStatsPage([], async () => {
+        showHomeView('stats');
+        const text = $('home').textContent;
+        if (!text.includes('Sin partidos todavía') || /NaN|undefined|Infinity/.test($('home').innerHTML) || document.querySelector('.stats-page svg')) throw new Error(text.slice(0, 200));
+      });
+      await withStatsPage([seasonRow('st-z', { players: statsPlayers })], async () => {
+        showHomeView('stats');
+        if (/NaN|undefined|Infinity/.test($('home').innerHTML)) throw new Error('a match without events');
+      });
+    });
+    T('stats: evolutionSvg output unchanged through trendSvg', () => {
+      const rows = [{ date: '2026-10-01', goals: 2, made: 0.5 }, { date: '2026-10-08', goals: 5, made: NaN }, { date: '2026-10-15', goals: 3, made: 0.25 }];
+      const bar = (x, y, h, n, date) => `<rect class="evo-bar" x="${x}" y="${y}" width="40" height="${h}" rx="4" fill="var(--act-def)" fill-opacity="0.45"/><text class="chart-num" x="${x + 20}" y="${y - 6}" font-size="16" text-anchor="middle">${n}</text><text class="chart-cap" x="${x + 20}" y="210" font-size="11" text-anchor="middle">${shortDateText(date)}</text>`;
+      const want = '<svg viewBox="0 0 360 220" role="img"><line x1="24" y1="186" x2="336" y2="186" stroke="var(--line)" stroke-width="2"/>'
+        + bar(56, 122.8, 63.2, 2, '2026-10-01') + bar(160, 28, 158, 5, '2026-10-08') + bar(264, 91.2, 94.8, 3, '2026-10-15')
+        + '\n      <polyline points="76,107 284,146.5" fill="none" stroke="var(--gold)" stroke-width="3" stroke-linejoin="round" stroke-linecap="round"/><circle class="evo-dot" cx="76" cy="107" r="5" fill="var(--gold)" stroke="var(--surface)" stroke-width="2"/><circle class="evo-dot" cx="284" cy="146.5" r="5" fill="var(--gold)" stroke="var(--surface)" stroke-width="2"/></svg>';
+      if (evolutionSvg(rows, 'goals', (r) => r.made) !== want) throw new Error(evolutionSvg(rows, 'goals', (r) => r.made));
+      const lines = trendSvg(rows, [{ key: 'goals', label: 'Goles', token: 'act-def' }, { key: 'made', label: 'Tiro', token: 'gold', rate: true }], 'line');
+      if (countOf(lines, /<polyline/g) !== 2 || /NaN|undefined/.test(lines) || trendSvg([], [{ key: 'goals', label: 'Goles', token: 'act-def' }], 'line') !== '') throw new Error('line chart');
     });
     await TA('a roster file with card names and photos stores them', async () => { const a = home.roster.find((p) => p.pos === 'POR'); const file = new File([JSON.stringify({ format: ROSTER_FORMAT, players: [{ num: a.num, name: 'Ana', pos: 'POR', fullName: 'Ana Ruiz', photo: TINY_PNG }, { num: 31, name: 'Eva', pos: 'EXT', fullName: 'Eva Gil Mora', photo: TINY_PNG }] })], 'p.json', { type: 'application/json' }); await importTeamRoster(file); const list = await backend.listPlayers(team.id); const ana = list.find((p) => p.id === a.id), eva = list.find((p) => p.num === 31); if (!ana || ana.fullName !== 'Ana Ruiz' || ana.photo !== TINY_PNG || !eva || eva.fullName !== 'Eva Gil Mora' || eva.photo !== TINY_PNG) throw new Error('not stored'); await retireTeamPlayer(rosterPlayer(eva.id)); });
     await TA('the full name and photo are saved and survive a roster file', async () => { const a = home.roster.find((p) => p.pos === 'POR'); await saveTeamPlayer(a, { fullName: 'Ana Ruiz Gómez', photo: TINY_PNG }); const file = new File([JSON.stringify({ format: ROSTER_FORMAT, players: [{ num: a.num, name: 'Ana', pos: 'POR' }] })], 'p.json', { type: 'application/json' }); await importTeamRoster(file); const stored = (await backend.listPlayers(team.id)).find((p) => p.id === a.id); if (!stored || stored.name !== 'Ana' || stored.fullName !== 'Ana Ruiz Gómez' || stored.photo !== TINY_PNG) throw new Error(JSON.stringify(stored && { ...stored, photo: Boolean(stored.photo) })); });

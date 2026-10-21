@@ -980,6 +980,44 @@ span.att-foot { visibility: hidden; }
 @media (max-width: 1100px) { .player-grid { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); } .player-grid > :last-child { grid-column: 1 / -1; } }
 @media (max-width: 700px) { .match-grid { grid-template-columns: minmax(0, 1fr); } }
 @media (max-width: 700px) { .player-grid, .player-fields { grid-template-columns: minmax(0, 1fr); } }
+/* ---------- «Estadísticas»: the season dashboards ---------- */
+.stats-page { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--space-4); align-items: start; }
+.stats-page .wide { grid-column: 1 / -1; }
+.stats-page .stat-tiles, .stats-page .stat-tiles:last-child { grid-template-columns: repeat(auto-fit, minmax(7.5rem, 1fr)); margin-bottom: var(--space-3); }
+.stats-page .stat-tile:last-child:nth-child(4n+3) { grid-column: auto; }
+.stats-page figure { margin: 0; }
+.stats-page .trend svg, .stats-page .zone-map svg { display: block; width: 100%; height: auto; }
+.stats-page .trend svg { max-height: 15rem; }
+.chart-title { margin: var(--space-3) 0 var(--space-1); font: var(--type-caption); font-weight: 700; color: var(--muted); }
+.sheet-card .chart-legend { display: flex; flex-wrap: wrap; gap: var(--space-1) var(--space-4); margin-bottom: var(--space-2); }
+.sheet-card .chart-legend li { display: flex; justify-content: flex-start; align-items: center; gap: var(--space-2); }
+.chart-legend i { width: var(--space-3); height: var(--space-3); border-radius: var(--radius-full); flex: none; }
+.split-pair { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--space-4); margin-bottom: var(--space-3); }
+.share-list { display: grid; gap: var(--space-3); align-content: start; }
+.share-list h4 { margin: 0; font: var(--type-heading); }
+.share-row { display: grid; gap: var(--space-1); }
+.share-label { display: flex; justify-content: space-between; gap: var(--space-2); font: var(--type-caption); }
+.share-label b { font-weight: 700; }
+.share-row small { font: var(--type-caption); color: var(--muted); }
+.share-bar { display: block; height: var(--space-3); border-radius: var(--radius-full); background: var(--soft); overflow: hidden; }
+.share-bar i { display: block; height: 100%; width: var(--share); background: var(--bar); border-radius: var(--radius-full); }
+.loss-list { display: grid; gap: var(--space-2); }
+.loss-row { display: grid; grid-template-columns: auto minmax(4rem, 8rem) minmax(0, 1fr) 2.5ch; align-items: center; gap: var(--space-2); font: var(--type-caption); }
+.loss-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.loss-bar { display: flex; height: var(--space-3); border-radius: var(--radius-full); background: var(--soft); overflow: hidden; }
+.loss-bar i { display: block; height: 100%; }
+.loss-row b { text-align: right; font-variant-numeric: tabular-nums; }
+.stats-details summary { min-height: var(--target); display: flex; align-items: center; gap: var(--space-2); font: var(--type-caption); font-weight: 700; cursor: pointer; }
+.stats-details summary::after { content: "▾"; }
+.stats-details[open] summary::after { content: "▴"; }
+.stats-players th, .stats-players td { padding-inline: var(--space-2); }
+.stats-players th .sort-btn { min-height: var(--target); min-width: var(--target); padding: 0 var(--space-1); border: 0; background: none; color: inherit; font: inherit; letter-spacing: inherit; text-transform: inherit; }
+.stats-players th[aria-sort="ascending"] .sort-btn::after { content: " ▲"; }
+.stats-players th[aria-sort="descending"] .sort-btn::after { content: " ▼"; }
+.stats-page th.who, .stats-page td.who { text-align: left; }
+.who-cell { display: inline-flex; align-items: center; gap: var(--space-2); }
+.who-cell .disc { flex: none; }
+@media (max-width: 700px) { .stats-page, .split-pair { grid-template-columns: minmax(0, 1fr); } }
 @media (max-width: 1100px) { .team-page { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); } .squad { grid-column: 1 / -1; } }
 @media (max-width: 900px) { .calendar-card .cal-row { grid-template-columns: 40px minmax(0, 1fr) auto; } .cal-date { grid-column: 2; } .cal-who { grid-column: 1 / -1; } }
 @media (max-width: 700px) { .team-page { grid-template-columns: minmax(0, 1fr); } }
@@ -1132,6 +1170,7 @@ span.att-foot { visibility: hidden; }
     // A leaderboard needs this many shots before a player is ranked on shooting accuracy, and this many rated matches on rating.
     leaders: { minShots: 3, minRated: 2 },
     attackTypes: { quickRestartSeconds: 15 },
+    stats: { minTrendMatches: 4 },
     // Player photos are kept as small square JPEGs this wide.
     photoSizePx: 128,
     // Who usually shoots from a spot (m): wings wide and close to the goal line, pivots close and central, centre backs central.
@@ -4943,7 +4982,7 @@ span.att-foot { visibility: hidden; }
   let currentMatchId = null;
   let syncTimer = null;
   let attendanceSyncTimer = null;
-  const home = { view: 'loading', user: null, teams: [], roster: [], matches: [], season: null, templates: [], template: null, squad: new Set(), leaderMetric: 'goals', playerId: null, playerMatchId: null, playerEdit: false, playerDraft: null, offline: false, error: '', draft: null, crestDraft: undefined, armed: null, passwordChange: false, seasonOffline: false, sessions: null, fixtures: null, teamMatches: [], fixtureEdit: null, squadFixture: null, attendanceDate: null, attendanceKind: null, attendanceNoteFor: null, stateMatches: [] };
+  const home = { view: 'loading', user: null, teams: [], roster: [], matches: [], season: null, templates: [], template: null, squad: new Set(), leaderMetric: 'goals', playerId: null, playerMatchId: null, playerEdit: false, playerDraft: null, offline: false, error: '', draft: null, crestDraft: undefined, armed: null, passwordChange: false, seasonOffline: false, sessions: null, fixtures: null, teamMatches: [], fixtureEdit: null, squadFixture: null, attendanceDate: null, attendanceKind: null, attendanceNoteFor: null, stateMatches: [], statsSort: null };
 
   // ---- Device storage ----
   function readJson(key) {
@@ -5504,7 +5543,7 @@ span.att-foot { visibility: hidden; }
       <button class="btn press" type="button" data-home-view="profile">‹ Perfil</button>
       <img class="crest home-crest" src="${esc(crestSrc(team))}" alt="">
       <div class="home-title"><h1>${esc(team.name)}</h1><small>${esc(team.club)}</small></div>
-      <div class="tabs" role="group" aria-label="Secciones">${tab('team', 'Equipo')}${tab('matches', 'Partidos')}</div>
+      <div class="tabs" role="group" aria-label="Secciones">${tab('team', 'Equipo')}${tab('matches', 'Partidos')}${tab('stats', 'Estadísticas')}</div>
       ${home.view === 'team' ? '<button class="btn go press" type="button" data-new-match>+ Nuevo partido</button>' : ''}
     </header>`;
   }
@@ -5605,7 +5644,7 @@ span.att-foot { visibility: hidden; }
         ${problem ? `<span class="note">${problem}</span>` : ''}</div>
       <div class="squad-grid">${home.roster.slice().sort(byPosition).map(chip).join('')}</div>`;
   }
-  const HOME_VIEWS = { team: teamPageHtml, player: playerPageHtml, 'player-match': playerMatchHtml, 'team-edit': teamEditHtml, matches: matchesHtml, squad: squadHtml, attendance: attendanceHtml };
+  const HOME_VIEWS = { team: teamPageHtml, player: playerPageHtml, 'player-match': playerMatchHtml, 'team-edit': teamEditHtml, matches: matchesHtml, stats: teamStatsHtml, squad: squadHtml, attendance: attendanceHtml };
 
   // ---- Profile: the first screen after signing in (teams, rival templates, account) ----
   const profileHeadHtml = () => `<header class="home-head glass"><span class="app-mark" aria-hidden="true">HB</span>
@@ -6186,26 +6225,50 @@ span.att-foot { visibility: hidden; }
 
   const EVO = {
     minW: 360, pad: 24, slotW: 56, barMaxW: 40, barShare: 0.6, h: 220, top: 28, bottom: 34, dotR: 5, barCorner: 4, barOpacity: 0.45,
-    valueSize: 16, valueLift: 6, dateSize: 11, dateDrop: 10, axisWidth: 2, lineWidth: 3, dotRing: 2
+    valueSize: 16, valueLift: 6, dateSize: 11, dateDrop: 10, axisWidth: 2, lineWidth: 3, dotRing: 2, pointSize: 13, pointLift: 12, pointDrop: 20, rateStep: 0.2
   };
-  // One bar per match (oldest left) for barKey, and a line over them for pct(row) in 0-1; '' when there are no matches.
-  function evolutionSvg(rows, barKey, pct) {
+  const seriesValue = (series, row) => (typeof series.key === 'function' ? series.key(row) : row[series.key]);
+  const seriesColour = (series) => `var(--${series.token})`;
+  // One slot per match (oldest left). kind 'bars': each series without `rate` is a bar (grouped, scaled to the tallest) and each
+  // `rate` series a line over them on 0-1. kind 'line': every series is a line, each point labelled; a `rate` series is in 0-1,
+  // the others share the tallest value. A series key is a row field or a function of the row; '' when there are no matches.
+  function trendSvg(rows, series, kind) {
     if (!rows.length) return '';
     const width = Math.max(EVO.minW, rows.length * EVO.slotW + 2 * EVO.pad), slot = (width - 2 * EVO.pad) / rows.length;
-    const base = EVO.h - EVO.bottom, plotH = base - EVO.top, peak = Math.max(...rows.map((r) => r[barKey])) || 1;
-    const barW = Math.min(EVO.barMaxW, slot * EVO.barShare);
+    const base = EVO.h - EVO.bottom, plotH = base - EVO.top;
+    const bars = kind === 'bars' ? series.filter((x) => !x.rate) : [], lines = series.filter((x) => kind === 'line' || x.rate);
+    const peakOf = (list) => Math.max(0, ...rows.flatMap((r) => list.map((x) => seriesValue(x, r))).filter(Number.isFinite)) || 1;
+    const barPeak = peakOf(bars), linePeak = peakOf(lines.filter((x) => !x.rate));
+    // A rate over the bars is always on 0-1; in a line chart the top is the highest rate rounded up to the next step.
+    const ratePeak = kind === 'line' ? Math.min(1, Math.ceil(peakOf(lines.filter((x) => x.rate)) / EVO.rateStep) * EVO.rateStep) : 1;
+    const barW = Math.min(EVO.barMaxW, (slot * EVO.barShare) / (bars.length || 1));
     const centre = (i) => svgNum(EVO.pad + slot * (i + 0.5));
-    const bars = rows.map((r, i) => {
-      const barH = svgNum((r[barKey] / peak) * plotH);
-      return `<rect class="evo-bar" x="${svgNum(centre(i) - barW / 2)}" y="${svgNum(base - barH)}" width="${svgNum(barW)}" height="${barH}" rx="${EVO.barCorner}" fill="var(--act-def)" fill-opacity="${EVO.barOpacity}"/>`
-        + `<text class="chart-num" x="${centre(i)}" y="${svgNum(base - barH - EVO.valueLift)}" font-size="${EVO.valueSize}" text-anchor="middle">${esc(r[barKey])}</text>`
-        + `<text class="chart-cap" x="${centre(i)}" y="${EVO.h - EVO.dateDrop}" font-size="${EVO.dateSize}" text-anchor="middle">${esc(shortDateText(r.date))}</text>`;
+    const yOf = (x, v) => svgNum(base - clamp(v / (x.rate ? ratePeak : linePeak), 0, 1) * plotH);
+    const caption = (r, i) => `<text class="chart-cap" x="${centre(i)}" y="${EVO.h - EVO.dateDrop}" font-size="${EVO.dateSize}" text-anchor="middle">${esc(shortDateText(r.date))}</text>`;
+    const barMarks = rows.map((r, i) => bars.map((x, k) => {
+      const value = seriesValue(x, r), barH = svgNum((value / barPeak) * plotH), mid = centre(i) + (k - (bars.length - 1) / 2) * barW;
+      return `<rect class="evo-bar" x="${svgNum(mid - barW / 2)}" y="${svgNum(base - barH)}" width="${svgNum(barW)}" height="${barH}" rx="${EVO.barCorner}" fill="${seriesColour(x)}" fill-opacity="${EVO.barOpacity}"/>`
+        + `<text class="chart-num" x="${svgNum(mid)}" y="${svgNum(base - barH - EVO.valueLift)}" font-size="${EVO.valueSize}" text-anchor="middle">${esc(value)}</text>`;
+    }).join('') + caption(r, i)).join('');
+    const dates = bars.length ? '' : rows.map(caption).join('');
+    const marks = lines.map((x) => ({ x, points: rows.map((r, i) => [seriesValue(x, r), i]).filter(([v]) => Number.isFinite(v)).map(([v, i]) => ({ i, v, px: centre(i), py: yOf(x, v) })) }));
+    // The higher of the labels at one match goes above its dot, the lower below it, unless there is no room under it.
+    const labelY = (mark, point, n) => {
+      const higher = !marks.some((o) => o !== mark && o.points.some((q) => q.i === point.i && q.py < point.py));
+      return higher || point.py + EVO.pointDrop > base - EVO.axisWidth || n < 2 ? point.py - EVO.pointLift : point.py + EVO.pointDrop;
+    };
+    const labelText = (x, v) => (x.rate ? pctText(Math.round(v * PERCENT)) : String(v));
+    const lineMarks = marks.map((mark) => {
+      const polyline = mark.points.length ? `<polyline points="${mark.points.map((q) => `${q.px},${q.py}`).join(' ')}" fill="none" stroke="${seriesColour(mark.x)}" stroke-width="${EVO.lineWidth}" stroke-linejoin="round" stroke-linecap="round"/>` : '';
+      const dots = mark.points.map((q) => `<circle class="evo-dot" cx="${q.px}" cy="${q.py}" r="${EVO.dotR}" fill="${seriesColour(mark.x)}" stroke="var(--surface)" stroke-width="${EVO.dotRing}"/>`).join('');
+      const values = kind === 'line' ? mark.points.map((q) => `<text class="chart-num" x="${q.px}" y="${svgNum(labelY(mark, q, marks.length))}" font-size="${EVO.pointSize}" text-anchor="middle">${esc(labelText(mark.x, q.v))}</text>`).join('') : '';
+      return `${polyline}${dots}${values}`;
     }).join('');
-    const points = rows.map((r, i) => [r, i]).filter(([r]) => Number.isFinite(pct(r))).map(([r, i]) => [centre(i), svgNum(base - clamp(pct(r), 0, 1) * plotH)]);
-    const dots = points.map(([x, y]) => `<circle class="evo-dot" cx="${x}" cy="${y}" r="${EVO.dotR}" fill="var(--gold)" stroke="var(--surface)" stroke-width="${EVO.dotRing}"/>`).join('');
-    return `<svg viewBox="0 0 ${width} ${EVO.h}" role="img"><line x1="${EVO.pad}" y1="${base}" x2="${width - EVO.pad}" y2="${base}" stroke="var(--line)" stroke-width="${EVO.axisWidth}"/>${bars}
-      ${points.length ? `<polyline points="${points.map((p) => p.join(',')).join(' ')}" fill="none" stroke="var(--gold)" stroke-width="${EVO.lineWidth}" stroke-linejoin="round" stroke-linecap="round"/>` : ''}${dots}</svg>`;
+    return `<svg viewBox="0 0 ${width} ${EVO.h}" role="img"><line x1="${EVO.pad}" y1="${base}" x2="${width - EVO.pad}" y2="${base}" stroke="var(--line)" stroke-width="${EVO.axisWidth}"/>${barMarks}${dates}
+      ${lineMarks}</svg>`;
   }
+  // One bar per match for barKey and a line over them for pct(row) in 0-1.
+  const evolutionSvg = (rows, barKey, pct) => trendSvg(rows, [{ key: barKey, token: 'act-def' }, { key: (r) => pct(r), token: 'gold', rate: true }], 'bars');
   async function showMatches() {
     showHomeView('matches');
     try {
@@ -6394,7 +6457,7 @@ span.att-foot { visibility: hidden; }
       home.seasonOffline = false;
       console.warn(`Season not available: ${cloudErrorText(err)}`);
     }
-    if (['team', 'player', 'player-match'].includes(home.view)) renderHome();
+    if (['team', 'stats', 'player', 'player-match'].includes(home.view)) renderHome();
   }
   // The attendance sessions feed the rates of the team page and the player card; they load once per team.
   async function ensureSessions() {
@@ -6411,6 +6474,147 @@ span.att-foot { visibility: hidden; }
   async function showTeamPage() {
     showHomeView('team');
     await Promise.all([ensureSeason(), ensureSessions()]);
+  }
+
+  // ---- Team dashboard: the season of the team by match, by attack type, by goalkeeper and by player ----
+  const STATS_DEFAULT_SORT = { key: 'rating', dir: -1 };
+  const STATS_SORT_ASCENDING = ['player'];
+  const STATS_TOKENS = { us: 'act-def', them: 'act-rival', miss6: 'act-bad', miss9: 'act-rule', loss: 'act-bad' };
+  const KEEPER_TOKENS = ['act-def', 'act-rival', 'act-good', 'act-rule'];
+  // One finished or live match of the season as the dashboard reads it.
+  function teamMatchRow(m) {
+    const { events } = m.state;
+    const keepers = [...new Set(rivalShots(events).map((e) => e.gkId))].map((id) => {
+      const c = countGroups(gkShots(id, events));
+      return { id, saves: c.PARADA, onTarget: c.GOL + c.PARADA };
+    });
+    const afterTurnoverGoals = rivalShots(events).filter((e) => e.result === 'GOL' && afterOurTurnover(e, events)).length;
+    return {
+      id: m.id, date: m.date, them: m.them, result: matchResult(m), scoreUs: m.scoreUs, scoreThem: m.scoreThem, ...matchFigures(m.state),
+      attack: attackTypeRows(events, 'us'), against: attackTypeRows(events, 'them'), afterTurnoverGoals, keepers
+    };
+  }
+  // Who lost the ball, by type of turnover; players of the roster with none do not appear.
+  function turnoversByPlayer(matches, roster) {
+    const lost = matches.flatMap((m) => m.state.events).filter((e) => e.kind === 'TURNOVER');
+    return roster.map((player) => {
+      const own = lost.filter((e) => e.playerId === player.id);
+      return { player, total: own.length, byType: countBy(own, (e) => e.subtype) };
+    }).filter((r) => r.total).sort((a, b) => b.total - a.total || a.player.num - b.player.num);
+  }
+  // Minutes and +/− stay null when no match of the player has them.
+  function seasonPlayerTable(matches, roster) {
+    return roster.map((player) => {
+      const season = playerSeason(matches, player), t = season.totals, known = (field) => season.rows.some((r) => r[field] != null);
+      return {
+        player, played: season.rows.length, seconds: known('seconds') ? t.seconds : null, plusMinus: known('plusMinus') ? t.plusMinus : null,
+        rating: season.rating, goals: t.goals ?? 0, shots: t.shots ?? 0, turnovers: t.turnovers ?? 0
+      };
+    }).filter((r) => r.played > 0);
+  }
+  const STATS_SORT_VALUES = { player: (r) => r.player.num, played: (r) => r.played, seconds: (r) => r.seconds, plusMinus: (r) => r.plusMinus, rating: (r) => r.rating, goals: (r) => r.goals, turnovers: (r) => r.turnovers };
+  // Unknown values go last whichever way the column is sorted; ties follow the dorsal.
+  function sortedPlayerRows(rows, sort) {
+    const value = STATS_SORT_VALUES[sort.key];
+    return rows.slice().sort((a, b) => {
+      const [x, y] = [value(a), value(b)];
+      if (x == null || y == null) return (x == null) - (y == null) || a.player.num - b.player.num;
+      return (x - y) * sort.dir || a.player.num - b.player.num;
+    });
+  }
+  function nextStatsSort(key) {
+    const sort = home.statsSort || STATS_DEFAULT_SORT;
+    return { key, dir: sort.key === key ? -sort.dir : STATS_SORT_ASCENDING.includes(key) ? 1 : -1 };
+  }
+  const legendHtml = (items) => `<ul class="chart-legend">${items.map(({ label, token }) => `<li><i style="background:var(--${token})"></i>${esc(label)}</li>`).join('')}</ul>`;
+  // A trend needs CONFIG.stats.minTrendMatches matches; with fewer the stat tiles of the card are the whole story.
+  const trendBlockHtml = (rows, series) => (rows.length < CONFIG.stats.minTrendMatches ? '' : `<figure class="trend">${legendHtml(series)}${trendSvg(rows, series, 'line')}</figure>`);
+  const barsBlockHtml = (rows, series) => `<figure class="trend">${series.length > 1 ? legendHtml(series) : ''}${trendSvg(rows, series, 'bars')}</figure>`;
+  const statsTilesHtml = (tiles) => `<div class="stat-tiles">${tiles.map((t) => statTileHtml(...t)).join('')}</div>`;
+  const rateValue = (value) => (value == null ? NaN : value / PERCENT);
+  function trendCardHtml(rows) {
+    const goalsFor = sumOf(rows, (r) => r.scoreUs), goalsAgainst = sumOf(rows, (r) => r.scoreThem);
+    const series = [{ key: 'scoreUs', label: 'Goles a favor', token: STATS_TOKENS.us }, { key: 'scoreThem', label: 'Goles en contra', token: STATS_TOKENS.them }];
+    const table = rows.map((r) => `<tr><td>${esc(shortDateText(r.date))}</td><td class="who">${esc(r.them)}</td><td class="${resultClass(r)}">${r.scoreUs}–${r.scoreThem}</td><td>${pctText(r.shooting)}</td><td>${r.turnovers}</td></tr>`).join('');
+    return `<section class="sheet-card"><h3>Tendencia</h3>
+      ${statsTilesHtml([['A favor', goalsFor, `${decimalText(goalsFor / rows.length)} por partido`], ['En contra', goalsAgainst, `${decimalText(goalsAgainst / rows.length)} por partido`]])}
+      ${trendBlockHtml(rows, series)}
+      <details class="stats-details"><summary>Tabla por partido</summary><div class="table-wrap"><table><thead><tr><th>Fecha</th><th class="who">Rival</th><th>Res.</th><th>% tiro</th><th>Pérd.</th></tr></thead><tbody>${table}</tbody></table></div></details></section>`;
+  }
+  function shootingCardHtml(rows) {
+    const goals = sumOf(rows, (r) => r.goals), shots = sumOf(rows, (r) => r.shots);
+    const rate = { key: (r) => rateValue(r.shooting), label: '% de tiro', token: STATS_TOKENS.us, rate: true };
+    return `<section class="sheet-card"><h3>Tiro</h3>
+      ${statsTilesHtml([['% tiro', pctText(pct(goals, shots)), `${goals}/${shots}`], ['Fallos 6 m', sumOf(rows, (r) => r.miss6), FAILED_SHOT_NOTE], ['Fallos 9 m', sumOf(rows, (r) => r.miss9), FAILED_SHOT_NOTE]])}
+      ${trendBlockHtml(rows, [rate])}
+      <p class="chart-title">Tiros fallados por partido</p>
+      ${barsBlockHtml(rows, [{ key: 'miss6', label: 'Fallos 6 m', token: STATS_TOKENS.miss6 }, { key: 'miss9', label: 'Fallos 9 m', token: STATS_TOKENS.miss9 }])}</section>`;
+  }
+  const sumAttackRows = (lists) => Object.keys(ATTACK_TYPES).map((type, i) => {
+    const shots = sumOf(lists, (l) => l[i].shots), goals = sumOf(lists, (l) => l[i].goals);
+    return { type, shots, goals, pct: pct(goals, shots) };
+  });
+  // Part of a whole, biggest first: the bar is the share of the side's shots, with the goals of that type beside it.
+  function attackSplitHtml(title, rows, token) {
+    const total = sumOf(rows, (r) => r.shots);
+    const lines = rows.slice().sort((a, b) => b.shots - a.shots).map((r) => {
+      const share = pct(r.shots, total);
+      return `<div class="share-row"><span class="share-label"><b>${ATTACK_TYPES[r.type]}</b><span>${plural(r.shots, 'tiro', 'tiros')} · ${pctText(share)}</span></span>
+        <span class="share-bar"><i style="--share:${share || 0}%;--bar:var(--${token})"></i></span><small>${r.shots ? `${plural(r.goals, 'gol', 'goles')} · ${pctText(r.pct)} de acierto` : 'Sin tiros de este tipo'}</small></div>`;
+    }).join('');
+    return `<div class="share-list"><h4>${title}</h4>${total ? lines : '<p class="note">Sin lanzamientos.</p>'}</div>`;
+  }
+  const attackCardHtml = (rows) => `<section class="sheet-card"><h3>Tipos de ataque</h3>
+      <div class="split-pair">${attackSplitHtml('Nuestro ataque', sumAttackRows(rows.map((r) => r.attack)), STATS_TOKENS.us)}${attackSplitHtml('Ataque del rival', sumAttackRows(rows.map((r) => r.against)), STATS_TOKENS.them)}</div>
+      <p class="note">El saque rápido se deduce del tiempo: un lanzamiento hasta ${CONFIG.attackTypes.quickRestartSeconds} s después de un gol del otro equipo.</p></section>`;
+  function afterTurnoverCardHtml(rows) {
+    const goals = sumOf(rows, (r) => r.afterTurnoverGoals), conceded = sumOf(rows, (r) => r.scoreThem);
+    return `<section class="sheet-card"><h3>Goles tras pérdida</h3>
+      ${statsTilesHtml([['Tras pérdida', goals, `${pctText(pct(goals, conceded))} de ${plural(conceded, 'gol en contra', 'goles en contra')}`]])}
+      <p class="chart-title">Por partido</p>${barsBlockHtml(rows, [{ key: 'afterTurnoverGoals', label: 'Goles tras pérdida', token: STATS_TOKENS.loss }])}
+      <p class="note">Goles del rival en la posesión que sigue a una pérdida nuestra.</p></section>`;
+  }
+  function goalkeepingCardHtml(rows, matches) {
+    const keepers = [...new Set(rows.flatMap((r) => r.keepers.map((k) => k.id)))];
+    const nameOf = (id) => { const p = rosterPlayer(id); return p ? `#${p.num} ${p.name}` : 'Portero'; };
+    const series = keepers.map((id, i) => ({
+      key: (r) => { const k = r.keepers.find((x) => x.id === id); return k && k.onTarget ? k.saves / k.onTarget : NaN; }, label: nameOf(id), token: KEEPER_TOKENS[i % KEEPER_TOKENS.length], rate: true
+    }));
+    const tiles = keepers.map((id) => {
+      const saves = sumOf(rows, (r) => sumOf(r.keepers.filter((k) => k.id === id), (k) => k.saves)), onTarget = sumOf(rows, (r) => sumOf(r.keepers.filter((k) => k.id === id), (k) => k.onTarget));
+      return [nameOf(id), pctText(pct(saves, onTarget)), `${saves}/${onTarget} paradas`];
+    });
+    return `<section class="sheet-card zone-map"><h3>Portería</h3>
+      ${tiles.length ? statsTilesHtml(tiles) : '<p class="note">Sin lanzamientos del rival.</p>'}${trendBlockHtml(rows, series)}
+      <p class="chart-title">Paradas por zona de lanzamiento</p>${zoneMapSvg(matches.flatMap((m) => rivalShots(m.state.events)), isSave, CARD_ZONE_COLOURS.keeper, onTarget)}</section>`;
+  }
+  function turnoversCardHtml(matches) {
+    const lost = turnoversByPlayer(matches, home.roster), peak = lost[0] ? lost[0].total : 1;
+    const segments = (r) => CONFIG.turnoverGroups.map((g) => ({ g, n: sumOf(g.types, (t) => r.byType[t] || 0) })).filter((x) => x.n)
+      .map(({ g, n }) => `<i class="${g.cls}" style="width:${(n / peak) * PERCENT}%" title="${esc(g.label)}: ${n}"></i>`).join('');
+    const lines = lost.map((r) => `<div class="loss-row">${discHtml(r.player)}<span class="loss-name">${esc(r.player.name)}</span><span class="loss-bar">${segments(r)}</span><b>${r.total}</b></div>`).join('');
+    const legend = legendHtml(CONFIG.turnoverGroups.map((g) => ({ label: g.label, token: g.cls.slice(2) })));
+    return `<section class="sheet-card"><h3>Pérdidas por jugador</h3>${lost.length ? `${legend}<div class="loss-list">${lines}</div>` : '<p class="note">Sin pérdidas.</p>'}</section>`;
+  }
+  const STATS_COLUMNS = [['player', 'Jugador'], ['played', 'PJ'], ['seconds', 'Min'], ['plusMinus', '+/−'], ['rating', 'Nota'], ['goals', 'Goles/tiros'], ['turnovers', 'Pérd.']];
+  function playersCardHtml(matches) {
+    const sort = home.statsSort || STATS_DEFAULT_SORT, rows = sortedPlayerRows(seasonPlayerTable(matches, home.roster), sort);
+    const head = STATS_COLUMNS.map(([key, label]) => `<th${key === 'player' ? ' class="who"' : ''} aria-sort="${sort.key === key ? (sort.dir > 0 ? 'ascending' : 'descending') : 'none'}"><button class="sort-btn press" type="button" data-sort="${key}">${label}</button></th>`).join('');
+    const body = rows.map((r) => `<tr data-player-row="${esc(r.player.id)}"><td class="who"><span class="who-cell">${discHtml(r.player)}${esc(r.player.name)}</span></td><td data-col="played">${r.played}</td>
+      <td data-col="seconds">${minutesText(r.seconds)}</td><td data-col="plusMinus">${plusMinusText(r.plusMinus)}</td><td data-col="rating">${r.rating == null ? '–' : ratingChipHtml(r.rating)}</td>
+      <td data-col="goals">${r.goals}/${r.shots}</td><td data-col="turnovers">${r.turnovers}</td></tr>`).join('');
+    return `<section class="sheet-card wide stats-players"><h3>Jugadores</h3><div class="table-wrap"><table><thead><tr>${head}</tr></thead><tbody>${body}</tbody></table></div></section>`;
+  }
+  function teamStatsHtml() {
+    const note = home.seasonOffline ? SEASON_OFFLINE_NOTE : '';
+    if (home.season === null) return `${statusHtml()}<p class="note">Cargando…</p>`;
+    if (!home.season.length) return `${statusHtml()}${note}<section class="sheet-card"><h3>Estadísticas</h3><p class="note">Sin partidos todavía</p></section>`;
+    const matches = home.season.slice().reverse(), rows = matches.map(teamMatchRow);
+    return `${statusHtml()}${note}<div class="stats-page">${trendCardHtml(rows)}${shootingCardHtml(rows)}${attackCardHtml(rows)}${afterTurnoverCardHtml(rows)}${goalkeepingCardHtml(rows, matches)}${turnoversCardHtml(matches)}${playersCardHtml(matches)}</div>`;
+  }
+  async function showStats() {
+    showHomeView('stats');
+    await ensureSeason();
   }
 
   // ---- Attendance: today's session by faces; a tap cycles the status ----
@@ -7131,6 +7335,8 @@ span.att-foot { visibility: hidden; }
     if (b.hasAttribute('data-att-note-save')) { home.attendanceNoteFor = null; renderHome(); return; }
     if (b.dataset.homeView === 'attendance') { showAttendance(); return; }
     if (b.dataset.homeView === 'matches') { showMatches(); return; }
+    if (b.dataset.homeView === 'stats') { showStats(); return; }
+    if (b.dataset.sort) { home.statsSort = nextStatsSort(b.dataset.sort); renderHome(); return; }
     if (b.dataset.homeView === 'team') { home.crestDraft = undefined; showTeamPage(); return; }
     if (b.dataset.player) { showPlayer(b.dataset.player); return; }
     if (b.hasAttribute('data-player-back')) { showPlayer(home.playerId); return; }
