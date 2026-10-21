@@ -778,19 +778,35 @@ a:focus-visible, input:focus-visible, select:focus-visible, summary:focus-visibl
 .home-title h1 { margin: 0; font: var(--type-title); text-transform: uppercase; letter-spacing: .02em; }
 .home-title small { color: var(--muted); }
 .home-head .head-actions { margin-left: auto; display: flex; gap: var(--space-2); align-items: center; flex-wrap: wrap; }
-.team-cards { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: var(--space-3); }
-.team-card { display: flex; align-items: center; gap: var(--space-3); min-height: 64px; padding: var(--space-2) var(--space-4) var(--space-2) var(--space-3); border-radius: var(--inner-radius, var(--radius-sm)); border: 1px solid transparent; box-shadow: var(--ring); background: var(--surface); color: var(--fg); font: inherit; text-align: left; cursor: pointer; }
+.card-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: var(--space-3); }
+.grid-title, .span-all { grid-column: 1 / -1; }
+.grid-title { margin: var(--space-2) 0 calc(var(--space-1) * -1); font: var(--type-caption); font-weight: 700; letter-spacing: .1em; text-transform: uppercase; color: var(--muted); }
+.grid-title:first-child { margin-top: 0; }
+.team-card { --stripe: 6px; position: relative; overflow: hidden; display: flex; align-items: center; gap: var(--space-3); min-height: 88px; padding: calc(var(--space-2) + var(--stripe)) var(--space-4) var(--space-2) var(--space-3); border-radius: var(--radius-lg); border: 1px solid transparent; box-shadow: var(--ring); background: var(--surface); color: var(--fg); font: inherit; text-align: left; cursor: pointer; }
+.team-card:not(.add)::before { content: ""; position: absolute; inset: 0 0 auto; height: var(--stripe); background: linear-gradient(90deg, var(--team-brand, var(--brand)) 0 50%, var(--team-brand2, var(--gold)) 50% 100%); }
+.team-card .crest { width: 56px; height: 56px; }
 .team-card span { display: grid; min-width: 0; }
 .team-card b { font: var(--type-heading); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .team-card small { color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.team-card.add { justify-content: center; border-style: dashed; border-color: var(--line); box-shadow: none; font-weight: 700; }
+.team-card.add { justify-content: center; border-style: dashed; border-color: var(--line); box-shadow: none; background: var(--surface); font-weight: 700; }
 .template-edit { display: grid; gap: var(--space-4); }
 .template-pick { margin-block: var(--space-2); }
 .home-body { display: grid; gap: var(--space-4); align-content: start; }
 .status { display: inline-block; padding: var(--space-1) var(--space-3); border-radius: var(--radius-full); font: var(--type-caption); font-weight: 700; background: var(--soft); color: var(--fg); white-space: nowrap; }
 .status.s-live { background: var(--color-success); color: var(--color-on-success); }
 .status.s-finished { background: var(--fg); color: var(--bg); }
-.score-cell { font-family: var(--font-display); font-weight: 800; font-size: 20px; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.match-card { display: grid; align-content: space-between; gap: var(--space-3); }
+.match-top { display: flex; align-items: center; gap: var(--space-3); }
+.match-chip.form-chip { flex: none; min-width: 40px; line-height: 40px; font-size: 18px; }
+.match-who { display: grid; flex: 1; min-width: 0; }
+.match-rival { font: var(--type-heading); overflow-wrap: anywhere; }
+.match-who small { font: var(--type-caption); color: var(--muted); }
+.match-score { font-family: var(--font-display); font-weight: 800; font-size: 28px; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.match-meta { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-2); }
+.match-round { padding: var(--space-1) var(--space-3); border-radius: var(--radius-full); border: 1px solid var(--line); font: var(--type-caption); font-weight: 700; white-space: nowrap; }
+.match-foot { display: flex; align-items: center; justify-content: space-between; gap: var(--space-3); }
+.match-foot .mvp-face-static .disc { width: 44px; height: 44px; font-size: 18px; }
+.match-foot .crown-face { left: -2px; top: -14px; width: 28px; }
 .legacy { display: flex; gap: var(--space-3); align-items: center; flex-wrap: wrap; padding: var(--space-3) var(--space-4); border-radius: var(--radius-md); }
 .legacy span { flex: 1 1 280px; }
 .team-layout { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.5fr); gap: var(--space-4); align-items: start; }
@@ -816,9 +832,9 @@ a:focus-visible, input:focus-visible, select:focus-visible, summary:focus-visibl
 .rating-chip.rt-mid { background: var(--rating-mid); color: var(--rating-ink-mid); }
 .rating-chip.rt-low { background: var(--rating-low); color: var(--rating-ink-low); }
 .rating-chip.rt-bad { background: var(--rating-bad); color: var(--rating-ink-bad); }
-.last-score.res-G, .match-table .res-G { background: none; color: var(--color-success-text); }
-.last-score.res-E, .match-table .res-E { background: none; color: var(--color-warning-text); }
-.last-score.res-P, .match-table .res-P { background: none; color: var(--color-danger-text); }
+.last-score.res-G, .match-score.res-G, .match-table .res-G { background: none; color: var(--color-success-text); }
+.last-score.res-E, .match-score.res-E, .match-table .res-E { background: none; color: var(--color-warning-text); }
+.last-score.res-P, .match-score.res-P, .match-table .res-P { background: none; color: var(--color-danger-text); }
 .season-kpis { display: grid; grid-template-columns: 1fr 1fr; gap: var(--space-2); margin-bottom: var(--space-4); }
 .season-kpi { display: grid; gap: var(--space-1); align-content: start; padding: var(--space-3); border-radius: var(--inner-radius, var(--radius-sm)); background: var(--soft); min-width: 0; }
 .season-kpi b { font: var(--type-kpi); font-variant-numeric: tabular-nums; }
@@ -959,6 +975,8 @@ span.att-foot { visibility: hidden; }
 .match-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--space-4); align-items: start; }
 .player-fields { display: grid; grid-template-columns: 1fr 100px 1fr; gap: var(--space-3); margin-bottom: var(--space-3); }
 .player-edit .pos-pick, .player-edit .row-actions { margin-top: var(--space-3); }
+@media (max-width: 1100px) { .card-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+@media (max-width: 700px) { .card-grid { grid-template-columns: minmax(0, 1fr); } }
 @media (max-width: 1100px) { .player-grid { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); } .player-grid > :last-child { grid-column: 1 / -1; } }
 @media (max-width: 700px) { .match-grid { grid-template-columns: minmax(0, 1fr); } }
 @media (max-width: 700px) { .player-grid, .player-fields { grid-template-columns: minmax(0, 1fr); } }
@@ -5478,17 +5496,37 @@ span.att-foot { visibility: hidden; }
     return `<div class="legacy glass"><span>En esta tablet hay un partido de la versión anterior: <b>${esc(s.us)} ${sc.us}–${sc.them} ${esc(s.them)}</b>${s.date ? ` (${esc(dateText(s.date))})` : ''}.</span>
       <button class="btn primary press" type="button" data-legacy-import>Importarlo</button>${armedButton('legacy-drop', 'Descartar', 'data-legacy-drop')}</div>`;
   }
+  // The player a finished match's MVP pick points to: from the roster, else from the squad the match kept.
+  const mvpOf = (matchState) => matchState.mvpId && (rosterPlayer(matchState.mvpId) || matchState.players.find((p) => p.id === matchState.mvpId)) || null;
+  // The calendar round of each match that is linked to one (M0d), by match id.
+  function matchRounds() {
+    const fixtures = home.fixtures || [], links = linkFixtures(fixtures, home.teamMatches), rounds = new Map();
+    fixtures.filter((f) => links.has(f.id)).forEach((f) => rounds.set(links.get(f.id).id, f.round));
+    return rounds;
+  }
+  function matchCardHtml(m, rounds) {
+    const finished = m.status === 'finished', result = matchResult(m);
+    const chip = finished ? `<i class="match-chip form-chip res-${result}" role="img" aria-label="${RESULT_LABEL[result]}">${result}</i>`
+      : `<span class="match-chip status s-${m.status}">${MATCH_STATUS[m.status]}</span>`;
+    const setup = m.status === 'setup';
+    const season = (home.season || []).find((x) => x.id === m.id), mvp = season && mvpOf(season.state);
+    const where = [dateText(m.date), m.venue].filter(Boolean).map(esc).join(' · ') || '–';
+    const meta = [finished ? `<span class="status s-finished">${MATCH_STATUS.finished}</span>` : '', rounds.has(m.id) ? `<span class="match-round">Jornada ${rounds.get(m.id)}</span>` : '',
+      m.pending ? '<small class="note">sin subir</small>' : ''].join('');
+    const face = mvp ? `<span class="mvp-face-static" role="img" aria-label="MVP del partido: ${esc(mvp.name)}">${discHtml(mvp)}${crownSvg('crown-face')}</span>` : '';
+    return `<article class="match-card sheet-card">
+      <div class="match-top">${chip}<span class="match-who"><b class="match-rival">${esc(m.them)}</b><small>${where}</small></span>
+        <strong class="match-score${finished ? ` res-${result}` : ''}">${setup ? '–' : `${m.scoreUs}–${m.scoreThem}`}</strong></div>
+      ${meta ? `<div class="match-meta">${meta}</div>` : ''}
+      <div class="match-foot"><div class="row-actions"><button class="btn primary press" type="button" data-open-match="${m.id}">${finished ? 'Ver' : 'Seguir'}</button>${setup ? '' : armedButton(`restart-${m.id}`, 'Reiniciar', `data-restart-match="${m.id}" aria-label="Reiniciar el partido contra ${esc(m.them)}"`)}${armedButton(`delete-${m.id}`, 'Borrar', `data-delete-match="${m.id}" aria-label="Borrar el partido contra ${esc(m.them)}"`)}</div>${face}</div></article>`;
+  }
   function matchesHtml() {
-    const rows = home.matches.map((m) => `<tr>
-        <td>${esc(dateText(m.date)) || '–'}</td><td style="text-align:left">${esc(m.them)}</td><td style="text-align:left">${esc(m.venue) || '–'}</td>
-        <td class="score-cell">${m.status === 'setup' ? '–' : `${m.scoreUs}–${m.scoreThem}`}</td>
-        <td><span class="status s-${m.status}">${MATCH_STATUS[m.status]}</span>${m.pending ? ' <small class="note">sin subir</small>' : ''}</td>
-        <td><div class="row-actions"><button class="btn primary press" type="button" data-open-match="${m.id}">${m.status === 'finished' ? 'Ver' : 'Seguir'}</button>${m.status === 'setup' ? '' : armedButton(`restart-${m.id}`, 'Reiniciar', `data-restart-match="${m.id}" aria-label="Reiniciar el partido contra ${esc(m.them)}"`)}${armedButton(`delete-${m.id}`, 'Borrar', `data-delete-match="${m.id}" aria-label="Borrar el partido contra ${esc(m.them)}"`)}</div></td></tr>`).join('');
+    const rounds = matchRounds();
     return `<div class="row-actions"><button class="btn go press" type="button" data-new-match>+ Nuevo partido</button><button class="btn press" type="button" data-sample>Ver partido de ejemplo</button></div>
       ${legacyHtml()}
       ${home.offline ? '<p class="note">Sin conexión: ves la copia guardada en esta tablet. Los partidos se subirán al volver la conexión.</p>' : ''}
       ${statusHtml()}
-      ${rows ? `<div class="table-wrap"><table><thead><tr><th>Fecha</th><th style="text-align:left">Rival</th><th style="text-align:left">Lugar</th><th>Resultado</th><th>Estado</th><th></th></tr></thead><tbody>${rows}</tbody></table></div>`
+      ${home.matches.length ? `<div class="card-grid">${home.matches.map((m) => matchCardHtml(m, rounds)).join('')}</div>`
         : '<p class="note">Todavía no hay partidos. Pulsa «Nuevo partido» para elegir la convocatoria y prepararlo.</p>'}`;
   }
   function teamRosterHtml() {
@@ -5544,8 +5582,11 @@ span.att-foot { visibility: hidden; }
   // ---- Profile: the first screen after signing in (teams, rival templates, account) ----
   const profileHeadHtml = () => `<header class="home-head glass"><span class="app-mark" aria-hidden="true">HB</span>
       <div class="home-title"><h1>HBStats</h1><small>${home.user ? esc(home.user.email) : 'En este dispositivo'}</small></div></header>`;
+  // A team's colours as custom properties of its card; a value that is not a hex colour falls back to the app's own.
+  const teamColoursStyle = (t) => [['--team-brand', t.brand, 'var(--brand)'], ['--team-brand2', t.brand2, 'var(--gold)']]
+    .map(([name, value, fallback]) => `${name}:${HEX_COLOUR.test(value) ? value : fallback}`).join(';');
   function profileHtml() {
-    const teams = home.teams.map((t) => `<button class="team-card press" type="button" data-open-team="${t.id}"><img class="crest" src="${esc(crestSrc(t))}" alt=""><span><b>${esc(t.name)}</b><small>${esc(t.club)}</small></span></button>`).join('');
+    const teams = home.teams.map((t) => `<button class="team-card press" type="button" data-open-team="${t.id}" style="${teamColoursStyle(t)}"><img class="crest" src="${esc(crestSrc(t))}" alt=""><span><b>${esc(t.name)}</b><small>${esc(t.club)}</small></span></button>`).join('');
     const rows = home.templates.map((t) => `<tr><td style="text-align:left"><b>${esc(t.name)}</b></td><td>${plural(t.players.length, 'dorsal', 'dorsales')}</td>
         <td><div class="row-actions"><button class="btn press" type="button" data-template-edit="${t.id}">Editar</button><button class="btn press" type="button" data-template-export="${t.id}">Exportar</button>${armedButton(`template-${t.id}`, 'Borrar', `data-template-del="${t.id}" aria-label="Borrar la plantilla ${esc(t.name)}"`)}</div></td></tr>`).join('');
     const account = home.user
@@ -5553,12 +5594,17 @@ span.att-foot { visibility: hidden; }
       : '<p class="note">Sin cuenta: todo se guarda solo en esta tablet.</p>';
     return `${statusHtml()}
       ${home.offline ? '<p class="note">Sin conexión: ves la copia guardada en esta tablet.</p>' : ''}
-      <section class="sheet-card"><h3>Mis equipos</h3><div class="team-cards">${teams}<button class="team-card add press" type="button" data-new-team>+ Nuevo equipo</button></div></section>
-      <section class="sheet-card"><h3>Plantillas de rivales</h3>
-        <div class="row-actions"><button class="btn primary press" type="button" data-template-new>+ Nueva plantilla</button><button class="btn press" type="button" data-roster-import="template">Importar archivo</button></div>
-        ${rows ? `<div class="table-wrap"><table><thead><tr><th style="text-align:left">Rival</th><th>Dorsales</th><th></th></tr></thead><tbody>${rows}</tbody></table></div>`
-          : '<p class="note">Guarda aquí a los rivales con sus dorsales y cárgalos en el acta de cada partido con «Cargar plantilla».</p>'}</section>
-      <section class="sheet-card"><h3>Cuenta</h3>${account}</section>`;
+      <div class="card-grid profile-grid">
+        <h3 class="grid-title">Mis equipos</h3>
+        ${teams}<button class="team-card add press" type="button" data-new-team>+ Nuevo equipo</button>
+        <h3 class="grid-title">Plantillas de rivales</h3>
+        <section class="sheet-card span-all">
+          <div class="row-actions"><button class="btn primary press" type="button" data-template-new>+ Nueva plantilla</button><button class="btn press" type="button" data-roster-import="template">Importar archivo</button></div>
+          ${rows ? `<div class="table-wrap"><table><thead><tr><th style="text-align:left">Rival</th><th>Dorsales</th><th></th></tr></thead><tbody>${rows}</tbody></table></div>`
+            : '<p class="note">Guarda aquí a los rivales con sus dorsales y cárgalos en el acta de cada partido con «Cargar plantilla».</p>'}</section>
+        <h3 class="grid-title">Cuenta</h3>
+        <section class="sheet-card">${account}</section>
+      </div>`;
   }
   function templateHtml() {
     const t = home.template;
@@ -6172,8 +6218,7 @@ span.att-foot { visibility: hidden; }
     const form = s.form.map((r) => `<i class="form-chip res-${r}">${r}</i>`).join('');
     const perMatch = decimalText(s.goalsFor / matches.length);
     const latest = s.latest;
-    const mvpId = latest && latest.state.mvpId;
-    const mvp = mvpId && (rosterPlayer(mvpId) || latest.state.players.find((p) => p.id === mvpId));
+    const mvp = latest && mvpOf(latest.state);
     const last = latest ? `<h3>Último partido</h3><div class="last-match">${mvp ? `<span class="mvp-face-static">${discHtml(mvp)}${crownSvg('crown-face')}</span>` : ''}
         <span class="last-who"><b>${esc(latest.them)}</b><small>${esc(dateText(latest.date))}${latest.venue ? ` · ${esc(latest.venue)}` : ''}</small></span>
         <strong class="last-score ${resultClass(latest)}">${latest.scoreUs}–${latest.scoreThem}</strong></div>` : '';

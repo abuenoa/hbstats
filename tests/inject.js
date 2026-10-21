@@ -2659,6 +2659,71 @@
     const showCalendarPage = (fixtures, matches) => { home.fixtures = fixtures; home.teamMatches = matches; home.season = []; showHomeView('team'); };
     const season14 = () => Array.from({ length: 14 }, (_, i) => fx('r' + (i + 1), i + 1, weeksFromNow(i - 2), 'Rival ' + (i + 1), { home: i % 2 === 0 }));
     const flatText = (el) => el.textContent.replace(/\s+/g, ' ').trim();
+    // The match list (cards) and the profile: the grids hold three columns above this width, two below.
+    const CARD_GRID_WIDE_MIN_PX = 1100;
+    const listMatch = (id, them, status, scoreUs, scoreThem, over) => ({ id, date: '2026-10-17', them, venue: 'Pabellón Vivero', status, scoreUs, scoreThem, ...over });
+    const withHomeView = async (fn) => {
+      const keep = { matches: home.matches, season: home.season, fixtures: home.fixtures, teamMatches: home.teamMatches, roster: home.roster, teams: home.teams, templates: home.templates, user: home.user, view: home.view }, hidden = $('home').hidden;
+      try { await fn(); } finally { Object.assign(home, keep); $('home').hidden = hidden; }
+    };
+    const showMatchCards = (matches, over) => { Object.assign(home, { matches, season: null, fixtures: [], teamMatches: [], ...over }); showHomeView('matches'); return [...document.querySelectorAll('.match-card')]; };
+    const columnsOf = (el) => getComputedStyle(el).gridTemplateColumns.split(' ').length;
+    await TA('matches: one card per match with its actions', async () => withHomeView(async () => {
+      const cards = showMatchCards([listMatch('c1', 'BM Norte', 'finished', 7, 5), listMatch('c2', 'CD Sur', 'finished', 6, 6), listMatch('c3', 'Atlético <b data-evil>x</b>', 'finished', 4, 9),
+        listMatch('c4', 'BM Este', 'live', 3, 2), listMatch('c5', 'BM Oeste', 'setup', 0, 0, { pending: true, venue: '' })]);
+      if (cards.length !== 5 || document.querySelector('.home-body table')) throw new Error('cards ' + cards.length);
+      const chips = cards.map((c) => c.querySelector('.match-chip')), chipTexts = chips.map(flatText);
+      if (chipTexts.join() !== 'G,E,P,En juego,Preparando') throw new Error(chipTexts.join());
+      if (!['Victoria', 'Empate', 'Derrota'].every((word, i) => chips[i].getAttribute('aria-label') === word)) throw new Error('chip labels');
+      const scores = cards.map((c) => flatText(c.querySelector('.match-score')));
+      if (scores.join() !== '7–5,6–6,4–9,3–2,–') throw new Error(scores.join());
+      if (!flatText(cards[0]).includes('BM Norte') || !flatText(cards[0]).includes(dateText('2026-10-17')) || !flatText(cards[0]).includes('Pabellón Vivero')) throw new Error(flatText(cards[0]));
+      if (cards[2].querySelector('.match-rival b, [data-evil]')) throw new Error('rival name is not escaped');
+      const openLabels = cards.map((c) => flatText(c.querySelector('[data-open-match]')));
+      if (openLabels.join() !== 'Ver,Ver,Ver,Seguir,Seguir' || cards.some((c, i) => c.querySelector('[data-open-match]').dataset.openMatch !== 'c' + (i + 1))) throw new Error(openLabels.join());
+      const restart = cards.map((c) => Boolean(c.querySelector('[data-restart-match]')));
+      if (restart.join() !== 'true,true,true,true,false' || cards.some((c) => !c.querySelector('[data-delete-match]'))) throw new Error('actions ' + restart.join());
+      if (!cards[0].querySelector('[data-delete-match]').getAttribute('aria-label').includes('BM Norte')) throw new Error('delete label');
+      const pending = cards.map((c) => flatText(c).includes('sin subir'));
+      if (pending.join() !== 'false,false,false,false,true') throw new Error(pending.join());
+      const grid = document.querySelector('.card-grid');
+      if (!grid || getComputedStyle(grid).display !== 'grid' || columnsOf(grid) !== (innerWidth > CARD_GRID_WIDE_MIN_PX ? 3 : 2)) throw new Error('grid ' + (grid && getComputedStyle(grid).gridTemplateColumns));
+      if (cards.some((c) => /NaN|undefined/.test(c.textContent))) throw new Error('NaN');
+    }));
+    await TA('matches: MVP face when the season knows it', async () => withHomeView(async () => {
+      const list = [listMatch('v1', 'BM Norte', 'finished', 7, 5), listMatch('v2', 'CD Sur', 'finished', 6, 6), listMatch('v3', 'BM Este', 'live', 1, 0)];
+      const known = (id, mvpId, players = [cardField, cardKeeper]) => ({ ...list.find((m) => m.id === id), state: { mvpId, players } });
+      const face = (c) => c.querySelector('.mvp-face-static');
+      let cards = showMatchCards(list, { roster: [cardField, cardKeeper], season: [known('v1', 'ca'), known('v2', null)] });
+      if (!face(cards[0]) || !face(cards[0]).querySelector('.disc') || !face(cards[0]).querySelector('.crown-face') || face(cards[0]).getAttribute('aria-label') !== 'MVP del partido: Ari') throw new Error('face missing');
+      if (face(cards[1]) || face(cards[2])) throw new Error('a match with no pick, or a live one, shows a face');
+      cards = showMatchCards(list, { roster: [], season: [known('v1', 'ca')] });
+      if (!face(cards[0])) throw new Error('a player gone from the roster keeps his face, from the match squad');
+      cards = showMatchCards(list, { roster: [cardField], season: [known('v1', 'zz')] });
+      if (face(cards[0]) || /undefined/.test(cards[0].textContent)) throw new Error('an unknown MVP id shows a face');
+      cards = showMatchCards(list, { roster: [cardField], season: null });
+      if (cards.length !== 3 || cards.some((c) => face(c))) throw new Error('no season: no faces');
+    }));
+    await TA('matches: the card names the calendar round of its match', async () => withHomeView(async () => {
+      const list = [listMatch('r1', 'BM Norte', 'finished', 7, 5), listMatch('r2', 'Alcalá', 'finished', 2, 1), listMatch('r3', 'Libre', 'finished', 3, 3)];
+      const fixtures = [fx('f3', 3, '2026-11-01', 'Otro nombre', { matchId: 'r1' }), fx('f4', 4, '2026-10-18', 'BM ALCALA')];
+      const cards = showMatchCards(list, { fixtures, teamMatches: list });
+      const rounds = cards.map((c) => (c.querySelector('.match-round') ? flatText(c.querySelector('.match-round')) : ''));
+      if (rounds.join() !== 'Jornada 3,Jornada 4,') throw new Error(rounds.join());
+    }));
+    await TA('profile: teams, templates and account share one card grid', async () => withHomeView(async () => {
+      const brandTeam = (id, name, brand, brand2) => ({ id, club: 'Club ' + name, name, brand, brand2, brandInk: '#ffffff', crest: null });
+      Object.assign(home, { user: null, teams: [brandTeam('p1', 'Uno', '#112233', '#aabbcc'), brandTeam('p2', 'Dos', 'red;background:url(x)', '#aabbcc')], templates: [{ id: 'pt', name: 'BM Sur', players: [{ id: 'a', num: 4 }] }] });
+      showHomeView('profile');
+      const grid = document.querySelector('.card-grid');
+      const teamCards = [...grid.querySelectorAll('[data-open-team]')];
+      if (teamCards.length !== 2 || !grid.querySelector('[data-new-team]') || !grid.querySelector('[data-template-edit="pt"]') || !grid.textContent.includes('Sin cuenta')) throw new Error('grid content');
+      const brandOf = (c) => c.style.getPropertyValue('--team-brand').trim();
+      if (brandOf(teamCards[0]) !== '#112233' || teamCards[0].style.getPropertyValue('--team-brand2').trim() !== '#aabbcc') throw new Error('brand colours ' + brandOf(teamCards[0]));
+      if (brandOf(teamCards[1]) !== 'var(--brand)') throw new Error('an invalid colour reaches the style: ' + brandOf(teamCards[1]));
+      if (!teamCards[0].querySelector('img.crest') || columnsOf(grid) !== (innerWidth > CARD_GRID_WIDE_MIN_PX ? 3 : 2)) throw new Error('crest or columns');
+      ['Mis equipos', 'Plantillas de rivales', 'Cuenta'].forEach((h) => { if (!flatText(grid).includes(h)) throw new Error('missing ' + h); });
+    }));
     await TA('team page: next match shows round, weekend, rival and home or away', async () => {
       await withCalendarTeam(async () => {
         showCalendarPage([fx('r1', 1, '2099-10-25', 'BALONMANO GADES - ASISA', { home: false }), fx('r2', 2, '2099-11-01', 'Otro')], []);
