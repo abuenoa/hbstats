@@ -1897,11 +1897,11 @@
     });
     const withAttendanceView = async (fn, { season = [], fixtures = [], teamMatches = [] } = {}) => {
       await withAttendanceTeam(async () => {
-        const saved = { roster: home.roster, season: home.season, view: home.view };
+        const saved = { roster: home.roster, season: home.season, view: home.view, sessions: home.sessions, fixtures: home.fixtures, teamMatches: home.teamMatches, stateMatches: home.stateMatches, attendanceDate: home.attendanceDate };
         try {
           home.roster = [];
           for (const [num, name, pos] of [[1, 'Portero Uno', 'POR'], [7, 'Lateral Siete', 'LI'], [9, 'Pivote Nueve', 'PIV']]) home.roster.push(await backend.savePlayer('cal-team', { num, name, pos, photo: null }));
-          home.sessions = []; home.season = season; home.fixtures = fixtures; home.teamMatches = teamMatches;
+          home.sessions = []; home.season = season; home.stateMatches = season; home.fixtures = fixtures; home.teamMatches = teamMatches;
           await showAttendance();
           await fn();
         } finally { Object.assign(home, saved); showHomeView('team'); }
@@ -1938,13 +1938,15 @@
     await TA('attendance view: on a match day, convocados are locked and others read No convocado', async () => {
       const day = todayIso(), call = (ids) => ({ id: 'mx', date: day, them: 'Rival', state: { players: ids.map((id) => ({ id })) } });
       await withAttendanceView(async () => {
-        home.season = [call([home.roster[0].id, home.roster[1].id])];
+        home.season = home.stateMatches = [call([home.roster[0].id, home.roster[1].id])];
         home.teamMatches = [{ id: 'mx', date: day, them: 'Rival' }];
         await showAttendance();
         const [gk, lat, piv] = home.roster.map((p) => document.querySelector(`[data-att="${p.id}"]`));
         if (home.attendanceKind !== 'PARTIDO' || !gk.disabled || !lat.disabled || piv.disabled) throw new Error('lock: ' + home.attendanceKind);
         if (!/Convocado/.test(gk.textContent) || !/No convocado/.test(piv.textContent)) throw new Error(gk.textContent + '|' + piv.textContent);
         if (!/2 presentes/.test(flatText(document.querySelector('.att-count'))) || /no convocado/i.test(flatText(document.querySelector('.att-count')))) throw new Error('counter ' + flatText(document.querySelector('.att-count')));
+        gk.click();
+        if (localSessions().length) throw new Error('a locked face changed the session');
         piv.click();
         if (!/F Falta/.test(badgeOf(home.roster[2].id)) || localSessions()[0].matchId !== 'mx') throw new Error(badgeOf(home.roster[2].id) + JSON.stringify(localSessions()));
         for (let i = 0; i < 3; i++) document.querySelector(`[data-att="${home.roster[2].id}"]`).click();
@@ -1967,12 +1969,43 @@
         const input = document.querySelector(`[data-att-note-input="${id}"]`);
         if (!input || Number(input.maxLength) !== CONFIG.attendance.noteMax) throw new Error('no note input');
         input.value = '<img src=x onerror=alert(1)>';
-        input.dispatchEvent(new Event('change', { bubbles: true }));
+        input.dispatchEvent(new Event('input', { bubbles: true }));
         if (localSessions()[0].marks[id].n !== '<img src=x onerror=alert(1)>') throw new Error(JSON.stringify(localSessions()));
         document.querySelector(`[data-att="${id}"]`).click();
         if (document.querySelector('.squad img[src="x"]') || !$('home').textContent.includes('<img src=x onerror=alert(1)>') || localSessions()[0].marks[id].s !== 'J') throw new Error('note lost or markup rendered');
         document.querySelector(`[data-att-note="${id}"]`).click();
         if (document.querySelector(`[data-att-note-input="${id}"]`).value !== '<img src=x onerror=alert(1)>') throw new Error('the input does not hold the note');
+      });
+    });
+    await TA('attendance view: a note typed and never confirmed survives a tap on another face', async () => {
+      await withAttendanceView(async () => {
+        const [first, second] = [home.roster[1].id, home.roster[2].id];
+        document.querySelector(`[data-att="${first}"]`).click();
+        document.querySelector(`[data-att-note="${first}"]`).click();
+        const input = document.querySelector(`[data-att-note-input="${first}"]`);
+        input.value = 'rodilla';
+        input.dispatchEvent(new Event('input', { bubbles: true }));
+        document.querySelector(`[data-att="${second}"]`).click();
+        if (localSessions()[0].marks[first].n !== 'rodilla' || document.querySelector('[data-att-note-input]')) throw new Error(JSON.stringify(localSessions()));
+        document.querySelector(`[data-att-note="${first}"]`).click();
+        document.querySelector('[data-att-note-save]').click();
+        if (document.querySelector('[data-att-note-input]') || !/rodilla/.test(document.querySelector(`[data-att-note="${first}"]`).textContent)) throw new Error('Guardar did not close the editor');
+        if (document.querySelectorAll('.att-foot').length !== 3) throw new Error('every tile needs the footer slot');
+      });
+    });
+    await TA('attendance view: a match still in setup locks its convocados and its id is backfilled', async () => {
+      const day = todayIso();
+      await withAttendanceView(async () => {
+        const setup = { id: 'ms', date: day, them: 'Rival', status: 'setup', state: { players: [{ id: home.roster[0].id }] } };
+        home.stateMatches = [setup]; home.teamMatches = [{ id: 'ms', date: day, them: 'Rival' }];
+        await showAttendance();
+        if (home.attendanceKind !== 'PARTIDO' || !document.querySelector(`[data-att="${home.roster[0].id}"]`).disabled || !/1 presente/.test(flatText(document.querySelector('.att-count')))) throw new Error('setup match not counted');
+        document.querySelector(`[data-att="${home.roster[1].id}"]`).click();
+        if (localSessions()[0].matchId !== 'ms') throw new Error('no match id');
+        home.stateMatches = []; home.sessions = home.sessions.map((x) => ({ ...x, matchId: null }));
+        home.stateMatches = [setup];
+        document.querySelector(`[data-att="${home.roster[1].id}"]`).click();
+        if (localSessions()[0].matchId !== 'ms') throw new Error('match id not backfilled: ' + JSON.stringify(localSessions()));
       });
     });
     await TA('attendance view: changing the date opens that day\'s session', async () => {

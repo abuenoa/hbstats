@@ -782,20 +782,26 @@ a:focus-visible, input:focus-visible, select:focus-visible, summary:focus-visibl
 .squad .row-actions { margin-top: var(--space-4); }
 /* Attendance: the faces with a status badge that carries a letter and a word, never colour alone */
 .att-bar { display: flex; align-items: end; gap: var(--space-4); flex-wrap: wrap; margin-bottom: var(--space-3); }
+.att-sum { display: grid; gap: var(--space-1); }
 .att-count { margin: 0; font: var(--type-heading); }
-.att .faces { grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); }
-.att-cell { display: grid; align-content: start; gap: var(--space-1); min-width: 0; }
-.att-cell .face { height: 100%; }
+.att-note-row { display: flex; align-items: end; gap: var(--space-3); margin-bottom: var(--space-3); }
+.att-note-row .field { flex: 1; min-width: 0; }
+.att-note-in { width: 100%; min-width: 0; }
+.att .pos-groups { display: flex; flex-wrap: wrap; column-gap: var(--space-6); align-items: start; }
+.att .faces { display: flex; flex-wrap: wrap; gap: var(--space-2); }
+.att-cell { --tile-pad: var(--space-1); width: 112px; display: grid; gap: var(--space-1); padding: var(--tile-pad); border-radius: var(--radius-lg); box-shadow: var(--ring); background: var(--surface); }
+.att-cell .face { --face-disc: 48px; padding: var(--space-2) 0; border-radius: calc(var(--radius-lg) - var(--tile-pad)); box-shadow: none; }
 .att-cell .face:disabled { cursor: default; color: var(--fg); opacity: 1; }
-.face span.att-badge { display: inline-flex; align-items: center; justify-content: center; gap: var(--space-1); padding: var(--space-1) var(--space-2); border-radius: var(--radius-full); border: 1px solid currentColor; white-space: normal; text-align: center; }
+.att-foot { display: block; min-height: var(--target); padding: 0 var(--space-2); border-radius: calc(var(--radius-lg) - var(--tile-pad)); border: 0; background: transparent; color: var(--fg); font: var(--type-caption); font-weight: 700; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+button.att-foot { background: var(--soft); }
+span.att-foot { visibility: hidden; }
+.face span.att-badge { display: inline-flex; align-items: center; justify-content: center; gap: var(--space-1); padding: var(--space-1); border-radius: var(--radius-full); border: 1px solid currentColor; font-size: .75rem; line-height: 1.3; }
 .att-badge b { font-weight: 800; }
 .att-P { color: var(--color-success-text); }
 .att-F { color: var(--color-danger-text); }
 .att-J { color: var(--color-warning-text); }
 .att-L { color: var(--color-text); }
 .att-NC { color: var(--color-text-secondary); }
-.att-note { font: var(--type-caption); color: var(--color-text-secondary); overflow-wrap: anywhere; text-align: center; }
-.att-note-in { width: 100%; min-width: 0; }
 /* Team page: «Próximo partido» and «Calendario» use the full width */
 .next-card, .calendar-card { grid-column: 1 / -1; }
 .next-body { display: flex; align-items: center; gap: var(--space-4); flex-wrap: wrap; }
@@ -4049,7 +4055,7 @@ a:focus-visible, input:focus-visible, select:focus-visible, summary:focus-visibl
   let currentMatchId = null;
   let syncTimer = null;
   let attendanceSyncTimer = null;
-  const home = { view: 'loading', user: null, teams: [], roster: [], matches: [], season: null, templates: [], template: null, squad: new Set(), leaderMetric: 'goals', playerId: null, playerMatchId: null, playerEdit: false, playerDraft: null, offline: false, error: '', draft: null, crestDraft: undefined, armed: null, passwordChange: false, seasonOffline: false, sessions: null, fixtures: null, teamMatches: [], fixtureEdit: null, squadFixture: null, attendanceDate: null, attendanceKind: null, attendanceNoteFor: null };
+  const home = { view: 'loading', user: null, teams: [], roster: [], matches: [], season: null, templates: [], template: null, squad: new Set(), leaderMetric: 'goals', playerId: null, playerMatchId: null, playerEdit: false, playerDraft: null, offline: false, error: '', draft: null, crestDraft: undefined, armed: null, passwordChange: false, seasonOffline: false, sessions: null, fixtures: null, teamMatches: [], fixtureEdit: null, squadFixture: null, attendanceDate: null, attendanceKind: null, attendanceNoteFor: null, stateMatches: [] };
 
   // ---- Device storage ----
   function readJson(key) {
@@ -4522,7 +4528,7 @@ a:focus-visible, input:focus-visible, select:focus-visible, summary:focus-visibl
 
   // ---- Home screen ----
   const homeStatus = (text) => sheetStatus('home-status', text);
-  const statusHtml = (text = '') => `<p class="note home-status" id="home-status" role="status" aria-live="polite">${text}</p>`;
+  const statusHtml = (text = '') => `<p class="note home-status" id="home-status" role="status" aria-live="polite">${esc(text)}</p>`;
   // Destructive buttons ask once more: the first tap arms them ("¿Seguro?"), the second acts.
   const armedButton = (id, label, attrs) => `<button class="btn press${home.armed === id ? ' armed' : ''}" type="button" ${attrs}>${home.armed === id ? '⚠ ¿Seguro?' : label}</button>`;
   function confirmTap(id) {
@@ -4803,6 +4809,7 @@ a:focus-visible, input:focus-visible, select:focus-visible, summary:focus-visibl
     const all = withLocalChanges(list, (m) => ({ state: m.state })).filter((m) => m.state && !m.state.sample);
     const matches = all.filter((m) => SEASON_STATUSES.includes(m.status));
     home.season = matches;
+    home.stateMatches = all;
     home.teamMatches = all.map(({ state, ...summary }) => summary);
     persistLinks();
     return { matches, offline };
@@ -5301,7 +5308,7 @@ a:focus-visible, input:focus-visible, select:focus-visible, summary:focus-visibl
   function positionGroupsHtml(faceOf) {
     return SQUAD_GROUP_ORDER.map((pos) => {
       const players = home.roster.filter((p) => (POSITION_GROUPS[p.pos] ? p.pos : 'CEN') === pos).sort((a, b) => a.num - b.num);
-      return players.length ? `<h4 style="--pos:${pos === 'POR' ? 'var(--fg)' : CONFIG.positions[pos].color}">${POSITION_GROUPS[pos]}</h4><div class="faces">${players.map(faceOf).join('')}</div>` : '';
+      return players.length ? `<div class="pos-group"><h4 style="--pos:${pos === 'POR' ? 'var(--fg)' : CONFIG.positions[pos].color}">${POSITION_GROUPS[pos]}</h4><div class="faces">${players.map(faceOf).join('')}</div></div>` : '';
     }).join('');
   }
   function squadCardHtml() {
@@ -5397,8 +5404,9 @@ a:focus-visible, input:focus-visible, select:focus-visible, summary:focus-visibl
   const SESSION_KIND_LABELS = { [SESSION_KINDS.TRAINING]: 'Entreno', [SESSION_KINDS.MATCH]: 'Partido' };
   const ATTENDANCE_COUNT_WORDS = { P: ['presente', 'presentes'], F: ['falta', 'faltas'], J: ['justificada', 'justificadas'], L: ['lesionado', 'lesionados'] };
   const ATTENDANCE_SAVED_TEXT = 'Guardado en la tablet', ATTENDANCE_UPLOADED_TEXT = 'Subido';
-  const attendanceMatch = (date) => (home.season || []).find((m) => m.date === date) || null;
-  // A match day: a season match, or a fixture kicking off, on that date.
+  // Any match of the team with a state, one still in setup included: its squad is the convocatoria.
+  const attendanceMatch = (date) => home.stateMatches.find((m) => m.date === date) || null;
+  // A match day: a match of the team, or a fixture kicking off, on that date.
   const isMatchDay = (date) => Boolean(attendanceMatch(date)) || home.teamMatches.some((m) => m.date === date)
     || (home.fixtures || []).some((f) => f.kickoff && localIso(new Date(f.kickoff)) === date);
   const kindOn = (date) => (isMatchDay(date) ? SESSION_KINDS.MATCH : SESSION_KINDS.TRAINING);
@@ -5406,7 +5414,9 @@ a:focus-visible, input:focus-visible, select:focus-visible, summary:focus-visibl
   function currentSession() {
     const { attendanceDate: date, attendanceKind: kind } = home;
     const match = kind === SESSION_KINDS.MATCH ? attendanceMatch(date) : null;
-    return storedSession() || { id: newUuid(), date, kind, matchId: match ? match.id : null, marks: {}, note: '' };
+    const stored = storedSession();
+    if (!stored) return { id: newUuid(), date, kind, matchId: match ? match.id : null, marks: {}, note: '' };
+    return !stored.matchId && match ? { ...stored, matchId: match.id } : stored;
   }
   function attendanceStatusText() {
     const stored = storedSession();
@@ -5421,13 +5431,21 @@ a:focus-visible, input:focus-visible, select:focus-visible, summary:focus-visibl
     const code = sessionStatus(session, p.id, match);
     const locked = session.kind === SESSION_KINDS.MATCH && code === 'P';
     const { letter, label } = locked ? ATTENDANCE_CALLED : { letter: code, label: ATTENDANCE[code] };
-    const mark = session.marks[p.id], marked = MARK_CODES.includes(code);
-    const note = home.attendanceNoteFor === p.id
-      ? `<input class="in att-note-in" type="text" maxlength="${CONFIG.attendance.noteMax}" data-att-note-input="${esc(p.id)}" value="${esc((mark && mark.n) || '')}" aria-label="Nota de ${esc(p.name)}">`
-      : mark && mark.n ? `<small class="att-note">${esc(mark.n)}</small>` : '';
+    const mark = session.marks[p.id];
+    // Every tile has the footer slot, so a note never changes the height of a row; it is empty for P, C and NC.
+    const foot = MARK_CODES.includes(code)
+      ? `<button class="att-foot press" type="button" data-att-note="${esc(p.id)}" aria-label="Nota de ${esc(p.name)}">${mark && mark.n ? esc(mark.n) : 'Nota'}</button>`
+      : '<span class="att-foot" aria-hidden="true"></span>';
     return `<div class="att-cell"><button class="face press" type="button" data-att="${esc(p.id)}" style="--pos:${posOf(p).color}"${locked ? ' disabled' : ''} aria-label="#${p.num} ${esc(p.name)}: ${label}">${discHtml(p)}<span>${esc(p.name)}</span>
-        <span class="att-badge att-${locked ? 'P' : code}"><b>${letter}</b> ${label}</span></button>
-      ${marked ? `<button class="btn press" type="button" data-att-note="${esc(p.id)}" aria-label="Nota de ${esc(p.name)}">Nota</button>` : ''}${note}</div>`;
+        <span class="att-badge att-${locked ? 'P' : code}"><b>${letter}</b> ${label}</span></button>${foot}</div>`;
+  }
+  // One shared editor for the note of the player whose «Nota» was tapped.
+  function attendanceNoteRowHtml(session) {
+    const p = home.roster.find((x) => x.id === home.attendanceNoteFor), mark = p && session.marks[p.id];
+    if (!mark) return '';
+    return `<div class="att-note-row"><label class="field">Nota de ${esc(p.name)} (${ATTENDANCE[mark.s]})
+        <input class="in att-note-in" type="text" maxlength="${CONFIG.attendance.noteMax}" data-att-note-input="${esc(p.id)}" value="${esc(mark.n || '')}"></label>
+      <button class="btn primary press" type="button" data-att-note-save>Guardar</button></div>`;
   }
   function attendanceHtml() {
     const session = currentSession(), match = session.kind === SESSION_KINDS.MATCH ? attendanceMatch(session.date) : null;
@@ -5437,9 +5455,10 @@ a:focus-visible, input:focus-visible, select:focus-visible, summary:focus-visibl
     return `${home.offline ? '<p class="note">Sin conexión: ves la copia guardada en esta tablet.</p>' : ''}
       <section class="sheet-card squad att"><h3>Asistencia</h3>
         <div class="att-bar"><label class="field">Fecha<input class="in" type="date" id="att-date" value="${esc(home.attendanceDate)}"></label>
-          <div class="chips" role="group" aria-label="Tipo de sesión">${chips}</div></div>
-        <p class="att-count">${counted}</p>${statusHtml(attendanceStatusText())}
-        ${positionGroupsHtml((p) => attendanceFaceHtml(p, session, match)) || '<p class="note">Todavía no hay jugadores.</p>'}${remove}</section>`;
+          <div class="chips" role="group" aria-label="Tipo de sesión">${chips}</div>
+          <div class="att-sum"><p class="att-count">${counted}</p>${statusHtml(attendanceStatusText())}</div></div>
+        ${attendanceNoteRowHtml(session)}
+        <div class="pos-groups">${positionGroupsHtml((p) => attendanceFaceHtml(p, session, match)) || '<p class="note">Todavía no hay jugadores.</p>'}</div>${remove}</section>`;
   }
   async function showAttendance() {
     Object.assign(home, { attendanceDate: todayIso(), attendanceNoteFor: null });
@@ -5453,7 +5472,7 @@ a:focus-visible, input:focus-visible, select:focus-visible, summary:focus-visibl
     renderHome();
   }
   function openAttendanceDay(date, kind) {
-    Object.assign(home, { attendanceDate: ISO_DATE.test(date) ? date : todayIso(), attendanceNoteFor: null });
+    Object.assign(home, { attendanceDate: ISO_DATE.test(date) ? date : todayIso(), attendanceNoteFor: null, armed: null });
     home.attendanceKind = kind || kindOn(home.attendanceDate);
     renderHome();
   }
@@ -6069,6 +6088,7 @@ a:focus-visible, input:focus-visible, select:focus-visible, summary:focus-visibl
     if (b.dataset.att) { tapAttendance(b.dataset.att); return; }
     if (b.dataset.attKind) { openAttendanceDay(home.attendanceDate, b.dataset.attKind); return; }
     if (b.dataset.attNote) { home.attendanceNoteFor = b.dataset.attNote; renderHome(); document.querySelector(`[data-att-note-input="${b.dataset.attNote}"]`).focus(); return; }
+    if (b.hasAttribute('data-att-note-save')) { home.attendanceNoteFor = null; renderHome(); return; }
     if (b.dataset.homeView === 'attendance') { showAttendance(); return; }
     if (b.dataset.homeView === 'matches') { showMatches(); return; }
     if (b.dataset.homeView === 'team') { home.crestDraft = undefined; showTeamPage(); return; }
@@ -6118,12 +6138,13 @@ a:focus-visible, input:focus-visible, select:focus-visible, summary:focus-visibl
     const el = ev.target;
     if (el.id === 'tpl-name') { home.template.name = el.value; return; }
     if (el.id === 'att-date') { openAttendanceDay(el.value); return; }
-    if (el.dataset.attNoteInput) { saveAttendanceNote(el.dataset.attNoteInput, el.value); return; }
     if (el.dataset.tplNum) { editDraftRival(draftRival(el.dataset.tplNum), { num: Number(el.value) }); return; }
     if (el.dataset.tplName) { editDraftRival(draftRival(el.dataset.tplName), { name: el.value.trim().slice(0, MAX_NAME_LENGTH) }); return; }
     if (el.dataset.teamNum) { saveTeamPlayer(rosterPlayer(el.dataset.teamNum), { num: Number(el.value) }); return; }
     if (el.dataset.teamName) saveTeamPlayer(rosterPlayer(el.dataset.teamName), { name: el.value.trim().slice(0, MAX_NAME_LENGTH) });
   });
+  // A note is kept as it is typed, so no tap can lose it.
+  $('home').addEventListener('input', (ev) => { if (ev.target.dataset.attNoteInput) saveAttendanceNote(ev.target.dataset.attNoteInput, ev.target.value); });
   $('home').addEventListener('keydown', (ev) => { if (ev.key === 'Enter' && ['tpl-dorsals', 'tpl-new-name'].includes(ev.target.id)) addDraftRivals(); });
   $('crest-file').addEventListener('change', (ev) => {
     const file = ev.target.files && ev.target.files[0];
