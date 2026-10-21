@@ -4,6 +4,54 @@
   state = sampleState(); ui.sheetMode = 'sheet'; $('sheet').hidden = true; $('final').hidden = true; $('home').hidden = true; commit();
   const T = (name, fn) => { try { fn(); __results.push('OK ' + name); } catch (e) { __results.push('FAIL ' + name + ': ' + (e && e.message || e) + ' ' + ((e && e.stack) || '').split('\n')[1]); } };
   const throws = (fn, re) => { try { fn(); } catch (e) { if (re.test(e.message)) return; throw new Error('wrong error ' + e.message); } throw new Error('did not throw'); };
+  // Rects of the live screen at the suite's viewport (1280×800, sample match, defence), recorded before the design pass (M0b).
+  const LIVE_GEOMETRY = {
+    bar: { x: 16, y: 10, w: 1248, h: 73.39 },
+    clock: { x: 616.38, y: 37.39, w: 108.23, h: 34 },
+    court: { x: 205, y: 100.39, w: 750, h: 595.61 },
+    bench: { x: 17, y: 122.19, w: 170, h: 384.98 },
+    panel: { x: 972, y: 93.39, w: 292, h: 609.61 },
+    'actions:btn-undo': { x: 798.44, y: 722, w: 48, h: 59 },
+    'actions:btn-redo': { x: 854.44, y: 722, w: 48, h: 59 },
+    'actions:btn-stop': { x: 910.44, y: 722, w: 101.7, h: 59 },
+    'actions:btn-sheet': { x: 1020.14, y: 722, w: 68.12, h: 59 },
+    'actions:btn-finish': { x: 1096.27, y: 722, w: 102.73, h: 59 },
+    'actions:btn-theme': { x: 1207, y: 722, w: 48, h: 59 },
+    'tokens:p1': { x: 539.39, y: 293.29, w: 81.22, h: 77.84 },
+    'tokens:p22': { x: 282.2, y: 323.74, w: 81.22, h: 77.84 },
+    'tokens:p5': { x: 370.18, y: 413.09, w: 81.22, h: 90.02 },
+    'tokens:p14': { x: 478.48, y: 460.46, w: 81.22, h: 90.02 },
+    'tokens:p18': { x: 600.3, y: 472.65, w: 81.22, h: 77.84 },
+    'tokens:p19': { x: 708.6, y: 425.27, w: 81.22, h: 77.84 },
+    'tokens:p17': { x: 796.59, y: 323.74, w: 81.22, h: 77.84 },
+  };
+  const LIVE_GEOMETRY_ELEMENTS = {
+    bar: () => document.querySelector('.bar'), clock: () => $('clock'), court: () => $('court'), bench: () => $('bench'),
+    panel: () => document.querySelector('aside[aria-label^="Portero"]'),
+    ...Object.fromEntries([...document.querySelectorAll('.strip-actions .btn')].map((b) => [`actions:${b.id}`, () => b])),
+    ...Object.fromEntries([...document.querySelectorAll('#tokens-layer .tok')].map((t) => [`tokens:${t.dataset.id}`, () => t])),
+  };
+  const GEOMETRY_TOLERANCE_PX = 0.5;
+  T('design: contrastRatio matches known pairs', () => {
+    const near = (a, b, tol) => Math.abs(a - b) <= tol;
+    if (!near(contrastRatio('#000000', '#ffffff'), 21, 0.001)) throw new Error('black/white ' + contrastRatio('#000000', '#ffffff'));
+    if (!near(contrastRatio('#767676', '#ffffff'), 4.54, 0.01)) throw new Error('grey/white ' + contrastRatio('#767676', '#ffffff'));
+    if (contrastRatio('#767676', '#ffffff') !== contrastRatio('#ffffff', '#767676')) throw new Error('order matters');
+    if (!near(contrastRatio('#123456', '#123456'), 1, 0.001)) throw new Error('same colour');
+  });
+  T('design: live screen geometry unchanged', () => {
+    const drift = [];
+    Object.entries(LIVE_GEOMETRY).forEach(([name, want]) => {
+      const el = LIVE_GEOMETRY_ELEMENTS[name] && LIVE_GEOMETRY_ELEMENTS[name]();
+      if (!el) { drift.push(`${name} missing`); return; }
+      const r = el.getBoundingClientRect();
+      const got = { x: r.x, y: r.y, w: r.width, h: r.height };
+      Object.keys(want).forEach((k) => { if (Math.abs(got[k] - want[k]) > GEOMETRY_TOLERANCE_PX) drift.push(`${name}.${k} ${got[k].toFixed(2)} vs ${want[k]}`); });
+    });
+    const extra = Object.keys(LIVE_GEOMETRY_ELEMENTS).filter((name) => !(name in LIVE_GEOMETRY));
+    if (extra.length) drift.push('unrecorded: ' + extra.join());
+    if (drift.length) throw new Error(drift.join('; '));
+  });
   T('render all tabs', () => { Object.keys(SHEET_TABS).forEach((t) => { ui.sheetTab = t; renderSheet(); }); ui.sheetGk = state.gkId; ui.sheetTab = 'gk'; renderSheet(); ui.sheetGk = null; });
   T('score pop', () => { openScorePop({ x: 100, y: 100 }); closePop(); });
   T('score fix +1 and undo', () => { const b = score().us; addEvent('SCORE_FIX', { team: 'us', delta: 1 }); if (score().us !== b + 1) throw new Error('no +1'); undo(); if (score().us !== b) throw new Error('undo'); });

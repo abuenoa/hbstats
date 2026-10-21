@@ -4100,6 +4100,21 @@ td.zero { color: var(--faint); }
   }
   window.addEventListener('online', syncMatches);
 
+  // ---- Colour ----
+  const LINEAR_RGB_KNEE = 0.03928, LINEAR_RGB_SLOPE = 12.92, LINEAR_RGB_OFFSET = 0.055, LINEAR_RGB_SCALE = 1.055, LINEAR_RGB_GAMMA = 2.4;
+  const LUMINANCE_WEIGHTS = [0.2126, 0.7152, 0.0722];
+  const CONTRAST_FLARE = 0.05;
+  // WCAG relative luminance of «#rrggbb», from 0 (black) to 1 (white).
+  function relLuminance(hex) {
+    const linear = (c) => (c <= LINEAR_RGB_KNEE ? c / LINEAR_RGB_SLOPE : ((c + LINEAR_RGB_OFFSET) / LINEAR_RGB_SCALE) ** LINEAR_RGB_GAMMA);
+    return hexToRgb(hex).reduce((sum, c, i) => sum + LUMINANCE_WEIGHTS[i] * linear(c / 255), 0);
+  }
+  // WCAG contrast ratio of two «#rrggbb» colours, from 1 to 21, whichever order they come in.
+  function contrastRatio(a, b) {
+    const [light, dark] = [relLuminance(a), relLuminance(b)].sort((x, y) => y - x);
+    return (light + CONTRAST_FLARE) / (dark + CONTRAST_FLARE);
+  }
+
   // ---- Team look ----
   const rgbTriplet = (hex) => hexToRgb(hex).join(', ');
   // Text colour that reads on the brand colour.
