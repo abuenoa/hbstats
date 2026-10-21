@@ -4,8 +4,9 @@
   state = sampleState(); ui.sheetMode = 'sheet'; $('sheet').hidden = true; $('final').hidden = true; $('home').hidden = true; commit();
   const T = (name, fn) => { try { fn(); __results.push('OK ' + name); } catch (e) { __results.push('FAIL ' + name + ': ' + (e && e.message || e) + ' ' + ((e && e.stack) || '').split('\n')[1]); } };
   const throws = (fn, re) => { try { fn(); } catch (e) { if (re.test(e.message)) return; throw new Error('wrong error ' + e.message); } throw new Error('did not throw'); };
-  // Rects of the live screen at the suite's viewport (1280×800, sample match, defence), recorded before the design pass (M0b).
-  const LIVE_GEOMETRY = {
+  // Rects of the live screen (sample match, defence), recorded before the design pass (M0b), per viewport: the suite asks
+  // for a 1280×800 window, which is the viewport locally and 1280×657 in the CI's Chrome (it keeps room for browser UI).
+  const LIVE_GEOMETRY_1280X800 = {
     bar: { x: 16, y: 10, w: 1248, h: 73.39 },
     clock: { y: 37.39, h: 34 }, // x and width follow the display font, so they are not pinned
     court: { x: 205, y: 100.39, w: 750, h: 595.61 },
@@ -25,6 +26,24 @@
     'tokens:p19': { x: 708.6, y: 425.27, w: 81.22, h: 77.84 },
     'tokens:p17': { x: 796.59, y: 323.74, w: 81.22, h: 77.84 },
   };
+  const LIVE_GEOMETRY_BY_VIEWPORT = {
+    '1280x800': LIVE_GEOMETRY_1280X800,
+    '1280x657': {
+      ...LIVE_GEOMETRY_1280X800,
+      court: { ...LIVE_GEOMETRY_1280X800.court, h: 452.61 },
+      bench: { ...LIVE_GEOMETRY_1280X800.bench, w: 155, h: 349.98 },
+      panel: { ...LIVE_GEOMETRY_1280X800.panel, h: 466.61 },
+      ...Object.fromEntries(['undo', 'redo', 'stop', 'sheet', 'finish', 'theme'].map((b) =>
+        [`actions:btn-${b}`, { ...LIVE_GEOMETRY_1280X800[`actions:btn-${b}`], y: 579 }])),
+      'tokens:p1': { x: 549.14, y: 246.97, w: 61.72, h: 59.15 },
+      'tokens:p22': { x: 353.7, y: 270.12, w: 61.72, h: 59.15 },
+      'tokens:p5': { x: 420.56, y: 338.01, w: 61.72, h: 68.41 },
+      'tokens:p14': { x: 502.85, y: 374.01, w: 61.72, h: 68.41 },
+      'tokens:p18': { x: 595.43, y: 383.27, w: 61.72, h: 59.15 },
+      'tokens:p19': { x: 677.72, y: 347.27, w: 61.72, h: 59.15 },
+      'tokens:p17': { x: 744.59, y: 270.12, w: 61.72, h: 59.15 },
+    },
+  };
   const LIVE_GEOMETRY_ELEMENTS = {
     bar: () => document.querySelector('.bar'), clock: () => $('clock'), court: () => $('court'), bench: () => $('bench'),
     panel: () => document.querySelector('aside[aria-label^="Portero"]'),
@@ -41,6 +60,9 @@
     if (!near(contrastRatio('#123456', '#123456'), 1, 0.001)) throw new Error('same colour');
   });
   T('design: live screen geometry unchanged', () => {
+    const viewport = `${innerWidth}x${innerHeight}`;
+    const LIVE_GEOMETRY = LIVE_GEOMETRY_BY_VIEWPORT[viewport];
+    if (!LIVE_GEOMETRY) throw new Error(`no live geometry recorded for viewport ${viewport}`);
     const drift = [];
     Object.entries(LIVE_GEOMETRY).forEach(([name, want]) => {
       const el = LIVE_GEOMETRY_ELEMENTS[name] && LIVE_GEOMETRY_ELEMENTS[name]();
