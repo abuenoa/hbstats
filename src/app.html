@@ -1255,15 +1255,15 @@ span.att-foot { visibility: hidden; }
       autoPhase: from.autoPhase, clockDown: Boolean(from.clockDown), reportEmail: from.reportEmail || '', mvpId: null,
       them: prefill.them || 'Rival', rivals: [], venue: prefill.venue || '', date: prefill.date || todayIso(), phase: DEFAULT_PHASE,
       clock: { period: 1, elapsedMs: 0, runningSince: null }, timeoutsUsed: 0, timeoutsUsedThem: 0, timeout: null,
-      events: [], fired: [], alerts: [], history: [], future: []
+      events: [], fired: [], alerts: [], history: [], future: [], court: []
     };
   }
-  // The same match back at 0:00: squad, rival and setup kept; clock, time-outs and log cleared.
+  // The same match back at 0:00: squad, rival and setup kept; clock, time-outs, log and court log cleared.
   function restartedMatch(from) {
     return {
       ...from, finished: false, mvpId: null, phase: DEFAULT_PHASE,
       clock: { period: 1, elapsedMs: 0, runningSince: null }, timeoutsUsed: 0, timeoutsUsedThem: 0, timeout: null,
-      events: [], fired: [], alerts: [], history: [], future: []
+      events: [], fired: [], alerts: [], history: [], future: [], court: []
     };
   }
   // The sample match sits behind the home screen until a real match is opened.
@@ -1623,6 +1623,7 @@ span.att-foot { visibility: hidden; }
     const op = { added: [e], removed: [] };
     const benched = opts.bringOn ? isOnBench(opts.bringOn) : false;
     if (benched) { const swap = benchSwapFor(opts.bringOn); if (swap) op.lineup = swap; }
+    if (Array.isArray(state.court) && isOnCourtStamped(e)) e.on = onCourtIds(courtAfter(op.lineup));
     if (opts.penalty) op.penalty = opts.penalty;
     const next = state.autoPhase ? phaseAfter(e) : null;
     if (next && next !== state.phase) op.phase = { before: state.phase, after: next };
@@ -1703,7 +1704,34 @@ span.att-foot { visibility: hidden; }
     commit({ freshId: lastAdded(op) });
     hint(`↷ ${opLabel(op)}`);
   }
-  function commit(opts) { save(); renderAll(opts); }
+  function commit(opts) { noteCourt(); save(); renderAll(opts); }
+
+  // ===================== Court log: who is on court, and when (recorded from the substitutions already made) =====================
+  // Only matches created or restarted with a `court` array keep one; old matches, the sample and setup log nothing.
+  // `on` is the field players of the phase being played plus the goalkeeper, sorted; `on: []` is a break (half-time).
+  const ON_COURT_STAMPED = ['SHOT', 'RIVAL_SHOT'];
+  const isOnCourtStamped = (e) => ON_COURT_STAMPED.includes(e.kind) || (e.kind === 'ACTION' && e.playerId == null);
+  const onCourtIds = (s = state) => [...Object.keys(s.lineups[s.phase]), s.gkId].sort();
+  // The court once an event's own bench swaps are made (before they are applied to the lineup).
+  function courtAfter(swaps = []) {
+    const team = { ...lineup() };
+    swaps.filter((swap) => swap.phase === state.phase).forEach((swap) => { delete team[swap.outId]; team[swap.inId] = true; });
+    return { phase: state.phase, gkId: state.gkId, lineups: { [state.phase]: team } };
+  }
+  const sameIds = (a, b) => a.length === b.length && a.every((id, i) => id === b[i]);
+  // An entry at the same second as the last one replaces it (a break is kept); a clock moved back is clamped to it.
+  function logCourt(on) {
+    const log = state.court;
+    const abs = Math.max(absSeconds(), log.length ? log.at(-1).abs : 0);
+    if (log.length && sameIds(log.at(-1).on, on)) return;
+    if (log.length && log.at(-1).abs === abs && log.at(-1).on.length) log.pop();
+    if (log.length && sameIds(log.at(-1).on, on)) return;
+    log.push({ abs, on });
+  }
+  function noteCourt() {
+    if (!Array.isArray(state.court) || !state.setupDone || state.sample || state.finished) return;
+    logCourt(onCourtIds());
+  }
 
   // ===================== Audio, vibration, wake lock =====================
   let audioCtx = null;
@@ -1776,7 +1804,12 @@ span.att-foot { visibility: hidden; }
     rearmPeriodEnd();
     commit();
   }
-  function startPeriod(n) { state.clock = { period: n, elapsedMs: 0, runningSince: null }; rearmPeriodEnd(); commit(); }
+  function startPeriod(n) {
+    if (Array.isArray(state.court)) logCourt([]);
+    state.clock = { period: n, elapsedMs: 0, runningSince: null };
+    rearmPeriodEnd();
+    commit();
+  }
   function startSecondHalf() {
     state.alerts = state.alerts.filter((a) => !(a.kind === 'period' && a.period === 1));
     $('final').hidden = true;

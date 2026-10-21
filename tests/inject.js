@@ -400,6 +400,123 @@
     if (JSON.stringify(pure) !== JSON.stringify(live)) throw new Error(JSON.stringify({ pure, live }));
     } finally { restore(snap); }
   });
+  // ---- Court log (M1): a match created after M1 keeps who is on court, recorded from the substitutions already made ----
+  const withCourtMatch = (fn) => () => {
+    const snap = snapshot();
+    try { state = freshMatch(sampleState()); state.setupDone = true; commit(); fn(); } finally { disarmAction(); cancelPenalty(); closePop(); restore(snap); }
+  };
+  const atSecond = (abs) => { state.clock = { period: abs >= CONFIG.halfSeconds ? 2 : 1, elapsedMs: (abs % CONFIG.halfSeconds) * 1000, runningSince: null }; };
+  const courtSummary = () => JSON.stringify(state.court.map((c) => [c.abs, c.on.length]));
+  const benchFieldPlayer = () => state.players.find((p) => p.pos !== 'POR' && !state.lineups.ATK[p.id] && !state.lineups.DEF[p.id]);
+  T('court: a bench substitution logs a new entry', withCourtMatch(() => {
+    if (state.court.length !== 1 || state.court[0].abs !== 0 || state.court[0].on.length !== CONFIG.maxFieldPlayers + 1) throw new Error('first entry ' + JSON.stringify(state.court));
+    setPhase('ATK'); atSecond(100);
+    const inP = benchFieldPlayer(), outId = Object.keys(lineup())[0];
+    substituteFromBench(inP.id, outId); commit();
+    const last = state.court.at(-1);
+    if (state.court.length !== 2 || last.abs !== 100 || !last.on.includes(inP.id) || last.on.includes(outId) || last.on.join() !== [...last.on].sort().join()) throw new Error(JSON.stringify(state.court));
+  }));
+  T('court: switching to defence with specialists logs the defence lineup', withCourtMatch(() => {
+    setPhase('ATK'); atSecond(60); commit();
+    const atk = state.court.at(-1).on;
+    setPhase('DEF');
+    const last = state.court.at(-1);
+    if (last.on.join() !== onCourtIds().join() || last.on.join() === atk.join() || !last.on.includes('p5') || last.on.includes('p8')) throw new Error(JSON.stringify([atk, last.on]));
+  }));
+  T('court: a goalkeeper change logs', withCourtMatch(() => {
+    atSecond(200);
+    const spare = state.players.find((p) => p.pos === 'POR' && p.id !== state.gkId);
+    state.gkId = spare.id; commit();
+    const last = state.court.at(-1);
+    if (last.abs !== 200 || !last.on.includes(spare.id) || last.on.includes('p1')) throw new Error(JSON.stringify(last));
+  }));
+  T('court: undoing a bench swap logs the restored lineup', withCourtMatch(() => {
+    setPhase('ATK'); state.autoPhase = false; atSecond(300);
+    const before = state.court.at(-1).on.slice();
+    commitShot({ type: 'ourShot', playerId: 'p21', origin: m(0, 8), target: { x: 500, y: 120 }, zone: '9M' }, 'GOL');
+    const swapped = state.court.at(-1).on;
+    if (!swapped.includes('p21')) throw new Error('swap not logged ' + JSON.stringify(swapped));
+    atSecond(310); undo();
+    if (state.court.at(-1).on.join() !== before.join() || state.court.at(-1).abs !== 310) throw new Error('undo ' + JSON.stringify(state.court));
+    atSecond(320); redo();
+    if (!state.court.at(-1).on.includes('p21')) throw new Error('redo ' + JSON.stringify(state.court));
+    if (!state.events.at(-1).on.includes('p21')) throw new Error('redone event lost its stamp');
+  }));
+  T('court: the same second replaces, a clock moved back clamps', withCourtMatch(() => {
+    setPhase('ATK'); atSecond(100);
+    const inP = benchFieldPlayer(), outId = Object.keys(lineup())[0];
+    substituteFromBench(inP.id, outId); commit();
+    const n = state.court.length;
+    const other = Object.keys(lineup()).find((id) => id !== inP.id);
+    substituteFromBench(outId, other); commit();
+    if (state.court.length !== n || state.court.at(-1).abs !== 100 || state.court.at(-1).on.includes(other)) throw new Error('not replaced ' + courtSummary());
+    substituteFromBench(other, outId); commit();
+    if (state.court.length !== n || state.court.at(-1).on.includes(outId)) throw new Error('did not replace back ' + courtSummary());
+    atSecond(400); setPhase('DEF');
+    atSecond(50); substituteFromBench(benchFieldPlayer().id, Object.keys(lineup())[0]); commit();
+    const abs = state.court.map((c) => c.abs);
+    if (abs.join() !== '0,100,400' || state.court.at(-1).on.join() !== onCourtIds().join()) throw new Error('not clamped ' + courtSummary());
+  }));
+  T('court: half-time writes a break entry', withCourtMatch(() => {
+    setPhase('ATK'); atSecond(CONFIG.halfSeconds - 30); commit();
+    startPeriod(2);
+    const [brk, second] = state.court.slice(-2);
+    if (brk.abs !== CONFIG.halfSeconds - 30 || brk.on.length || second.abs !== CONFIG.halfSeconds || second.on.length !== CONFIG.maxFieldPlayers + 1) throw new Error(JSON.stringify(state.court.slice(-2)));
+    atSecond(CONFIG.halfSeconds - 1); startPeriod(1); atSecond(CONFIG.halfSeconds); startPeriod(2);
+    if (!state.court.some((c, i) => !c.on.length && state.court[i + 1] && state.court[i + 1].abs === c.abs)) throw new Error('break lost at the same second ' + courtSummary());
+  }));
+  T('court: old matches and the sample get no log', () => {
+    const snap = snapshot();
+    try {
+      const old = JSON.parse(snap); delete old.court; old.sample = false;
+      state = restoreState(old); commit(); setPhase('ATK');
+      addEvent('RIVAL_SHOT', { gkId: state.gkId, rivalId: null, origin: m(0, 8), target: { x: 500, y: 120 }, zone: '6M', result: 'GOL', contra: false });
+      if ('court' in state || 'on' in state.events.at(-1)) throw new Error('old match grew a log');
+      state = sampleState(); commit(); setPhase('DEF');
+      if ('court' in state) throw new Error('sample has a log');
+      const fresh = freshMatch(sampleState());
+      if (!Array.isArray(fresh.court) || fresh.court.length) throw new Error('fresh match');
+      if (!Array.isArray(restartedMatch(JSON.parse(snap)).court) || restartedMatch({ ...JSON.parse(snap), court: [{ abs: 5, on: ['p1'] }] }).court.length) throw new Error('restarted match');
+    } finally { restore(snap); }
+  });
+  T('court: setup and a finished match log nothing', () => {
+    const snap = snapshot();
+    try {
+      state = freshMatch(sampleState()); commit();
+      state.lineups.ATK = { ...state.lineups.ATK }; delete state.lineups.ATK.p8; commit();
+      if (state.court.length) throw new Error('setup logged ' + courtSummary());
+      state.setupDone = true; commit();
+      state.finished = true; setPhase('DEF');
+      if (state.court.length !== 1) throw new Error('finished logged ' + courtSummary());
+    } finally { restore(snap); }
+  });
+  T('court: a shot by a bench player stamps him on court', withCourtMatch(() => {
+    setPhase('ATK'); state.autoPhase = false; atSecond(120);
+    const p = benchFieldPlayer();
+    commitShot({ type: 'ourShot', playerId: p.id, origin: m(0, 8), target: { x: 500, y: 120 }, zone: '9M' }, 'GOL');
+    const e = state.events.at(-1);
+    if (e.kind !== 'SHOT' || !e.on || !e.on.includes(p.id) || e.on.length !== CONFIG.maxFieldPlayers + 1 || e.on.join() !== e.on.slice().sort().join()) throw new Error(JSON.stringify(e.on));
+    if (e.on.join() !== state.court.at(-1).on.join()) throw new Error('stamp and court log disagree');
+    commitShot({ type: 'rivalShot', rivalId: null, origin: m(0, 8), target: { x: 500, y: 120 }, zone: '6M' }, 'PARADA');
+    if (!state.events.at(-1).on.includes(state.gkId)) throw new Error('rival shot without the goalkeeper');
+  }));
+  T('court: team fault stamps the players on court', withCourtMatch(() => {
+    setPhase('ATK'); atSecond(150);
+    addEvent('ACTION', { playerId: null, action: 'NOATK' });
+    const e = state.events.at(-1);
+    if (!e.on || e.on.join() !== onCourtIds().join()) throw new Error(JSON.stringify(e.on));
+    addEvent('ACTION', { playerId: 'p8', action: 'ASIST' });
+    if ('on' in state.events.at(-1)) throw new Error('a player action was stamped');
+    addEvent('NOTE', { text: 'x' });
+    if ('on' in state.events.at(-1)) throw new Error('a note was stamped');
+  }));
+  T('court: a 2 min stays on court, a red card takes the player out', withCourtMatch(() => {
+    setPhase('ATK'); atSecond(200);
+    addSanction('p8', '2M');
+    if (!state.court.at(-1).on.includes('p8')) throw new Error('2 min removed him from the log');
+    atSecond(500); addSanction('p8', 'D');
+    if (state.court.at(-1).on.includes('p8') || state.court.at(-1).abs !== 500) throw new Error(JSON.stringify(state.court.at(-1)));
+  }));
   T('fresh match: setup first, our roster kept, opponent reset', () => { const f = freshMatch(sampleState()); if (f.setupDone || f.finished || f.events.length || f.rivals.length || f.them !== 'Rival' || !f.players.length || f.clock.elapsedMs) throw new Error(JSON.stringify({ s: f.setupDone, e: f.events.length })); });
   T('setup screen: Empezar goes to the court with the clock stopped', () => { const snap = snapshot(); state = freshMatch(state); commit(); openSetup(); if (!document.querySelector('[data-start-match]') || !document.querySelector('[data-team="them"]') || !document.querySelector('#rival-dorsals')) throw new Error('setup content'); document.querySelector('[data-start-match]').click(); if (!state.setupDone || !$('sheet').hidden || isRunning()) throw new Error('start'); restore(snap); });
   T('setup refuses to start without a goalkeeper', () => { const snap = snapshot(); state = freshMatch(state); state.players = state.players.filter((p) => p.pos !== 'POR'); openSetup(); document.querySelector('[data-start-match]').click(); if (state.setupDone || $('sheet').hidden) throw new Error('started'); if (!$('setup-status').textContent.includes('portero')) throw new Error('msg'); restore(snap); });
