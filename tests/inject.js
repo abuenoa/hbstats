@@ -7,7 +7,7 @@
   // Rects of the live screen at the suite's viewport (1280×800, sample match, defence), recorded before the design pass (M0b).
   const LIVE_GEOMETRY = {
     bar: { x: 16, y: 10, w: 1248, h: 73.39 },
-    clock: { x: 616.38, y: 37.39, w: 108.23, h: 34 },
+    clock: { y: 37.39, h: 34 }, // x and width follow the display font, so they are not pinned
     court: { x: 205, y: 100.39, w: 750, h: 595.61 },
     bench: { x: 17, y: 122.19, w: 170, h: 384.98 },
     panel: { x: 972, y: 93.39, w: 292, h: 609.61 },
@@ -35,6 +35,7 @@
   T('design: contrastRatio matches known pairs', () => {
     const near = (a, b, tol) => Math.abs(a - b) <= tol;
     if (!near(contrastRatio('#000000', '#ffffff'), 21, 0.001)) throw new Error('black/white ' + contrastRatio('#000000', '#ffffff'));
+    if (contrastRatio('#000', '#fff') !== contrastRatio('#000000', '#ffffff')) throw new Error('shorthand');
     if (!near(contrastRatio('#767676', '#ffffff'), 4.54, 0.01)) throw new Error('grey/white ' + contrastRatio('#767676', '#ffffff'));
     if (contrastRatio('#767676', '#ffffff') !== contrastRatio('#ffffff', '#767676')) throw new Error('order matters');
     if (!near(contrastRatio('#123456', '#123456'), 1, 0.001)) throw new Error('same colour');

@@ -66,14 +66,17 @@ MATRIX_SCENES = {
     "halftime": SCENES["halftime"],
     "final": SCENES["final"],
 }
-# Thresholds the probe judges by (WCAG 2.2: 1.4.3 contrast, 2.5.8 target size, in CSS px).
+# Thresholds the probe judges by (contrast: WCAG 1.4.3; the 44 px target is the AAA size of 2.5.5, stricter than the AA 24 px of 2.5.8; in CSS px).
 PROBE_LIMITS = {"textRatio": 4.5, "largeTextRatio": 3, "largeTextPx": 24, "largeBoldTextPx": 18.66, "boldWeight": 700, "targetPx": 44}
 PROBE_SCOPE = ".home, #sheet, #final"
 TARGET_SELECTOR = "button, a[href], input, select, summary, [role=button], [data-player-match]"
+UNMEASURED_SHOWN = 5
 MOTION_CHOICES = ("no-preference", "reduce")
 REDUCED_MOTION_FLAG = "--force-prefers-reduced-motion"
 # Written into the page once the scene is drawn; the tool reads it back from the dumped DOM. It runs in the app's scope
-# (for contrastRatio) with `limits` in reach. contrast and targets list only what fails; motion counts what moves.
+# (for contrastRatio) with `limits` in reach. contrast and targets list only what fails. motion counts what moves and is 0
+# unless reduced motion is active. unmeasured lists text the probe cannot judge: over a gradient or image background, or
+# with an SVG fill that is not a plain colour. data-contrast-skip works from an ancestor, data-target-exempt on the element only.
 PROBE = """
     const badText = [];
     const walker = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT);
@@ -100,10 +103,20 @@ PROBE = """
     const hexOf = (rgba) => '#' + rgba.slice(0, 3).map((c) => c.toString(16).padStart(2, '0')).join('');
     const backdropOf = (el) => {
       const layers = [];
-      for (let node = el; node && !layers.some((l) => l[3] === 255); node = node.parentElement) layers.push(rgbaOf(getComputedStyle(node).backgroundColor));
-      return layers.reduceRight((under, layer) => over(layer, under), [255, 255, 255, 255]);
+      let image = false;
+      for (let node = el; node && !layers.some((l) => l[3] === 255); node = node.parentElement) {
+        const style = getComputedStyle(node);
+        image = image || style.backgroundImage !== 'none';
+        layers.push(rgbaOf(style.backgroundColor));
+      }
+      return { rgba: layers.reduceRight((under, layer) => over(layer, under), [255, 255, 255, 255]), image };
     };
-    const contrast = [];
+    const opacityOf = (el) => {
+      let product = 1;
+      for (let node = el; node; node = node.parentElement) product *= Number(getComputedStyle(node).opacity);
+      return product;
+    };
+    const contrast = [], unmeasured = [];
     scoped('*').forEach((el) => {
       const own = [...el.childNodes].filter((n) => n.nodeType === Node.TEXT_NODE).map((n) => n.nodeValue.trim()).join(' ').trim();
       if (!own || el.closest('[data-contrast-skip], script, style') || !visible(el)) return;
@@ -111,8 +124,13 @@ PROBE = """
       const size = parseFloat(style.fontSize);
       const large = size >= limits.largeTextPx || (size >= limits.largeBoldTextPx && Number(style.fontWeight) >= limits.boldWeight);
       const need = large ? limits.largeTextRatio : limits.textRatio;
-      const back = backdropOf(el);
-      const ratio = contrastRatio(hexOf(over(rgbaOf(style.color), back)), hexOf(back));
+      const paint = el instanceof SVGElement ? style.fill : style.color;
+      if (el instanceof SVGElement && /^(none|url)/.test(paint)) { unmeasured.push({ text: own.slice(0, 40), why: 'svg fill ' + paint.slice(0, 20) }); return; }
+      const { rgba: back, image } = backdropOf(el);
+      if (image) unmeasured.push({ text: own.slice(0, 40), why: 'image backdrop' });
+      const ink = rgbaOf(paint);
+      ink[3] = Math.round(ink[3] * opacityOf(el));
+      const ratio = contrastRatio(hexOf(over(ink, back)), hexOf(back));
       if (ratio < need) contrast.push({ text: own.slice(0, 40), ratio: Math.round(ratio * 100) / 100, need });
     });
     const targets = scoped(targetSelector).filter((el) => visible(el) && !el.hasAttribute('data-target-exempt')).flatMap((el) => {
@@ -128,8 +146,9 @@ PROBE = """
       return properties.some((p, i) => (p === 'transform' || p === 'all') && durations[i % durations.length] > 0);
     };
     const running = document.getAnimations().filter((a) => a.playState === 'running' && roots.some((root) => root.contains(a.effect && a.effect.target)));
-    const motion = running.length + scoped('*').filter((el) => visible(el) && slides(el)).length;
-    return { overflowX: document.documentElement.scrollWidth > innerWidth, badText, contrast, targets, motion };
+    const reduced = matchMedia('(prefers-reduced-motion: reduce)').matches;
+    const motion = reduced ? running.length + scoped('*').filter((el) => visible(el) && slides(el)).length : 0;
+    return { overflowX: document.documentElement.scrollWidth > innerWidth, badText, contrast, targets, motion, unmeasured };
 """
 
 
@@ -214,6 +233,8 @@ def run_matrix(app: str, names: list[str], sizes: list[str], themes: list[str], 
                 problem = probe_problem(probe)
                 passed &= not problem
                 print(f"{shown(out)}: " + (f"FAIL {problem}" if problem else "ok"))
+                if probe.get("unmeasured"):
+                    print(f"  unmeasured={len(probe['unmeasured'])}: " + "; ".join(f"{u['text']!r} ({u['why']})" for u in probe["unmeasured"][:UNMEASURED_SHOWN]))
     return passed
 
 
