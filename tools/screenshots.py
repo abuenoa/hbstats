@@ -99,6 +99,7 @@ MATRIX_SCENES = {
     "sheet-keeper": f"{SHEET_PLAYER} ui.sheetPlayer = '{SAMPLE_KEEPER_ID}'; renderSheet();",
     "halftime": SCENES["halftime"],
     "final": SCENES["final"],
+    "final-share": f"{SAMPLE} commit(); openFinal(); await ui.mvpCardReady; $('mvp-preview').scrollIntoView({{ block: 'center' }});",
 }
 # Thresholds the probe judges by (contrast: WCAG 1.4.3; the 44 px target is the AAA size of 2.5.5, stricter than the AA 24 px of 2.5.8; in CSS px).
 PROBE_LIMITS = {"textRatio": 4.5, "largeTextRatio": 3, "largeTextPx": 24, "largeBoldTextPx": 18.66, "boldWeight": 700, "targetPx": 44}

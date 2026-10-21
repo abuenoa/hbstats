@@ -565,6 +565,10 @@ button.rex-chip { border: 0; cursor: pointer; position: relative; }
 .mvp-face { position: relative; display: grid; justify-items: center; gap: 4px; min-width: var(--tap); min-height: var(--tap); padding: 4px 6px; border: 2px solid transparent; border-radius: var(--radius-md); background: transparent; color: var(--fg); font: var(--type-caption); font-weight: 600; }
 .mvp-face[aria-pressed="true"] { border-color: var(--gold); background: var(--glow-gold); }
 .mvp-tag { font: var(--type-caption); font-weight: 800; color: var(--fg); }
+.mvp-share { display: grid; gap: var(--space-2); }
+.mvp-share h3 { margin: 0; font: var(--type-caption); font-weight: 700; color: var(--muted); text-transform: uppercase; letter-spacing: .06em; }
+.mvp-preview { font: var(--type-caption); color: var(--muted); }
+.mvp-preview-img { display: block; width: min(100%, 260px); height: auto; aspect-ratio: 1080 / 1350; border-radius: var(--radius-md); }
 .ratings { display: grid; gap: var(--space-2); }
 .rating-list { margin: 0; padding: 0; list-style: none; }
 .rating-row { --face-disc: 40px; border-bottom: 1px solid var(--line); }
@@ -1318,6 +1322,9 @@ span.att-foot { visibility: hidden; }
     lastPenTs: 0, shooter: null, rivalNewPos: null, sheetTab: 'stats', sheetMode: 'sheet', sheetGk: null, sheetGoal: 'GK', sheetShooter: null, sheetPlayer: null, sheetReturn: null, rosterSide: 'team', templatePick: false,
     // The final screen lists every rating, not just the top rows.
     ratingsAll: false,
+    // The MVP card shown on the final screen: its PNG and object URL (revoked when the screen re-renders or closes), the
+    // promise of the render in flight and a ticket that retires a render the screen has left behind.
+    mvpCardBlob: null, mvpCardUrl: null, mvpCardReady: null, mvpCardTicket: 0,
     finishArmedTimer: null,
     // Team photos by player id (see setTeamPhotos).
     photos: new Map(),
@@ -2078,7 +2085,7 @@ span.att-foot { visibility: hidden; }
   }
   function startSecondHalf() {
     state.alerts = state.alerts.filter((a) => !(a.kind === 'period' && a.period === 1));
-    $('final').hidden = true;
+    hideFinal();
     startPeriod(2);
   }
   // Logging a play with the clock stopped means the game is on: start it (not for sanctions or score fixes,
@@ -4416,6 +4423,7 @@ span.att-foot { visibility: hidden; }
   }
   const summaryDetailHtml = () => `<details class="more"><summary>Ver más detalle</summary>${tableHtml(['', state.us, state.them], finalRows().map((r) => r.map(String)))}</details>`;
   function openHalftime() {
+    releaseMvpCard();
     const k = keyPoints();
     const block = (title, items) => `<section><h3 class="acta-h">${title}</h3>${keyPointsHtml(items)}</section>`;
     $('final').innerHTML = `<div class="final-card glass">
@@ -4444,12 +4452,19 @@ span.att-foot { visibility: hidden; }
     openFinal(typed ? typed.value : undefined);
   }
   function openFinal(email = state.reportEmail) {
+    releaseMvpCard();
     const seconds = minutesOnCourt(state), ratings = matchRatings(state);
     $('final').innerHTML = `<div class="final-card glass">
       <h2>Final · ${esc(finalTitle())}</h2>
       ${kpiTilesHtml()}
       ${ratingsListHtml(state, ratings, seconds)}
       ${mvpPickHtml()}
+      <section class="mvp-share"><h3>Imagen del MVP</h3>
+        <div class="mvp-preview" id="mvp-preview" aria-live="polite"></div>
+        <div class="row-actions">
+          <button class="btn primary press" type="button" data-final-mvp-share>Compartir MVP</button>
+        </div>
+      </section>
       ${summaryDetailHtml()}
       <label class="final-mail">Enviar los PDF a<input class="in" id="final-email" type="email" inputmode="email" autocomplete="email" placeholder="entrenador@club.es, otro@club.es" value="${esc(email || '')}"></label>
       <div class="row-actions">
@@ -4461,8 +4476,67 @@ span.att-foot { visibility: hidden; }
       <p class="note" id="final-status" aria-live="polite">Correo: descarga los PDF y abre el correo con el resumen; adjúntalos desde Descargas. Compartir: envía los PDF ya adjuntos (Gmail, WhatsApp, Drive…).</p>
     </div>`;
     $('final').hidden = false;
+    ui.mvpCardReady = renderMvpPreview();
   }
   const finalStatus = (text) => sheetStatus('final-status', text);
+  function hideFinal() {
+    releaseMvpCard();
+    $('final').hidden = true;
+  }
+  // Frees the preview's object URL and retires any render still in flight.
+  function releaseMvpCard() {
+    ui.mvpCardTicket++;
+    if (ui.mvpCardUrl) URL.revokeObjectURL(ui.mvpCardUrl);
+    ui.mvpCardUrl = ui.mvpCardBlob = null;
+  }
+  const MVP_PREVIEW_TEXT = { none: 'Elige el MVP para generar la imagen.', busy: 'Generando la imagen…', failed: 'No se pudo generar la imagen del MVP.' };
+  // The MVP card of the match (the coach's pick, else the provisional MVP), drawn on every final screen so it is always ready to share.
+  async function renderMvpPreview() {
+    const ticket = ui.mvpCardTicket, ratings = matchRatings(state), seconds = minutesOnCourt(state), mvp = matchMvp(state, ratings, seconds);
+    const show = (html) => { const slot = $('mvp-preview'); if (slot) slot.innerHTML = html; };
+    if (!mvp.id) { show(esc(MVP_PREVIEW_TEXT.none)); return; }
+    show(esc(MVP_PREVIEW_TEXT.busy));
+    try {
+      const data = mvpCardData(state, mvp.id, ratings, team, seconds), blob = await mvpCardBlob(data);
+      if (ticket !== ui.mvpCardTicket) return;
+      ui.mvpCardBlob = blob;
+      ui.mvpCardUrl = URL.createObjectURL(blob);
+      show(`<img class="mvp-preview-img" src="${ui.mvpCardUrl}" alt="Tarjeta del MVP: ${esc(data.name)}">`);
+    } catch (err) {
+      console.error('MVP card failed', err);
+      if (ticket === ui.mvpCardTicket) show(esc(MVP_PREVIEW_TEXT.failed));
+    }
+  }
+  // 'shared', 'cancelled' (the coach closed the sheet) or 'unsupported'; any other failure is thrown for the caller to report.
+  async function shareFiles(files, title, text) {
+    if (!navigator.canShare || !navigator.canShare({ files })) return 'unsupported';
+    try {
+      await navigator.share({ files, title, text });
+      return 'shared';
+    } catch (err) {
+      if (err && err.name === 'AbortError') return 'cancelled';
+      throw err;
+    }
+  }
+  const SHARE_STATUS = { shared: 'Compartido.', cancelled: 'Compartir cancelado.' };
+  // An image through the share sheet; a device that cannot share files gets a download instead.
+  async function shareImage(blob, filename, title) {
+    try {
+      const result = await shareFiles([new File([blob], filename, { type: blob.type })], title, title);
+      if (result !== 'unsupported') { finalStatus(SHARE_STATUS[result]); return; }
+      await offerFile(filename, blob);
+      finalStatus(`Imagen descargada: ${filename}.`);
+    } catch (err) {
+      console.error('Image share failed', err);
+      finalStatus(err instanceof Error ? `No se pudo compartir: ${err.message}.` : fileErrorText(err));
+    }
+  }
+  const shareFilename = (prefix) => `${prefix}-${slug(state.us)}-${slug(state.them)}.png`;
+  async function shareMvpCard() {
+    await ui.mvpCardReady;
+    if (!ui.mvpCardBlob) { finalStatus(MVP_PREVIEW_TEXT.none); return; }
+    await shareImage(ui.mvpCardBlob, shareFilename('mvp'), `MVP ${finalTitle()}`);
+  }
   async function reportFiles() {
     await loadPdfLibs();
     return ['match', 'players'].map((kind) => { const { doc, filename } = buildPdf(kind); return { filename, blob: doc.output('blob') }; });
@@ -4487,11 +4561,9 @@ span.att-foot { visibility: hidden; }
     finalStatus('Preparando los PDF…');
     try {
       const files = (await reportFiles()).map((f) => new File([f.blob], f.filename, { type: 'application/pdf' }));
-      if (!navigator.canShare || !navigator.canShare({ files })) { finalStatus('Este dispositivo no permite compartir archivos: usa «Enviar por correo».'); return; }
-      await navigator.share({ files, title: `Informe ${finalTitle()}`, text: finalText() });
-      finalStatus('Compartido.');
+      const result = await shareFiles(files, `Informe ${finalTitle()}`, finalText());
+      finalStatus(result === 'unsupported' ? 'Este dispositivo no permite compartir archivos: usa «Enviar por correo».' : SHARE_STATUS[result]);
     } catch (err) {
-      if (err && err.name === 'AbortError') { finalStatus('Compartir cancelado.'); return; }
       console.error('Report share failed', err);
       finalStatus(`No se pudo compartir: ${(err && err.message) || 'error desconocido'}.`);
     }
@@ -4501,11 +4573,12 @@ span.att-foot { visibility: hidden; }
     if (!b) return;
     if (b.dataset.mvp) { setMvp(b.dataset.mvp); return; }
     if (b.hasAttribute('data-ratings-all')) { ui.ratingsAll = !ui.ratingsAll; openFinal($('final-email').value); return; }
-    if (b.hasAttribute('data-final-close')) { $('final').hidden = true; return; }
-    if (b.hasAttribute('data-final-sheet')) { $('final').hidden = true; ui.sheetMode = 'sheet'; ui.sheetTab = 'stats'; renderSheet(); $('sheet').hidden = false; return; }
+    if (b.hasAttribute('data-final-close')) { hideFinal(); return; }
+    if (b.hasAttribute('data-final-sheet')) { hideFinal(); ui.sheetMode = 'sheet'; ui.sheetTab = 'stats'; renderSheet(); $('sheet').hidden = false; return; }
     if (b.hasAttribute('data-second-half')) { startSecondHalf(); return; }
     if (b.hasAttribute('data-final-mail')) { sendReportsByMail(); return; }
     if (b.hasAttribute('data-final-share')) shareReports();
+    if (b.hasAttribute('data-final-mvp-share')) shareMvpCard();
   });
 
   // ---- Sheet wiring ----

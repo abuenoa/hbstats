@@ -947,12 +947,16 @@
   const goalAtZone = (id, zone, n, tag) => rShots(id, zone, n, 0).map((e, i) => ({ ...e, id: `${tag}${i}`, abs: 50 + i }));
   // Opens the final screen on the sample squad with these events and court log; the sample's own match is restored afterwards.
   const placed = (e) => (e.kind === 'SHOT' || e.kind === 'RIVAL_SHOT' ? { origin: m(0, 6), target: gf(0.5, 0.5), from: e.zone, ...e } : e);
-  const onFinal = (over, fn) => () => {
+  // Returns what puts the match back; the async final tests (the MVP preview) wait for ui.mvpCardReady before they close it.
+  const withFinal = (over) => {
     const snap = snapshot();
-    try {
-      Object.assign(state, { mvpId: null, history: [], court: undefined, courtSets: undefined, clock: FULL_MATCH_CLOCK, ...over, collapsed: undefined, events: (over.events || []).map(placed) });
-      ui.ratingsAll = !over.collapsed; openFinal(); fn();
-    } finally { ui.ratingsAll = false; restore(snap); }
+    Object.assign(state, { mvpId: null, history: [], court: undefined, courtSets: undefined, clock: FULL_MATCH_CLOCK, ...over, collapsed: undefined, events: (over.events || []).map(placed) });
+    ui.ratingsAll = !over.collapsed; openFinal();
+    return () => { ui.ratingsAll = false; restore(snap); };
+  };
+  const onFinal = (over, fn) => () => {
+    const done = withFinal(over);
+    try { fn(); } finally { done(); }
   };
   const ratingRows = () => [...$('final').querySelectorAll('.rating-row')];
   const rowIds = () => ratingRows().map((r) => r.dataset.ratingPlayer);
@@ -1128,6 +1132,20 @@
   // ---- Accounts, team and saved matches (device backend; Supabase mapping through a fake client) ----
   const TA = async (name, fn) => { try { await fn(); __results.push('OK ' + name); } catch (e) { __results.push('FAIL ' + name + ': ' + (e && e.message || e) + ' ' + ((e && e.stack) || '').split('\n')[1]); } };
   const tick0 = () => new Promise((r) => setTimeout(r, 0));
+  // Share-sheet and object-URL stubs for the final screen's image tests.
+  const previewImg = () => $('final').querySelector('#mvp-preview img');
+  const sheetStubs = (canShare, share) => {
+    const own = (key) => Object.getOwnPropertyDescriptor(navigator, key);
+    const saved = { canShare: own('canShare'), share: own('share') };
+    Object.defineProperty(navigator, 'canShare', { value: canShare, configurable: true });
+    Object.defineProperty(navigator, 'share', { value: share, configurable: true });
+    return () => ['canShare', 'share'].forEach((key) => { if (saved[key]) Object.defineProperty(navigator, key, saved[key]); else delete navigator[key]; });
+  };
+  const revokedUrls = () => {
+    const revoke = URL.revokeObjectURL.bind(URL), revoked = [];
+    URL.revokeObjectURL = (url) => { revoked.push(url); revoke(url); };
+    return { revoked, stop: () => { URL.revokeObjectURL = revoke; } };
+  };
   const accountTests = async () => {
     // Awaits requestAnimationFrame under the runner's virtual time, which stalls after heavy canvas work: keep it before the card tests.
     await TA('design: theme switch suppresses transitions for two frames', async () => {
@@ -1242,6 +1260,91 @@
       if (!(error instanceof Error) || !/image/i.test(error.message)) throw new Error('loadImage did not reject clearly: ' + error);
       const blob = await mvpCardBlob({ ...mvpCardData(state, 'p17', cardRatings()), photo: broken });
       if (blob.type !== 'image/png' || blob.size < 1000) throw new Error(blob.type + ' ' + blob.size);
+    });
+    // ---- The MVP card at the end of the match, and the share sheet (M3) ----
+    await TA('final: finishing a match shows the MVP preview', async () => {
+      const done = withFinal({ ...playedFew(), finished: false });
+      try {
+        await ui.mvpCardReady;
+        const img = previewImg();
+        if (!img || !img.src.startsWith('blob:') || img.src !== ui.mvpCardUrl) throw new Error('no preview image');
+        if (!img.alt.includes('Diego')) throw new Error('not the provisional MVP: ' + img.alt);
+        if (!$('final').querySelector('[data-final-mvp-share]')) throw new Error('share button missing');
+      } finally { done(); }
+      const noMvp = withFinal({ events: [], courtSets: [[]], court: [{ abs: 0, set: 0 }] });
+      try {
+        await ui.mvpCardReady;
+        if (previewImg() || !$('mvp-preview').textContent.includes('Elige el MVP para generar la imagen.')) throw new Error('no-MVP message: ' + $('mvp-preview').textContent);
+      } finally { noMvp(); }
+    });
+    await TA('final: the coach\'s pick redraws the preview for that player', async () => {
+      const done = withFinal(playedFew());
+      try {
+        await ui.mvpCardReady;
+        const first = previewImg().src;
+        if (!previewImg().alt.includes('Diego')) throw new Error('provisional: ' + previewImg().alt);
+        document.querySelector('[data-mvp="p8"]').click();
+        await ui.mvpCardReady;
+        const picked = state.players.find((p) => p.id === 'p8');
+        if (!previewImg() || previewImg().src === first || !previewImg().alt.includes(picked.name)) throw new Error('preview not redrawn: ' + (previewImg() && previewImg().alt));
+      } finally { done(); }
+    });
+    await TA('final: re-rendering revokes the old preview URL', async () => {
+      const done = withFinal(playedFew()), spy = revokedUrls();
+      try {
+        await ui.mvpCardReady;
+        const first = ui.mvpCardUrl;
+        openFinal();
+        if (!spy.revoked.includes(first)) throw new Error('re-render kept the old URL');
+        await ui.mvpCardReady;
+        const second = ui.mvpCardUrl;
+        $('final').querySelector('[data-final-close]').click();
+        if (!spy.revoked.includes(second) || ui.mvpCardUrl) throw new Error('closing kept the URL');
+        // A card that finishes after the screen was closed leaves no URL behind.
+        const pending = (openFinal(), ui.mvpCardReady);
+        $('final').querySelector('[data-final-close]').click();
+        await pending;
+        if (ui.mvpCardUrl) throw new Error('a stale card kept its URL');
+      } finally { spy.stop(); done(); }
+    });
+    await TA('final: share falls back to a download when files cannot be shared', async () => {
+      const done = withFinal(playedFew());
+      const click = HTMLAnchorElement.prototype.click, clicked = [], spy = revokedUrls();
+      HTMLAnchorElement.prototype.click = function () { clicked.push({ download: this.download, href: this.href }); };
+      let shared = 0, unstub = sheetStubs(() => false, async () => { shared++; });
+      const tap = async () => { $('final').querySelector('[data-final-mvp-share]').click(); await ui.mvpCardReady; for (let i = 0; i < 5; i++) await tick0(); };
+      try {
+        await ui.mvpCardReady;
+        await tap();
+        if (shared || clicked.length !== 1 || !/^mvp-.+\.png$/.test(clicked[0].download) || !clicked[0].href.startsWith('blob:')) throw new Error(JSON.stringify(clicked) + ' shared ' + shared);
+        await new Promise((r) => setTimeout(r, 1100));
+        if (!spy.revoked.includes(clicked[0].href)) throw new Error('download URL not revoked');
+        // A cancelled sheet is not an error; any other failure says so.
+        unstub(); unstub = sheetStubs(() => true, async () => { throw Object.assign(new Error('x'), { name: 'AbortError' }); });
+        await tap();
+        if (clicked.length !== 1 || /No se pudo/.test($('final-status').textContent)) throw new Error('cancel: ' + $('final-status').textContent);
+        unstub(); unstub = sheetStubs(() => true, async () => { throw new Error('boom'); });
+        await tap();
+        if (!/No se pudo compartir: boom/.test($('final-status').textContent)) throw new Error('failure: ' + $('final-status').textContent);
+      } finally { unstub(); HTMLAnchorElement.prototype.click = click; spy.stop(); done(); }
+    });
+    await TA('shareFiles: shared, cancelled, unsupported and failures', async () => {
+      const file = new File(['x'], 'a.png', { type: 'image/png' });
+      let unstub = sheetStubs(undefined, undefined);
+      try {
+        if (await shareFiles([file], 't', 'x') !== 'unsupported') throw new Error('no canShare');
+        unstub(); unstub = sheetStubs(() => false, async () => {});
+        if (await shareFiles([file], 't', 'x') !== 'unsupported') throw new Error('canShare false');
+        const calls = [];
+        unstub(); unstub = sheetStubs((data) => !!data.files, async (data) => { calls.push(data); });
+        if (await shareFiles([file], 'Título', 'Texto') !== 'shared' || calls[0].title !== 'Título' || calls[0].text !== 'Texto' || calls[0].files[0] !== file) throw new Error('shared');
+        unstub(); unstub = sheetStubs(() => true, async () => { throw Object.assign(new Error('x'), { name: 'AbortError' }); });
+        if (await shareFiles([file], 't', 'x') !== 'cancelled') throw new Error('abort');
+        unstub(); unstub = sheetStubs(() => true, async () => { throw new Error('boom'); });
+        let message = '';
+        try { await shareFiles([file], 't', 'x'); } catch (e) { message = e.message; }
+        if (message !== 'boom') throw new Error('failure swallowed: ' + message);
+      } finally { unstub(); }
     });
     await TA('home opens on team creation when the device has no team', async () => { await startHome(); if (home.view !== 'team-new' || $('home').hidden || !document.querySelector('[data-form="team-new"]')) throw new Error(home.view); });
     await TA('create team: name, colours and initials crest applied', async () => { $('team-club').value = 'CB Ejemplo'; $('team-name').value = 'Ejemplo Sur'; $('team-brand').value = '#1d4ed8'; $('team-brand2').value = '#facc15'; await submitTeam(document.querySelector('[data-form="team-new"]'), true); if (home.view !== 'team' || team.name !== 'Ejemplo Sur' || !team.id) throw new Error(home.view + ' ' + team.name); if (getComputedStyle($('score-us')).color !== 'rgb(29, 78, 216)') throw new Error('score colour ' + getComputedStyle($('score-us')).color); if (PDF_RGB.brand.join() !== '29,78,216' || team.brandInk !== '#ffffff') throw new Error('pdf/ink'); if (!decodeURIComponent($('bar-crest').src).includes('>ES<')) throw new Error('initials'); if (inkFor('#facc15') !== '#151515') throw new Error('ink for light'); });
@@ -2926,6 +3029,16 @@
     T('pdf match', () => { addNote('Salida fallada del 9 en la 2ª acción — revisar'); const { doc, filename } = buildPdf('match'); undo(); __results.push('match pages ' + doc.getNumberOfPages() + ' ' + filename); window.__pdfMatch = doc.output('datauristring'); });
     T('pdf players', () => { const { doc } = buildPdf('players'); __results.push('players pages ' + doc.getNumberOfPages()); window.__pdfPlayers = doc.output('datauristring'); });
     T('pdf one', () => { const { filename } = buildPdf('p8'); __results.push(filename); });
+    return TA('final: shareReports still shares through shareFiles', async () => {
+      const done = withFinal(playedFew()), shared = [];
+      const unstub = sheetStubs((data) => data.files.every((f) => f.type === 'application/pdf'), async (data) => { shared.push(data); });
+      try {
+        $('final').querySelector('[data-final-share]').click();
+        for (let i = 0; i < 50 && !shared.length; i++) await tick0();
+        if (shared.length !== 1 || shared[0].files.length !== 2 || !/^informe-.+\.pdf$/.test(shared[0].files[0].name) || !shared[0].title.startsWith('Informe')) throw new Error(JSON.stringify(shared.map((d) => d.files.map((f) => f.name))));
+        if ($('final-status').textContent !== 'Compartido.') throw new Error($('final-status').textContent);
+      } finally { unstub(); done(); }
+    });
   }).catch((e) => __results.push('FAIL libs ' + e.message)).finally(() => {
     const pre = document.createElement('pre'); pre.id = 'res'; pre.textContent = __results.join('\n'); document.body.appendChild(pre);
     ['__pdfMatch', '__pdfPlayers'].forEach((k) => { if (window[k]) { const t = document.createElement('textarea'); t.id = k; t.textContent = window[k]; document.body.appendChild(t); } });
