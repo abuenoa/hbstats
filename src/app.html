@@ -2023,6 +2023,52 @@ span.att-foot { visibility: hidden; }
     { key: 'red', label: 'Roja', weight: (w) => w.red },
     { key: 'blue', label: 'Azul', weight: (w) => w.blue }
   ];
+  // What the coach can tune, in the order of the tuning view. Keys are `CONFIG.rating.weights` names, with two knobs that
+  // keep his fixed relations: `oneOnOne` alone moves PROV7, BEATEN and PEN7C (+, −, −), and `teamFaultKeeper` is a share (0–1)
+  // of `teamFaultField`, so the goalkeeper's team fault can never weigh more than the field player's.
+  const RATING_KNOB_STEP = 0.05;
+  const RATING_KNOB_DECIMALS = 2;
+  const RATING_KNOBS = [
+    { key: 'shot', label: 'Acierto en tiro', group: 'Tiro y portería', min: 0, max: 2, step: RATING_KNOB_STEP },
+    { key: 'save', label: 'Paradas sobre lo esperado', group: 'Tiro y portería', min: 0, max: 1.5, step: RATING_KNOB_STEP },
+    { key: 'turnover', label: 'Pérdida de balón', group: 'Pérdidas', min: -1.5, max: 0, step: RATING_KNOB_STEP },
+    { key: 'forcedTurnover', label: 'Pérdida forzada por el rival', group: 'Pérdidas', min: -1.5, max: 0, step: RATING_KNOB_STEP },
+    { key: 'ruleTurnover', label: 'Pérdida de regla (pasos, dobles)', group: 'Pérdidas', min: -1.5, max: 0, step: RATING_KNOB_STEP },
+    { key: 'ruleFault', label: 'Falta personal', group: 'Faltas', min: -1, max: 0, step: RATING_KNOB_STEP },
+    { key: 'tactical', label: 'Fallo táctico', group: 'Faltas', min: -1, max: 0, step: RATING_KNOB_STEP },
+    { key: 'oneOnOne', label: '1x1: 7 m provocado, superado o cometido', group: '1x1 y 7 m', min: 0, max: 1, step: RATING_KNOB_STEP },
+    { key: 'assist', label: 'Asistencia', group: 'Acciones', min: 0, max: 1, step: RATING_KNOB_STEP },
+    { key: 'recovery', label: 'Recuperación', group: 'Acciones', min: 0, max: 1, step: RATING_KNOB_STEP },
+    { key: 'block', label: 'Bloqueo', group: 'Acciones', min: 0, max: 1, step: RATING_KNOB_STEP },
+    { key: 'teamFaultField', label: 'Falta de contundencia: jugador de campo', group: 'Equipo', min: -0.5, max: 0, step: RATING_KNOB_STEP },
+    { key: 'teamFaultKeeper', label: 'Falta de contundencia: portero (parte de la de campo)', group: 'Equipo', min: 0, max: 1, step: RATING_KNOB_STEP },
+    { key: 'yellow', label: 'Amarilla', group: 'Sanciones', min: -1, max: 0, step: RATING_KNOB_STEP },
+    { key: 'twoMin', label: '2 minutos', group: 'Sanciones', min: -1.5, max: 0, step: RATING_KNOB_STEP },
+    { key: 'red', label: 'Roja', group: 'Sanciones', min: -3, max: 0, step: RATING_KNOB_STEP },
+    { key: 'blue', label: 'Azul', group: 'Sanciones', min: -2, max: 0, step: RATING_KNOB_STEP }
+  ];
+  const RATING_KNOB_DEFAULTS = { ...CONFIG.rating.weights, teamFaultKeeper: CONFIG.rating.weights.teamFaultKeeper / CONFIG.rating.weights.teamFaultField };
+  const knobOf = (key) => RATING_KNOBS.find((k) => k.key === key);
+  const roundToKnobStep = (knob, v) => clamp(roundHalfUp(v / knob.step, 0) * knob.step, knob.min, knob.max);
+  // The knob values of a team: the defaults with its saved ones laid over them. A saved value that is unknown, not a
+  // number or out of range is dropped or clamped, with a warning, so a bad row can never skew a rating.
+  function ratingKnobValues(t = team) {
+    const values = { ...RATING_KNOB_DEFAULTS }, saved = t.ratingWeights;
+    if (saved == null) return values;
+    if (typeof saved !== 'object' || Array.isArray(saved)) { console.warn('Rating weights ignored: not an object'); return values; }
+    Object.entries(saved).forEach(([key, value]) => {
+      const knob = knobOf(key);
+      if (!knob) { console.warn(`Rating weight dropped: unknown key ${key}`); return; }
+      if (typeof value !== 'number' || !Number.isFinite(value)) { console.warn(`Rating weight ${key} dropped: not a number`); return; }
+      values[key] = clamp(value, knob.min, knob.max);
+      if (values[key] !== value) console.warn(`Rating weight ${key} clamped from ${value} to ${values[key]}`);
+    });
+    return values;
+  }
+  // The knobs as `CONFIG.rating.weights`: the keeper's team fault is its share of the field player's.
+  const weightsFromKnobs = (knobs) => Object.fromEntries(Object.keys(CONFIG.rating.weights).map((key) => [key,
+    key === 'teamFaultKeeper' ? knobs.teamFaultKeeper * knobs.teamFaultField : knobs[key]]));
+  const ratingWeights = (t = team) => weightsFromKnobs(ratingKnobValues(t));
   // The share of shots from a zone that go in, from the middle of the zone's reference range.
   const expectedGoal = (zone) => {
     const [good, poor] = CONFIG.targets[zone] || CONFIG.targets.shooting;
@@ -2067,16 +2113,17 @@ span.att-foot { visibility: hidden; }
   // How far the minutes on court can be trusted: 1 from a full match, and when the minutes are unknown (null).
   const ratingConfidence = (seconds) => (seconds == null ? 1
     : Math.min(1, (seconds / SECONDS_PER_MINUTE / CONFIG.rating.fullMatchMinutes) ** CONFIG.rating.minutesExponent));
-  // `value` is null («S/C») when the minutes are known and under the minimum.
-  function playerRating(s, player, { seconds = null, weights } = {}) {
-    const features = ratingFeatures(s, player), confidence = ratingConfidence(seconds);
+  // The rating from counted features: `value` is null («S/C») when the minutes are known and under the minimum.
+  function ratingFromCounts(features, { seconds = null, keeper, weights }) {
+    const confidence = ratingConfidence(seconds);
     if (seconds != null && seconds / SECONDS_PER_MINUTE < CONFIG.rating.minMinutes) return { value: null, raw: null, features, confidence, rated: false };
-    return { ...ratingFromFeatures(features, { keeper: player.pos === 'POR', weights, confidence }), features, confidence, rated: true };
+    return { ...ratingFromFeatures(features, { keeper, weights, confidence }), features, confidence, rated: true };
   }
-  // Every player's rating by id; minutes unknown (no court log) rates with confidence 1.
+  const playerRating = (s, player, { seconds = null, weights = ratingWeights() } = {}) => ratingFromCounts(ratingFeatures(s, player), { seconds, keeper: player.pos === 'POR', weights });
+  // Every player's rating by id, with the team's weights; minutes unknown (no court log) rates with confidence 1.
   function matchRatings(s, players = s.players) {
-    const minutes = minutesOnCourt(s);
-    return new Map(players.map((p) => [p.id, playerRating(s, p, { seconds: minutes ? minutes.get(p.id) || 0 : null })]));
+    const minutes = minutesOnCourt(s), weights = ratingWeights();
+    return new Map(players.map((p) => [p.id, playerRating(s, p, { seconds: minutes ? minutes.get(p.id) || 0 : null, weights })]));
   }
   // «S/C» (no rating) reads in the neutral `rt-none` chip, never in a band.
   const RATING_NONE_BAND = 'rt-none';
@@ -2116,9 +2163,10 @@ span.att-foot { visibility: hidden; }
   // What moved the rating: each non-zero feature with its share of the points (scaled by the minutes, like the rating).
   function ratingItemsHtml(rating, keeper) {
     if (!rating.rated) return '';
+    const weights = ratingWeights();
     return RATING_TERMS.filter((t) => Math.abs(rating.features[t.key]) > RATING_ROUNDING_EPSILON).map((t) => {
       const count = rating.features[t.key];
-      const points = roundHalfUp(t.weight(CONFIG.rating.weights, keeper) * count * rating.confidence, CONFIG.rating.decimals);
+      const points = roundHalfUp(t.weight(weights, keeper) * count * rating.confidence, CONFIG.rating.decimals);
       return `<li>${t.label}${t.counts === false ? '' : ` ×${count}`} <b>${signedText(points)}</b></li>`;
     }).join('');
   }
@@ -5217,8 +5265,9 @@ span.att-foot { visibility: hidden; }
     if (!window.supabase) await loadScript(SUPABASE_JS_URL);
     const client = window.supabase.createClient(config.url, config.anonKey, { auth: { persistSession: true, autoRefreshToken: true, detectSessionInUrl: true } });
     const check = (result) => { if (result.error) throw new Error(result.error.message); return result.data; };
-    const toTeam = (r) => ({ id: r.id, club: r.club, name: r.name, brand: r.brand, brand2: r.brand2, brandInk: r.brand_ink, crest: r.crest });
-    const teamRow = (t) => ({ club: t.club, name: t.name, brand: t.brand, brand2: t.brand2, brand_ink: t.brandInk, crest: t.crest });
+    const toTeam = (r) => ({ id: r.id, club: r.club, name: r.name, brand: r.brand, brand2: r.brand2, brandInk: r.brand_ink, crest: r.crest, ratingWeights: r.rating_weights });
+    const teamRow = (t) => ({ club: t.club, name: t.name, brand: t.brand, brand2: t.brand2, brand_ink: t.brandInk, crest: t.crest,
+      ...(t.ratingWeights === undefined ? {} : { rating_weights: t.ratingWeights }) });
     const PLAYER_COLUMNS = 'id,num,name,pos,full_name,photo';
     // `name` is the short name shown on court; `fullName` is the one on the official card.
     const toPlayer = (r) => ({ id: r.id, num: r.num, name: r.name, pos: r.pos, fullName: r.full_name, photo: r.photo });

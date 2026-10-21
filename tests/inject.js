@@ -1860,6 +1860,64 @@
         if (!document.querySelector('.match-head .rating-chip') || document.querySelector('.match-head .rating-chip').textContent !== ratingText(season.rows[0].rating)) throw new Error('per-match chip');
       } finally { Object.assign(home, keep); }
     });
+    // ---- Rating weights per team (M7) ----
+    const withTeamWeights = (ratingWeights, fn) => { const previous = team; team = { ...previous, ratingWeights }; try { return fn(); } finally { team = previous; } };
+    const warned = (fn) => { const real = console.warn, seen = []; console.warn = (...a) => seen.push(a.join(' ')); try { fn(); } finally { console.warn = real; } return seen; };
+    const knobOf = (key) => RATING_KNOBS.find((k) => k.key === key);
+    T('weights: defaults when the team has none', () => {
+      const before = JSON.stringify(CONFIG.rating.weights);
+      for (const t of [{}, { ratingWeights: null }, { ratingWeights: {} }, undefined]) {
+        const w = t === undefined ? ratingWeights() : ratingWeights(t);
+        if (JSON.stringify(w) !== before) throw new Error('not the defaults for ' + JSON.stringify(t) + ': ' + JSON.stringify(w));
+      }
+      if (ratingWeights({}) === CONFIG.rating.weights || JSON.stringify(CONFIG.rating.weights) !== before) throw new Error('the defaults must be copied, never edited');
+      const keys = new Set(RATING_KNOBS.map((k) => k.key));
+      if (!keys.has('oneOnOne') || !keys.has('teamFaultKeeper') || keys.size !== Object.keys(CONFIG.rating.weights).length) throw new Error('one knob per weight: ' + [...keys]);
+      if (!RATING_KNOBS.every((k) => k.label && k.group && k.min < k.max && k.step > 0)) throw new Error('knob fields');
+      if (ratingOf([rTurnover('a', 'Pase')]).raw !== withTeamWeights(undefined, () => ratingOf([rTurnover('a', 'Pase')]).raw)) throw new Error('team without weights rates as before');
+    });
+    T('weights: unknown keys dropped, values clamped', () => {
+      const messages = warned(() => {
+        const w = ratingWeights({ ratingWeights: { bogus: 1, shot: 99, turnover: -99, assist: 'x', recovery: NaN, block: 0.05 } });
+        if ('bogus' in w || Object.keys(w).join() !== Object.keys(CONFIG.rating.weights).join()) throw new Error('unknown key kept: ' + Object.keys(w));
+        if (w.shot !== knobOf('shot').max || w.turnover !== knobOf('turnover').min) throw new Error('not clamped: ' + w.shot + ' ' + w.turnover);
+        if (w.assist !== CONFIG.rating.weights.assist || w.recovery !== CONFIG.rating.weights.recovery || w.block !== 0.05) throw new Error('bad values fall back, good ones stay');
+      });
+      if (messages.length !== 5) throw new Error('one warning per fix: ' + messages.join(' | '));
+      if (warned(() => ratingWeights({ ratingWeights: { shot: 0.9 } })).length) throw new Error('a valid value must not warn');
+      const garbage = warned(() => { if (JSON.stringify(ratingWeights({ ratingWeights: 'oops' })) !== JSON.stringify(CONFIG.rating.weights)) throw new Error('garbage object'); });
+      if (garbage.length !== 1) throw new Error('a non-object warns once: ' + garbage.length);
+    });
+    T('weights: keeper team fault stays below the field one', () => {
+      const keeperShare = knobOf('teamFaultKeeper');
+      if (keeperShare.min !== 0 || keeperShare.max !== 1) throw new Error('a share between 0 and 1');
+      warned(() => {
+        const hard = ratingWeights({ ratingWeights: { teamFaultField: -0.2, teamFaultKeeper: 5 } });
+        if (hard.teamFaultKeeper !== -0.2 || Math.abs(hard.teamFaultKeeper) > Math.abs(hard.teamFaultField)) throw new Error('share capped at 1: ' + hard.teamFaultKeeper);
+        const none = ratingWeights({ ratingWeights: { teamFaultField: -0.2, teamFaultKeeper: -3 } });
+        if (none.teamFaultKeeper !== 0) throw new Error('share floored at 0: ' + none.teamFaultKeeper);
+      });
+      const half = ratingWeights({ ratingWeights: { teamFaultField: -0.4 } });
+      if (!nearTo(half.teamFaultKeeper, -0.4 * CONFIG.rating.weights.teamFaultKeeper / CONFIG.rating.weights.teamFaultField)) throw new Error('default share kept: ' + half.teamFaultKeeper);
+      // The 1x1 knob moves the three terms together.
+      const delta = (action) => withTeamWeights({ oneOnOne: 0.5 }, () => ratingOf([rAct('a', action)]).raw - CONFIG.rating.base);
+      if (!nearTo(delta('PROV7'), 0.5) || !nearTo(delta('BEATEN'), -0.5) || !nearTo(delta('PEN7C'), -0.5)) throw new Error([delta('PROV7'), delta('BEATEN'), delta('PEN7C')].join());
+    });
+    await TA('weights: saved weights reload through the local backend', async () => {
+      const local = localBackend(), created = await local.createTeam({ club: 'W', name: 'W', brand: '#1a4a8a', brand2: '#ffffff', brandInk: '#ffffff', crest: null });
+      try {
+        await local.updateTeam(created.id, { ratingWeights: { turnover: -0.6, oneOnOne: 0.4 } });
+        const [again] = (await local.listTeams()).filter((t) => t.id === created.id);
+        if (again.club !== 'W' || JSON.stringify(again.ratingWeights) !== JSON.stringify({ turnover: -0.6, oneOnOne: 0.4 })) throw new Error(JSON.stringify(again));
+        const w = ratingWeights(again);
+        if (w.turnover !== -0.6 || w.oneOnOne !== 0.4 || w.shot !== CONFIG.rating.weights.shot) throw new Error(JSON.stringify(w));
+        await local.updateTeam(created.id, { club: 'W2' });
+        if (JSON.stringify((await local.listTeams()).find((t) => t.id === created.id).ratingWeights) !== JSON.stringify(again.ratingWeights)) throw new Error('a team edit without weights must keep them');
+        const withTeam = withTeamWeights(again.ratingWeights, () => ratingOf([rTurnover('a', 'Pase')]).raw);
+        if (!nearTo(withTeam, CONFIG.rating.base - 0.6)) throw new Error('rated with the team weights: ' + withTeam);
+        if (!nearTo(ratingOf([rTurnover('a', 'Pase')]).raw, CONFIG.rating.base - 0.4)) throw new Error('premise: default weights');
+      } finally { await local.deleteTeam(created.id); }
+    });
     T('zones: lane and ring from the origin, 7 m and counters apart', () => {
       const shot = (over) => ({ kind: 'SHOT', from: '9M', zone: '9M', origin: m(0, 10), ...over });
       const zones = [shotZone(shot({ origin: m(-8, 2) })), shotZone(shot()), shotZone(shot({ from: '7M', zone: '7M' })), shotZone(shot({ zone: 'CONTRA' }))];
@@ -2806,6 +2864,11 @@
         next = { data: { id: 't9', club: 'C', name: 'N', brand: '#000000', brand2: '#ffffff', brand_ink: '#ffffff', crest: null }, error: null };
         const created = await cloud.createTeam({ club: 'C', name: 'N', brand: '#000000', brand2: '#ffffff', brandInk: '#ffffff', crest: null });
         if (created.brandInk !== '#ffffff' || calls.find((c) => c[0] === 'rpc')[1] !== 'create_team') throw new Error('create');
+        next = { data: { id: 't9', club: 'C', name: 'N', brand: '#000000', brand2: '#ffffff', brand_ink: '#ffffff', crest: null, rating_weights: { turnover: -0.6 } }, error: null }; calls.length = 0;
+        const weighted = await cloud.updateTeam('t9', { ratingWeights: { turnover: -0.6 } });
+        if (calls.find((c) => c[0] === 'update')[1].rating_weights.turnover !== -0.6 || weighted.ratingWeights.turnover !== -0.6) throw new Error('rating_weights mapping');
+        calls.length = 0; await cloud.updateTeam('t9', { club: 'C', name: 'N' });
+        if (calls.find((c) => c[0] === 'update')[1].rating_weights !== undefined) throw new Error('a team edit must not send the weights');
         next = { data: null, error: { message: 'duplicate key value violates unique constraint "players_team_num_active"' } };
         let msg = ''; try { await cloud.savePlayer('t1', { id: null, num: 4, name: 'X', pos: 'LAT' }); } catch (e) { msg = cloudErrorText(e); }
         if (msg !== 'ese dorsal ya está en la plantilla') throw new Error(msg);
