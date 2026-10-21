@@ -31,6 +31,7 @@ CLOUD_CONFIG_LINE = re.compile(r"const CLOUD_CONFIG = .*;")
 DEFAULT_SIZES = "1280x800,1024x640"
 DEFAULT_THEMES = "light,dark"
 PROBE_SETTLE_MS = 100
+BOOT_POLL_MS = 10
 PROBE_META = re.compile(r'<meta name="probe" content="([^"]*)"')
 
 # The home screen opens over the app; scenes close it and dress the app as a club with its colours.
@@ -52,9 +53,10 @@ SCENES = {
 }
 # Matrix-only scenes: the season fixture (tools/scenes/season.js) puts the app in the team pages of a club with four matches.
 SHEET_STATS = f"{SAMPLE} commit(); ui.sheetMode = 'sheet'; ui.sheetTab = 'stats'; renderSheet(); $('sheet').hidden = false;"
+TOP_SCORER_SAMPLE_ID = "p17"
 MATRIX_SCENES = {
     "team": "await seedSeason();",
-    "player": "await seedSeason(); showPlayer(home.roster.find((p) => p.pos === 'EXT').id);",
+    "player": f"showPlayer((await seedSeason()).get('{TOP_SCORER_SAMPLE_ID}'));",
     "keeper": "await seedSeason(); showPlayer(home.roster.find((p) => p.pos === 'POR').id);",
     "matches": "await seedSeason(); await showMatches();",
     "profile": "await seedSeason(); await showProfile();",
@@ -81,8 +83,10 @@ def scene_page(app: str, snippet: str, matrix: bool = False) -> str:
         raise ValueError(f"{SOURCE_PAGE} must end its script with an IIFE '{APP_END}'")
     if not matrix:
         return app[:cut] + f"  {snippet}\n" + app[cut:]
-    # Matrix scenes run on the local backend (the built page points at the cloud) once the app has finished booting.
-    app = CLOUD_CONFIG_LINE.sub("const CLOUD_CONFIG = null;", app)
+    # Matrix scenes run on the local backend (the built page points at the cloud) once fonts are loaded and the app has booted.
+    app, replaced = CLOUD_CONFIG_LINE.subn("const CLOUD_CONFIG = null;", app)
+    if not replaced:
+        raise ValueError(f"{SOURCE_PAGE} has no 'const CLOUD_CONFIG = ...;' line to switch to the local backend")
     cut = app.rfind(APP_END)
     season = (SCENES_DIR / "season.js").read_text(encoding="utf-8")
     run = f"""  const writeProbe = (result) => {{
@@ -93,6 +97,8 @@ def scene_page(app: str, snippet: str, matrix: bool = False) -> str:
   }};
   const probe = () => {{{PROBE}  }};
   (async () => {{
+    await document.fonts.ready;
+    while (home.view === 'loading') await new Promise((resolve) => setTimeout(resolve, {BOOT_POLL_MS}));
     await new Promise((resolve) => setTimeout(resolve));
     {snippet}
     await new Promise((resolve) => setTimeout(resolve, {PROBE_SETTLE_MS}));
