@@ -1773,6 +1773,98 @@
       const gone = fx('r1', 1, '2026-10-18', 'EL JAMON CBM LEPE', { matchId: 'deleted' });
       if (fixtureMatch(gone, [mt('m1', '2026-10-17', 'CBMLEPE')]) !== null || linkFixtures([gone], [mt('m1', '2026-10-17', 'CBMLEPE')]).size !== 0) throw new Error('fell back to the auto link');
     });
+    const emptySession = (date = '2026-10-20', kind = 'ENTRENO') => ({ id: 'sess-' + date + kind, date, kind, matchId: null, marks: {}, note: '' });
+    const withAttendanceTeam = async (fn) => {
+      await withCalendarTeam(async (calTeam) => {
+        const savedSessions = home.sessions;
+        try { await fn(calTeam); } finally { removeKey(attendanceKey('cal-team')); removeKey(CACHE_KEY_PREFIX + 'attendance:cal-team'); clearTimeout(attendanceSyncTimer); home.sessions = savedSessions; }
+      });
+    };
+    await TA('attendance: tapping cycles Presente, Falta, Justificada, Lesionado', async () => {
+      const train = ['P', 'F', 'J', 'L', 'P'], seen = [train[0]];
+      train.slice(1).forEach(() => seen.push(nextStatus(seen[seen.length - 1], false)));
+      if (seen.join() !== train.join()) throw new Error(seen.join());
+      const match = ['NC', 'F', 'J', 'L', 'NC'], seenMatch = [match[0]];
+      match.slice(1).forEach(() => seenMatch.push(nextStatus(seenMatch[seenMatch.length - 1], true)));
+      if (seenMatch.join() !== match.join()) throw new Error(seenMatch.join());
+      const s0 = emptySession(), s1 = setMark(s0, 'p1', 'F', 'x'.repeat(CONFIG.attendance.noteMax + 5));
+      if (s1.marks.p1.s !== 'F' || s1.marks.p1.n.length !== CONFIG.attendance.noteMax || Object.keys(s0.marks).length) throw new Error(JSON.stringify([s0, s1]));
+      if (setMark(s1, 'p1', 'J').marks.p1.n !== s1.marks.p1.n) throw new Error('the note was lost on the next tap');
+      if (ATTENDANCE.NC !== 'No convocado' || ATTENDANCE.J !== 'Justificada') throw new Error('labels');
+    });
+    await TA('attendance: Presente stores nothing', async () => {
+      const marked = setMark(setMark(emptySession(), 'p1', 'L', 'rodilla'), 'p2', 'F');
+      const back = setMark(marked, 'p1', 'P');
+      if ('p1' in back.marks || !('p2' in back.marks)) throw new Error(JSON.stringify(back.marks));
+      if ('p2' in setMark(marked, 'p2', 'NC').marks) throw new Error('NC stored a mark');
+      const match = { state: { players: [{ id: 'p1' }] } }, day = { ...emptySession('2026-10-17', 'PARTIDO'), marks: { p1: { s: 'F' }, p3: { s: 'J' } } };
+      if (sessionStatus(day, 'p1', match) !== 'P' || sessionStatus(day, 'p2', match) !== 'NC' || sessionStatus(day, 'p3', match) !== 'J') throw new Error('match day statuses');
+      if (sessionStatus(emptySession(), 'p2', null) !== 'P' || sessionStatus({ ...emptySession(), marks: { p2: { s: 'L' } } }, 'p2', null) !== 'L') throw new Error('training statuses');
+    });
+    await TA('attendance: a session saved offline is uploaded when back online', async () => {
+      await withAttendanceTeam(async () => {
+        const local = backend, calls = []; let failing = true;
+        try {
+        backend = { listSessions: local.listSessions, saveSession: async (teamId, s) => { calls.push(s.date); if (failing) throw new TypeError('Failed to fetch'); return local.saveSession(teamId, s); } };
+        storeLocalSession(setMark(emptySession(), 'p1', 'F'), true);
+        await syncAttendance();
+        if (!localSessions()[0].dirty || (await local.listSessions('cal-team')).length) throw new Error('uploaded while offline');
+        failing = false;
+        window.dispatchEvent(new Event('online'));
+        for (let i = 0; i < 5; i++) await tick0();
+        if (localSessions()[0].dirty || calls.length !== 2 || (await local.listSessions('cal-team')).length !== 1) throw new Error(JSON.stringify([calls, localSessions()]));
+        await syncAttendance();
+        if (calls.length !== 2) throw new Error('a clean session was uploaded again');
+        const offline = await loadAttendance();
+        if (offline.offline || home.sessions.length !== 1 || home.sessions[0].marks.p1.s !== 'F') throw new Error(JSON.stringify(home.sessions));
+        } finally { backend = local; }
+      });
+    });
+    await TA('attendance: the same day and kind upsert one session', async () => {
+      await withAttendanceTeam(async () => {
+        const local = backend;
+        const first = await local.saveSession('cal-team', setMark(emptySession(), 'p1', 'F'));
+        const second = await local.saveSession('cal-team', { ...setMark(emptySession(), 'p2', 'J'), id: 'other-device' });
+        if (second.id !== first.id || (await local.listSessions('cal-team')).length !== 1 || !('p2' in second.marks)) throw new Error(JSON.stringify([first, second]));
+        await local.saveSession('cal-team', emptySession('2026-10-20', 'PARTIDO'));
+        if ((await local.listSessions('cal-team')).length !== 2) throw new Error('kinds must be apart');
+        storeLocalSession({ ...emptySession(), id: 'other-device' }, true);
+        await syncAttendance();
+        if (localSessions().length !== 1 || localSessions()[0].id !== first.id) throw new Error('the id the backend returned was not adopted: ' + JSON.stringify(localSessions()));
+        await loadAttendance();
+        if (home.sessions.filter((x) => x.kind === 'ENTRENO').length !== 1) throw new Error(JSON.stringify(home.sessions));
+        await local.deleteSession(first.id);
+        if ((await local.listSessions('cal-team')).some((x) => x.id === first.id)) throw new Error('not deleted');
+      });
+    });
+    await TA('attendance: Supabase backend upserts on team, day and kind and maps the row', async () => {
+      const calls = []; let next = { data: null, error: null };
+      const query = () => new Proxy({}, { get: (t, k) => (k === 'then' ? (ok) => ok(next) : (...a) => { calls.push([k, ...a]); return query(); }) });
+      const savedLib = window.supabase; window.supabase = { createClient: () => ({ from: (tbl) => { calls.push(['from', tbl]); return query(); } }) };
+      try {
+        const cloud = await supabaseBackend({ url: 'https://x.supabase.co', anonKey: 'k' });
+        next = { data: { id: 'first-id', on_date: '2026-10-20', kind: 'ENTRENO', match_id: null, marks: { p1: { s: 'F' } }, note: null }, error: null };
+        const saved = await cloud.saveSession('t1', { ...emptySession(), id: 'mine', marks: { p1: { s: 'F' } } });
+        const [, row, options] = calls.find((c) => c[0] === 'upsert');
+        if (options.onConflict !== 'team_id,on_date,kind' || row.team_id !== 't1' || row.on_date !== '2026-10-20' || row.id !== 'mine') throw new Error(JSON.stringify(calls));
+        if (saved.id !== 'first-id' || saved.date !== '2026-10-20' || saved.note !== '' || saved.marks.p1.s !== 'F') throw new Error(JSON.stringify(saved));
+      } finally { window.supabase = savedLib; }
+    });
+    await TA('attendance: scheduling replaces the timer and signing out waits for pending sessions', async () => {
+      await withAttendanceTeam(async () => {
+        const real = backend; let uploads = 0, signedOut = false;
+        try {
+        backend = { saveSession: async () => { uploads++; throw new TypeError('Failed to fetch'); }, signOut: async () => { signedOut = true; } };
+        scheduleAttendanceSync();
+        const first = attendanceSyncTimer;
+        scheduleAttendanceSync();
+        if (attendanceSyncTimer === first) throw new Error('the timer was not replaced');
+        storeLocalSession(setMark(emptySession(), 'p1', 'F'), true);
+        await signOut();
+        if (uploads !== 1 || signedOut || !localSessions()[0].dirty || !/asistencia sin subir/.test($('home-status').textContent)) throw new Error(JSON.stringify([uploads, signedOut, $('home-status').textContent]));
+        } finally { backend = real; }
+      });
+    });
     await TA('calendar: deleting a team removes its calendar copy from the device', async () => {
       const gone = { id: 'cal-gone', club: 'Gone', name: 'Gone', brand: '#1a4a8a', brand2: '#ffffff', brandInk: '#ffffff', crest: null };
       const real = backend, previous = team, savedTeams = home.teams;

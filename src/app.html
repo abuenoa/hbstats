@@ -1049,7 +1049,10 @@ a:focus-visible, input:focus-visible, select:focus-visible, summary:focus-visibl
       attack: [50, 40], turnovers: [12, 20, 'lower'], gk: [33, 25], defense: [55, 45]
     },
     // Key points only speak from a minimum of evidence.
-    insights: { minShots: 3, minGoals: 2, penetrationShare: 50, minBlocked: 3, minRepeats: 2 }
+    insights: { minShots: 3, minGoals: 2, penetrationShare: 50, minBlocked: 3, minRepeats: 2 },
+    // Attendance: a rate under warnPct warns; the excluded codes count neither for nor against; a player's note is
+    // cut at noteMax characters; changes reach the cloud after syncDelayMs without further taps.
+    attendance: { warnPct: 75, excludeFromRate: ['L'], noteMax: 60, syncDelayMs: 2000 }
   };
   /* CLOUD — tools/build_site.py sets this from config/cloud.json ({ url, anonKey } of the Supabase project).
      null = no accounts: teams and matches stay on this device (tests, previews). */
@@ -4009,6 +4012,7 @@ a:focus-visible, input:focus-visible, select:focus-visible, summary:focus-visibl
   const CACHE_KEY_PREFIX = 'hbstats:cache:';
   const CURRENT_MATCH_KEY = 'hbstats:current-match';
   const SQUAD_KEY_PREFIX = 'hbstats:squad:';
+  const ATTENDANCE_KEY_PREFIX = 'hbstats:attendance:';
   const LOCAL_DB_KEY = 'hbstats:local:v1';
   // Matches left by the per-club releases on this same site, offered for import once.
   const LEGACY_MATCH_KEYS = ['hbstats:triana:v4', 'hbstats:triana-fem:v4', 'hbstats-directo:v4'];
@@ -4028,7 +4032,8 @@ a:focus-visible, input:focus-visible, select:focus-visible, summary:focus-visibl
   let backend = null;
   let currentMatchId = null;
   let syncTimer = null;
-  const home = { view: 'loading', user: null, teams: [], roster: [], matches: [], season: null, templates: [], template: null, squad: new Set(), leaderMetric: 'goals', playerId: null, playerMatchId: null, playerEdit: false, playerDraft: null, offline: false, error: '', draft: null, crestDraft: undefined, armed: null, passwordChange: false, seasonOffline: false, fixtures: null, teamMatches: [], fixtureEdit: null, squadFixture: null };
+  let attendanceSyncTimer = null;
+  const home = { view: 'loading', user: null, teams: [], roster: [], matches: [], season: null, templates: [], template: null, squad: new Set(), leaderMetric: 'goals', playerId: null, playerMatchId: null, playerEdit: false, playerDraft: null, offline: false, error: '', draft: null, crestDraft: undefined, armed: null, passwordChange: false, seasonOffline: false, sessions: null, fixtures: null, teamMatches: [], fixtureEdit: null, squadFixture: null };
 
   // ---- Device storage ----
   function readJson(key) {
@@ -4061,6 +4066,9 @@ a:focus-visible, input:focus-visible, select:focus-visible, summary:focus-visibl
   const FIXTURE_COLUMN_OF = { kickoff: 'kickoff', venue: 'venue', matchId: 'match_id' };
   const FIXTURE_COLUMNS = 'id,season,competition,round,weekend,home,opponent,kickoff,venue,match_id';
   const FIXTURE_KEY = 'team_id,season,competition,round';
+  const SESSION_COLUMNS = 'id,on_date,kind,match_id,marks,note';
+  const SESSION_KEY = 'team_id,on_date,kind';
+  const byNewestSession = (a, b) => b.date.localeCompare(a.date) || a.kind.localeCompare(b.kind);
   const byWeekend = (a, b) => a.weekend.localeCompare(b.weekend) || a.round - b.round;
   const CLOUD_ERRORS = [
     [/invalid login credentials/i, 'email o contraseña incorrectos'],
@@ -4082,11 +4090,12 @@ a:focus-visible, input:focus-visible, select:focus-visible, summary:focus-visibl
 
   // Everything on this device: no sign-in, one store in localStorage. Match states are the device copies themselves.
   function localBackend() {
-    const read = () => ({ teams: [], players: [], matches: {}, templates: [], fixtures: [], ...readJson(LOCAL_DB_KEY) });
+    const read = () => ({ teams: [], players: [], matches: {}, templates: [], fixtures: [], sessions: [], ...readJson(LOCAL_DB_KEY) });
     const write = (db) => { if (!writeJson(LOCAL_DB_KEY, db)) throw new Error('no queda espacio en este dispositivo'); };
     const plain = (p) => ({ id: p.id, num: p.num, name: p.name, pos: p.pos, fullName: p.fullName || null, photo: p.photo || null });
     const plainFixture = ({ id, season, competition, round, weekend, home, opponent, kickoff, venue, matchId }) => ({ id, season, competition, round, weekend, home, opponent, kickoff, venue, matchId });
     const listFixtures = async (teamId) => read().fixtures.filter((f) => f.teamId === teamId).map(plainFixture).sort(byWeekend);
+    const plainSession = ({ id, date, kind, matchId, marks, note }) => ({ id, date, kind, matchId, marks, note });
     return {
       needsLogin: false,
       listFixtures,
@@ -4156,6 +4165,22 @@ a:focus-visible, input:focus-visible, select:focus-visible, summary:focus-visibl
         const db = read();
         delete db.matches[id];
         db.fixtures.filter((f) => f.matchId === id).forEach((f) => { f.matchId = null; });
+        db.sessions.filter((x) => x.matchId === id).forEach((x) => { x.matchId = null; });
+        write(db);
+      },
+      async listSessions(teamId) { return read().sessions.filter((x) => x.teamId === teamId).map(plainSession).sort(byNewestSession); },
+      // One session per team, day and kind: the first row keeps its id, like the unique key in the cloud.
+      async saveSession(teamId, s) {
+        const db = read();
+        let row = db.sessions.find((x) => x.teamId === teamId && x.date === s.date && x.kind === s.kind);
+        if (!row) { row = { id: s.id || newUuid(), teamId }; db.sessions.push(row); }
+        Object.assign(row, { date: s.date, kind: s.kind, matchId: s.matchId || null, marks: s.marks, note: s.note || '' });
+        write(db);
+        return plainSession(row);
+      },
+      async deleteSession(id) {
+        const db = read();
+        db.sessions = db.sessions.filter((x) => x.id !== id);
         write(db);
       },
       async deleteTeam(id) {
@@ -4163,6 +4188,7 @@ a:focus-visible, input:focus-visible, select:focus-visible, summary:focus-visibl
         db.teams = db.teams.filter((t) => t.id !== id);
         db.players = db.players.filter((p) => p.teamId !== id);
         db.fixtures = db.fixtures.filter((f) => f.teamId !== id);
+        db.sessions = db.sessions.filter((x) => x.teamId !== id);
         Object.keys(db.matches).filter((k) => db.matches[k].teamId === id).forEach((k) => { delete db.matches[k]; });
         write(db);
       },
@@ -4197,6 +4223,7 @@ a:focus-visible, input:focus-visible, select:focus-visible, summary:focus-visibl
     // `name` is the short name shown on court; `fullName` is the one on the official card.
     const toPlayer = (r) => ({ id: r.id, num: r.num, name: r.name, pos: r.pos, fullName: r.full_name, photo: r.photo });
     const toFixture = (r) => ({ id: r.id, season: r.season, competition: r.competition, round: r.round, weekend: r.weekend, home: r.home, opponent: r.opponent, kickoff: r.kickoff, venue: r.venue, matchId: r.match_id });
+    const toSession = (r) => ({ id: r.id, date: r.on_date, kind: r.kind, matchId: r.match_id, marks: r.marks || {}, note: r.note || '' });
     const listFixtures = async (teamId) => check(await client.from('fixtures').select(FIXTURE_COLUMNS).eq('team_id', teamId).order('weekend').order('round')).map(toFixture);
     const toSummary = (r) => ({ id: r.id, date: r.played_on || '', them: r.rival, venue: r.venue, status: r.status, scoreUs: r.score_us, scoreThem: r.score_them });
     return {
@@ -4234,6 +4261,13 @@ a:focus-visible, input:focus-visible, select:focus-visible, summary:focus-visibl
         check(await client.from('matches').upsert({ id, team_id: teamId, played_on: m.date || null, rival: m.them, venue: m.venue, status: m.status, score_us: m.scoreUs, score_them: m.scoreThem, state: s }));
       },
       async deleteMatch(id) { check(await client.from('matches').delete().eq('id', id)); },
+      async listSessions(teamId) { return check(await client.from('attendance_sessions').select(SESSION_COLUMNS).eq('team_id', teamId).order('on_date', { ascending: false })).map(toSession); },
+      // The unique key makes two devices on the same day one session; the row that comes back carries the id that won.
+      async saveSession(teamId, s) {
+        const row = { id: s.id || newUuid(), team_id: teamId, on_date: s.date, kind: s.kind, match_id: s.matchId || null, marks: s.marks, note: s.note || null };
+        return toSession(check(await client.from('attendance_sessions').upsert(row, { onConflict: SESSION_KEY }).select(SESSION_COLUMNS).single()));
+      },
+      async deleteSession(id) { check(await client.from('attendance_sessions').delete().eq('id', id)); },
       // The upsert writes only the file's columns, so a re-import keeps the kickoff, the venue and the match link.
       async saveFixtures(teamId, { season, competition, fixtures }) {
         const rows = fixtures.map((f) => ({ team_id: teamId, season, competition, round: f.round, weekend: f.weekend, home: f.home, opponent: f.opponent }));
@@ -4318,6 +4352,81 @@ a:focus-visible, input:focus-visible, select:focus-visible, summary:focus-visibl
     }
   }
   window.addEventListener('online', syncMatches);
+
+  // ---- Attendance: one session per team, day and kind; marks only for who was absent ----
+  const ATTENDANCE = { P: 'Presente', F: 'Falta', J: 'Justificada', L: 'Lesionado', NC: 'No convocado' };
+  const SESSION_KINDS = { TRAINING: 'ENTRENO', MATCH: 'PARTIDO' };
+  const MARK_CODES = ['F', 'J', 'L'];
+  const attendanceKey = (teamId) => ATTENDANCE_KEY_PREFIX + teamId;
+  const sameSession = (a, b) => a.date === b.date && a.kind === b.kind;
+  // The device copy of a team: its sessions, each with the dirty flag of the matches' copies.
+  const localSessions = (teamId = team.id) => readJson(attendanceKey(teamId)) || [];
+  function storeLocalSession(s, dirty) {
+    const kept = localSessions().filter((x) => !sameSession(x, s));
+    writeJson(attendanceKey(team.id), [...kept, { ...s, dirty: Boolean(dirty), savedAt: Date.now() }]);
+  }
+  // Sessions changed on this device and not uploaded yet replace (or add to) the backend's list.
+  function withLocalSessions(list) {
+    const dirty = localSessions().filter((x) => x.dirty);
+    const kept = list.filter((s) => !dirty.some((x) => sameSession(x, s)));
+    const pending = dirty.map(({ dirty: flag, savedAt, ...s }) => ({ ...s, pending: true }));
+    return [...kept, ...pending].sort(byNewestSession);
+  }
+  const pendingSessions = () => storedKeys(ATTENDANCE_KEY_PREFIX).flatMap((key) => (readJson(key) || []).filter((x) => x.dirty));
+  async function loadAttendance() {
+    const teamId = team.id;
+    const { value, offline } = await cachedRead(`attendance:${teamId}`, () => backend.listSessions(teamId));
+    if (team.id === teamId) home.sessions = withLocalSessions(value);
+    return { offline };
+  }
+  function scheduleAttendanceSync() {
+    clearTimeout(attendanceSyncTimer);
+    attendanceSyncTimer = setTimeout(syncAttendance, CONFIG.attendance.syncDelayMs);
+  }
+  // Uploads every session changed on this device and adopts the row that comes back: on a same-day conflict the
+  // server keeps the first id. A session edited during the upload keeps the adopted id and stays marked.
+  async function syncAttendance() {
+    clearTimeout(attendanceSyncTimer);
+    if (!backend) return;
+    for (const key of storedKeys(ATTENDANCE_KEY_PREFIX)) {
+      const teamId = key.slice(ATTENDANCE_KEY_PREFIX.length);
+      for (const pending of (readJson(key) || []).filter((x) => x.dirty)) {
+        try {
+          const { dirty, savedAt, ...sent } = pending;
+          const saved = await backend.saveSession(teamId, sent);
+          const adopt = (x) => (!sameSession(x, pending) ? x : x.savedAt === savedAt ? { ...saved, dirty: false, savedAt } : { ...x, id: saved.id });
+          writeJson(key, (readJson(key) || []).map(adopt));
+          if (team.id === teamId && home.sessions) home.sessions = home.sessions.map((x) => (sameSession(x, pending) ? { ...x, id: saved.id } : x));
+        } catch (err) {
+          console.warn(`Attendance of ${pending.date} not uploaded yet: ${cloudErrorText(err)}`);
+        }
+      }
+    }
+  }
+  window.addEventListener('online', syncAttendance);
+
+  // P→F→J→L→P; a player not called up to a match goes NC→F→J→L→NC.
+  function nextStatus(code, onMatchDay) {
+    const at = MARK_CODES.indexOf(code);
+    if (at < 0) return MARK_CODES[0];
+    return at + 1 < MARK_CODES.length ? MARK_CODES[at + 1] : onMatchDay ? 'NC' : 'P';
+  }
+  // Pure: P and NC are the absence of a mark; a note stays with the player until another one replaces it.
+  function setMark(session, playerId, code, note) {
+    const { [playerId]: previous, ...marks } = session.marks;
+    if (MARK_CODES.includes(code)) {
+      const text = (note === undefined ? previous && previous.n : note) || '';
+      marks[playerId] = text ? { s: code, n: text.slice(0, CONFIG.attendance.noteMax) } : { s: code };
+    }
+    return { ...session, marks };
+  }
+  // On a match day the squad of the match is present and cannot be changed; the others are not called up unless marked.
+  function sessionStatus(session, playerId, match) {
+    const mark = session.marks[playerId];
+    const marked = mark && MARK_CODES.includes(mark.s) ? mark.s : null;
+    if (session.kind !== SESSION_KINDS.MATCH || !match) return marked || 'P';
+    return match.state.players.some((p) => p.id === playerId) ? 'P' : marked || 'NC';
+  }
 
   // ---- Colour ----
   // Rating bands from best to worst: the --rating-<band> and --rating-ink-<band> tokens.
@@ -4626,6 +4735,7 @@ a:focus-visible, input:focus-visible, select:focus-visible, summary:focus-visibl
     applyTeam(t);
     home.crestDraft = undefined;
     home.season = null;
+    home.sessions = null;
     home.fixtures = null;
     home.fixtureEdit = null;
     home.teamMatches = [];
@@ -5740,8 +5850,9 @@ a:focus-visible, input:focus-visible, select:focus-visible, summary:focus-visibl
     try { await backend.deleteTeam(gone.id); }
     catch (err) { homeStatus(`No se pudo borrar: ${cloudErrorText(err)}.`); return; }
     localMatches().filter((m) => m.teamId === gone.id).forEach((m) => removeKey(MATCH_KEY_PREFIX + m.id));
-    [`players:${gone.id}`, `matches:${gone.id}`, `fixtures:${gone.id}`].forEach((key) => removeKey(CACHE_KEY_PREFIX + key));
+    [`players:${gone.id}`, `matches:${gone.id}`, `fixtures:${gone.id}`, `attendance:${gone.id}`].forEach((key) => removeKey(CACHE_KEY_PREFIX + key));
     removeKey(SQUAD_KEY_PREFIX + gone.id);
+    removeKey(attendanceKey(gone.id));
     home.teams = home.teams.filter((t) => t.id !== gone.id);
     writeJson(CACHE_KEY_PREFIX + `teams:${userKey()}`, home.teams);
     applyTeam(DEFAULT_TEAM);
@@ -5787,12 +5898,13 @@ a:focus-visible, input:focus-visible, select:focus-visible, summary:focus-visibl
   }
   // Signing out leaves nothing of the team on the tablet, so it waits until every match is uploaded.
   async function signOut() {
-    await syncMatches();
+    await Promise.all([syncMatches(), syncAttendance()]);
     if (localMatches().some((m) => m.dirty)) { homeStatus('Hay partidos sin subir: conéctate a internet antes de salir.'); return; }
+    if (pendingSessions().length) { homeStatus('Hay asistencia sin subir: conéctate a internet antes de salir.'); return; }
     try { await backend.signOut(); }
     catch (err) { homeStatus(`No se pudo salir: ${cloudErrorText(err)}.`); return; }
-    [...storedKeys(MATCH_KEY_PREFIX), ...storedKeys(CACHE_KEY_PREFIX), ...storedKeys(SQUAD_KEY_PREFIX), CURRENT_MATCH_KEY].forEach(removeKey);
-    Object.assign(home, { user: null, teams: [], roster: [], matches: [], templates: [] });
+    [...storedKeys(MATCH_KEY_PREFIX), ...storedKeys(ATTENDANCE_KEY_PREFIX), ...storedKeys(CACHE_KEY_PREFIX), ...storedKeys(SQUAD_KEY_PREFIX), CURRENT_MATCH_KEY].forEach(removeKey);
+    Object.assign(home, { user: null, teams: [], roster: [], matches: [], sessions: null, templates: [] });
     applyTeam(DEFAULT_TEAM);
     showHomeView('login');
   }
