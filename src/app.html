@@ -558,7 +558,7 @@ button.rex-chip { border: 0; cursor: pointer; position: relative; }
 .sheet-head .btn { margin-left: auto; }
 .sheet-head .head-actions { margin-left: auto; display: flex; gap: 8px; flex-wrap: wrap; }
 .sheet-head .head-actions .btn { margin-left: 0; }
-.table-wrap { overflow-x: auto; background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius); }
+.table-wrap { overflow-x: auto; background: var(--surface); border: 1px solid var(--line); border-radius: var(--inner-radius, var(--radius)); }
 table { border-collapse: collapse; width: 100%; font-size: 14px; font-variant-numeric: tabular-nums; }
 th, td { padding: 8px; border-bottom: 1px solid var(--line); text-align: center; white-space: nowrap; }
 th { font-size: 12px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; color: var(--muted); background: var(--soft); }
@@ -567,7 +567,7 @@ td.name span { display: inline-block; width: 10px; height: 10px; border-radius: 
 td.zero { color: var(--faint); }
 .sheet-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 12px; margin-top: 12px; }
 /* Outer radius = tile radius + padding + border (--inner-radius), so tiles inside a card sit concentric with it */
-.sheet-card { --inner-radius: calc(var(--radius-lg) - var(--space-2) - 1px); background: var(--surface); border: 1px solid transparent; border-radius: var(--radius-lg); box-shadow: var(--ring); padding: var(--space-2); min-width: 0; }
+.sheet-card { --card-border: 1px; --inner-radius: calc(var(--radius-xl) - var(--space-3) - var(--card-border)); background: var(--surface); border: var(--card-border) solid transparent; border-radius: var(--radius-xl); box-shadow: var(--ring); padding: var(--space-3); min-width: 0; }
 .sheet-card h3 { margin: 0 0 8px; font-size: 12px; letter-spacing: .1em; text-transform: uppercase; color: var(--muted); }
 .sheet-card ul { margin: 0; padding: 0; list-style: none; display: grid; gap: 4px; font-size: 14px; }
 .sheet-card li { display: flex; justify-content: space-between; gap: 8px; }
@@ -663,7 +663,8 @@ td.zero { color: var(--faint); }
   .home .team-card:hover, .home .face:hover { box-shadow: var(--ring-hover); }
   .home .leader:hover { background: var(--color-bg-subtle); }
 }
-a:focus-visible, input:focus-visible, select:focus-visible, summary:focus-visible, [tabindex]:focus-visible, .chip:focus-visible { outline: var(--focus-ring); outline-offset: 2px; }
+a:focus-visible, input:focus-visible, select:focus-visible, summary:focus-visible, [tabindex]:focus-visible,
+.home .chip:focus-visible, #sheet .chip:focus-visible, #final .chip:focus-visible { outline: var(--focus-ring); outline-offset: 2px; }
 /* ---------- Home: sign-in, team and matches (outside a match) ---------- */
 .home { position: fixed; inset: 0; z-index: 40; overflow: auto; background: var(--bg); padding-block: 16px; padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); }
 .home-wrap { max-width: 1120px; margin: 0 auto; display: grid; gap: 14px; }
@@ -688,7 +689,7 @@ a:focus-visible, input:focus-visible, select:focus-visible, summary:focus-visibl
 .team-card span { display: grid; min-width: 0; }
 .team-card b { font-size: 16px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .team-card small { color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.team-card.add { justify-content: center; border-style: dashed; font-weight: 700; }
+.team-card.add { justify-content: center; border-style: dashed; border-color: var(--line); box-shadow: none; font-weight: 700; }
 .template-edit { display: grid; gap: 12px; }
 .template-pick { margin-block: 6px; }
 .home-body { display: grid; gap: 14px; align-content: start; }
@@ -741,7 +742,7 @@ a:focus-visible, input:focus-visible, select:focus-visible, summary:focus-visibl
 .squad h4 { margin: 14px 0 6px; font-size: 12px; letter-spacing: .1em; text-transform: uppercase; }
 .faces { display: grid; grid-template-columns: repeat(auto-fill, minmax(76px, 1fr)); gap: 8px; }
 .face, .last-match { --face-disc: 56px; }
-.face { display: grid; justify-items: center; gap: 4px; min-height: var(--tap); padding: var(--space-1); border: 1px solid transparent; border-radius: calc(var(--face-disc) / 2 + var(--space-1) + 1px); box-shadow: var(--ring); background: var(--surface); color: var(--fg); font: inherit; font-size: 12px; font-weight: 700; }
+.face { display: grid; justify-items: center; gap: 4px; min-height: var(--tap); padding: var(--space-2); border: 1px solid transparent; border-radius: calc(var(--face-disc) / 2 + var(--space-2) + 1px); box-shadow: var(--ring); background: var(--surface); color: var(--fg); font: inherit; font-size: 12px; font-weight: 700; }
 .face span:not(.disc) { max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .face .disc, .last-match .disc { width: var(--face-disc); height: var(--face-disc); font-size: 22px; }
 .face .disc { box-shadow: 0 0 0 3px var(--pos); }

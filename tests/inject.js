@@ -149,9 +149,10 @@
     return radius.endsWith('%') ? parseFloat(radius) / 100 * Math.min(el.offsetWidth, el.offsetHeight) : parseFloat(radius);
   };
   const CONCENTRIC_TOLERANCE_PX = 1;
-  T('design: nested radii are concentric', () => withHost('<section class="sheet-card"><div class="kpi-tile">1</div></section><button class="face"><span class="disc">7</span></button>', (host) => {
+  // The pairs that occur: team and player cards hold season KPIs and stat tiles, the squad face card holds a disc.
+  T('design: nested radii are concentric', () => withHost('<section class="sheet-card"><div class="season-kpis"><div class="season-kpi">1</div></div><div class="tiles"><div class="tile">1</div></div></section><button class="face"><span class="disc">7</span></button>', (host) => {
     const off = [];
-    [['.sheet-card', '.kpi-tile'], ['.face', '.disc']].forEach(([outerSel, innerSel]) => {
+    [['.sheet-card', '.season-kpi'], ['.sheet-card', '.tile'], ['.face', '.disc']].forEach(([outerSel, innerSel]) => {
       const outer = host.querySelector(outerSel), inner = host.querySelector(innerSel), css = getComputedStyle(outer);
       const want = outerRadius(inner) + parseFloat(css.paddingTop) + parseFloat(css.borderTopWidth), got = outerRadius(outer);
       if (Math.abs(got - want) > CONCENTRIC_TOLERANCE_PX) off.push(`${outerSel} > ${innerSel}: outer ${got}px, inner + padding + border ${want}px`);
@@ -161,39 +162,33 @@
   T('design: cards outside the live screen carry the ring on a transparent border', () => withHost('<section class="sheet-card"></section>', (host) => {
     const css = getComputedStyle(host.firstChild);
     if (css.borderTopColor !== 'rgba(0, 0, 0, 0)' || css.borderTopWidth !== '1px') throw new Error(`border ${css.borderTopWidth} ${css.borderTopColor}`);
-    if (css.boxShadow === 'none' || css.borderTopLeftRadius !== '16px') throw new Error(`ring ${css.boxShadow} radius ${css.borderTopLeftRadius}`);
+    if (css.boxShadow === 'none' || css.borderTopLeftRadius !== '24px') throw new Error(`ring ${css.boxShadow} radius ${css.borderTopLeftRadius}`);
   }));
   T('design: no transition: all and every hover is gated', () => {
     const ungated = [], everything = [];
     let gated = 0;
     ownSheets().forEach((sheet) => walkRules(sheet.cssRules, false, (rule, inHover) => {
-      if (rule.selectorText.includes(':hover') && !rule.selectorText.includes('.rex-chip:hover .x')) { if (inHover) gated += 1; else ungated.push(rule.selectorText); }
-      const transition = rule.style.getPropertyValue('transition-property') || rule.style.getPropertyValue('transition');
-      if (/(^|[\s,])all([\s,]|$)/.test(transition)) everything.push(rule.selectorText);
+      rule.selectorText.split(',').map((sel) => sel.trim()).filter((sel) => sel.includes(':hover') && sel !== '.rex-chip:hover .x').forEach((sel) => { if (inHover) gated += 1; else ungated.push(sel); });
+      if (rule.style.transitionProperty === 'all' || /(^|[\s,])all([\s,]|$)/.test(rule.style.getPropertyValue('transition'))) everything.push(rule.selectorText);
     }));
     if (ungated.length) throw new Error('ungated hover: ' + ungated.join(' | '));
     if (everything.length) throw new Error('transition all: ' + everything.join(' | '));
     if (!gated) throw new Error('no hover rule found inside (hover: hover)');
   });
-  // The transition that wins for el when the page prefers reduced motion or not: later rules win, !important beats the rest.
-  const winningTransition = (el, reduce) => {
-    let winner = '', winnerImportant = false;
-    const applies = (media) => (/prefers-reduced-motion:\s*reduce/.test(media) ? reduce : /prefers-reduced-motion:\s*no-preference/.test(media) ? !reduce : matchMedia(media).matches);
-    const visit = (rules) => [...rules].forEach((rule) => {
-      if (rule.media && !applies(rule.media.mediaText)) return;
-      const value = rule.selectorText !== undefined && el.matches(rule.selectorText) ? rule.style.getPropertyValue('transition') : '';
-      const important = value !== '' && rule.style.getPropertyPriority('transition') === 'important';
-      if (value && (important || !winnerImportant)) { winner = value; winnerImportant = important; }
-      if (rule.cssRules) visit(rule.cssRules);
-    });
-    ownSheets().forEach((sheet) => visit(sheet.cssRules));
-    return winner;
+  // The real cascade: each reduced-motion media rule is forced on or off in turn, then the computed transition is read.
+  const forceMotionPreference = (reduce, fn) => {
+    const rules = [];
+    const collect = (list) => [...list].forEach((rule) => { if (rule.media && /prefers-reduced-motion/.test(rule.media.mediaText)) rules.push([rule, rule.media.mediaText]); if (rule.cssRules) collect(rule.cssRules); });
+    ownSheets().forEach((sheet) => collect(sheet.cssRules));
+    rules.forEach(([rule, text]) => { rule.media.mediaText = /reduce\b/.test(text) === reduce ? 'all' : 'not all'; });
+    try { return fn(); } finally { rules.forEach(([rule, text]) => { rule.media.mediaText = text; }); }
   };
   T('design: reduced motion leaves no transform transition', () => withHost('<div class="home"><button class="press" type="button">x</button></div>', (host) => {
     const press = host.querySelector('.press');
-    const reduced = winningTransition(press, true), moving = winningTransition(press, false);
-    if (/transform|\ball\b/.test(reduced)) throw new Error('reduced: ' + reduced);
-    if (!moving.includes('transform') || !moving.includes('var(--dur-press)') || !moving.includes('var(--ease-out)')) throw new Error('no-preference: ' + moving);
+    const read = (reduce) => forceMotionPreference(reduce, () => { const css = getComputedStyle(press); return [css.transitionProperty, css.transitionDuration]; });
+    const [reducedProperty, reducedDuration] = read(true), [movingProperty, movingDuration] = read(false);
+    if (reducedDuration !== '0s') throw new Error(`reduced: ${reducedProperty} ${reducedDuration}`);
+    if (movingProperty !== 'transform' || movingDuration !== '0.15s') throw new Error(`no-preference: ${movingProperty} ${movingDuration}`);
   }));
   T('design: photos get a neutral outline outside the live screen only', () => {
     const bench = document.createElement('div');
@@ -216,8 +211,14 @@
       if (getComputedStyle(benchDisc).outlineStyle !== 'none') throw new Error('bench disc outlined');
     } finally { bench.remove(); }
   });
+  T('design: the focus ring on chips stays off the live screen', () => {
+    const leaks = [];
+    ownSheets().forEach((sheet) => walkRules(sheet.cssRules, false, (rule) => rule.selectorText.split(',').map((sel) => sel.trim())
+      .filter((sel) => sel.includes('.chip:focus-visible') && !/^(\.home|#sheet|#final) /.test(sel)).forEach((sel) => leaks.push(sel))));
+    if (leaks.length) throw new Error('unscoped: ' + leaks.join(' | '));
+  });
   T('design: focus ring covers links, fields, summaries and chips', () => {
-    const wanted = ['a:focus-visible', 'input:focus-visible', 'select:focus-visible', 'summary:focus-visible', '[tabindex]:focus-visible', '.chip:focus-visible'];
+    const wanted = ['a:focus-visible', 'input:focus-visible', 'select:focus-visible', 'summary:focus-visible', '[tabindex]:focus-visible', '.home .chip:focus-visible'];
     let ring = '';
     ownSheets().forEach((sheet) => walkRules(sheet.cssRules, false, (rule) => { if (rule.style.getPropertyValue('outline') === 'var(--focus-ring)') ring += rule.selectorText + ','; }));
     const missing = wanted.filter((selector) => !ring.includes(selector));
