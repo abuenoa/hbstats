@@ -809,7 +809,7 @@
   const rateMatch = (events, over) => ({ players: [], events, gkId: 'g', courtSets: [['a', 'b', 'g']], ...over });
   const rShot = (playerId, zone, result, i) => ({ id: 's' + playerId + zone + result + i, abs: i, kind: 'SHOT', playerId, zone, result });
   const rShots = (playerId, zone, goals, misses) => [...Array(goals).keys()].map((i) => rShot(playerId, zone, 'GOL', i))
-    .concat([...Array(misses).keys()].map((i) => rShot(playerId, zone, 'FALLO', 100 + i)));
+    .concat([...Array(misses).keys()].map((i) => rShot(playerId, zone, 'FUERA', 100 + i)));
   const rAct = (playerId, action, i = 0) => ({ id: 'a' + playerId + action + i, abs: i, kind: 'ACTION', playerId, action });
   const rMany = (n, make) => [...Array(n).keys()].map(make);
   const rTurnover = (playerId, subtype, i = 0) => ({ id: 't' + playerId + subtype + i, abs: i, kind: 'TURNOVER', playerId, subtype });
@@ -1340,6 +1340,16 @@
     pdfTable(high, { title: 'Notas', head: ['Min'], body, startY: bottom - PDF_TITLE_KEEP_MM - 1 });
     if (high.calls.map((c) => c[0]).join() !== 'title,table') throw new Error('title with room: ' + JSON.stringify(high.calls));
     if (high.calls[1][2] !== 'avoid') throw new Error('a row may split across pages: ' + high.calls[1][2]);
+  });
+  T('pdf: the shot-chart legend names its owner', () => {
+    const legend = (viewKey) => {
+      const texts = [];
+      const doc = new Proxy({ text: (t) => texts.push(t), getTextWidth: () => 10 }, { get: (target, key) => (key in target ? target[key] : () => {}) });
+      pdfShotChart(doc, 0, 0, 100, [], viewKey);
+      return texts.join(' | ');
+    };
+    if (legend('US') !== 'parados 0 | goles 0 | fuera 0') throw new Error('our shots: ' + legend('US'));
+    if (legend('GK') !== 'Nuestro portero: | detenidos 0 | goles encajados 0 | fallos 0') throw new Error('shots at our goal: ' + legend('GK'));
   });
   T('pdf: text keeps the en dash and swaps the characters the font lacks', () => {
     if (pdfText('Mi equipo 7 – 5 Rival') !== 'Mi equipo 7 – 5 Rival' || pdfText('1–0') !== '1–0' || pdfText('–') !== '–') throw new Error('en dash dropped');
@@ -2038,6 +2048,12 @@
       if (afterOurTurnover(goal, [atkLoss(40), atkRecovery(45), goal])) throw new Error('a recovery ended the possession in between');
       if (afterOurTurnover(goal, [atkLoss(40), atkRival(45, 'PARADA'), goal])) throw new Error('the rival shot before');
       if (afterOurTurnover(goal, [goal])) throw new Error('first event of the match');
+      const half = CONFIG.halfSeconds, secondHalf = { ...atkRival(half + 5, 'GOL') };
+      if (afterOurTurnover(secondHalf, [atkLoss(half - 10), secondHalf])) throw new Error('a turnover before half-time is not the possession before the throw-off');
+      if (!afterOurTurnover(secondHalf, [atkLoss(half + 1), secondHalf])) throw new Error('a turnover in the second half');
+      const restart = atkShot(half + 5);
+      if (attackType(restart, [atkRival(half - 5), restart]) !== 'POS') throw new Error('the first shot of the second half is no quick restart');
+      if (attackType(atkShot(95), [atkRival(100), atkShot(95)]) !== 'POS') throw new Error('a clock moved back is no quick restart');
       const rows = attackTypeRows([atkLoss(10), atkRival(20), atkRival(30, 'FUERA')], 'them');
       if (rows.map((r) => r.type).join() !== 'POS,CONTRA,SAQUE' || rows[0].shots !== 2 || rows[0].goals !== 1 || rows[0].pct !== 50 || rows[1].pct !== null) throw new Error(JSON.stringify(rows));
     });
@@ -2126,6 +2142,11 @@
         showHomeView('stats');
         if (/NaN|undefined|Infinity/.test($('home').innerHTML)) throw new Error('a match without events');
       });
+    });
+    T('stats: a rate line sits on a 0-100 % scale with a line at 50 %', () => {
+      const svg = trendSvg([{ date: '2026-10-01', rate: 0.38 }, { date: '2026-10-08', rate: 0.38 }], [{ key: 'rate', label: 'Paradas', token: 'act-def', rate: true }], 'line');
+      const mid = Number(/class="evo-mid"[^>]*y1="([\d.]+)"/.exec(svg)[1]), dot = Number(/class="evo-dot"[^>]*cy="([\d.]+)"/.exec(svg)[1]);
+      if (!(dot > mid)) throw new Error(`38 % must sit under the 50 % line: dot ${dot}, line ${mid}`);
     });
     T('stats: evolutionSvg output unchanged through trendSvg', () => {
       const rows = [{ date: '2026-10-01', goals: 2, made: 0.5 }, { date: '2026-10-08', goals: 5, made: NaN }, { date: '2026-10-15', goals: 3, made: 0.25 }];

@@ -1633,13 +1633,16 @@ span.att-foot { visibility: hidden; }
   const ATTACK_TYPES = { POS: 'Posicional', CONTRA: 'Contraataque', SAQUE: 'Saque rápido' };
   // A possession ends with a shot of either team, our turnover or our recovery (the same count as the «pos.» figures).
   const endsPossession = (e) => e.kind === 'SHOT' || e.kind === 'RIVAL_SHOT' || e.kind === 'TURNOVER' || (e.kind === 'ACTION' && e.action === 'RECUP');
-  const previousPossessionEnd = (e, events) => events.slice(0, events.indexOf(e)).filter(endsPossession).at(-1) || null;
+  // The second half starts with a throw-off: nothing from the first half is the possession before it.
+  const previousPossessionEnd = (e, events) => events.slice(0, events.indexOf(e))
+    .filter((p) => endsPossession(p) && (p.abs >= CONFIG.halfSeconds || e.abs < CONFIG.halfSeconds)).at(-1) || null;
   // The attack type of a shot (ours or the rival's). A quick restart is inferred from timing: the shot comes within
   // CONFIG.attackTypes.quickRestartSeconds of a goal of the other team, with no possession ending in between.
   function attackType(e, events) {
     if (e.kind === 'RIVAL_SHOT' ? e.contra : e.zone === ZONE_CONTRA) return 'CONTRA';
     const conceded = previousPossessionEnd(e, events), scoredBy = e.kind === 'SHOT' ? 'RIVAL_SHOT' : 'SHOT';
-    const restart = conceded && conceded.kind === scoredBy && conceded.result === 'GOL' && e.abs - conceded.abs <= CONFIG.attackTypes.quickRestartSeconds;
+    const gap = conceded ? e.abs - conceded.abs : NaN;
+    const restart = conceded && conceded.kind === scoredBy && conceded.result === 'GOL' && gap >= 0 && gap <= CONFIG.attackTypes.quickRestartSeconds;
     return restart ? 'SAQUE' : 'POS';
   }
   // A rival shot whose previous possession-ending event is our turnover.
@@ -4096,8 +4099,9 @@ span.att-foot { visibility: hidden; }
   const hexToRgb = (hex) => [1, 3, 5].map((i) => parseInt(hex.slice(i, i + 2), 16));
   const PDF_RGB = { brand: hexToRgb(team.brand), brand2: hexToRgb(team.brand2), ink: [21, 21, 21], muted: [95, 91, 87], soft: [241, 239, 236], court: [232, 236, 240], line: [60, 60, 60], net: [200, 204, 210], red: [212, 32, 42], gold: [245, 196, 0], gol: [31, 157, 85], parada: [37, 99, 235], fallo: [138, 143, 152] };
   const PDF_VIEWS = {
-    US: { colors: { GOL: PDF_RGB.gol, PARADA: PDF_RGB.parada, FALLO: PDF_RGB.fallo } },
-    GK: { colors: { GOL: PDF_RGB.red, PARADA: PDF_RGB.parada, FALLO: PDF_RGB.fallo } }
+    // Our shots are named by the shooter; the shots at our goal by the goalkeeper who faces them, as on the screen map.
+    US: { colors: { GOL: PDF_RGB.gol, PARADA: PDF_RGB.parada, FALLO: PDF_RGB.fallo }, labels: { GOL: 'goles', PARADA: 'parados', FALLO: 'fuera' } },
+    GK: { colors: { GOL: PDF_RGB.red, PARADA: PDF_RGB.parada, FALLO: PDF_RGB.fallo }, owner: 'Nuestro portero:', labels: { GOL: 'goles encajados', PARADA: 'detenidos', FALLO: 'fallos' } }
   };
   const PDF_DASH = { GOL: [], PARADA: [1.6, 1], FALLO: [0.5, 1] };
   const PDF_PAGE = { w: 297, h: 210, margin: 12, top: 26, chartW: 120, rightX: 140 };
@@ -4202,6 +4206,7 @@ span.att-foot { visibility: hidden; }
     for (let i = steps; i >= 0; i--) { const a = (i / steps) * (Math.PI / 2); pts.push({ x: CENTER_X + half + r * Math.cos(a), y: GOAL_LINE_Y + r * Math.sin(a) }); }
     return pts.filter((p) => p.x >= 0 && p.x <= 1000);
   }
+  const PDF_LEGEND_GAP = 3;
   const PDF_DORSAL = { r: 2.1, fontSize: 6.5 };
   // With dorsals, each release point carries the shooter's number (drawn after every line so none is hidden).
   function pdfShotChart(doc, x, y, w, shots, viewKey, dorsals = false) {
@@ -4267,11 +4272,16 @@ span.att-foot { visibility: hidden; }
     let lx = x;
     const ly = y + COURT_VIEW_H * k + 6;
     doc.setFontSize(8);
+    if (view.owner) {
+      doc.setTextColor(...PDF_RGB.ink);
+      doc.text(view.owner, lx, ly);
+      lx += doc.getTextWidth(view.owner) + PDF_LEGEND_GAP;
+    }
     TALLY_ORDER.forEach((g) => {
       doc.setFillColor(...view.colors[g]);
       doc.rect(lx, ly - 2.6, 3, 3, 'F');
       doc.setTextColor(...PDF_RGB.ink);
-      const label = `${TALLY_LABELS[g].toLowerCase()} ${c[g]}`;
+      const label = `${view.labels[g]} ${c[g]}`;
       doc.text(pdfText(label), lx + 4.5, ly);
       lx += doc.getTextWidth(label) + 12;
     });
@@ -6274,7 +6284,7 @@ span.att-foot { visibility: hidden; }
 
   const EVO = {
     minW: 360, pad: 24, slotW: 56, barMaxW: 40, barShare: 0.6, h: 220, top: 28, bottom: 34, dotR: 5, barCorner: 4, barOpacity: 0.45,
-    valueSize: 16, valueLift: 6, dateSize: 11, dateDrop: 10, axisWidth: 2, lineWidth: 3, dotRing: 2, pointSize: 13, pointLift: 12, pointDrop: 20, rateStep: 0.2
+    valueSize: 16, valueLift: 6, dateSize: 11, dateDrop: 10, axisWidth: 2, lineWidth: 3, dotRing: 2, pointSize: 13, pointLift: 12, pointDrop: 20, gridWidth: 2, gridDash: '4 4', rateMid: 0.5
   };
   const seriesValue = (series, row) => (typeof series.key === 'function' ? series.key(row) : row[series.key]);
   const seriesColour = (series) => `var(--${series.token})`;
@@ -6288,11 +6298,9 @@ span.att-foot { visibility: hidden; }
     const bars = kind === 'bars' ? series.filter((x) => !x.rate) : [], lines = series.filter((x) => kind === 'line' || x.rate);
     const peakOf = (list) => Math.max(0, ...rows.flatMap((r) => list.map((x) => seriesValue(x, r))).filter(Number.isFinite)) || 1;
     const barPeak = peakOf(bars), linePeak = peakOf(lines.filter((x) => !x.rate));
-    // A rate over the bars is always on 0-1; in a line chart the top is the highest rate rounded up to the next step.
-    const ratePeak = kind === 'line' ? Math.min(1, Math.ceil(peakOf(lines.filter((x) => x.rate)) / EVO.rateStep) * EVO.rateStep) : 1;
     const barW = Math.min(EVO.barMaxW, (slot * EVO.barShare) / (bars.length || 1));
     const centre = (i) => svgNum(EVO.pad + slot * (i + 0.5));
-    const yOf = (x, v) => svgNum(base - clamp(v / (x.rate ? ratePeak : linePeak), 0, 1) * plotH);
+    const yOf = (x, v) => svgNum(base - clamp(v / (x.rate ? 1 : linePeak), 0, 1) * plotH);
     const caption = (r, i) => `<text class="chart-cap" x="${centre(i)}" y="${EVO.h - EVO.dateDrop}" font-size="${EVO.dateSize}" text-anchor="middle">${esc(shortDateText(r.date))}</text>`;
     const barMarks = rows.map((r, i) => bars.map((x, k) => {
       const value = seriesValue(x, r), barH = svgNum((value / barPeak) * plotH), mid = centre(i) + (k - (bars.length - 1) / 2) * barW;
@@ -6313,7 +6321,9 @@ span.att-foot { visibility: hidden; }
       const values = kind === 'line' ? mark.points.map((q) => `<text class="chart-num" x="${q.px}" y="${svgNum(labelY(mark, q, marks.length))}" font-size="${EVO.pointSize}" text-anchor="middle">${esc(labelText(mark.x, q.v))}</text>`).join('') : '';
       return `${polyline}${dots}${values}`;
     }).join('');
-    return `<svg viewBox="0 0 ${width} ${EVO.h}" role="img"><line x1="${EVO.pad}" y1="${base}" x2="${width - EVO.pad}" y2="${base}" stroke="var(--line)" stroke-width="${EVO.axisWidth}"/>${barMarks}${dates}
+    // A rate line is always on 0-100 %, with a light line at 50 % so a low rate does not read as a high one.
+    const mid = kind === 'line' && lines.some((x) => x.rate) ? `<line class="evo-mid" x1="${EVO.pad}" y1="${yOf({ rate: true }, EVO.rateMid)}" x2="${width - EVO.pad}" y2="${yOf({ rate: true }, EVO.rateMid)}" stroke="var(--line)" stroke-width="${EVO.gridWidth}" stroke-dasharray="${EVO.gridDash}"/>` : '';
+    return `<svg viewBox="0 0 ${width} ${EVO.h}" role="img">${mid}<line x1="${EVO.pad}" y1="${base}" x2="${width - EVO.pad}" y2="${base}" stroke="var(--line)" stroke-width="${EVO.axisWidth}"/>${barMarks}${dates}
       ${lineMarks}</svg>`;
   }
   // One bar per match for barKey and a line over them for pct(row) in 0-1.
