@@ -20,7 +20,7 @@ START_DELAY_MS = 300
 STDERR_TAIL_LINES = 40
 # Virtual time Chrome gives the page before dumping it: the suite's timers (arming, the clock) and the PDF library
 # download must fit, or the dump has no results. Virtual time only advances while the page is idle.
-VIRTUAL_TIME_BUDGET_MS = 60000
+VIRTUAL_TIME_BUDGET_MS = 300000
 
 
 def build_test_page() -> str:
