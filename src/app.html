@@ -4000,7 +4000,7 @@ a:focus-visible, input:focus-visible, select:focus-visible, summary:focus-visibl
   let backend = null;
   let currentMatchId = null;
   let syncTimer = null;
-  const home = { view: 'loading', user: null, teams: [], roster: [], matches: [], season: null, templates: [], template: null, squad: new Set(), leaderMetric: 'goals', playerId: null, playerMatchId: null, playerEdit: false, playerDraft: null, offline: false, error: '', draft: null, crestDraft: undefined, armed: null, passwordChange: false, seasonOffline: false, fixtures: null };
+  const home = { view: 'loading', user: null, teams: [], roster: [], matches: [], season: null, templates: [], template: null, squad: new Set(), leaderMetric: 'goals', playerId: null, playerMatchId: null, playerEdit: false, playerDraft: null, offline: false, error: '', draft: null, crestDraft: undefined, armed: null, passwordChange: false, seasonOffline: false, fixtures: null, teamMatches: [] };
 
   // ---- Device storage ----
   function readJson(key) {
@@ -4594,6 +4594,7 @@ a:focus-visible, input:focus-visible, select:focus-visible, summary:focus-visibl
     home.crestDraft = undefined;
     home.season = null;
     home.fixtures = null;
+    home.teamMatches = [];
     try { home.roster = (await cachedRead(`players:${t.id}`, () => backend.listPlayers(t.id))).value; }
     catch (err) { home.roster = []; console.warn(`Roster not available: ${cloudErrorText(err)}`); }
     try { await loadFixtures(); }
@@ -4631,8 +4632,11 @@ a:focus-visible, input:focus-visible, select:focus-visible, summary:focus-visibl
       list = localMatches().filter((m) => m.teamId === teamId && m.state).map(withState);
       console.warn(`Season from the device copies: ${cloudErrorText(failure)}`);
     }
-    const matches = withLocalChanges(list, (m) => ({ state: m.state })).filter((m) => m.state && SEASON_STATUSES.includes(m.status) && !m.state.sample);
+    const all = withLocalChanges(list, (m) => ({ state: m.state })).filter((m) => m.state && !m.state.sample);
+    const matches = all.filter((m) => SEASON_STATUSES.includes(m.status));
     home.season = matches;
+    home.teamMatches = all.map(({ state, ...summary }) => summary);
+    persistLinks();
     return { matches, offline };
   }
 
@@ -4642,6 +4646,10 @@ a:focus-visible, input:focus-visible, select:focus-visible, summary:focus-visibl
   const MAX_FIXTURE_ROUND = 60, MAX_OPPONENT_LENGTH = 60, MAX_COMPETITION_LENGTH = 120;
   const SEASON_LENGTH_RANGE = [4, 9];
   const ISO_DATE = /^\d{4}-\d{2}-\d{2}$/;
+  const DAY_MS = 86400000, WEEK_LAST_DAY = 6;
+  // Words of a club name that say nothing about which club it is.
+  const OPPONENT_STOPWORDS = ['BM', 'CBM', 'CB', 'CD', 'CLUB', 'BALONMANO', 'EL', 'LA', 'LOS', 'DE'];
+  const MIN_SHARED_WORD = 4;
   const isIsoDate = (s) => typeof s === 'string' && ISO_DATE.test(s) && new Date(`${s}T00:00:00Z`).toISOString().startsWith(s);
   // Validates an imported calendar file; returns the season and its rounds or throws an Error explaining what is wrong.
   function parseCalendar(text) {
@@ -4684,6 +4692,65 @@ a:focus-visible, input:focus-visible, select:focus-visible, summary:focus-visibl
       homeStatus(`Calendario importado: ${plural(calendar.fixtures.length, 'jornada', 'jornadas')}.`);
     } catch (err) {
       homeStatus(`No se pudo guardar el calendario: ${cloudErrorText(err)}.`);
+    }
+  }
+  // «BALONMANO GADES - ASISA» -> «BALONMANO GADES ASISA»: upper case, no accents, words made of A-Z and 0-9.
+  const normalName = (s) => String(s || '').normalize('NFD').replace(/[̀-ͯ]/g, '').toUpperCase().replace(/[^A-Z0-9]+/g, ' ').trim();
+  const clubWords = (name) => normalName(name).split(' ').filter((w) => w.length >= MIN_SHARED_WORD && /^[A-Z]+$/.test(w) && !OPPONENT_STOPWORDS.includes(w));
+  // The federation writes «BALONMANO GADES - ASISA» where the coach types «Gades»: one name holds the other, or they share a club word.
+  function sameOpponent(a, b) {
+    const [short, long] = [normalName(a).replace(/ /g, ''), normalName(b).replace(/ /g, '')].sort((x, y) => x.length - y.length);
+    if (short.length >= MIN_SHARED_WORD && long.includes(short)) return true;
+    const words = clubWords(b);
+    return clubWords(a).some((w) => words.includes(w));
+  }
+  const isoOfUtc = (ms) => new Date(ms).toISOString().slice(0, 10);
+  // The Monday and the Sunday of the week that holds `weekendIso`.
+  function weekOf(weekendIso) {
+    const day = new Date(`${weekendIso}T00:00:00Z`);
+    const monday = day.getTime() - ((day.getUTCDay() + WEEK_LAST_DAY) % (WEEK_LAST_DAY + 1)) * DAY_MS;
+    return [isoOfUtc(monday), isoOfUtc(monday + WEEK_LAST_DAY * DAY_MS)];
+  }
+  const pad2 = (n) => String(n).padStart(2, '0');
+  const localIso = (d) => `${d.getFullYear()}-${pad2(d.getMonth() + 1)}-${pad2(d.getDate())}`;
+  // The match a fixture was played as: its explicit link, else a free match of the same week (or the kickoff day) against the same rival.
+  function fixtureMatch(f, matches, taken = new Set()) {
+    const free = matches.filter((m) => !taken.has(m.id));
+    const linked = f.matchId && free.find((m) => m.id === f.matchId);
+    if (linked) return linked;
+    const [monday, sunday] = weekOf(f.weekend);
+    const kickoffDay = f.kickoff ? localIso(new Date(f.kickoff)) : null;
+    return free.find((m) => m.date && ((m.date >= monday && m.date <= sunday) || m.date === kickoffDay) && sameOpponent(m.them, f.opponent)) || null;
+  }
+  // Explicit links first, so an auto link never takes a match that is linked by hand; a match serves one fixture only.
+  function linkFixtures(fixtures, matches) {
+    const links = new Map(), taken = new Set();
+    const link = (f, m) => { links.set(f.id, m); taken.add(m.id); };
+    fixtures.filter((f) => f.matchId).forEach((f) => {
+      const m = matches.find((x) => x.id === f.matchId && !taken.has(x.id));
+      if (m) link(f, m);
+    });
+    fixtures.filter((f) => !links.has(f.id)).forEach((f) => {
+      const m = fixtureMatch(f, matches, taken);
+      if (m) link(f, m);
+    });
+    return links;
+  }
+  // Writes the links found by date and rival back to the fixtures, so they hold when the names change. Online only (matches not
+  // uploaded yet cannot be referenced); a failure is only a warning, and the next load tries again.
+  async function persistLinks() {
+    if (!navigator.onLine || !home.fixtures) return;
+    const teamId = team.id;
+    const links = linkFixtures(home.fixtures, home.teamMatches.filter((m) => !m.pending));
+    try {
+      for (const f of home.fixtures.filter((x) => !x.matchId && links.has(x.id))) {
+        const saved = await backend.updateFixture(f.id, { matchId: links.get(f.id).id });
+        if (team.id !== teamId) return;
+        home.fixtures = home.fixtures.map((x) => (x.id === saved.id ? saved : x));
+      }
+      writeJson(CACHE_KEY_PREFIX + `fixtures:${teamId}`, home.fixtures);
+    } catch (err) {
+      console.warn(`Fixture links not saved yet: ${cloudErrorText(err)}`);
     }
   }
   function matchResult(m) {

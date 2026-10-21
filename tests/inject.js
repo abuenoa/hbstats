@@ -1468,6 +1468,7 @@
     const calFile = (over, fixtures) => JSON.stringify({ format: CALENDAR_FORMAT, version: 1, team: 'Triana', season: '2026/2027', competition: 'Liga', fixtures: fixtures || [
       { round: 1, weekend: '2026-10-18', home: true, opponent: 'EL JAMON CBM LEPE' }, { round: 2, weekend: '2026-10-25', home: false, opponent: 'BALONMANO GADES - ASISA' }, { round: 3, weekend: '2026-11-08', home: true, opponent: 'BM Nazareno' }], ...over });
     const fx = (id, round, weekend, opponent, over) => ({ id, season: '2026/2027', competition: 'Liga', round, weekend, home: true, opponent, kickoff: null, venue: null, matchId: null, ...over });
+    const mt = (id, date, them) => ({ id, date, them });
     await TA('calendar: parses a hbstats-calendario file', async () => {
       const c = parseCalendar(calFile());
       if (c.team !== 'Triana' || c.season !== '2026/2027' || c.competition !== 'Liga' || c.fixtures.length !== 3) throw new Error(JSON.stringify(c));
@@ -1525,7 +1526,7 @@
       const real = backend, previous = team, calTeam = { id: 'cal-team', club: 'Cal', name: 'Cal', brand: '#1a4a8a', brand2: '#ffffff', brandInk: '#ffffff', crest: null };
       backend = localBackend();
       applyTeam(calTeam);
-      try { await fn(calTeam); } finally { await backend.deleteTeam('cal-team'); backend = real; applyTeam(previous); home.fixtures = null; removeKey(CACHE_KEY_PREFIX + 'fixtures:cal-team'); removeKey(CACHE_KEY_PREFIX + 'players:cal-team'); }
+      try { await fn(calTeam); } finally { await backend.deleteTeam('cal-team'); backend = real; applyTeam(previous); home.fixtures = null; home.teamMatches = []; removeKey(CACHE_KEY_PREFIX + 'fixtures:cal-team'); removeKey(CACHE_KEY_PREFIX + 'players:cal-team'); }
     };
     await TA('calendar: fixtures load from the device copy offline', async () => {
       await withCalendarTeam(async () => {
@@ -1542,9 +1543,9 @@
     await TA('calendar: selecting a team clears the fixtures of the previous one and loads its own', async () => {
       await withCalendarTeam(async (calTeam) => {
         await backend.saveFixtures('cal-team', parseCalendar(calFile()));
-        home.fixtures = [fx('stale', 1, '2026-10-18', 'A')];
+        home.fixtures = [fx('stale', 1, '2026-10-18', 'A')]; home.teamMatches = [mt('stale-m', '2026-10-17', 'A')];
         await selectTeam(calTeam);
-        if (home.fixtures.length !== 3 || home.fixtures.some((f) => f.id === 'stale')) throw new Error('stale fixtures ' + JSON.stringify(home.fixtures));
+        if (home.fixtures.length !== 3 || home.fixtures.some((f) => f.id === 'stale') || home.teamMatches.some((m) => m.id === 'stale-m')) throw new Error('stale fixtures ' + JSON.stringify(home.fixtures));
       });
     });
     await TA('calendar: «Editar equipo» shows the count and imports a file', async () => {
@@ -1558,6 +1559,57 @@
         if (!$('home-status').textContent.includes('no es JSON') || home.fixtures.length !== 3) throw new Error('bad file: ' + $('home-status').textContent);
         showHomeView('profile');
       });
+    });
+    await TA('calendar: CBMLEPE on 2026-10-17 links to round 1', async () => {
+      const fixtures = [fx('r1', 1, '2026-10-18', 'EL JAMON CBM LEPE'), fx('r8', 8, '2026-12-20', 'EL JAMON CBM LEPE')];
+      const links = linkFixtures(fixtures, [mt('m1', '2026-10-17', 'CBMLEPE')]);
+      if (links.get('r1').id !== 'm1' || links.has('r8') || links.size !== 1) throw new Error([...links.keys()].join());
+      if (weekOf('2026-10-18').join() !== '2026-10-12,2026-10-18') throw new Error(weekOf('2026-10-18').join());
+    });
+    await TA('calendar: sameOpponent ignores accents, dots and club words', async () => {
+      const cases = [['Gades', 'BALONMANO GADES - ASISA', true], ['BM Nazareno', 'BALONMANO NAZARENO', true], ['BM.Lauro', 'EL JAMON CBM LEPE', false], ['BM Sur', 'BM PROIN SAN JOSÉ RINCONADA', false], ['San José', 'BM PROIN SAN JOSE RINCONADA', true], ['CB', 'CBM LEPE', false]];
+      cases.forEach(([a, b, expected]) => { if (sameOpponent(a, b) !== expected || sameOpponent(b, a) !== expected) throw new Error(`${a} / ${b}`); });
+    });
+    await TA('calendar: the same rival in another week does not link', async () => {
+      const f = fx('r8', 8, '2026-12-20', 'EL JAMON CBM LEPE');
+      if (fixtureMatch(f, [mt('m1', '2026-10-17', 'CBMLEPE')]) !== null) throw new Error('linked across weeks');
+      if (fixtureMatch(f, [mt('m1', '2026-12-14', 'CBMLEPE')]).id !== 'm1' || fixtureMatch(f, [mt('m1', '2026-12-13', 'CBMLEPE')]) !== null) throw new Error('week edges');
+      if (fixtureMatch(f, [mt('m1', '2026-12-19', 'BM Sur')]) !== null) throw new Error('another rival linked');
+    });
+    await TA('calendar: an explicit matchId wins over the auto link', async () => {
+      const fixtures = [fx('r1', 1, '2026-10-18', 'EL JAMON CBM LEPE', { matchId: 'm2' })];
+      const links = linkFixtures(fixtures, [mt('m1', '2026-10-17', 'CBMLEPE'), mt('m2', '2026-11-30', 'Otro')]);
+      if (links.get('r1').id !== 'm2') throw new Error(links.get('r1').id);
+    });
+    await TA('calendar: a match links to one fixture only', async () => {
+      const fixtures = [fx('a', 1, '2026-10-18', 'EL JAMON CBM LEPE'), fx('b', 2, '2026-10-25', 'EL JAMON CBM LEPE', { kickoff: '2026-10-17T10:00:00' })];
+      const links = linkFixtures(fixtures, [mt('m1', '2026-10-17', 'CBMLEPE')]);
+      if (links.size !== 1 || links.get('a').id !== 'm1') throw new Error([...links.keys()].join());
+      const explicit = linkFixtures([fx('a', 1, '2026-10-18', 'EL JAMON CBM LEPE'), fx('c', 3, '2026-11-01', 'Z', { matchId: 'm1' })], [mt('m1', '2026-10-17', 'CBMLEPE')]);
+      if (explicit.get('c').id !== 'm1' || explicit.has('a')) throw new Error('explicit link lost its match to an auto link');
+    });
+    await TA('calendar: a kickoff moved to another week still links by its date', async () => {
+      const moved = fx('r1', 1, '2026-10-18', 'EL JAMON CBM LEPE', { kickoff: new Date(2026, 9, 28, 19, 30).toISOString() });
+      if (fixtureMatch(moved, [mt('m1', '2026-10-28', 'CBMLEPE')]).id !== 'm1') throw new Error('kickoff date ignored');
+    });
+    await TA('calendar: persistLinks writes only new auto links, only online, and only warns on failure', async () => {
+      const real = backend, savedFixtures = home.fixtures, savedMatches = home.teamMatches, online = Object.getOwnPropertyDescriptor(Navigator.prototype, 'onLine'), warn = console.warn;
+      const writes = [], warnings = [];
+      const setOnline = (value) => Object.defineProperty(navigator, 'onLine', { value, configurable: true });
+      try {
+        home.fixtures = [fx('r1', 1, '2026-10-18', 'EL JAMON CBM LEPE'), fx('r2', 2, '2026-10-25', 'BALONMANO NAZARENO', { matchId: 'm9' })];
+        home.teamMatches = [mt('m1', '2026-10-17', 'CBMLEPE'), mt('m3', '2026-10-24', 'Nazareno'), { ...mt('m4', '2026-10-17', 'CBMLEPE'), pending: true }];
+        backend = { updateFixture: async (id, patch) => { writes.push([id, patch]); return { ...home.fixtures.find((f) => f.id === id), ...patch }; } };
+        console.warn = (m) => warnings.push(m);
+        setOnline(false); await persistLinks();
+        if (writes.length) throw new Error('wrote offline');
+        setOnline(true); await persistLinks();
+        if (JSON.stringify(writes) !== '[["r1",{"matchId":"m1"}]]' || home.fixtures[0].matchId !== 'm1') throw new Error(JSON.stringify(writes));
+        home.fixtures[0].matchId = null;
+        backend = { updateFixture: async () => { throw new Error('Failed to fetch'); } };
+        await persistLinks();
+        if (!warnings.length || home.fixtures[0].matchId !== null) throw new Error('failure not warned');
+      } finally { console.warn = warn; backend = real; home.fixtures = savedFixtures; home.teamMatches = savedMatches; delete navigator.onLine; if (online) Object.defineProperty(Navigator.prototype, 'onLine', online); }
     });
     currentMatchId = null; removeKey(CURRENT_MATCH_KEY);
     state = sampleState(); ['home', 'sheet', 'final'].forEach((id) => { $(id).hidden = true; }); commit();
