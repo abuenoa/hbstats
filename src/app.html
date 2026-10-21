@@ -3680,6 +3680,7 @@ a:focus-visible, input:focus-visible, select:focus-visible, summary:focus-visibl
     pdfTable(doc, { title: 'Sanciones', head: ['Min', 'Quién', 'Sanción'], body: sanctions.length ? sanctions : [['-', '-', 'Sin sanciones']], startY: right, left: PDF_PAGE.rightX });
   }
   // Everything one player's page shows, from the events of any saved match. A goalkeeper has only the shots he faced.
+  // The turnover, fault and timeline rows of a goalkeeper are not drawn by the PDF.
   function playerReport(p, s = state) {
     const keeper = p.pos === 'POR';
     const mine = eventsOf(p.id, s.events);
