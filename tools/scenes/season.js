@@ -31,6 +31,10 @@ const SEASON_TEAM = { club: 'Triana BM Vivero', name: 'Triana' };
 const SEASON_SQUAD_IDS = ['p1', 'p12', 'p22', 'p17', 'p3', 'p8', 'p18', 'p5', 'p77', 'p19', 'p10', 'p13'];
 const SEASON_MVP_SAMPLE_ID = 'p8';
 const SEASON_DROP_EVERY = 3;
+// The matches that keep a court log (the others are older, and show «–» for minutes and +/−): one player is replaced
+// halfway through the first half, and again at the start of the second.
+const SEASON_COURT_LOGGED = [0, 3];
+const SEASON_SUBSTITUTION_ABS = 900;
 const SEASON_FULL_TIME_MS = 60 * 60 * 1000;
 const SEASON_CONCEDED_RESULT = { PARADA: 'GOL' };
 const SEASON_MISSED_RESULT = { FUERA: 'GOL' };
@@ -82,6 +86,20 @@ function seasonMatchState(spec, roster, sampleIds, mvp) {
   };
 }
 
+// A court log for a seeded match: the attack lineup, then the same with one field player swapped for a bench player at
+// `SEASON_SUBSTITUTION_ABS` (and back after half-time). Every shot and team fault is stamped with the set on court then.
+function withSeasonCourt(matchState, roster) {
+  const start = [...Object.keys(matchState.lineups.ATK), matchState.gkId].sort();
+  const bench = roster.find((p) => p.pos !== 'POR' && !start.includes(p.id));
+  const swapped = [...start.filter((id) => id !== start[0]), bench.id].sort();
+  const setAt = (abs) => (abs >= SEASON_SUBSTITUTION_ABS && abs < CONFIG.halfSeconds ? 1 : 0);
+  const stamped = (e) => (['SHOT', 'RIVAL_SHOT'].includes(e.kind) || (e.kind === 'ACTION' && e.playerId == null) ? { ...e, on: setAt(e.abs) } : e);
+  return {
+    ...matchState, events: matchState.events.map(stamped), courtSets: [start, swapped],
+    court: [{ abs: 0, set: 0 }, { abs: SEASON_SUBSTITUTION_ABS, set: 1 }, { abs: CONFIG.halfSeconds, set: 0 }]
+  };
+}
+
 // One round a week, the third one this week; the first two are linked to the played matches `SEASON_CALENDAR_PLAYED`.
 async function seedCalendar(teamId, matchIds) {
   const thisSunday = Date.parse(`${weekOf(todayIso())[1]}T00:00:00Z`);
@@ -113,7 +131,8 @@ async function seedSeason() {
   for (const [i, spec] of SEASON_MATCHES.entries()) {
     const id = newUuid();
     matchIds.push(id);
-    const matchState = seasonMatchState(spec, roster, SEASON_SQUAD_IDS, i === SEASON_MATCHES.length - 1);
+    const built = seasonMatchState(spec, roster, SEASON_SQUAD_IDS, i === SEASON_MATCHES.length - 1);
+    const matchState = SEASON_COURT_LOGGED.includes(i) ? withSeasonCourt(built, roster) : built;
     storeLocalMatch(id, matchState, false);
     await backend.saveMatch(created.id, id, matchState);
   }

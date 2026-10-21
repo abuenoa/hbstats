@@ -697,6 +697,67 @@
   T('mvp: a restarted match has no MVP', () => { const saved = JSON.parse(snapshot()); saved.mvpId = saved.players[0].id; if (restartedMatch(saved).mvpId !== null) throw new Error('MVP kept'); });
   T('crowns on screen never share gradient ids', () => { const ids = [...(crownSvg() + crownSvg('x')).matchAll(/id="([^"]+)"/g)].map((x) => x[1]); if (!ids.length || new Set(ids).size !== ids.length) throw new Error(ids.join()); });
 
+  // ---- Minutes and +/− (M1): derived from the court log and the event stamps ----
+  const minutesMatch = (over) => ({
+    clock: { period: 1, elapsedMs: CONFIG.halfSeconds * 1000, runningSince: null }, events: [], gkId: 'g',
+    courtSets: [['a', 'b', 'g'], ['b', 'c', 'g'], ['a', 'g']], court: [{ abs: 0, set: 0 }], ...over
+  });
+  const twoMin = (playerId, abs, card = '2M') => ({ id: 'x' + abs + playerId, abs, kind: 'SANCTION', playerId, card });
+  const goalAt = (kind, abs, on, extra) => ({ id: 'g' + kind + abs, abs, kind, result: 'GOL', on, ...extra });
+  T('minutes: one substitution splits the time', () => {
+    const mins = minutesOnCourt(minutesMatch({ court: [{ abs: 0, set: 0 }, { abs: 600, set: 1 }] }));
+    if (mins.get('a') !== 600 || mins.get('b') !== 1800 || mins.get('c') !== 1200 || mins.get('g') !== 1800) throw new Error(JSON.stringify([...mins]));
+    if (minutesText(1799) !== '29' || minutesText(0) !== '0' || minutesText(null) !== '–') throw new Error('text');
+  });
+  T('minutes: a defence specialist counts defence time only', () => {
+    const mins = minutesOnCourt(minutesMatch({ court: [{ abs: 0, set: 0 }, { abs: 300, set: 2 }, { abs: 450, set: 0 }] }));
+    if (mins.get('a') !== 1800 || mins.get('b') !== 1650 || mins.has('c')) throw new Error(JSON.stringify([...mins]));
+  });
+  T('minutes: a 2′ is not on court and a red card ends the time', () => {
+    const two = minutesOnCourt(minutesMatch({ events: [twoMin('a', 1000)] }));
+    if (two.get('a') !== CONFIG.halfSeconds - CONFIG.exclusionSeconds || two.get('b') !== CONFIG.halfSeconds) throw new Error(JSON.stringify([...two]));
+    const early = minutesOnCourt(minutesMatch({ events: [twoMin('a', 1000), { id: 'end', abs: 1030, kind: 'EXCLUSION_END', sanctionId: 'x1000a' }] }));
+    if (early.get('a') !== CONFIG.halfSeconds - 30) throw new Error('early end ' + early.get('a'));
+    const red = minutesOnCourt(minutesMatch({ events: [twoMin('a', 1000, 'D')] }));
+    if (red.get('a') !== 1000 || red.get('b') !== CONFIG.halfSeconds) throw new Error('red ' + JSON.stringify([...red]));
+    const third = minutesOnCourt(minutesMatch({ events: [twoMin('a', 100), twoMin('a', 500), twoMin('a', 900)] }));
+    if (third.get('a') !== 900 - 2 * CONFIG.exclusionSeconds) throw new Error('third 2′ ' + third.get('a'));
+  });
+  T('minutes: half-time and an early-ended first half are not counted', () => {
+    const half = CONFIG.halfSeconds;
+    const early = minutesOnCourt(minutesMatch({ clock: { period: 2, elapsedMs: 600 * 1000, runningSince: null }, court: [{ abs: 0, set: 0 }, { abs: 1500, set: null }, { abs: half, set: 0 }] }));
+    if (early.get('a') !== 1500 + 600 || early.get('g') !== 1500 + 600) throw new Error(JSON.stringify([...early]));
+    const clamped = minutesOnCourt(minutesMatch({ clock: { period: 1, elapsedMs: 99 * 60 * 1000, runningSince: null } }));
+    if (clamped.get('a') !== half || matchEndAbs(minutesMatch({ clock: { period: 2, elapsedMs: 5000, runningSince: null } })) !== half + 5) throw new Error('end of the clock');
+  });
+  T('minutes: no log gives null and the tables show –', () => {
+    if (minutesOnCourt(minutesMatch({ court: undefined })) !== null || minutesOnCourt(minutesMatch({ court: [] })) !== null) throw new Error('no log');
+    if (minutesOnCourt(minutesMatch({ clock: { period: 1, elapsedMs: 0, runningSince: null } })) !== null) throw new Error('clock never ran');
+    const snap = snapshot();
+    try {
+      state = sampleState(); commit();
+      const cells = [...new DOMParser().parseFromString(`<table>${sheetStatsHtml().match(/<tbody>.*?<\/tbody>/s)[0]}</table>`, 'text/html').querySelector('tr').children].map((c) => c.textContent);
+      if (cells[2] !== '–' || cells[3] !== '–') throw new Error(JSON.stringify(cells.slice(0, 4)));
+    } finally { restore(snap); }
+    if (minutesSentence({ rows: [{ seconds: null }], totals: { seconds: 0 } }).length) throw new Error('sentence without a log');
+  });
+  T('plus-minus: goals for and against while on court', () => {
+    const balance = plusMinus(minutesMatch({ events: [
+      goalAt('SHOT', 10, 0, { playerId: 'a' }), goalAt('SHOT', 20, 1, { playerId: 'b' }), goalAt('RIVAL_SHOT', 30, 1),
+      { ...goalAt('SHOT', 50, 0, { playerId: 'a' }), result: 'PARADA' }, { id: 'fix', abs: 60, kind: 'SCORE_FIX', team: 'us', delta: 1 }
+    ] }));
+    if (balance.get('a') !== 1 || balance.get('b') !== 1 || balance.get('c') !== 0 || balance.get('g') !== 1) throw new Error(JSON.stringify([...balance]));
+    if (plusMinusText(3) !== '+3' || plusMinusText(-2) !== '−2' || plusMinusText(0) !== '0' || plusMinusText(null) !== '–') throw new Error('text');
+    if (plusMinus(minutesMatch({ events: [{ id: 's', abs: 1, kind: 'SHOT', result: 'GOL', playerId: 'a' }] })) !== null) throw new Error('goals without a stamp');
+  });
+  T('plus-minus: a bench player who scores counts the goal', () => {
+    const match = minutesMatch({ events: [goalAt('SHOT', 10, 1, { playerId: 'c' })], court: [{ abs: 0, set: 0 }, { abs: 5, set: 1 }] });
+    const balance = plusMinus(match);
+    if (balance.get('c') !== 1 || balance.has('a') || courtFiguresOf(match, 'c').plusMinus !== 1 || courtFiguresOf(match, 'a').plusMinus !== 0) throw new Error(JSON.stringify([...balance]));
+    const served = minutesMatch({ events: [twoMin('a', 0), goalAt('SHOT', 10, 2, { playerId: 'b' })] });
+    if (plusMinus(served).has('c') || plusMinus(served).get('a') !== 1) throw new Error('the stamp, not the log, says who was on court');
+  });
+
   // ---- Drill-down: the per-match drawing helpers work over any saved state (M0c) ----
   // Runs buildPdf('players') with the drawing primitives replaced by recorders, so the player pages can be compared as data.
   const recordPlayerPages = () => {
@@ -1214,6 +1275,28 @@
         openCard('cg', matches); overflow('goalkeeper card');
         const wrap = document.querySelector('.match-table').parentElement;
         if (wrap.scrollWidth > wrap.clientWidth) throw new Error(`match table scrolls sideways by ${wrap.scrollWidth - wrap.clientWidth}px`);
+      } finally { Object.assign(home, keep); }
+    });
+    await TA('layout: minutes and +/− show in the player card tables without sideways scroll', async () => {
+      const keep = { roster: home.roster, season: home.season };
+      const court = { courtSets: [['ca', 'cg']], court: [{ abs: 0, set: 0 }], clock: { period: 2, elapsedMs: (2820 - CONFIG.halfSeconds) * 1000, runningSince: null } };
+      const logged = cardMatch(court);
+      logged.state.events = logged.state.events.map((e) => ({ ...e, on: 0 }));
+      const balance = logged.state.events.filter((e) => e.result === 'GOL').reduce((n, e) => n + (e.kind === 'SHOT' ? 1 : -1), 0);
+      try {
+        openCard('ca', [logged, cardMatch({ id: 'cm9' })]);
+        const cells = [...document.querySelectorAll('.match-table tbody tr')].map((tr) => [...tr.children].map((c) => c.textContent));
+        const heads = [...document.querySelectorAll('.match-table th')].map((c) => c.textContent);
+        if (heads.join() !== 'Fecha,Rival,Res.,Min,Goles,%,Pases,Pérd.,+/−') throw new Error(heads.join());
+        const logRow = cells.find((r) => r[3] === '47'), oldRow = cells.find((r) => r[3] === '–');
+        if (!logRow || logRow.at(-1) !== plusMinusText(balance) || !oldRow || oldRow.at(-1) !== '–') throw new Error(JSON.stringify(cells));
+        const wrap = document.querySelector('.match-table').parentElement;
+        if (wrap.scrollWidth > wrap.clientWidth) throw new Error(`field table scrolls sideways by ${wrap.scrollWidth - wrap.clientWidth}px`);
+        openCard('cg', [logged]);
+        if ([...document.querySelectorAll('.match-table th')].map((c) => c.textContent).join() !== 'Fecha,Rival,Res.,Min,Paradas,%,7 m,Goles' || !document.querySelector('.match-table tbody td:nth-child(4)').textContent.includes('47')) throw new Error('keeper table');
+        if (/NaN|undefined/.test($('home').textContent)) throw new Error('NaN or undefined');
+        const old = playerMatchRow(seasonRow('old', { events: [seasonShot('sp2', 'GOL')] }), seasonPlayers[1]);
+        if (old.seconds !== null || old.plusMinus !== null || playerSeason([seasonRow('old')], seasonPlayers[1]).totals.seconds !== 0) throw new Error('a match without a log must stay unknown');
       } finally { Object.assign(home, keep); }
     });
     await TA('layout: radar labels stay inside their card', async () => {
