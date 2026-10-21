@@ -182,3 +182,34 @@ create policy fixtures_all on public.fixtures for all to authenticated
     private.is_team_member(team_id)
     and (match_id is null or exists (select 1 from public.matches m where m.id = match_id and m.team_id = fixtures.team_id))
   );
+
+-- Attendance: one session per team, day and kind (training or match day). The app makes the id and upserts on
+-- (team_id, on_date, kind), so sessions can be created offline; the last writer wins.
+-- marks: { [playerId]: { s: 'F' | 'J' | 'L', n?: text } }; a present player has no key.
+create table if not exists public.attendance_sessions (
+  id uuid primary key,
+  team_id uuid not null references public.teams (id) on delete cascade,
+  on_date date not null,
+  kind text not null check (kind in ('ENTRENO', 'PARTIDO')),
+  match_id uuid references public.matches (id) on delete set null,
+  marks jsonb not null default '{}' check (jsonb_typeof(marks) = 'object' and pg_column_size(marks) <= 20000),
+  note text check (note is null or char_length(note) <= 120),
+  updated_at timestamptz not null default now(),
+  updated_by uuid default auth.uid() references auth.users (id) on delete set null,
+  unique (team_id, on_date, kind)
+);
+create index if not exists attendance_team_date on public.attendance_sessions (team_id, on_date desc);
+create index if not exists attendance_match on public.attendance_sessions (match_id);
+create index if not exists attendance_updated_by on public.attendance_sessions (updated_by);
+drop trigger if exists attendance_touch on public.attendance_sessions;
+create trigger attendance_touch before update on public.attendance_sessions for each row execute function public.touch_updated_at();
+
+alter table public.attendance_sessions enable row level security;
+revoke all on table public.attendance_sessions from anon;
+drop policy if exists attendance_all on public.attendance_sessions;
+create policy attendance_all on public.attendance_sessions for all to authenticated
+  using (private.is_team_member(team_id))
+  with check (
+    private.is_team_member(team_id)
+    and (match_id is null or exists (select 1 from public.matches m where m.id = match_id and m.team_id = attendance_sessions.team_id))
+  );
