@@ -116,6 +116,22 @@ PROBE = """
       for (let node = el; node; node = node.parentElement) product *= Number(getComputedStyle(node).opacity);
       return product;
     };
+    // SVG text sits on the shapes drawn before it in the same drawing (cells, floors), not only on the page behind the SVG.
+    // Masked shapes are skipped: hit testing ignores masks, so they would count where they are not drawn; text over them carries a halo.
+    const svgBackdrop = (el) => {
+      const box = el.getBoundingClientRect();
+      const below = document.elementsFromPoint(box.x + box.width / 2, box.y + box.height / 2)
+        .filter((hit) => hit instanceof SVGGeometryElement && !(hit instanceof SVGLineElement) && !hit.hasAttribute('mask') && hit.ownerSVGElement === el.ownerSVGElement && hit.compareDocumentPosition(el) & Node.DOCUMENT_POSITION_FOLLOWING);
+      const base = backdropOf(el.ownerSVGElement);
+      const rgba = below.reduceRight((under, shape) => {
+        const style = getComputedStyle(shape);
+        if (/^(none|url)/.test(style.fill)) return under;
+        const fill = rgbaOf(style.fill);
+        fill[3] = Math.round(fill[3] * Number(style.fillOpacity) * opacityOf(shape));
+        return over(fill, under);
+      }, base.rgba);
+      return { rgba, image: base.image };
+    };
     const contrast = [], unmeasured = [];
     scoped('*').forEach((el) => {
       const own = [...el.childNodes].filter((n) => n.nodeType === Node.TEXT_NODE).map((n) => n.nodeValue.trim()).join(' ').trim();
@@ -126,12 +142,12 @@ PROBE = """
       const need = large ? limits.largeTextRatio : limits.textRatio;
       const paint = el instanceof SVGElement ? style.fill : style.color;
       if (el instanceof SVGElement && /^(none|url)/.test(paint)) { unmeasured.push({ text: own.slice(0, 40), why: 'svg fill ' + paint.slice(0, 20) }); return; }
-      const { rgba: back, image } = backdropOf(el);
+      const { rgba: back, image } = el instanceof SVGElement ? svgBackdrop(el) : backdropOf(el);
       if (image) unmeasured.push({ text: own.slice(0, 40), why: 'image backdrop' });
       const ink = rgbaOf(paint);
       ink[3] = Math.round(ink[3] * opacityOf(el));
       const ratio = contrastRatio(hexOf(over(ink, back)), hexOf(back));
-      if (ratio < need) contrast.push({ text: own.slice(0, 40), ratio: Math.round(ratio * 100) / 100, need });
+      if (ratio < need) contrast.push({ text: own.slice(0, 40), ratio: Math.round(ratio * 100) / 100, need, in: el.tagName.toLowerCase() + (el.classList.length ? '.' + [...el.classList].join('.') : '') });
     });
     const targets = scoped(targetSelector).filter((el) => visible(el) && !el.hasAttribute('data-target-exempt')).flatMap((el) => {
       const { width, height } = el.getBoundingClientRect();

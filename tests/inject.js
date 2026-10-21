@@ -65,6 +65,7 @@
     ...['display', 'title', 'heading', 'body', 'caption', 'kpi'].map((n) => `--type-${n}`),
     ...[1, 2, 3, 4, 5, 6, 8, 10, 12].map((n) => `--space-${n}`),
     ...['sm', 'md', 'lg', 'xl', 'full'].map((n) => `--radius-${n}`),
+    '--target', '--color-success', '--color-on-success', '--color-success-text', '--color-warning-text', '--color-danger-text', '--color-keeper', '--poster-tint', '--rate-tint',
     '--ring', '--ring-hover', '--photo-outline', '--dur-press', '--dur-state', '--dur-enter', '--dur-exit', '--ease-out', '--focus-ring',
     ...RATING_BANDS.flatMap((b) => [`--rating-${b}`, `--rating-ink-${b}`]),
   ];
@@ -224,6 +225,65 @@
     const missing = wanted.filter((selector) => !ring.includes(selector));
     if (missing.length) throw new Error('no focus ring on ' + missing.join());
   });
+  // ---- Pages outside the live screen: contrast of what the probe cannot see (M0b.4) ----
+  const rgbOf = (css) => {
+    const swatch = document.createElement('canvas').getContext('2d', { willReadFrequently: true });
+    swatch.fillStyle = css; swatch.fillRect(0, 0, 1, 1);
+    return [...swatch.getImageData(0, 0, 1, 1).data].slice(0, 3);
+  };
+  const hexOfRgb = (rgb) => '#' + rgb.map((c) => c.toString(16).padStart(2, '0')).join('');
+  const hexMix = (top, under, share) => hexOfRgb(rgbOf(top).map((c, i) => Math.round(c * share + rgbOf(under)[i] * (1 - share))));
+  T('design: success, warning and danger text pass 4.5:1 on the surface and the subtle fill, in both themes', () => {
+    const weak = [];
+    ['light', 'dark'].forEach((theme) => inTheme(theme, (css) => ['success', 'warning', 'danger'].forEach((kind) => {
+      const ratio = contrastRatio(tokenValue(css, `--color-${kind}-text`), tokenValue(css, '--surface'));
+      if (ratio < 4.5) weak.push(`${theme} ${kind} ${ratio.toFixed(2)}`);
+    })));
+    ['light', 'dark'].forEach((theme) => inTheme(theme, (css) => {
+      const numerals = contrastRatio(tokenValue(css, '--color-success'), tokenValue(css, '--color-on-success'));
+      if (numerals < 4.5) weak.push(`${theme} success button ${numerals.toFixed(2)}`);
+    }));
+    if (weak.length) throw new Error(weak.join('; '));
+  });
+  T('design: position colours keep dorsals readable and rings visible on the pages', () => withHost('<div class="home"><i></i></div>', (host) => {
+    const weak = [];
+    ['light', 'dark'].forEach((theme) => inTheme(theme, () => {
+      const css = getComputedStyle(host.firstChild.firstChild), surface = css.getPropertyValue('--surface').trim();
+      Object.entries(CONFIG.positions).forEach(([key, { color, darkText }]) => {
+        const fill = css.getPropertyValue(color.slice(4, -1)).trim(), ink = darkText ? '#151515' : '#ffffff';
+        const dorsal = contrastRatio(fill, ink), ring = contrastRatio(fill, surface);
+        if (dorsal < 4.5) weak.push(`${theme} ${key} dorsal ${dorsal.toFixed(2)}`);
+        if (ring < 3) weak.push(`${theme} ${key} ring ${ring.toFixed(2)}`);
+      });
+    }));
+    if (weak.length) throw new Error(weak.join('; '));
+  }));
+  T('design: poster text passes 4.5:1 on the gradient\'s worst region, for every position in both themes', () => withHost('<div class="home"><section class="sheet-card poster"></section></div>', (host) => {
+    const weak = [];
+    ['light', 'dark'].forEach((theme) => inTheme(theme, () => {
+      const css = getComputedStyle(host.querySelector('.poster')), tint = parseFloat(css.getPropertyValue('--poster-tint')) / 100;
+      Object.entries(CONFIG.positions).forEach(([key, { color }]) => {
+        const worst = hexMix(css.getPropertyValue(color.slice(4, -1)).trim(), css.getPropertyValue('--surface').trim(), tint);
+        ['--fg', '--muted'].forEach((ink) => {
+          const ratio = contrastRatio(css.getPropertyValue(ink).trim(), worst);
+          if (ratio < 4.5) weak.push(`${theme} ${key} ${ink} ${ratio.toFixed(2)}`);
+        });
+      });
+    }));
+    if (weak.length) throw new Error(weak.join('; '));
+  }));
+  T('design: rate tiles keep their text at 4.5:1 across the whole scale, in both themes', () => withHost('<div class="home"></div>', (host) => {
+    const weak = [];
+    ['light', 'dark'].forEach((theme) => inTheme(theme, () => {
+      [0, 0.25, 0.5, 0.75, 1].forEach((fraction) => {
+        host.firstChild.innerHTML = `<div class="rate-tile" style="--rate:${rateColour(fraction)}"><b>1</b><span>x</span></div>`;
+        const css = getComputedStyle(host.firstChild.firstChild);
+        const ratio = contrastRatio(hexOfRgb(rgbOf(css.color)), hexOfRgb(rgbOf(css.backgroundColor)));
+        if (ratio < 4.5) weak.push(`${theme} ${fraction} ${ratio.toFixed(2)}`);
+      });
+    }));
+    if (weak.length) throw new Error(weak.join('; '));
+  }));
   T('render all tabs', () => { Object.keys(SHEET_TABS).forEach((t) => { ui.sheetTab = t; renderSheet(); }); ui.sheetGk = state.gkId; ui.sheetTab = 'gk'; renderSheet(); ui.sheetGk = null; });
   T('score pop', () => { openScorePop({ x: 100, y: 100 }); closePop(); });
   T('score fix +1 and undo', () => { const b = score().us; addEvent('SCORE_FIX', { team: 'us', delta: 1 }); if (score().us !== b + 1) throw new Error('no +1'); undo(); if (score().us !== b) throw new Error('undo'); });
@@ -874,6 +934,49 @@
           labels.forEach((t) => { const b = t.getBoundingClientRect(); if (b.left < card.left || b.right > card.right || b.top < card.top || b.bottom > card.bottom) throw new Error(`${id}: «${t.textContent}» sticks out of the card`); });
         }
       } finally { Object.assign(home, keep); }
+    });
+    // The probe's control selector (tools/screenshots.py) and its size: a control is as big as the element itself, a ::after hit area does not count.
+    const TARGET_SELECTOR = 'button, a[href], input, select, summary, [role=button], [data-player-match]', MIN_TARGET_PX = 44;
+    const smallControls = (root) => [...root.querySelectorAll(TARGET_SELECTOR)].filter((el) => el.checkVisibility() && !el.hasAttribute('data-target-exempt')).flatMap((el) => {
+      const { width, height } = el.getBoundingClientRect();
+      return width >= MIN_TARGET_PX && height >= MIN_TARGET_PX ? [] : [`${el.tagName.toLowerCase()}${el.className ? '.' + String(el.className).split(' ').join('.') : ''} ${Math.round(width)}×${Math.round(height)}`];
+    });
+    await TA('design: home, sheet and final controls are at least 44 px', async () => {
+      const keep = { roster: home.roster, season: home.season, matches: home.matches, view: home.view }, snap = snapshot();
+      const small = [];
+      const check = (where, root) => { const found = [...new Set(smallControls(root))]; if (found.length) small.push(`${where}: ${found.join(', ')}`); };
+      try {
+        home.roster = [cardField, cardKeeper];
+        home.season = [cardMatch({ mvpId: 'ca' })];
+        home.matches = ['finished', 'live', 'setup'].map((status, i) => ({ id: `tm${i}`, date: '2026-10-1' + i, them: 'Rival ' + i, venue: '', status, scoreUs: 3, scoreThem: 2 }));
+        Object.keys(HOME_VIEWS).filter((view) => view !== 'player').forEach((view) => { showHomeView(view); check(`home ${view}`, $('home')); });
+        showPlayer('ca'); check('player card', $('home'));
+        document.querySelector('[data-player-edit]').click(); check('player card, edit panel', $('home'));
+        showPlayer('cg'); check('goalkeeper card', $('home'));
+        home.armed = null; $('home').hidden = true;
+        $('sheet').hidden = false;
+        Object.keys(SHEET_TABS).forEach((tab) => { ui.sheetTab = tab; renderSheet(); check(`sheet ${tab}`, $('sheet')); });
+        $('sheet').hidden = true;
+        openFinal(); check('final', $('final'));
+        if (small.length) throw new Error(small.join(' | '));
+      } finally { restore(snap); $('final').hidden = true; $('sheet').hidden = true; $('home').hidden = true; Object.assign(home, keep); }
+    });
+    await TA('design: every number cell is tabular', async () => {
+      const keep = { roster: home.roster, season: home.season };
+      const seen = new Set(), plain = [];
+      const check = (root) => ['td', '.kpi strong', '.leader .value', '.tile b'].forEach((selector) => root.querySelectorAll(selector).forEach((el) => {
+        seen.add(selector);
+        if (!getComputedStyle(el).fontVariantNumeric.includes('tabular-nums')) plain.push(`${selector} «${el.textContent.trim().slice(0, 20)}»`);
+      }));
+      try {
+        openCard('ca', [cardMatch({ mvpId: 'ca' })]); check($('home'));
+        showHomeView('team'); check($('home'));
+        $('sheet').hidden = false; ui.sheetTab = 'stats'; renderSheet(); check($('sheet')); $('sheet').hidden = true;
+        check(document.body);
+        const missing = ['td', '.kpi strong', '.leader .value', '.tile b'].filter((selector) => !seen.has(selector));
+        if (missing.length) throw new Error('nothing to check for ' + missing.join());
+        if (plain.length) throw new Error(plain.slice(0, 8).join('; '));
+      } finally { $('home').hidden = true; Object.assign(home, keep); }
     });
     await TA('team page: coming back does not download the season again, a changed match does', async () => {
       const real = backend, savedId = team.id, keep = { roster: home.roster, season: home.season };
