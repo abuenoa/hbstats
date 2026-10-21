@@ -1133,6 +1133,16 @@
     try { openHalftime(); const go = $('final').querySelector('.final-actions [data-second-half]'); if (!go || go.getBoundingClientRect().bottom > window.innerHeight) throw new Error('below the fold'); } finally { restore(snap); }
   });
 
+  T('final and half-time: the sticky footer is flush with the bottom of the screen', () => {
+    const snap = snapshot(), footerBottom = () => $('final').querySelector('.final-actions').getBoundingClientRect().bottom;
+    try {
+      openHalftime();
+      if (Math.abs(footerBottom() - window.innerHeight) > 0.5) throw new Error('half-time footer ' + footerBottom() + ' vs ' + window.innerHeight);
+      hideFinal(); openFinal();
+      if (Math.abs(footerBottom() - window.innerHeight) > 0.5) throw new Error('final footer ' + footerBottom() + ' vs ' + window.innerHeight);
+    } finally { hideFinal(); restore(snap); }
+  });
+
   // ---- Drill-down: the per-match drawing helpers work over any saved state (M0c) ----
   // Runs buildPdf('players') with the drawing primitives replaced by recorders, so the player pages can be compared as data.
   const recordPlayerPages = () => {
