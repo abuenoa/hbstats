@@ -1050,6 +1050,47 @@
     if (document.getElementById('injected') || !ratingRows().find((r) => r.dataset.ratingPlayer === 'p22').textContent.includes('<i id="injected">')) throw new Error('name not escaped');
   }));
 
+  // ---- Visual pages (M5): the «Hoja» summary, half-time and final layout ----
+  const SUMMARY_KPI_LABELS = ['Goles', '% tiro', 'Fallos 6 m', 'Fallos 9 m', 'Pérdidas', 'Recuperaciones', '% paradas'];
+  const onSummary = (over, fn) => () => {
+    const snap = snapshot();
+    try { Object.assign(state, over); Object.assign(ui, { sheetMode: 'sheet', sheetTab: 'summary' }); renderSheet(); $('sheet').hidden = false; fn(); } finally { restore(snap); ui.sheetTab = 'stats'; }
+  };
+  const statTiles = (root = $('sheet')) => [...root.querySelectorAll('.stat-tile')];
+  const tileValue = (tiles, label) => tiles.find((t) => t.querySelector('span').textContent === label).querySelector('strong').textContent;
+  const nameOf = (id) => state.players.find((p) => p.id === id).name;
+  T('sheet: Resumen is the first tab and shows the seven KPIs', onSummary(sampleState(), () => {
+    if (Object.keys(SHEET_TABS)[0] !== 'summary' || SHEET_TABS.summary !== 'Resumen' || SHEET_TABS.stats !== 'Tablas') throw new Error(JSON.stringify(SHEET_TABS));
+    const first = document.querySelector('#sheet .tabs button');
+    if (first.textContent !== 'Resumen' || first.getAttribute('aria-pressed') !== 'true') throw new Error('first tab');
+    const labels = statTiles().map((t) => t.querySelector('span').textContent);
+    if (labels.join('|') !== SUMMARY_KPI_LABELS.join('|')) throw new Error(labels.join('|'));
+    if ($('sheet').querySelectorAll('.zone-map svg').length !== 2 || $('sheet').querySelectorAll('.goal-chart svg').length !== 2) throw new Error('maps and goal grids');
+    const strip = [...$('sheet').querySelectorAll('[data-pdf-pick]')];
+    if (strip.length !== state.players.length || !strip[0].querySelector('.rating-chip')) throw new Error('player strip');
+    strip[0].click();
+    if (ui.sheetTab !== 'reports' || !$('sheet').querySelector(`[data-pdf="${strip[0].dataset.pdfPick}"]`)) throw new Error('the card opens the player PDF list');
+    openFinal(); document.querySelector('[data-final-sheet]').click();
+    if (ui.sheetTab !== 'summary' || $('sheet').hidden || !$('final').hidden) throw new Error('«Ver Hoja» must open the summary');
+  }));
+  T('sheet: matchFigures equals liveStats for the sample', onSummary(sampleState(), () => {
+    const f = matchFigures(state), live = liveStats(), zone = (id) => live.us.zones.find((z) => z.id === id).FALLO;
+    const expected = { goals: live.us.goals, shots: live.us.shots, shooting: live.us.shooting, miss6: zone('6M'), miss9: zone('9M') + zone('11M'), turnovers: live.us.turnovers, recoveries: live.recov, saves: live.them.saved, onTarget: live.them.onTarget, savePct: live.them.savedPct };
+    Object.entries(expected).forEach(([k, v]) => { if (f[k] !== v) throw new Error(`${k}: ${f[k]} vs ${v}`); });
+    if (!f.shots || !f.onTarget || !f.turnovers) throw new Error('premise: the sample has shots, saves and turnovers');
+  }));
+  T('sheet: failed shots split 6 m and 9 m (+11 m counts as 9 m)', () => {
+    const shot = (zone, result, kind = 'SHOT') => ({ kind, zone, result });
+    const f = matchFigures({ events: [shot('6M', 'FUERA'), shot('6M', 'GOL'), shot('9M', 'PALO'), shot('11M', 'BLOCADO'), shot('9M', 'PARADA'), shot('7M', 'FUERA'), shot('CONTRA', 'FUERA'), shot('6M', 'FUERA', 'RIVAL_SHOT')] });
+    if (f.miss6 !== 1 || f.miss9 !== 2 || f.shots !== 7 || f.goals !== 1) throw new Error(JSON.stringify(f));
+  });
+  T('sheet: summary with no events shows dashes, no NaN', onSummary({ events: [], history: [] }, () => {
+    if (/NaN|undefined/.test($('sheet').textContent)) throw new Error('NaN or undefined');
+    const tiles = statTiles(), values = Object.fromEntries(SUMMARY_KPI_LABELS.map((l) => [l, tileValue(tiles, l)]));
+    if (values['% tiro'] !== '–' || values['% paradas'] !== '–' || values.Goles !== '0') throw new Error(JSON.stringify(values));
+    if ($('sheet').querySelector('.zone-map svg, .goal-chart svg')) throw new Error('with under four shots the card says so instead of drawing a chart');
+  }));
+
   // ---- Drill-down: the per-match drawing helpers work over any saved state (M0c) ----
   // Runs buildPdf('players') with the drawing primitives replaced by recorders, so the player pages can be compared as data.
   const recordPlayerPages = () => {

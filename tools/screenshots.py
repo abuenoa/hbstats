@@ -93,6 +93,7 @@ CARD_SCENES = {
 }
 # Matrix-only scenes: the season fixture (tools/scenes/season.js) puts the app in the team pages of a club with four matches.
 SHEET_STATS = f"{SAMPLE} commit(); ui.sheetMode = 'sheet'; ui.sheetTab = 'stats'; renderSheet(); $('sheet').hidden = false;"
+SHEET_SUMMARY = SHEET_STATS.replace("'stats'", "'summary'")
 SHEET_PLAYER = SHEET_STATS.replace("'stats'", "'player'")
 TOP_SCORER_SAMPLE_ID = "p17"
 SAMPLE_KEEPER_ID = "p1"
@@ -107,6 +108,7 @@ MATRIX_SCENES = {
     "profile": "await seedSeason(); await showProfile();",
     "attendance": "await seedSeason(); await showAttendance();",
     "attendance-match": "await seedSeason(); await showAttendance(); openAttendanceDay('2026-10-17');",
+    "sheet-summary": SHEET_SUMMARY,
     "sheet-stats": SHEET_STATS,
     "sheet-player": f"{SHEET_PLAYER} ui.sheetPlayer = '{TOP_SCORER_SAMPLE_ID}'; renderSheet();",
     "sheet-keeper": f"{SHEET_PLAYER} ui.sheetPlayer = '{SAMPLE_KEEPER_ID}'; renderSheet();",
