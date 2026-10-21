@@ -147,3 +147,79 @@ create policy rival_templates_own on public.rival_templates for all to authentic
   using (user_id = (select auth.uid())) with check (user_id = (select auth.uid()));
 
 drop function if exists public.is_team_member(uuid);
+
+-- Match calendar: one row per round of a season, entered from the federation's calendar (tools/calendar_sql.py).
+-- `weekend` is the round's reference Sunday; `kickoff` is set during the match week. A fixture links to a played
+-- match through `match_id` (the match must belong to the same team).
+create table if not exists public.fixtures (
+  id uuid primary key default gen_random_uuid(),
+  team_id uuid not null references public.teams (id) on delete cascade,
+  season text not null check (char_length(season) between 4 and 9),
+  competition text not null default '' check (char_length(competition) <= 120),
+  round int not null check (round between 1 and 60),
+  weekend date not null,
+  home boolean not null,
+  opponent text not null check (char_length(opponent) between 1 and 60),
+  kickoff timestamptz,
+  venue text check (venue is null or char_length(venue) <= 80),
+  match_id uuid references public.matches (id) on delete set null,
+  updated_at timestamptz not null default now(),
+  updated_by uuid default auth.uid() references auth.users (id) on delete set null,
+  unique (team_id, season, competition, round)
+);
+create index if not exists fixtures_team_weekend on public.fixtures (team_id, weekend);
+create index if not exists fixtures_match on public.fixtures (match_id);
+create index if not exists fixtures_updated_by on public.fixtures (updated_by);
+drop trigger if exists fixtures_touch on public.fixtures;
+create trigger fixtures_touch before update on public.fixtures for each row execute function public.touch_updated_at();
+
+alter table public.fixtures enable row level security;
+revoke all on table public.fixtures from anon;
+drop policy if exists fixtures_all on public.fixtures;
+create policy fixtures_all on public.fixtures for all to authenticated
+  using (private.is_team_member(team_id))
+  with check (
+    private.is_team_member(team_id)
+    and (match_id is null or exists (select 1 from public.matches m where m.id = match_id and m.team_id = fixtures.team_id))
+  );
+
+-- Attendance: one session per team, day and kind (training or match day). The app makes the id and upserts on
+-- (team_id, on_date, kind), so sessions can be created offline; the last writer wins.
+-- marks: { [playerId]: { s: 'F' | 'J' | 'L', n?: text } }; a present player has no key.
+create table if not exists public.attendance_sessions (
+  id uuid primary key,
+  team_id uuid not null references public.teams (id) on delete cascade,
+  on_date date not null,
+  kind text not null check (kind in ('ENTRENO', 'PARTIDO')),
+  match_id uuid references public.matches (id) on delete set null,
+  marks jsonb not null default '{}' check (jsonb_typeof(marks) = 'object' and pg_column_size(marks) <= 20000),
+  note text check (note is null or char_length(note) <= 120),
+  updated_at timestamptz not null default now(),
+  updated_by uuid default auth.uid() references auth.users (id) on delete set null,
+  unique (team_id, on_date, kind)
+);
+create index if not exists attendance_team_date on public.attendance_sessions (team_id, on_date desc);
+create index if not exists attendance_match on public.attendance_sessions (match_id);
+create index if not exists attendance_updated_by on public.attendance_sessions (updated_by);
+drop trigger if exists attendance_touch on public.attendance_sessions;
+create trigger attendance_touch before update on public.attendance_sessions for each row execute function public.touch_updated_at();
+
+-- A same-day upsert from a second device updates the row; the first id stays, so every device can delete it.
+create or replace function public.attendance_keep_id() returns trigger
+language plpgsql set search_path = '' as $$
+begin
+  new.id := old.id;
+  return new;
+end $$;
+drop trigger if exists attendance_keep_id on public.attendance_sessions;
+create trigger attendance_keep_id before update on public.attendance_sessions for each row execute function public.attendance_keep_id();
+
+alter table public.attendance_sessions enable row level security;
+revoke all on table public.attendance_sessions from anon;
+drop policy if exists attendance_all on public.attendance_sessions;
+create policy attendance_all on public.attendance_sessions for all to authenticated
+  using (private.is_team_member(team_id))
+  with check (
+    private.is_team_member(team_id)
+    and (match_id is null or exists (select 1 from public.matches m where m.id = match_id and m.team_id = attendance_sessions.team_id))
+  );
