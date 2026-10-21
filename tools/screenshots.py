@@ -55,7 +55,9 @@ SCENES = {
 }
 # Matrix-only scenes: the season fixture (tools/scenes/season.js) puts the app in the team pages of a club with four matches.
 SHEET_STATS = f"{SAMPLE} commit(); ui.sheetMode = 'sheet'; ui.sheetTab = 'stats'; renderSheet(); $('sheet').hidden = false;"
+SHEET_PLAYER = SHEET_STATS.replace("'stats'", "'player'")
 TOP_SCORER_SAMPLE_ID = "p17"
+SAMPLE_KEEPER_ID = "p1"
 MATRIX_SCENES = {
     "team": "await seedSeason();",
     "player": f"showPlayer((await seedSeason()).get('{TOP_SCORER_SAMPLE_ID}'));",
@@ -65,6 +67,8 @@ MATRIX_SCENES = {
     "matches": "await seedSeason(); await showMatches();",
     "profile": "await seedSeason(); await showProfile();",
     "sheet-stats": SHEET_STATS,
+    "sheet-player": f"{SHEET_PLAYER} ui.sheetPlayer = '{TOP_SCORER_SAMPLE_ID}'; renderSheet();",
+    "sheet-keeper": f"{SHEET_PLAYER} ui.sheetPlayer = '{SAMPLE_KEEPER_ID}'; renderSheet();",
     "halftime": SCENES["halftime"],
     "final": SCENES["final"],
 }

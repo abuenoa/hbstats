@@ -1274,6 +1274,94 @@
       if (!page || $('home').querySelector('[data-evil], img[onerror]')) throw new Error('markup injected');
       if (!page.querySelector('.last-who').textContent.includes(evil)) throw new Error('name not shown as text');
     }));
+    // ---- Hoja: the «Jugador» tab, and opening a match from the card ----
+    await TA("sheet: Jugador tab lists convocados and shows the picked player's figures", async () => {
+      const keep = { state, tab: ui.sheetTab, picked: ui.sheetPlayer };
+      try {
+        state = sampleState();
+        Object.assign(ui, { sheetTab: 'player', sheetPlayer: null });
+        renderSheet();
+        const chips = () => [...$('sheet').querySelectorAll('[data-sheet-player]')];
+        if (chips().length !== state.players.length || !$('sheet').textContent.includes('Elige un jugador')) throw new Error('chips ' + chips().length);
+        if (chips().some((c) => c.getAttribute('aria-pressed') !== 'false' || !c.querySelector('.disc'))) throw new Error('chip face or state');
+        const goalsOf = (p) => ourShots().filter((e) => e.playerId === p.id && e.result === 'GOL').length;
+        const scorer = fieldPlayers().reduce((best, p) => (goalsOf(p) > goalsOf(best) ? p : best));
+        $('sheet').hidden = false;
+        if (chips().some((c) => c.getBoundingClientRect().height < 44)) throw new Error('chip target size');
+        $('sheet').querySelector(`[data-sheet-player="${scorer.id}"]`).click();
+        const shots = ourShots().filter((e) => e.playerId === scorer.id);
+        if (!goalsOf(scorer)) throw new Error('premise: the scorer has no goals');
+        const figure = (label) => { const sum = [...$('sheet').querySelectorAll('.sum')].find((x) => x.querySelector('span').textContent === label); return sum && sum.querySelector('strong').textContent; };
+        if (figure('Goles') !== `${goalsOf(scorer)}/${shots.length}` || ui.sheetPlayer !== scorer.id) throw new Error('figures ' + figure('Goles'));
+        if (chips().filter((c) => c.getAttribute('aria-pressed') === 'true').map((c) => c.dataset.sheetPlayer).join() !== scorer.id) throw new Error('pressed chip');
+        const text = $('sheet').textContent;
+        ['Por zona', 'Pérdidas por tipo', 'Fallos defensivos', 'Cronología'].forEach((t) => { if (!text.includes(t)) throw new Error('missing «' + t + '»'); });
+        if ($('sheet').querySelectorAll('.shot-map').length !== 1 || /NaN|undefined/.test(text)) throw new Error('map or text');
+      } finally { $('sheet').hidden = true; state = keep.state; Object.assign(ui, { sheetTab: keep.tab, sheetPlayer: keep.picked }); renderSheet(); }
+    });
+    await TA('sheet: Jugador tab escapes player names', async () => {
+      const keep = { state, tab: ui.sheetTab, picked: ui.sheetPlayer };
+      const evil = '<img src=x onerror=alert(1) data-evil>';
+      try {
+        state = sampleState();
+        state.players = state.players.map((p, i) => (i ? p : { ...p, name: evil }));
+        Object.assign(ui, { sheetTab: 'player', sheetPlayer: state.players[0].id });
+        renderSheet();
+        if ($('sheet').querySelector('[data-evil], img[onerror]') || !$('sheet').textContent.includes(evil)) throw new Error('name injected');
+      } finally { state = keep.state; Object.assign(ui, { sheetTab: keep.tab, sheetPlayer: keep.picked }); renderSheet(); }
+    });
+    const SAMPLE_WING_ID = 'p17', SAMPLE_KEEPER_ID = 'p1';
+    // A finished match of the sample squad, as the backend would hand it over.
+    const sampleMatch = (over) => { const st = { ...sampleState(), sample: false, finished: true, ...over }; return { ...matchSummary('om1', st), state: st }; };
+    const openFromCard = async (playerId, match, fn) => withTeams(async () => {
+      const keepState = state, keepId = currentMatchId, keepTab = ui.sheetTab;
+      backend = { listMatchStates: async () => [match], listPlayers: async () => match.state.players, listMatches: async () => [], loadMatch: async () => match.state, saveMatch: async () => { throw new Error('Failed to fetch'); } };
+      try {
+        home.roster = match.state.players; home.season = [match];
+        showPlayer(playerId);
+        showPlayerMatch(match.id);
+        document.querySelector('[data-player-match-open]').click();
+        for (let i = 0; i < 5; i++) await tick0();
+        await fn();
+      } finally { state = keepState; currentMatchId = keepId; ui.sheetTab = keepTab; removeKey(MATCH_KEY_PREFIX + match.id); removeKey(CURRENT_MATCH_KEY); $('sheet').hidden = true; $('final').hidden = true; renderAll(); }
+    });
+    await TA('open match for player: lands on the Jugador tab filtered to him', async () => {
+      await openFromCard(SAMPLE_WING_ID, sampleMatch(), async () => {
+        if (currentMatchId !== 'om1' || !$('final').hidden || $('sheet').hidden || ui.sheetTab !== 'player' || ui.sheetPlayer !== SAMPLE_WING_ID) throw new Error(`final ${$('final').hidden} sheet ${$('sheet').hidden} ${ui.sheetTab} ${ui.sheetPlayer}`);
+        if ($('sheet').querySelector(`[data-sheet-player="${SAMPLE_WING_ID}"]`).getAttribute('aria-pressed') !== 'true') throw new Error('chip not pressed');
+        if (!$('home').hidden || $('sheet').querySelector('[data-close-sheet]').textContent !== '‹ Ficha') throw new Error('home or button label');
+      });
+    });
+    await TA('open match for player: a goalkeeper lands on his saves', async () => {
+      const base = sampleMatch();
+      const match = { ...base, state: { ...base.state, events: [...base.state.events, { ...seasonRivalShot('other-gk', 'GOL'), origin: m(0, 10), target: gf(0.5, 0.5) }] } };
+      await openFromCard(SAMPLE_KEEPER_ID, match, async () => {
+        if (ui.sheetPlayer !== SAMPLE_KEEPER_ID || ui.sheetTab !== 'player') throw new Error('not on his tab');
+        const maps = [...$('sheet').querySelectorAll('.match-grid .shot-map')];
+        const faced = rivalShots(state.events).filter((e) => e.gkId === SAMPLE_KEEPER_ID);
+        const saved = faced.filter((e) => e.result === 'PARADA').length, conceded = faced.filter((e) => e.result === 'GOL').length;
+        if (maps.length !== 2 || matchMarks(maps[0], state) !== saved || matchMarks(maps[1], state) !== conceded) throw new Error(maps.map((x) => matchMarks(x, state)).join() + ' vs ' + saved + '/' + conceded);
+        if (faced.length !== rivalShots(state.events).length - 1 || $('sheet').querySelectorAll('.goal-grid').length !== 2) throw new Error('other keeper counted or grids missing');
+      });
+    });
+    await TA('open match for player: Volver returns to the player match view', async () => {
+      await openFromCard(SAMPLE_WING_ID, sampleMatch(), async () => {
+        $('sheet').querySelector('[data-close-sheet]').click();
+        for (let i = 0; i < 5; i++) await tick0();
+        if (currentMatchId !== null || !$('sheet').hidden || ui.sheetReturn || ui.sheetPlayer) throw new Error('still in the match');
+        if (home.view !== 'player-match' || home.playerId !== SAMPLE_WING_ID || home.playerMatchId !== 'om1') throw new Error(home.view + ' ' + home.playerId + ' ' + home.playerMatchId);
+        if (!document.querySelector('[data-player-match-open="om1"]') || /Cargando/.test($('home').textContent)) throw new Error('match view not drawn again');
+      });
+    });
+    await TA('open match for player: a normal match keeps Volver and lands on the final', async () => {
+      const keepState = state, keepId = currentMatchId;
+      try {
+        enterMatch('plain-final', sampleMatch().state, false);
+        if (ui.sheetReturn || ui.sheetPlayer || $('final').hidden || !$('sheet').hidden) throw new Error('final not shown');
+        renderSheet();
+        if ($('sheet').querySelector('[data-close-sheet]').textContent !== 'Volver') throw new Error('label');
+      } finally { state = keepState; currentMatchId = keepId; removeKey(MATCH_KEY_PREFIX + 'plain-final'); removeKey(CURRENT_MATCH_KEY); $('final').hidden = true; renderAll(); }
+    });
     await TA('player card: field radar names the assists axis «Pases de gol» and the leaders chip says MVPs', async () => {
       if (FIELD_AXES.find((a) => a.key === 'assists').label !== 'Pases de gol' || LEADER_METRICS.find((x) => x.key === 'mvps').label !== 'MVPs') throw new Error('wording');
     });

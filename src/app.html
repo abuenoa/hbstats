@@ -607,6 +607,11 @@ td.zero { color: var(--color-text-tertiary); }
 .dmg b { font-family: var(--font-display); font-weight: 800; font-size: 26px; font-variant-numeric: tabular-nums; }
 .dmg small { min-width: 52px; color: var(--muted); font: var(--type-caption); }
 .dmg[aria-pressed="true"] { border-color: var(--fg); box-shadow: 0 0 0 3px var(--fg); }
+/* The player picker of the «Jugador» tab: a face and a name per convocado */
+.face-chip { display: flex; align-items: center; gap: var(--space-2); min-height: var(--target); padding: 0 var(--space-3) 0 var(--space-1); border-radius: var(--radius-full); border: 1px solid var(--line); background: var(--surface); color: var(--fg); font: var(--type-caption); font-weight: 700; }
+.face-chip .disc { width: 34px; height: 34px; font-size: 16px; }
+.face-chip[aria-pressed="true"] { border-color: var(--fg); box-shadow: 0 0 0 3px var(--fg); }
+#sheet .face-chip:focus-visible { outline: var(--focus-ring); outline-offset: 2px; }
 @media (max-width: 1000px) { .map-row { grid-template-columns: repeat(2, minmax(0, 1fr)); } .map-row > :last-child { grid-column: 1 / -1; } }
 @media (max-width: 600px) { .map-row { grid-template-columns: 1fr; } }
 .in { font: inherit; min-height: 44px; box-sizing: border-box; border-radius: 10px; border: 1px solid var(--line); background: var(--surface); color: var(--fg); padding: 0 10px; width: 100%; min-width: 0; }
@@ -684,7 +689,7 @@ td.zero { color: var(--color-text-tertiary); }
 .home .note, #sheet .note, #final .note { font: var(--type-caption); }
 .home .row-actions + .note { margin-top: var(--space-3); }
 .home .note a, #sheet .note a, #final .note a { display: inline-flex; align-items: center; min-height: var(--target); }
-.home .map-dorsal { fill: var(--dorsal-ink); }
+.home .map-dorsal, #sheet .map-dorsal { fill: var(--dorsal-ink); }
 .home .court-label, #sheet .court-label { fill: var(--color-text-secondary); opacity: 1; }
 .home .r-good, #sheet .r-good, #final .r-good { color: var(--color-success-text); }
 .home .r-warn, #sheet .r-warn, #final .r-warn { color: var(--color-warning-text); }
@@ -1203,7 +1208,7 @@ a:focus-visible, input:focus-visible, select:focus-visible, summary:focus-visibl
   let state = sampleState();
   const ui = {
     source: 'GK', sourcePhase: null, show: new Set(), popView: null, hintTimer: null, drag: null,
-    lastPenTs: 0, shooter: null, rivalNewPos: null, sheetTab: 'stats', sheetMode: 'sheet', sheetGk: null, sheetGoal: 'GK', sheetShooter: null, rosterSide: 'team', templatePick: false,
+    lastPenTs: 0, shooter: null, rivalNewPos: null, sheetTab: 'stats', sheetMode: 'sheet', sheetGk: null, sheetGoal: 'GK', sheetShooter: null, sheetPlayer: null, sheetReturn: null, rosterSide: 'team', templatePick: false,
     finishArmedTimer: null,
     // Team photos by player id (see setTeamPhotos).
     photos: new Map(),
@@ -2352,6 +2357,8 @@ a:focus-visible, input:focus-visible, select:focus-visible, summary:focus-visibl
   // A match opens with nothing armed or pending from the previous one.
   function resetPlayUi() {
     ui.shooter = null;
+    ui.sheetPlayer = null;
+    ui.sheetReturn = null;
     disarmAction();
     cancelPenalty();
   }
@@ -2787,7 +2794,7 @@ a:focus-visible, input:focus-visible, select:focus-visible, summary:focus-visibl
   $('btn-home').addEventListener('click', () => { if (DEMO) location.assign(APP_URL); else leaveMatch(); });
 
   // ===================== Match sheet: statistics, goalkeeper, roster, PDF reports =====================
-  const SHEET_TABS = { stats: 'Estadísticas', analysis: 'Análisis', gk: 'Portero', acta: 'Acta y plantilla', reports: 'Informes PDF' };
+  const SHEET_TABS = { stats: 'Estadísticas', player: 'Jugador', analysis: 'Análisis', gk: 'Portero', acta: 'Acta y plantilla', reports: 'Informes PDF' };
   const MAX_ROSTER = 16;
   const MAX_NAME_LENGTH = 24;
   // The name on the official card and the face photo (a small data URL, see supabase/schema.sql for the same limits).
@@ -3208,7 +3215,30 @@ a:focus-visible, input:focus-visible, select:focus-visible, summary:focus-visibl
     return `<div class="analysis">${analysisColumnHtml(attackAnalysis('them'), `Ataque de ${state.them} · nuestra defensa`, k.defence)}${analysisColumnHtml(attackAnalysis('us'), `Ataque de ${state.us}`, k.attack)}</div>
       <p class="note">Carriles vistos desde el atacante. 6 m = penetración; 9 m = lanzamiento exterior; los 7 m van aparte.</p>`;
   }
-  const SHEET_RENDERERS = { stats: sheetStatsHtml, analysis: sheetAnalysisHtml, gk: sheetGkHtml, acta: sheetActaHtml, reports: sheetReportsHtml };
+  // One player's page of the match, as the PDF draws it. A goalkeeper has the maps and grids of the «Portero» tab.
+  function playerReportHtml(p) {
+    const report = playerReport(p);
+    const heading = `<h3 class="acta-h">#${p.num} ${esc(p.name)} · ${posOf(p).label}</h3>`;
+    if (report.keeper) {
+      const maps = MAP_GROUPS.map(([group, title]) => { const list = report.shots.filter((e) => groupOf(e.result) === group); return card(`${title} · ${list.length}`, shotMapSvg(list, 'GK', null)); }).join('');
+      return `${heading}${figuresHtml(report.figures)}
+        <div class="match-grid">${maps}</div>
+        ${tableHtml(report.zoneHead, report.zoneRows)}
+        <div class="sheet-grid">${goalGridHtml(report.shots, 'PARADA', 'Detenidos por zona de portería', 'GK')}${goalGridHtml(report.shots, 'GOL', 'Encajados por zona de portería', 'GK')}</div>`;
+    }
+    return `${heading}${figuresHtml(report.figures)}
+      <div class="match-grid">${card(`Tiros · ${report.shots.length}`, shotMapSvg(report.shots, 'US', null))}${card('Por zona', tableHtml(report.zoneHead, report.zoneRows))}</div>
+      <div class="sheet-grid">${card('Pérdidas por tipo', tableHtml(['Tipo', 'N'], report.turnoverRows))}${card('Fallos defensivos', tableHtml(['Tipo', 'N'], report.faultRows))}</div>
+      ${card('Cronología', tableHtml(['Min', 'Acción'], report.timeline.length ? report.timeline : [['–', 'Sin acciones']]))}`;
+  }
+  function sheetPlayerHtml() {
+    const convocados = [...fieldPlayers(), ...goalkeepers()];
+    const picked = convocados.find((p) => p.id === ui.sheetPlayer);
+    const chips = convocados.map((p) => `<button class="face-chip press" type="button" data-sheet-player="${p.id}" aria-pressed="${p === picked}">${discHtml(p)}<span class="who">${esc(p.name || `#${p.num}`)}</span></button>`).join('');
+    return `<div class="chips" role="group" aria-label="Jugador">${chips}</div>
+      ${picked ? playerReportHtml(picked) : '<p class="note">Elige un jugador para ver su partido.</p>'}`;
+  }
+  const SHEET_RENDERERS = { stats: sheetStatsHtml, player: sheetPlayerHtml, analysis: sheetAnalysisHtml, gk: sheetGkHtml, acta: sheetActaHtml, reports: sheetReportsHtml };
   function renderSheet() {
     if (ui.sheetMode === 'setup') {
       $('sheet').innerHTML = `<div class="sheet-head"><h2>Preparar partido</h2>
@@ -3221,7 +3251,7 @@ a:focus-visible, input:focus-visible, select:focus-visible, summary:focus-visibl
     const s = score();
     $('sheet').innerHTML = `<div class="sheet-head"><h2>${esc(state.us)} ${s.us}–${s.them} ${esc(state.them)}</h2>
         <div class="tabs" role="group" aria-label="Secciones">${Object.entries(SHEET_TABS).map(([k, label]) => `<button class="press" type="button" data-tab="${k}" aria-pressed="${k === ui.sheetTab}">${label}</button>`).join('')}</div>
-        <button class="btn primary press" type="button" data-close-sheet>Volver</button></div>
+        <button class="btn primary press" type="button" data-close-sheet>${ui.sheetReturn ? '‹ Ficha' : 'Volver'}</button></div>
       <div class="sheet-body">${SHEET_RENDERERS[ui.sheetTab]()}</div>`;
   }
   const sheetStatus = (id, text) => { const el = $(id); if (el) el.textContent = text; };
@@ -3906,10 +3936,11 @@ a:focus-visible, input:focus-visible, select:focus-visible, summary:focus-visibl
   $('sheet').addEventListener('click', (ev) => {
     const b = ev.target.closest('button');
     if (!b) return;
-    if (b.hasAttribute('data-close-sheet')) { $('sheet').hidden = true; return; }
+    if (b.hasAttribute('data-close-sheet')) { if (ui.sheetReturn) backToPlayerMatch(ui.sheetReturn); else $('sheet').hidden = true; return; }
     if (b.hasAttribute('data-start-match')) { startMatch(); return; }
     if (b.hasAttribute('data-go-home')) { leaveMatch(); return; }
     if (b.dataset.tab) { ui.sheetTab = b.dataset.tab; renderSheet(); return; }
+    if (b.dataset.sheetPlayer) { ui.sheetPlayer = b.dataset.sheetPlayer; renderSheet(); return; }
     if (b.dataset.sheetGoal) { ui.sheetGoal = b.dataset.sheetGoal; ui.sheetShooter = null; renderSheet(); return; }
     if (b.dataset.sheetGk != null) { ui.sheetGk = b.dataset.sheetGk || null; ui.sheetShooter = null; renderSheet(); return; }
     if (b.dataset.sheetShooter != null) { const id = b.dataset.sheetShooter; ui.sheetShooter = ui.sheetShooter === id ? null : id; renderSheet(); return; }
@@ -5072,7 +5103,7 @@ a:focus-visible, input:focus-visible, select:focus-visible, summary:focus-visibl
     renderHome();
     homeStatus('Ficha guardada.');
   }
-  function enterMatch(id, saved, dirty) {
+  function enterMatch(id, saved, dirty, { sheetPlayer } = {}) {
     currentMatchId = id;
     home.season = null;
     writeJson(CURRENT_MATCH_KEY, id);
@@ -5086,7 +5117,14 @@ a:focus-visible, input:focus-visible, select:focus-visible, summary:focus-visibl
     ['home', 'sheet', 'final'].forEach((el) => { $(el).hidden = true; });
     renderAll();
     if (!state.setupDone) openSetup();
+    else if (sheetPlayer) openSheetPlayer(sheetPlayer);
     else if (state.finished) openFinal();
+  }
+  // The match opened from a player's card: the Hoja on his tab, and «‹ Ficha» to go back to that card's match view.
+  function openSheetPlayer(playerId) {
+    Object.assign(ui, { sheetPlayer: playerId, sheetTab: 'player', sheetReturn: { playerId, matchId: currentMatchId } });
+    renderSheet();
+    $('sheet').hidden = false;
   }
   // The latest copy of a match: this device's when not uploaded yet, else the backend's (the device copy without coverage).
   async function loadLatestMatch(id) {
@@ -5101,15 +5139,16 @@ a:focus-visible, input:focus-visible, select:focus-visible, summary:focus-visibl
       throw err;
     }
   }
-  async function openMatch(id) {
+  async function openMatch(id, options) {
     homeStatus('Abriendo el partido…');
     try {
       const latest = await loadLatestMatch(id);
-      enterMatch(id, latest.state, latest.dirty);
+      enterMatch(id, latest.state, latest.dirty, options);
     } catch (err) {
       homeStatus(`No se pudo abrir: ${cloudErrorText(err)}.`);
     }
   }
+  const openMatchForPlayer = (matchId, playerId) => openMatch(matchId, { sheetPlayer: playerId });
   async function restartMatch(id) {
     try {
       const latest = await loadLatestMatch(id);
@@ -5123,16 +5162,26 @@ a:focus-visible, input:focus-visible, select:focus-visible, summary:focus-visibl
     await showMatches();
     homeStatus('Partido reiniciado: empieza de nuevo desde 0:00.');
   }
-  function leaveMatch() {
+  function leaveMatch(after = showMatches) {
     if (isRunning()) pauseClock();
     save();
     syncMatches();
     currentMatchId = null;
     removeKey(CURRENT_MATCH_KEY);
     ui.shooter = null;
+    ui.sheetPlayer = null;
+    ui.sheetReturn = null;
     keepScreenOn(false);
     ['sheet', 'final'].forEach((el) => { $(el).hidden = true; });
-    showMatches();
+    after();
+  }
+  // The season was cleared on entering the match: the card's match view shows «Cargando…» until it is read again.
+  function backToPlayerMatch({ playerId, matchId }) {
+    leaveMatch(() => {
+      Object.assign(home, { playerId, playerMatchId: matchId });
+      showHomeView('player-match');
+      ensureSeason();
+    });
   }
   function openSample() {
     currentMatchId = null;
@@ -5449,7 +5498,7 @@ a:focus-visible, input:focus-visible, select:focus-visible, summary:focus-visibl
     if (b.dataset.homeView === 'team') { home.crestDraft = undefined; showTeamPage(); return; }
     if (b.dataset.player) { showPlayer(b.dataset.player); return; }
     if (b.hasAttribute('data-player-back')) { showPlayer(home.playerId); return; }
-    if (b.dataset.playerMatchOpen) { openMatch(b.dataset.playerMatchOpen); return; }
+    if (b.dataset.playerMatchOpen) { openMatchForPlayer(b.dataset.playerMatchOpen, home.playerId); return; }
     if (b.hasAttribute('data-player-edit')) { toggleEdit(); return; }
     if (b.dataset.playerPos) { editDraft({ pos: b.dataset.playerPos.split(':')[1] }); return; }
     if (b.hasAttribute('data-player-photo')) { $('photo-file').click(); return; }
