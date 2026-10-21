@@ -688,9 +688,9 @@
   T('ending the match early is not undone by the clock tick', () => { const snap = snapshot(); state.clock = { period: 2, elapsedMs: 600000, runningSince: null }; finishMatch(); checkTimers(); if (!state.finished) throw new Error('unfinished'); restore(snap); });
   T('the strip ends the match on a second tap, in either half', () => { const snap = snapshot(); state.clock = { period: 1, elapsedMs: 600000, runningSince: null }; renderAll(); const b = $('btn-finish'); if (b.textContent !== 'Finalizar') throw new Error('label ' + b.textContent); b.click(); if (state.finished || !b.classList.contains('armed') || !b.textContent.includes('Seguro')) throw new Error('first tap ended it'); b.click(); if (!state.finished || $('final').hidden || b.textContent !== 'Resumen' || b.classList.contains('armed')) throw new Error('second tap'); $('final').hidden = true; b.click(); if ($('final').hidden) throw new Error('summary not reopened'); $('final').hidden = true; restore(snap); renderAll(); });
   T('an armed «Finalizar» calms down by itself', () => { const snap = snapshot(); renderAll(); $('btn-finish').click(); if (!ui.finishArmedTimer) throw new Error('not armed'); disarmFinish(); if (ui.finishArmedTimer || $('btn-finish').textContent !== 'Finalizar' || state.finished) throw new Error('still armed'); restore(snap); renderAll(); });
-  T('end of the second half opens the final summary', () => { const snap = snapshot(); state.clock = { period: 2, elapsedMs: CONFIG.halfSeconds * 1000 - 500, runningSince: Date.now() - 1000 }; checkTimers(); if (!state.finished || $('final').hidden || isRunning()) throw new Error('not finished'); if ($('final').querySelectorAll('.kpi-tile').length !== summaryKpis().length) throw new Error('kpi tiles'); if (!$('final').querySelector('details.more table')) throw new Error('detail table not folded'); const rows = [...$('final').querySelectorAll('tbody tr')].map((r) => r.children[0].textContent); ['Goles', '% de tiro', 'Paradas del portero', '7 m', 'Máximo goleador'].forEach((label) => { if (!rows.includes(label)) throw new Error('missing ' + label); }); const head = [...$('final').querySelectorAll('th')].map((t) => t.textContent); if (head[1] !== state.us || head[2] !== state.them) throw new Error('teams'); restore(snap); });
+  T('end of the second half opens the final summary', () => { const snap = snapshot(); state.clock = { period: 2, elapsedMs: CONFIG.halfSeconds * 1000 - 500, runningSince: Date.now() - 1000 }; checkTimers(); if (!state.finished || $('final').hidden || isRunning()) throw new Error('not finished'); if ($('final').querySelectorAll('.kpi-tile').length !== summaryKpis().length) throw new Error('kpi tiles'); if (!$('final').querySelector('details.more table')) throw new Error('detail table not folded'); const rows = [...$('final').querySelectorAll('tbody tr')].map((r) => r.children[0].textContent); ['Goles', '% de tiro', '% de tiro 6 m', '% de tiro 9 m+', '% paradas 6 m', '% paradas 9 m+', 'Paradas del portero', '7 m', 'Máximo goleador'].forEach((label) => { if (!rows.includes(label)) throw new Error('missing ' + label); }); const head = [...$('final').querySelectorAll('th')].map((t) => t.textContent); if (head[1] !== state.us || head[2] !== state.them) throw new Error('teams'); restore(snap); });
   T('end of the first half opens the half-time summary once, with key points', () => { const snap = snapshot(); state.fired = state.fired.filter((k) => k !== 'period-1'); state.clock = { period: 1, elapsedMs: CONFIG.halfSeconds * 1000 - 500, runningSince: Date.now() - 1000 }; checkTimers(); if ($('final').hidden || !$('final').textContent.includes('Descanso')) throw new Error('not opened'); if (!$('final').querySelector('.kpi-tile') || $('final').querySelectorAll('.halftime-points .keypoints').length !== 2) throw new Error('content'); $('final').hidden = true; state.clock.runningSince = Date.now() - 1000; checkTimers(); if (!$('final').hidden) throw new Error('reopened'); document.querySelector('[data-halftime]').click(); if ($('final').hidden) throw new Error('alert Resumen'); document.querySelector('[data-second-half]').click(); if (state.clock.period !== 2 || !$('final').hidden || state.alerts.some((a) => a.kind === 'period')) throw new Error('second half'); restore(snap); });
-  T('summary KPIs colour our value against the rival', () => { const goals = summaryKpis()[0]; const losses = summaryKpis().find((k) => k.label === 'Pérdidas'); openHalftime(); const tiles = [...$('final').querySelectorAll('.kpi-tile')]; const toneOf = (k, tile) => tile.querySelector('.us strong').className; const expect = (k, better) => (k.us === k.them ? '' : (better ? k.us > k.them : k.us < k.them) ? 'r-good' : 'r-bad'); if (toneOf(goals, tiles[0]) !== expect(goals, true)) throw new Error('goals ' + toneOf(goals, tiles[0])); if (toneOf(losses, tiles[4]) !== expect(losses, false)) throw new Error('losses'); $('final').hidden = true; });
+  T('summary KPIs colour our value against the rival', () => { const goals = summaryKpis()[0]; const losses = summaryKpis().find((k) => k.label === 'Pérdidas'); openHalftime(); const tiles = [...$('final').querySelectorAll('.kpi-tile')]; const toneOf = (k, tile) => tile.querySelector('.us strong').className; const expect = (k, better) => (k.us === k.them ? '' : (better ? k.us > k.them : k.us < k.them) ? 'r-good' : 'r-bad'); if (toneOf(goals, tiles[0]) !== expect(goals, true)) throw new Error('goals ' + toneOf(goals, tiles[0])); if (toneOf(losses, tiles[summaryKpis().findIndex((k) => k.label === 'Pérdidas')]) !== expect(losses, false)) throw new Error('losses'); $('final').hidden = true; });
   T('turnovers are shown as a count, not a percentage', () => { ui.source = 'US'; renderLive(); const live = liveStats(); const tile = [...$('live').querySelectorAll('.kpi')].find((k) => k.textContent.includes('Pérdidas')); if (tile.querySelector('strong').textContent !== String(live.us.turnovers)) throw new Error('live ' + tile.textContent); const row = finalRows().find((r) => r[0] === 'Pérdidas'); if (row[1] !== live.us.turnovers || row[2] !== live.them.turnovers) throw new Error('final ' + row); if (summaryKpis().find((k) => k.label === 'Pérdidas').sub.some((t) => t.includes('%'))) throw new Error('tile sub'); ui.source = 'GK'; renderLive(); });
   T('shooter leaders: most shots, goals and misses', () => { const l = shooterLeaders(rivalShots()); if (l.scores.shooter.num !== 9 || l.shoots.shooter.num !== 9 || l.misses.shooter.num !== 7) throw new Error([l.shoots.shooter.num, l.scores.shooter.num, l.misses.shooter.num].join()); if (shooterLeaders([]).scores !== null) throw new Error('empty'); ui.sheetTab = 'gk'; ui.sheetGoal = 'GK'; renderSheet(); if (document.querySelectorAll('.shot-map').length !== 2 || !$('sheet').textContent.includes('Más falla')) throw new Error('gk tab'); });
   T('play after the final whistle does not restart the clock', () => { const snap = snapshot(); state.finished = true; pauseClock(); state.clock.elapsedMs = 0; addEvent('TURNOVER', { playerId: 'p8', subtype: 'Pasos' }); if (isRunning()) throw new Error('restarted'); restore(snap); });
@@ -1050,7 +1050,7 @@
     if (document.getElementById('injected') || !ratingRows().find((r) => r.dataset.ratingPlayer === 'p22').textContent.includes('<i id="injected">')) throw new Error('name not escaped');
 
   // ---- Visual pages (M5): the «Hoja» summary, half-time and final layout ----
-  const SUMMARY_KPI_LABELS = ['Goles', '% tiro', 'Fallos 6 m', 'Fallos 9 m', 'Pérdidas', 'Recuperaciones', '% paradas'];
+  const SUMMARY_KPI_LABELS = ['Goles', '% tiro 6 m', '% tiro 9 m+', 'Fallos 6 m', 'Fallos 9 m', 'Pérdidas', 'Recuperaciones', '% paradas 6 m', '% paradas 9 m+'];
   const onSummary = (over, fn) => () => {
     const snap = snapshot();
     try { Object.assign(state, over); Object.assign(ui, { sheetMode: 'sheet', sheetTab: 'summary' }); renderSheet(); $('sheet').hidden = false; fn(); } finally { restore(snap); ui.sheetTab = 'summary'; }
@@ -1087,9 +1087,72 @@
   T('sheet: summary with no events shows dashes, no NaN', onSummary({ events: [], history: [] }, () => {
     if (/NaN|undefined/.test($('sheet').textContent)) throw new Error('NaN or undefined');
     const tiles = statTiles(), values = Object.fromEntries(SUMMARY_KPI_LABELS.map((l) => [l, tileValue(tiles, l)]));
-    if (values['% tiro'] !== '–' || values['% paradas'] !== '–' || values.Goles !== '0') throw new Error(JSON.stringify(values));
+    if (['% tiro 6 m', '% tiro 9 m+', '% paradas 6 m', '% paradas 9 m+'].some((l) => values[l] !== '–') || values.Goles !== '0') throw new Error(JSON.stringify(values));
     if ($('sheet').querySelector('.zone-map svg, .goal-chart svg')) throw new Error('with under four shots the card says so instead of drawing a chart');
   }));
+  // ---- Shooting and saves by distance: 6 m (6M and 7M) against 9 m+ (9M and +11M) ----
+  const dShot = (kind, zone, result, i, extra = {}) => placed({ id: 'd' + kind + zone + result + i, abs: i, kind, zone, result, ...(kind === 'RIVAL_SHOT' ? { gkId: 'p1' } : { playerId: 'p8' }), ...extra });
+  const distanceEvents = (unknownOrigin = false) => [
+    dShot('SHOT', '6M', 'GOL', 1), dShot('SHOT', '6M', 'PARADA', 2), dShot('SHOT', '7M', 'GOL', 3), dShot('SHOT', '9M', 'FUERA', 4),
+    dShot('SHOT', 'CONTRA', 'GOL', 5, { from: '9M' }), dShot('SHOT', '11M', 'PARADA', 6),
+    dShot('RIVAL_SHOT', '6M', 'PARADA', 8), dShot('RIVAL_SHOT', '6M', 'GOL', 9), dShot('RIVAL_SHOT', '7M', 'PARADA', 10), dShot('RIVAL_SHOT', '6M', 'FUERA', 11),
+    dShot('RIVAL_SHOT', '9M', 'PARADA', 12), dShot('RIVAL_SHOT', '11M', 'GOL', 13, { contra: true }), dShot('RIVAL_SHOT', '9M', 'BLOCADO', 14),
+    ...(unknownOrigin ? [dShot('SHOT', '9M', 'GOL', 7, { origin: undefined }), dShot('RIVAL_SHOT', '9M', 'PARADA', 16, { origin: undefined })] : [])
+  ];
+  T('distance KPIs: 7 m counts as 6 m, +11 m as 9 m+, a counter-attack by its zone, an unknown origin in neither', () => {
+    if (KPI_DISTANCE_GROUPS.near.join() !== '6M,7M' || KPI_DISTANCE_GROUPS.far.join() !== '9M,11M') throw new Error(JSON.stringify(KPI_DISTANCE_GROUPS));
+    const d = distanceKpis(distanceEvents(true));
+    const same = (got, want) => { if (JSON.stringify(got) !== JSON.stringify(want)) throw new Error(JSON.stringify(got) + ' != ' + JSON.stringify(want)); };
+    same(d.shooting.us.near, { goals: 2, shots: 3, pct: 67 });
+    same(d.shooting.us.far, { goals: 1, shots: 3, pct: 33 });
+    same(d.shooting.them.near, { goals: 1, shots: 4, pct: 25 });
+    same(d.shooting.them.far, { goals: 1, shots: 3, pct: 33 });
+  });
+  T('distance KPIs: save % counts only shots on target, by our keeper and by the rival keeper', () => {
+    const d = distanceKpis(distanceEvents(true));
+    const same = (got, want) => { if (JSON.stringify(got) !== JSON.stringify(want)) throw new Error(JSON.stringify(got) + ' != ' + JSON.stringify(want)); };
+    same(d.saves.us.near, { saved: 2, onTarget: 3, pct: 67 });
+    same(d.saves.us.far, { saved: 1, onTarget: 2, pct: 50 });
+    same(d.saves.them.near, { saved: 1, onTarget: 3, pct: 33 });
+    same(d.saves.them.far, { saved: 1, onTarget: 2, pct: 50 });
+  });
+  T('distance KPIs: an empty group has no percentage and reads –', () => {
+    const d = distanceKpis([]);
+    if (d.shooting.us.far.pct !== null || d.saves.them.near.pct !== null || d.shooting.us.near.shots !== 0) throw new Error(JSON.stringify(d));
+    const snap = snapshot();
+    try {
+      state.events = [dShot('SHOT', '6M', 'GOL', 1)]; state.history = []; openHalftime();
+      const tiles = [...$('final').querySelectorAll('.kpi-tile')];
+      const far = tiles.find((t) => t.querySelector('span').textContent === '% tiro 9 m+');
+      if (far.querySelector('.us strong').textContent !== '–' || far.querySelector('.us small').textContent.includes('NaN') || $('final').textContent.includes('NaN')) throw new Error(far.textContent);
+    } finally { restore(snap); }
+  });
+  T('half-time and final show eight KPI tiles with the distance split', () => {
+    const snap = snapshot();
+    const labels = ['Goles', '% tiro 6 m', '% tiro 9 m+', '% de ataque', '% paradas 6 m', '% paradas 9 m+', 'Pérdidas', "Exclusiones 2'"];
+    try {
+      state.events = distanceEvents(); state.history = [];
+      [openHalftime, openFinal].forEach((open) => {
+        open();
+        const tiles = [...$('final').querySelectorAll('.kpi-tile')];
+        if (tiles.map((t) => t.querySelector('span').textContent).join('|') !== labels.join('|')) throw new Error(tiles.map((t) => t.querySelector('span').textContent).join('|'));
+        const near = tiles[1], saves = tiles[4];
+        if (near.querySelector('.us strong').textContent !== '67%' || !near.querySelector('.us small').textContent.endsWith('2/3') || !near.querySelector('.them small').textContent.endsWith('1/4')) throw new Error(near.textContent);
+        if (saves.querySelector('.us strong').textContent !== '67%' || !saves.querySelector('.us small').textContent.endsWith('2/3') || !saves.querySelector('.them small').textContent.endsWith('1/3')) throw new Error(saves.textContent);
+        if (near.querySelector('.us strong').className !== 'r-good') throw new Error('tone ' + near.querySelector('.us strong').className);
+      });
+    } finally { restore(snap); }
+  });
+  T('final rows list shooting and saves by distance, next to the overall rows', () => {
+    const snap = snapshot();
+    try {
+      state.events = distanceEvents(); state.history = [];
+      const rows = Object.fromEntries(finalRows().map((r) => [r[0], r.slice(1)]));
+      if (rows['% de tiro 6 m'].join('|') !== '2/3 · 67%|1/4 · 25%' || rows['% de tiro 9 m+'].join('|') !== '1/3 · 33%|1/3 · 33%') throw new Error(JSON.stringify(rows));
+      if (rows['% paradas 6 m'].join('|') !== '2/3 · 67%|1/3 · 33%' || rows['% paradas 9 m+'].join('|') !== '1/2 · 50%|1/2 · 50%') throw new Error(JSON.stringify(rows));
+      if (!rows['% de tiro'] || !rows['Paradas del portero'] || !finalText().includes('% de tiro 9 m+:')) throw new Error('overall rows or e-mail text');
+    } finally { restore(snap); }
+  });
   T('halftime: shows failed shots 6 m and 9 m and the top turnovers', () => {
     const snap = snapshot();
     try {

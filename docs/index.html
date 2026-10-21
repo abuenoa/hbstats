@@ -580,12 +580,12 @@ button.rex-chip { border: 0; cursor: pointer; position: relative; }
 .top-turnovers li b { font-variant-numeric: tabular-nums; }
 .final-card td:first-child { text-align: left; font-weight: 600; }
 /* Summary KPIs: our value (coloured against theirs) beside the rival's, details folded underneath */
-.kpi-tiles { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: var(--space-2); }
+.kpi-tiles { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: var(--space-2); }
 .kpi-tile { background: var(--surface); border: 1px solid var(--line); border-radius: var(--inner-radius, var(--radius-sm)); padding: var(--space-3); min-width: 0; }
 .kpi-tile > span { font: var(--type-caption); font-weight: 700; color: var(--muted); text-transform: uppercase; letter-spacing: .08em; }
 .kpi-tile .vs { display: grid; grid-template-columns: 1fr 1fr; gap: var(--space-2); margin-top: var(--space-1); }
 .kpi-tile .vs > div { min-width: 0; }
-.kpi-tile strong { display: block; font: var(--type-kpi); font-variant-numeric: tabular-nums; }
+.kpi-tile strong { display: block; font: var(--type-kpi); font-size: 1.5rem; font-variant-numeric: tabular-nums; }
 .kpi-tile .them strong { color: var(--muted); }
 .kpi-tile small { display: block; font: var(--type-caption); color: var(--muted); overflow-wrap: anywhere; }
 .more summary { min-height: 44px; display: flex; align-items: center; font-weight: 700; cursor: pointer; }
@@ -622,6 +622,8 @@ button.rex-chip { border: 0; cursor: pointer; position: relative; }
 /* «Resumen» of the Hoja and the half-time cards: label, value and a note per tile */
 .stat-tiles { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: var(--space-2); }
 @media (max-width: 700px) { .stat-tiles { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+.stat-tiles.summary-tiles { grid-template-columns: repeat(5, minmax(0, 1fr)); }
+@media (max-width: 700px) { .stat-tiles.summary-tiles { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
 .failed-shots .stat-tiles { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 .stat-tile { display: grid; align-content: start; gap: var(--space-1); background: var(--surface); border: 1px solid var(--line); border-radius: var(--inner-radius, var(--radius-md)); padding: var(--space-3); min-width: 0; }
 .stat-tile > span { font: var(--type-caption); font-weight: 700; color: var(--muted); text-transform: uppercase; letter-spacing: .08em; overflow-wrap: anywhere; }
@@ -1648,6 +1650,20 @@ span.att-foot { visibility: hidden; }
       turnovers: s.events.filter((e) => e.kind === 'TURNOVER').length, recoveries: s.events.filter((e) => e.kind === 'ACTION' && e.action === 'RECUP').length,
       saves, onTarget, savePct: pct(saves, onTarget)
     };
+  }
+  // Distance groups of the shooting and save KPIs: penalties count as 6 m, a counter-attack by where it was shot from.
+  const KPI_DISTANCE_GROUPS = { near: ['6M', '7M'], far: ['9M', '11M'] };
+  const KPI_PENALTY_ZONE = '7M';
+  const kpiShotZone = (e) => (e.kind === 'SHOT' ? e.from : e.zone);
+  // A shot without an origin has no distance, a penalty needs none.
+  const kpiDistanceOf = (e) => Object.keys(KPI_DISTANCE_GROUPS).find((g) => KPI_DISTANCE_GROUPS[g].includes(kpiShotZone(e)) && (e.origin || kpiShotZone(e) === KPI_PENALTY_ZONE)) || null;
+  // Goals per shot, and saves per shot on target by the keeper that faced them, in each distance group.
+  function distanceKpis(events = state.events) {
+    const byGroup = (shots, figures) => Object.fromEntries(Object.keys(KPI_DISTANCE_GROUPS).map((g) => [g, figures(shots.filter((e) => kpiDistanceOf(e) === g))]));
+    const shooting = (shots) => byGroup(shots, (list) => { const goals = countGroups(list).GOL; return { goals, shots: list.length, pct: pct(goals, list.length) }; });
+    const saves = (shots) => byGroup(shots, (list) => { const c = countGroups(list); return { saved: c.PARADA, onTarget: c.GOL + c.PARADA, pct: pct(c.PARADA, c.GOL + c.PARADA) }; });
+    const ours = ourShots(events), theirs = rivalShots(events);
+    return { shooting: { us: shooting(ours), them: shooting(theirs) }, saves: { us: saves(theirs), them: saves(ours) } };
   }
   // ---- Attack types: how a shot was reached, and what the rival scored after our turnovers ----
   const ATTACK_TYPES = { POS: 'Posicional', CONTRA: 'Contraataque', SAQUE: 'Saque rápido' };
@@ -3871,15 +3887,18 @@ span.att-foot { visibility: hidden; }
   const statTileHtml = (label, value, note, tone = '') => `<div class="stat-tile"><span>${esc(label)}</span><strong class="${tone}">${esc(value)}</strong><small>${esc(note)}</small></div>`;
   const failedShotTileHtml = (label, misses) => statTileHtml(label, misses, FAILED_SHOT_NOTE);
   // Each tile takes the colour of its target in CONFIG.targets; counts and the failed shots have none.
-  function summaryTilesHtml(f) {
+  const DISTANCE_LABELS = { near: '6 m', far: '9 m+' };
+  const distanceTilesHtml = (figures, label, made, tried, target) => Object.keys(DISTANCE_LABELS)
+    .map((g) => statTileHtml(`${label} ${DISTANCE_LABELS[g]}`, pctText(figures[g].pct), `${figures[g][made]}/${figures[g][tried]}`, rate(figures[g].pct, target)));
+  function summaryTilesHtml(f, d = distanceKpis()) {
     const possessions = f.shots + f.turnovers;
     return [
       statTileHtml('Goles', f.goals, plural(f.shots, 'lanzamiento', 'lanzamientos')),
-      statTileHtml('% tiro', pctText(f.shooting), `${f.goals}/${f.shots}`, rate(f.shooting, 'shooting')),
+      ...distanceTilesHtml(d.shooting.us, '% tiro', 'goals', 'shots', 'shooting'),
       failedShotTileHtml('Fallos 6 m', f.miss6), failedShotTileHtml('Fallos 9 m', f.miss9),
       statTileHtml('Pérdidas', f.turnovers, `${pctText(pct(f.turnovers, possessions))} · de ${plural(possessions, 'posesión', 'posesiones')}`, rate(pct(f.turnovers, possessions), 'turnovers')),
       statTileHtml('Recuperaciones', f.recoveries, ''),
-      statTileHtml('% paradas', pctText(f.savePct), `${f.saves}/${f.onTarget}`, rate(f.savePct, 'gk'))
+      ...distanceTilesHtml(d.saves.us, '% paradas', 'saved', 'onTarget', 'gk')
     ].join('');
   }
   const summaryChartHtml = (title, cls, counted, draw) => `<section class="sheet-card ${cls}"><h3>${title}</h3>${counted >= SUMMARY_MIN_SHOTS ? draw() : `<p class="note">${plural(counted, 'lanzamiento', 'lanzamientos')}: aún pocos para dibujarlo.</p>`}</section>`;
@@ -3894,7 +3913,7 @@ span.att-foot { visibility: hidden; }
     const ours = ourShots(), theirs = rivalShots(), ratings = matchRatings(state);
     const onGoal = (list) => list.filter(onTarget).length;
     const players = state.players.slice().sort(byPosition).map((p) => summaryPlayerHtml(p, ratings)).join('');
-    return `<div class="stat-tiles">${summaryTilesHtml(matchFigures())}</div>
+    return `<div class="stat-tiles summary-tiles">${summaryTilesHtml(matchFigures())}</div>
       <p class="note">Color según los objetivos del club; los recuentos sin objetivo no se colorean.</p>
       <div class="summary-cols">
         <div class="summary-col">${summaryChartHtml('Nuestros tiros · % de gol por zona', 'zone-map', ours.length, () => zoneMapSvg(ours, isGoal, CARD_ZONE_COLOURS.field, anyShot))}
@@ -4780,14 +4799,20 @@ span.att-foot { visibility: hidden; }
     const { us, them } = liveStats();
     const s = score();
     const pens = (side) => side.zones.find((z) => z.id === '7M');
+    const byDistance = distanceKpis();
+    const made = (a, b, pctValue) => `${a}/${b} · ${pctText(pctValue)}`;
+    const shotRow = (label, g) => [label, ...['us', 'them'].map((side) => { const f = byDistance.shooting[side][g]; return made(f.goals, f.shots, f.pct); })];
+    const saveRow = (label, g) => [label, ...['us', 'them'].map((side) => { const f = byDistance.saves[side][g]; return made(f.saved, f.onTarget, f.pct); })];
     const scorer = (team) => { const t = attackAnalysis(team).topScorer; return t ? `${t.label} (${t.goals})` : '–'; };
     return [
       ['Goles', s.us, s.them],
       ['Lanzamientos', us.shots, them.shots],
       ['% de tiro', pctText(us.shooting), pctText(them.shooting)],
+      shotRow('% de tiro 6 m', 'near'), shotRow('% de tiro 9 m+', 'far'),
       ['% de ataque', pctText(us.attack), pctText(them.attack)],
       ['Pérdidas', us.turnovers, them.turnovers],
       ['Paradas del portero', `${them.saved}/${them.onTarget} · ${pctText(them.savedPct)}`, `${us.saved}/${us.onTarget} · ${pctText(us.savedPct)}`],
+      saveRow('% paradas 6 m', 'near'), saveRow('% paradas 9 m+', 'far'),
       ['7 m', `${pens(us).GOL}/${pens(us).att}`, `${pens(them).GOL}/${pens(them).att}`],
       ["Exclusiones 2'", exclusionEvents().length, rivalExclusionEvents().length],
       ['Máximo goleador', scorer('us'), scorer('them')]
@@ -4803,11 +4828,14 @@ span.att-foot { visibility: hidden; }
   function summaryKpis() {
     const { us, them } = liveStats();
     const s = score();
+    const { shooting, saves } = distanceKpis();
+    const shotKpi = (label, g) => ({ label, us: shooting.us[g].pct, them: shooting.them[g].pct, pct: true, better: 'high', sub: [`${shooting.us[g].goals}/${shooting.us[g].shots}`, `${shooting.them[g].goals}/${shooting.them[g].shots}`] });
+    const saveKpi = (label, g) => ({ label, us: saves.us[g].pct, them: saves.them[g].pct, pct: true, better: 'high', sub: [`${saves.us[g].saved}/${saves.us[g].onTarget}`, `${saves.them[g].saved}/${saves.them[g].onTarget}`] });
     return [
       { label: 'Goles', us: s.us, them: s.them, better: 'high' },
-      { label: '% de tiro', us: us.shooting, them: them.shooting, pct: true, better: 'high', sub: [`${us.goals}/${us.shots}`, `${them.goals}/${them.shots}`] },
+      shotKpi('% tiro 6 m', 'near'), shotKpi('% tiro 9 m+', 'far'),
       { label: '% de ataque', us: us.attack, them: them.attack, pct: true, better: 'high', sub: [`${us.goals}/${us.possessions} pos.`, `${them.goals}/${them.possessions} pos.`] },
-      { label: 'Paradas', us: them.savedPct, them: us.savedPct, pct: true, better: 'high', sub: [`${them.saved}/${them.onTarget}`, `${us.saved}/${us.onTarget}`] },
+      saveKpi('% paradas 6 m', 'near'), saveKpi('% paradas 9 m+', 'far'),
       { label: 'Pérdidas', us: us.turnovers, them: them.turnovers, better: 'low', sub: [`de ${us.possessions} pos.`, `de ${them.possessions} pos.`] },
       { label: "Exclusiones 2'", us: exclusionEvents().length, them: rivalExclusionEvents().length, better: 'low' }
     ];
