@@ -1168,6 +1168,102 @@
         if (labels.join() !== '1/3') throw new Error('zone labels ' + labels.join());
       } finally { Object.assign(home, keep); }
     });
+    // ---- Player card: one match ----
+    const matchMarks = (svg, s) => svg.querySelectorAll('g').length - new DOMParser().parseFromString(shotMapSvg([], 'US', null, { s }), 'text/html').querySelectorAll('g').length;
+    const SHOT_END_FILL = 'var(--surface)'; // the ring where a trajectory meets the goal, not a result colour
+    const matchMaps = () => [...document.querySelectorAll('.match-grid .shot-map')];
+    const gridSum = (card) => [...card.querySelectorAll('.goal-grid b')].reduce((n, b) => n + Number(b.textContent), 0);
+    const gridCards = () => [...document.querySelectorAll('.match-grid .goal-grid')].map((g) => g.closest('.sheet-card'));
+    await TA('player card: tapping a match row opens that match for the player', async () => {
+      const keep = { roster: home.roster, season: home.season };
+      try {
+        const matches = [cardMatch(), seasonRow('cm2', { players: [cardField, cardKeeper], date: '2026-09-01' })];
+        openCard('ca', matches);
+        const rowEl = [...document.querySelectorAll('.match-table tr[data-player-match]')].find((r) => r.dataset.playerMatch === 'cm2');
+        if (!rowEl || !rowEl.classList.contains('row-link')) throw new Error('row affordance');
+        const btn = rowEl.querySelector('button.row-btn[data-player-match="cm2"]');
+        if (!btn || btn.getBoundingClientRect().height < 44) throw new Error('date button size');
+        rowEl.querySelector('td:nth-child(3)').click();
+        if (home.view !== 'player-match' || home.playerMatchId !== 'cm2') throw new Error(home.view + ' ' + home.playerMatchId);
+        if (document.querySelector('.tabs [data-home-view="team"]').getAttribute('aria-pressed') !== 'true') throw new Error('Equipo tab not pressed');
+        showPlayer('ca'); document.querySelector('.match-table button.row-btn[data-player-match="cm1"]').click();
+        if (home.view !== 'player-match' || home.playerMatchId !== 'cm1') throw new Error('button tap ' + home.view);
+      } finally { Object.assign(home, keep); }
+    });
+    await TA('player match: field map draws one mark per shot with the card colours', async () => {
+      const keep = { roster: home.roster, season: home.season };
+      try {
+        const match = cardMatch();
+        openCard('ca', [match]);
+        showPlayerMatch('cm1');
+        const row = playerMatchRow(match, cardField), [svg] = matchMaps();
+        if (matchMaps().length !== 1 || row.shotsList.length !== 4 || matchMarks(svg, match.state) !== row.shotsList.length) throw new Error('marks ' + matchMarks(svg, match.state));
+        const fills = new Set([...svg.querySelectorAll('g circle')].map((c) => c.getAttribute('fill')).filter((f) => f !== SHOT_END_FILL));
+        if (![...fills].every((f) => ['var(--gol)', 'var(--parada)', 'var(--fallo)'].includes(f)) || !fills.has('var(--gol)') || !fills.has('var(--parada)')) throw new Error([...fills].join());
+        const text = $('home').textContent;
+        ['Dónde marca', 'Dónde se lo paran', 'Abrir el partido', '‹ Ficha', 'Rival'].forEach((t) => { if (!text.includes(t)) throw new Error('missing «' + t + '»'); });
+        const [scored, saved] = gridCards();
+        if (gridSum(scored) !== 3 || gridSum(saved) !== 1) throw new Error(gridSum(scored) + '/' + gridSum(saved));
+        if (document.querySelector('.player-page .sum') === null || /NaN|undefined/.test(text)) throw new Error('figures or NaN');
+      } finally { Object.assign(home, keep); }
+    });
+    await TA('player match: goalkeeper sees rival shots faced, saves and goals', async () => {
+      const keep = { roster: home.roster, season: home.season };
+      try {
+        const match = cardMatch();
+        openCard('cg', [match]);
+        showPlayerMatch('cm1');
+        const row = playerMatchRow(match, cardKeeper), maps = matchMaps();
+        const goals = row.onTarget - row.saves;
+        if (maps.length !== 2 || matchMarks(maps[0], match.state) !== row.saves || matchMarks(maps[1], match.state) !== goals) throw new Error(maps.map((m) => matchMarks(m, match.state)).join());
+        if (row.saves !== 3 || goals !== 2) throw new Error('premise ' + row.saves + '/' + goals);
+        const [saved, conceded] = gridCards();
+        if (gridSum(saved) !== row.saves || gridSum(conceded) !== goals) throw new Error(gridSum(saved) + '/' + gridSum(conceded));
+        const fills = new Set([...document.querySelectorAll('.match-grid .shot-map g circle')].map((c) => c.getAttribute('fill')).filter((f) => f !== SHOT_END_FILL));
+        if (![...fills].every((f) => ['var(--gol)', 'var(--red)', 'var(--fallo)'].includes(f))) throw new Error([...fills].join());
+        const text = $('home').textContent;
+        ['Detenidos por zona de portería', 'Encajados por zona de portería', 'Paradas'].forEach((t) => { if (!text.includes(t)) throw new Error('missing «' + t + '»'); });
+      } finally { Object.assign(home, keep); }
+    });
+    await TA("player match: another match's shots are not drawn", async () => {
+      const keep = { roster: home.roster, season: home.season };
+      try {
+        const other = seasonRow('cm2', { players: [cardField, cardKeeper], date: '2026-09-01', events: [seasonShot('ca', 'GOL'), seasonShot('ca', 'GOL'), seasonRivalShot('cg', 'GOL')].map((e) => ({ origin: m(0, 10), target: gf(0.5, 0.5), ...e })) });
+        const first = cardMatch();
+        openCard('ca', [first, other]);
+        showPlayerMatch('cm2');
+        if (matchMarks(matchMaps()[0], other.state) !== 2 || gridSum(gridCards()[0]) !== 2) throw new Error('field shows ' + matchMarks(matchMaps()[0], other.state));
+        showPlayer('cg'); showPlayerMatch('cm2');
+        const maps = matchMaps();
+        if (matchMarks(maps[0], other.state) !== 0 || matchMarks(maps[1], other.state) !== 1) throw new Error('keeper shows ' + maps.map((x) => matchMarks(x, other.state)).join());
+      } finally { Object.assign(home, keep); }
+    });
+    await TA('player match: back returns to the card; a missing match falls back to the card', async () => {
+      const keep = { roster: home.roster, season: home.season };
+      try {
+        openCard('ca', [cardMatch()]);
+        showPlayerMatch('cm1');
+        document.querySelector('[data-player-back]').click();
+        if (home.view !== 'player' || home.playerId !== 'ca' || !document.querySelector('.match-table')) throw new Error('back ' + home.view);
+        showPlayerMatch('nope');
+        if (home.view !== 'player') throw new Error('missing match ' + home.view);
+        home.playerMatchId = 'gone'; showHomeView('player-match');
+        for (let i = 0; i < 3; i++) await tick0();
+        if (home.view !== 'player' || /NaN|undefined/.test($('home').textContent)) throw new Error('rendered a vanished match ' + home.view);
+        showPlayerMatch('cm1');
+        if (!document.querySelector('[data-player-match-open="cm1"]')) throw new Error('no open button');
+      } finally { Object.assign(home, keep); }
+    });
+    await TA('player match: rival and player names are escaped', async () => withTeams(async () => {
+      const evil = '<img src=x onerror=alert(1) data-evil>';
+      const hostile = { id: 'ce', num: 7, name: evil, pos: 'EXT', fullName: evil };
+      home.roster = [hostile, cardKeeper];
+      home.season = [seasonRow('ev9', { players: [hostile, cardKeeper], them: evil, venue: evil, mvpId: 'ce', events: [{ ...seasonShot('ce', 'GOL'), origin: m(0, 10), target: gf(0.5, 0.5) }] })];
+      showPlayer('ce'); showPlayerMatch('ev9');
+      const page = document.querySelector('.player-page');
+      if (!page || $('home').querySelector('[data-evil], img[onerror]')) throw new Error('markup injected');
+      if (!page.querySelector('.last-who').textContent.includes(evil)) throw new Error('name not shown as text');
+    }));
     await TA('player card: field radar names the assists axis «Pases de gol» and the leaders chip says MVPs', async () => {
       if (FIELD_AXES.find((a) => a.key === 'assists').label !== 'Pases de gol' || LEADER_METRICS.find((x) => x.key === 'mvps').label !== 'MVPs') throw new Error('wording');
     });

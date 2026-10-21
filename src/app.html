@@ -99,6 +99,7 @@
   --type-body: 400 1rem/1.5 var(--font-body);
   --type-caption: 400 0.8125rem/1.4 var(--font-body);
   --type-kpi: 800 2.125rem/1.05 var(--font-display);
+  --dorsal-ink: #ffffff;
   --space-1: 4px; --space-2: 8px; --space-3: 12px; --space-4: 16px; --space-5: 20px; --space-6: 24px; --space-8: 32px; --space-10: 40px; --space-12: 48px;
   --radius-sm: 8px; --radius-md: 12px; --radius-lg: 16px; --radius-xl: 24px; --radius-full: 9999px;
   --ring: 0 0 0 1px rgba(0, 0, 0, .06), 0 1px 2px -1px rgba(0, 0, 0, .06), 0 2px 4px 0 rgba(0, 0, 0, .04);
@@ -138,6 +139,7 @@
     --ring: 0 0 0 1px rgba(255, 255, 255, .08); --ring-hover: 0 0 0 1px rgba(255, 255, 255, .13); --photo-outline: rgba(255, 255, 255, .1);
     --rating-top: #5b8cff; --rating-ink-top: #0e0e10; --rating-good: #2fbf71; --rating-ink-good: #0e0e10; --rating-mid: #f5c542; --rating-ink-mid: #0e0e10;
     --rating-low: #ea7a2e; --rating-ink-low: #0e0e10; --rating-bad: #c53030; --rating-ink-bad: #ffffff;
+    --dorsal-ink: #0e0e10;
   }
 }
 :root[data-theme="dark"] {
@@ -157,6 +159,7 @@
   --ring: 0 0 0 1px rgba(255, 255, 255, .08); --ring-hover: 0 0 0 1px rgba(255, 255, 255, .13); --photo-outline: rgba(255, 255, 255, .1);
   --rating-top: #5b8cff; --rating-ink-top: #0e0e10; --rating-good: #2fbf71; --rating-ink-good: #0e0e10; --rating-mid: #f5c542; --rating-ink-mid: #0e0e10;
   --rating-low: #ea7a2e; --rating-ink-low: #0e0e10; --rating-bad: #c53030; --rating-ink-bad: #ffffff;
+  --dorsal-ink: #0e0e10;
 }
 
 /* Type roles for pages outside the live screen */
@@ -670,6 +673,7 @@ td.zero { color: var(--color-text-tertiary); }
   .home .press:active:not(:disabled), #sheet .press:active:not(:disabled), #final .press:active:not(:disabled) { transform: scale(.96); }
 }
 @media (hover: hover) {
+  .home .row-link:hover { background: var(--color-bg-subtle); }
   .home .team-card:hover, .home .face:hover { box-shadow: var(--ring-hover); }
   .home .leader:hover { background: var(--color-bg-subtle); }
 }
@@ -680,6 +684,7 @@ td.zero { color: var(--color-text-tertiary); }
 .home .note, #sheet .note, #final .note { font: var(--type-caption); }
 .home .row-actions + .note { margin-top: var(--space-3); }
 .home .note a, #sheet .note a, #final .note a { display: inline-flex; align-items: center; min-height: var(--target); }
+.home .map-dorsal { fill: var(--dorsal-ink); }
 .home .court-label, #sheet .court-label { fill: var(--color-text-secondary); opacity: 1; }
 .home .r-good, #sheet .r-good, #final .r-good { color: var(--color-success-text); }
 .home .r-warn, #sheet .r-warn, #final .r-warn { color: var(--color-warning-text); }
@@ -808,12 +813,19 @@ a:focus-visible, input:focus-visible, select:focus-visible, summary:focus-visibl
 .match-table th { letter-spacing: 0; }
 .match-table td:nth-child(2) { white-space: normal; min-width: 80px; }
 .match-table .res-G, .match-table .res-E, .match-table .res-P { font-weight: 800; }
+.row-link { cursor: pointer; }
+.row-btn { min-height: var(--target); min-width: var(--target); padding: 0 var(--space-1); border: 0; background: none; color: inherit; font: inherit; font-weight: 700; text-align: left; cursor: pointer; }
+.row-btn:focus-visible { outline: var(--focus-ring); outline-offset: -2px; border-radius: var(--radius-sm); }
 .mvp-row { background: linear-gradient(90deg, color-mix(in srgb, var(--gold) 22%, transparent), transparent); }
 .mvp-row td:first-child { position: relative; padding-left: 30px; }
 .mvp-row .crown-face { left: 0; top: 2px; width: 26px; filter: none; }
+.match-head .last-match { margin-top: 0; }
+.res-chip { font: var(--type-caption); font-weight: 800; padding: var(--space-1) var(--space-2); border-radius: var(--radius-sm); }
+.match-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--space-4); align-items: start; }
 .player-fields { display: grid; grid-template-columns: 1fr 100px 1fr; gap: var(--space-3); margin-bottom: var(--space-3); }
 .player-edit .pos-pick, .player-edit .row-actions { margin-top: var(--space-3); }
 @media (max-width: 1100px) { .player-grid { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); } .player-grid > :last-child { grid-column: 1 / -1; } }
+@media (max-width: 700px) { .match-grid { grid-template-columns: minmax(0, 1fr); } }
 @media (max-width: 700px) { .player-grid, .player-fields { grid-template-columns: minmax(0, 1fr); } }
 @media (max-width: 1100px) { .team-page { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); } .squad { grid-column: 1 / -1; } }
 @media (max-width: 700px) { .team-page { grid-template-columns: minmax(0, 1fr); } }
@@ -3957,7 +3969,7 @@ a:focus-visible, input:focus-visible, select:focus-visible, summary:focus-visibl
   let backend = null;
   let currentMatchId = null;
   let syncTimer = null;
-  const home = { view: 'loading', user: null, teams: [], roster: [], matches: [], season: null, templates: [], template: null, squad: new Set(), leaderMetric: 'goals', playerId: null, playerEdit: false, playerDraft: null, offline: false, error: '', draft: null, crestDraft: undefined, armed: null, passwordChange: false, seasonOffline: false };
+  const home = { view: 'loading', user: null, teams: [], roster: [], matches: [], season: null, templates: [], template: null, squad: new Set(), leaderMetric: 'goals', playerId: null, playerMatchId: null, playerEdit: false, playerDraft: null, offline: false, error: '', draft: null, crestDraft: undefined, armed: null, passwordChange: false, seasonOffline: false };
 
   // ---- Device storage ----
   function readJson(key) {
@@ -4327,7 +4339,7 @@ a:focus-visible, input:focus-visible, select:focus-visible, summary:focus-visibl
     </form>`;
   }
   function homeHeadHtml() {
-    const tab = (view, label) => `<button class="press" type="button" data-home-view="${view}" aria-pressed="${home.view === view || (view === 'matches' && home.view === 'squad') || (view === 'team' && ['team-edit', 'player'].includes(home.view))}">${label}</button>`;
+    const tab = (view, label) => `<button class="press" type="button" data-home-view="${view}" aria-pressed="${home.view === view || (view === 'matches' && home.view === 'squad') || (view === 'team' && ['team-edit', 'player', 'player-match'].includes(home.view))}">${label}</button>`;
     return `<header class="home-head glass">
       <button class="btn press" type="button" data-home-view="profile">‹ Perfil</button>
       <img class="crest home-crest" src="${esc(crestSrc(team))}" alt="">
@@ -4399,7 +4411,7 @@ a:focus-visible, input:focus-visible, select:focus-visible, summary:focus-visibl
         ${problem ? `<span class="note">${problem}</span>` : ''}</div>
       <div class="squad-grid">${home.roster.slice().sort(byPosition).map(chip).join('')}</div>`;
   }
-  const HOME_VIEWS = { team: teamPageHtml, player: playerPageHtml, 'team-edit': teamEditHtml, matches: matchesHtml, squad: squadHtml };
+  const HOME_VIEWS = { team: teamPageHtml, player: playerPageHtml, 'player-match': playerMatchHtml, 'team-edit': teamEditHtml, matches: matchesHtml, squad: squadHtml };
 
   // ---- Profile: the first screen after signing in (teams, rival templates, account) ----
   const profileHeadHtml = () => `<header class="home-head glass"><span class="app-mark" aria-hidden="true">HB</span>
@@ -4890,7 +4902,7 @@ a:focus-visible, input:focus-visible, select:focus-visible, summary:focus-visibl
   window.addEventListener('online', () => {
     if (!home.seasonOffline) return;
     home.season = null;
-    if (!['team', 'player'].includes(home.view)) return;
+    if (!['team', 'player', 'player-match'].includes(home.view)) return;
     renderHome();
     ensureSeason();
   });
@@ -4947,7 +4959,7 @@ a:focus-visible, input:focus-visible, select:focus-visible, summary:focus-visibl
     const best = teamBest(home.season, home.roster);
     const keeper = player.pos === 'POR';
     const card = keeper ? keeperCard(season, best.keeper) : fieldCard(season, best.field);
-    const rows = season.rows.map((r) => `<tr${r.mvp ? ' class="mvp-row"' : ''}><td>${r.mvp ? crownSvg('crown-face') : ''}${esc(shortDateText(r.date))}</td><td>${esc(r.them)}</td><td class="${resultClass(r)}">${r.scoreUs}–${r.scoreThem}</td>${card.cells(r)}</tr>`).join('');
+    const rows = season.rows.map((r) => `<tr class="row-link${r.mvp ? ' mvp-row' : ''}" data-player-match="${r.id}"><td>${r.mvp ? crownSvg('crown-face') : ''}<button class="row-btn press" type="button" data-player-match="${r.id}">${esc(shortDateText(r.date))}</button></td><td>${esc(r.them)}</td><td class="${resultClass(r)}">${r.scoreUs}–${r.scoreThem}</td>${card.cells(r)}</tr>`).join('');
     const mvp = season.mvps ? `<div class="mvp-tile">${crownSvg()}<b>${season.mvps}</b> <span>MVP del partido · ${season.mvps} de ${season.rows.length} partidos</span></div>` : '';
     const body = `<div class="sentences">${card.sentences.map((x) => `<p>${x}</p>`).join('')}</div>
       <div class="tiles"><div class="tile ${card.lead.cls}"><b>${card.lead.figure}</b><span>${card.lead.label}${card.lead.leads ? ' · el mejor del equipo' : ''}</span></div>
@@ -4987,6 +4999,37 @@ a:focus-visible, input:focus-visible, select:focus-visible, summary:focus-visibl
     if (!rosterPlayer(id)) { showTeamPage(); return; }
     Object.assign(home, { playerId: id, playerEdit: false, playerDraft: null });
     showHomeView('player');
+  }
+  // One match of one player: where the shots came from and where they went (a goalkeeper: the rival shots faced).
+  const RESULT_LABEL = { G: 'Victoria', E: 'Empate', P: 'Derrota' };
+  function playerMatchHtml() {
+    const player = rosterPlayer(home.playerId);
+    const match = (home.season || []).find((m) => m.id === home.playerMatchId);
+    const row = match && player && playerMatchRow(match, player);
+    // The match or the player is gone (a reload, a deleted match): go back to the card, or to the team page without a player.
+    if (!row) { queueMicrotask(() => showPlayer(home.playerId)); return ''; }
+    const keeper = player.pos === 'POR', s = match.state;
+    const gridView = keeper ? 'GK' : 'US';
+    const mapCard = (title, list, colours) => card(`${title} · ${list.length}`, shotMapSvg(list, gridView, null, { s, colours }));
+    const maps = keeper
+      ? `<div class="match-grid">${MAP_GROUPS.map(([group, title]) => mapCard(title, row.facedList.filter((e) => groupOf(e.result) === group), CARD_ZONE_COLOURS.keeper)).join('')}
+          ${goalGridHtml(row.facedList, 'PARADA', 'Detenidos por zona de portería', gridView)}${goalGridHtml(row.facedList, 'GOL', 'Encajados por zona de portería', gridView)}</div>`
+      : `<div class="match-grid">${mapCard('Tiros', row.shotsList, CARD_ZONE_COLOURS.field)}
+          <div class="player-col">${goalGridHtml(row.shotsList, 'GOL', 'Dónde marca', gridView)}${goalGridHtml(row.shotsList, 'PARADA', 'Dónde se lo paran', gridView)}</div></div>`;
+    const crown = row.mvp ? crownSvg('crown-face') : '';
+    return `<div class="player-page"><div class="player-bar"><button class="btn press" type="button" data-player-back>‹ Ficha</button>
+        <button class="btn primary press" type="button" data-player-match-open="${match.id}">Abrir el partido</button></div>
+      <section class="sheet-card match-head"><div class="last-match"><span class="mvp-face-static">${discHtml(player)}${crown}</span>
+        <span class="last-who"><b>${esc(match.them)}</b><small>${esc(dateText(match.date))}${match.venue ? ` · ${esc(match.venue)}` : ''}</small></span>
+        <span class="res-chip ${resultClass(row)}">${RESULT_LABEL[matchResult(row)]}</span>
+        <strong class="last-score ${resultClass(row)}">${row.scoreUs}–${row.scoreThem}</strong></div></section>
+      ${figuresHtml(keeper ? gkFigures(row.facedList) : playerFigures(player, s))}
+      ${maps}</div>`;
+  }
+  function showPlayerMatch(matchId) {
+    if (!(home.season || []).some((m) => m.id === matchId)) { showPlayer(home.playerId); return; }
+    home.playerMatchId = matchId;
+    showHomeView('player-match');
   }
   // Keeps what is typed in the panel before a tap re-renders it.
   function captureDraft() {
@@ -5386,6 +5429,8 @@ a:focus-visible, input:focus-visible, select:focus-visible, summary:focus-visibl
     else if (kind === 'team') submitTeam(form, false);
   });
   $('home').addEventListener('click', (ev) => {
+    const rowLink = ev.target.closest('[data-player-match]');
+    if (rowLink) { showPlayerMatch(rowLink.dataset.playerMatch); return; }
     const b = ev.target.closest('button');
     if (!b || b.type === 'submit') return;
     const armedBefore = home.armed;
@@ -5402,6 +5447,8 @@ a:focus-visible, input:focus-visible, select:focus-visible, summary:focus-visibl
     if (b.dataset.homeView === 'matches') { showMatches(); return; }
     if (b.dataset.homeView === 'team') { home.crestDraft = undefined; showTeamPage(); return; }
     if (b.dataset.player) { showPlayer(b.dataset.player); return; }
+    if (b.hasAttribute('data-player-back')) { showPlayer(home.playerId); return; }
+    if (b.dataset.playerMatchOpen) { openMatch(b.dataset.playerMatchOpen); return; }
     if (b.hasAttribute('data-player-edit')) { toggleEdit(); return; }
     if (b.dataset.playerPos) { editDraft({ pos: b.dataset.playerPos.split(':')[1] }); return; }
     if (b.hasAttribute('data-player-photo')) { $('photo-file').click(); return; }

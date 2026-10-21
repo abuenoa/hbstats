@@ -60,6 +60,8 @@ MATRIX_SCENES = {
     "team": "await seedSeason();",
     "player": f"showPlayer((await seedSeason()).get('{TOP_SCORER_SAMPLE_ID}'));",
     "keeper": "await seedSeason(); showPlayer(home.roster.find((p) => p.pos === 'POR').id);",
+    "player-match": f"showPlayer((await seedSeason()).get('{TOP_SCORER_SAMPLE_ID}')); showPlayerMatch(home.season[0].id);",
+    "keeper-match": "await seedSeason(); showPlayer(home.roster.find((p) => p.pos === 'POR').id); showPlayerMatch(home.season[0].id);",
     "matches": "await seedSeason(); await showMatches();",
     "profile": "await seedSeason(); await showProfile();",
     "sheet-stats": SHEET_STATS,
@@ -120,9 +122,14 @@ PROBE = """
     // Masked shapes are skipped, because hit testing ignores masks and they would count where they are not drawn. Filled shapes
     // that are masked or drawn after the text can tint it in ways this cannot compute, so such text is reported as unmeasured.
     const svgBackdrop = (el) => {
+      // Hit testing only sees what is inside the window: bring the text in, then put every scroll position back.
+      const scrolled = [];
+      for (let node = el.parentElement; node; node = node.parentElement) scrolled.push([node, node.scrollTop, node.scrollLeft]);
+      el.scrollIntoView({ block: 'center', inline: 'center' });
       const box = el.getBoundingClientRect();
       const filled = document.elementsFromPoint(box.x + box.width / 2, box.y + box.height / 2)
         .filter((hit) => hit instanceof SVGGeometryElement && !(hit instanceof SVGLineElement) && hit.ownerSVGElement === el.ownerSVGElement && !/^(none|url)/.test(getComputedStyle(hit).fill));
+      scrolled.forEach(([node, top, left]) => { node.scrollTop = top; node.scrollLeft = left; });
       const below = filled.filter((hit) => !hit.hasAttribute('mask') && hit.compareDocumentPosition(el) & Node.DOCUMENT_POSITION_FOLLOWING);
       const covered = filled.some((hit) => hit.hasAttribute('mask') || hit.compareDocumentPosition(el) & Node.DOCUMENT_POSITION_PRECEDING);
       const base = backdropOf(el.ownerSVGElement);
