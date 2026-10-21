@@ -1879,6 +1879,54 @@
       const xs = [...three.matchAll(/class="evo-bar" x="([\d.]+)"/g)].map((x) => +x[1]);
       if (xs.length !== 3 || !(xs[0] < xs[1] && xs[1] < xs[2]) || !three.includes(`>${shortDateText('2026-10-01')}<`) || !three.includes('<polyline')) throw new Error('order ' + xs);
     });
+    // ---- Attack types: positional, counter-attack and quick restart, for both sides ----
+    const atkShot = (abs, result = 'GOL', over = {}) => ({ id: newId('e'), abs, kind: 'SHOT', playerId: 'sp2', zone: '9M', from: '9M', result, ...over });
+    const atkRival = (abs, result = 'GOL', over = {}) => ({ id: newId('e'), abs, kind: 'RIVAL_SHOT', gkId: 'sp1', zone: '9M', result, contra: false, ...over });
+    const atkLoss = (abs) => ({ id: newId('e'), abs, kind: 'TURNOVER', playerId: 'sp2', subtype: 'Pase' });
+    const atkRecovery = (abs) => ({ id: newId('e'), abs, kind: 'ACTION', playerId: 'sp2', action: 'RECUP' });
+    T('attack types: contra flags win', () => {
+      const goal = atkRival(100), counter = atkShot(103, 'GOL', { zone: 'CONTRA' }), theirs = atkRival(120, 'GOL', { contra: true });
+      const events = [goal, counter, atkShot(110, 'GOL'), theirs];
+      if (attackType(counter, events) !== 'CONTRA') throw new Error('ours ' + attackType(counter, events));
+      if (attackType(theirs, events) !== 'CONTRA') throw new Error('theirs ' + attackType(theirs, events));
+      if (ATTACK_TYPES.CONTRA !== 'Contraataque' || ATTACK_TYPES.POS !== 'Posicional' || ATTACK_TYPES.SAQUE !== 'Saque rápido') throw new Error(JSON.stringify(ATTACK_TYPES));
+    });
+    T('attack types: a shot within the restart window after a rival goal is a quick restart', () => {
+      const window = CONFIG.attackTypes.quickRestartSeconds;
+      if (window !== 15) throw new Error('window ' + window);
+      const type = (before, after) => attackType(after, [before, after]);
+      if (type(atkRival(100), atkShot(100 + window)) !== 'SAQUE') throw new Error('at the limit');
+      if (type(atkRival(100), atkShot(101 + window)) !== 'POS') throw new Error('just after the window');
+      if (type(atkRival(100, 'PARADA'), atkShot(105)) !== 'POS') throw new Error('a save is not a restart');
+      if (type(atkShot(100), atkRival(100 + window)) !== 'SAQUE') throw new Error('the rival restarts after our goal');
+      if (attackType(atkShot(5), [atkShot(5)]) !== 'POS') throw new Error('first event of the match');
+    });
+    T('attack types: a turnover in between makes it positional', () => {
+      const after = atkShot(108);
+      if (attackType(after, [atkRival(100), atkLoss(103), after]) !== 'POS') throw new Error('turnover');
+      if (attackType(after, [atkRival(100), atkRival(104, 'PARADA'), after]) !== 'POS') throw new Error('rival shot');
+      if (attackType(after, [atkRival(100), { id: 'n', abs: 104, kind: 'NOTE', text: 'x' }, after]) !== 'SAQUE') throw new Error('a note is not a possession');
+    });
+    T('attack types: rival goal after our turnover counts, after our shot does not', () => {
+      const goal = atkRival(60);
+      if (!afterOurTurnover(goal, [atkLoss(50), goal])) throw new Error('after a turnover');
+      if (afterOurTurnover(goal, [atkShot(50, 'PARADA'), goal])) throw new Error('after our shot');
+      if (afterOurTurnover(goal, [atkLoss(40), atkRecovery(45), goal])) throw new Error('a recovery ended the possession in between');
+      if (afterOurTurnover(goal, [atkLoss(40), atkRival(45, 'PARADA'), goal])) throw new Error('the rival shot before');
+      if (afterOurTurnover(goal, [goal])) throw new Error('first event of the match');
+      const rows = attackTypeRows([atkLoss(10), atkRival(20), atkRival(30, 'FALLO')], 'them');
+      if (rows.map((r) => r.type).join() !== 'POS,CONTRA,SAQUE' || rows[0].shots !== 2 || rows[0].goals !== 1 || rows[0].pct !== 50 || rows[1].pct !== null) throw new Error(JSON.stringify(rows));
+    });
+    T('attack types: works on the sample and an old match without new fields', () => {
+      const sample = sampleState().events;
+      ['us', 'them'].forEach((side) => {
+        const rows = attackTypeRows(sample, side), shots = (side === 'us' ? ourShots : rivalShots)(sample);
+        if (sumOf(rows, (r) => r.shots) !== shots.length || sumOf(rows, (r) => r.goals) !== shots.filter((e) => e.result === 'GOL').length || /NaN|undefined/.test(JSON.stringify(rows))) throw new Error(side + JSON.stringify(rows));
+      });
+      const old = sample.map(({ contra, origin, ...rest }) => rest);
+      if (sumOf(attackTypeRows(old, 'us'), (r) => r.shots) !== ourShots(sample).length || attackTypeRows([], 'us').some((r) => r.shots !== 0 || r.pct !== null)) throw new Error('old match');
+      if (afterOurTurnover(rivalShots(old)[0], old) !== false || attackTypeRows(old, 'them').length !== 3) throw new Error('old match, rival');
+    });
     await TA('a roster file with card names and photos stores them', async () => { const a = home.roster.find((p) => p.pos === 'POR'); const file = new File([JSON.stringify({ format: ROSTER_FORMAT, players: [{ num: a.num, name: 'Ana', pos: 'POR', fullName: 'Ana Ruiz', photo: TINY_PNG }, { num: 31, name: 'Eva', pos: 'EXT', fullName: 'Eva Gil Mora', photo: TINY_PNG }] })], 'p.json', { type: 'application/json' }); await importTeamRoster(file); const list = await backend.listPlayers(team.id); const ana = list.find((p) => p.id === a.id), eva = list.find((p) => p.num === 31); if (!ana || ana.fullName !== 'Ana Ruiz' || ana.photo !== TINY_PNG || !eva || eva.fullName !== 'Eva Gil Mora' || eva.photo !== TINY_PNG) throw new Error('not stored'); await retireTeamPlayer(rosterPlayer(eva.id)); });
     await TA('the full name and photo are saved and survive a roster file', async () => { const a = home.roster.find((p) => p.pos === 'POR'); await saveTeamPlayer(a, { fullName: 'Ana Ruiz Gómez', photo: TINY_PNG }); const file = new File([JSON.stringify({ format: ROSTER_FORMAT, players: [{ num: a.num, name: 'Ana', pos: 'POR' }] })], 'p.json', { type: 'application/json' }); await importTeamRoster(file); const stored = (await backend.listPlayers(team.id)).find((p) => p.id === a.id); if (!stored || stored.name !== 'Ana' || stored.fullName !== 'Ana Ruiz Gómez' || stored.photo !== TINY_PNG) throw new Error(JSON.stringify(stored && { ...stored, photo: Boolean(stored.photo) })); });
     await TA('convocatoria: needs a goalkeeper, then opens the setup with the squad', async () => { openSquad(); if (home.squad.size !== home.roster.length) throw new Error('default squad'); home.squad = new Set(home.roster.filter((p) => p.pos !== 'POR').map((p) => p.id)); renderHome(); if (!document.querySelector('[data-squad-next]').disabled) throw new Error('no goalkeeper accepted'); const gk = home.roster.find((p) => p.pos === 'POR'); document.querySelector(`[data-squad="${gk.id}"]`).click(); if (document.querySelector('[data-squad-next]').disabled) throw new Error('still disabled'); document.querySelector('[data-squad-next]').click(); if (!currentMatchId || state.players.length !== home.squad.size || state.us !== team.name || !$('home').hidden) throw new Error('match'); if ($('sheet').hidden || ui.sheetMode !== 'setup') throw new Error('setup'); if (!localMatch(currentMatchId).dirty) throw new Error('not saved'); });

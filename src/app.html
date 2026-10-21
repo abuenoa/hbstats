@@ -1131,6 +1131,7 @@ span.att-foot { visibility: hidden; }
     zones: { nineFromM: 8.7, elevenFromM: 11 },
     // A leaderboard needs this many shots before a player is ranked on shooting accuracy, and this many rated matches on rating.
     leaders: { minShots: 3, minRated: 2 },
+    attackTypes: { quickRestartSeconds: 15 },
     // Player photos are kept as small square JPEGs this wide.
     photoSizePx: 128,
     // Who usually shoots from a spot (m): wings wide and close to the goal line, pivots close and central, centre backs central.
@@ -1578,6 +1579,31 @@ span.att-foot { visibility: hidden; }
       turnovers: s.events.filter((e) => e.kind === 'TURNOVER').length, recoveries: s.events.filter((e) => e.kind === 'ACTION' && e.action === 'RECUP').length,
       saves, onTarget, savePct: pct(saves, onTarget)
     };
+  }
+  // ---- Attack types: how a shot was reached, and what the rival scored after our turnovers ----
+  const ATTACK_TYPES = { POS: 'Posicional', CONTRA: 'Contraataque', SAQUE: 'Saque rápido' };
+  // A possession ends with a shot of either team, our turnover or our recovery (the same count as the «pos.» figures).
+  const endsPossession = (e) => e.kind === 'SHOT' || e.kind === 'RIVAL_SHOT' || e.kind === 'TURNOVER' || (e.kind === 'ACTION' && e.action === 'RECUP');
+  const previousPossessionEnd = (e, events) => events.slice(0, events.indexOf(e)).filter(endsPossession).at(-1) || null;
+  // The attack type of a shot (ours or the rival's). A quick restart is inferred from timing: the shot comes within
+  // CONFIG.attackTypes.quickRestartSeconds of a goal of the other team, with no possession ending in between.
+  function attackType(e, events) {
+    if (e.kind === 'RIVAL_SHOT' ? e.contra : e.zone === ZONE_CONTRA) return 'CONTRA';
+    const conceded = previousPossessionEnd(e, events), scoredBy = e.kind === 'SHOT' ? 'RIVAL_SHOT' : 'SHOT';
+    const restart = conceded && conceded.kind === scoredBy && conceded.result === 'GOL' && e.abs - conceded.abs <= CONFIG.attackTypes.quickRestartSeconds;
+    return restart ? 'SAQUE' : 'POS';
+  }
+  // A rival shot whose previous possession-ending event is our turnover.
+  function afterOurTurnover(e, events) {
+    const previous = previousPossessionEnd(e, events);
+    return Boolean(previous) && previous.kind === 'TURNOVER';
+  }
+  function attackTypeRows(events, side) {
+    const shots = side === 'us' ? ourShots(events) : rivalShots(events);
+    return Object.keys(ATTACK_TYPES).map((type) => {
+      const ofType = shots.filter((e) => attackType(e, events) === type), goals = ofType.filter((e) => e.result === 'GOL').length;
+      return { type, shots: ofType.length, goals, pct: pct(goals, ofType.length) };
+    });
   }
   // The same figures for both teams, each from its own side: shots, possessions, zones, saves suffered, 2' splits.
   function liveStats() {
