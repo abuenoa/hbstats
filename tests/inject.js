@@ -941,7 +941,7 @@
     });
     // ---- Player card ----
     const cardField = { id: 'ca', num: 5, name: 'Ari', pos: 'EXT', fullName: 'Ari Gómez Ruiz' }, cardKeeper = { id: 'cg', num: 1, name: 'Gus', pos: 'POR' };
-    const cardMatch = (over) => seasonRow('cm1', { players: [cardField, cardKeeper], events: [seasonShot('ca', 'GOL'), seasonShot('ca', 'GOL'), seasonShot('ca', 'GOL', 'CONTRA'), seasonShot('ca', 'PARADA'), seasonRivalShot('cg', 'PARADA'), seasonRivalShot('cg', 'PARADA'), seasonRivalShot('cg', 'GOL'), { ...seasonRivalShot('cg', 'PARADA'), zone: '7M' }, { ...seasonRivalShot('cg', 'GOL'), zone: '7M' }].map((e) => ({ origin: m(0, 10), target: gf(0.5, 0.5), ...e })), ...over });
+    const cardMatch = (over) => seasonRow('cm1', { players: [cardField, cardKeeper], events: [seasonShot('ca', 'GOL'), seasonShot('ca', 'GOL'), seasonShot('ca', 'GOL', 'CONTRA'), seasonShot('ca', 'PARADA'), seasonRivalShot('cg', 'PARADA'), seasonRivalShot('cg', 'PARADA'), seasonRivalShot('cg', 'GOL'), { ...seasonRivalShot('cg', 'PARADA'), zone: '7M' }, { ...seasonRivalShot('cg', 'GOL'), zone: '7M' }, seasonRivalShot('cg', 'FUERA')].map((e) => ({ origin: m(0, 10), target: gf(0.5, 0.5), ...e })), ...over });
     const openCard = (id, matches) => { home.roster = [cardField, cardKeeper]; home.season = matches; showHomeView('team'); document.querySelector(`.squad [data-player="${id}"]`).click(); };
     await TA('player card: tapping a face opens the card with sentences and radar', async () => {
       const keep = { roster: home.roster, season: home.season };
@@ -1204,7 +1204,11 @@
         ['Dónde marca', 'Dónde se lo paran', 'Abrir el partido', '‹ Ficha', 'Rival'].forEach((t) => { if (!text.includes(t)) throw new Error('missing «' + t + '»'); });
         const [scored, saved] = gridCards();
         if (gridSum(scored) !== 3 || gridSum(saved) !== 1) throw new Error(gridSum(scored) + '/' + gridSum(saved));
-        if (document.querySelector('.player-page .sum') === null || /NaN|undefined/.test(text)) throw new Error('figures or NaN');
+        const figure = (label) => { const sum = [...document.querySelectorAll('.player-page .sum')].find((x) => x.querySelector('span').textContent === label); return sum && sum.querySelector('strong').textContent; };
+        if (figure('Goles') !== '3/4' || figure('Parados') !== '1' || /NaN|undefined/.test(text)) throw new Error('figures ' + figure('Goles') + ' ' + figure('Parados'));
+        const dorsals = [...svg.querySelectorAll('text.map-dorsal')].map((t) => t.textContent);
+        if (dorsals.length !== row.shotsList.length || dorsals.some((d) => d !== String(cardField.num))) throw new Error('dorsals ' + dorsals.join());
+        if (!document.querySelector('#home-status')) throw new Error('no status line');
       } finally { Object.assign(home, keep); }
     });
     await TA('player match: goalkeeper sees rival shots faced, saves and goals', async () => {
@@ -1216,7 +1220,10 @@
         const row = playerMatchRow(match, cardKeeper), maps = matchMaps();
         const goals = row.onTarget - row.saves;
         if (maps.length !== 2 || matchMarks(maps[0], match.state) !== row.saves || matchMarks(maps[1], match.state) !== goals) throw new Error(maps.map((m) => matchMarks(m, match.state)).join());
-        if (row.saves !== 3 || goals !== 2) throw new Error('premise ' + row.saves + '/' + goals);
+        if (row.saves !== 3 || goals !== 2 || row.facedList.length !== 6) throw new Error('premise ' + row.saves + '/' + goals + '/' + row.facedList.length);
+        const figure = (label) => { const sum = [...document.querySelectorAll('.player-page .sum')].find((x) => x.querySelector('span').textContent === label); return sum && sum.querySelector('strong').textContent; };
+        if (figure('Detenidos') !== '3' || figure('Encajados') !== '2') throw new Error('figures ' + figure('Detenidos') + '/' + figure('Encajados'));
+        if (!gridCards()[0].querySelector('.goal-grid div').getAttribute('style').includes('--c:var(--gol)') || !gridCards()[1].querySelector('.goal-grid div').getAttribute('style').includes('--c:var(--red)')) throw new Error('grid colours');
         const [saved, conceded] = gridCards();
         if (gridSum(saved) !== row.saves || gridSum(conceded) !== goals) throw new Error(gridSum(saved) + '/' + gridSum(conceded));
         const fills = new Set([...document.querySelectorAll('.match-grid .shot-map g circle')].map((c) => c.getAttribute('fill')).filter((f) => f !== SHOT_END_FILL));
@@ -1252,6 +1259,9 @@
         if (home.view !== 'player' || /NaN|undefined/.test($('home').textContent)) throw new Error('rendered a vanished match ' + home.view);
         showPlayerMatch('cm1');
         if (!document.querySelector('[data-player-match-open="cm1"]')) throw new Error('no open button');
+        home.season = null; renderHome();
+        for (let i = 0; i < 3; i++) await tick0();
+        if (home.view !== 'player-match' || !$('home').textContent.includes('Cargando…')) throw new Error('cleared season: ' + home.view);
       } finally { Object.assign(home, keep); }
     });
     await TA('player match: rival and player names are escaped', async () => withTeams(async () => {

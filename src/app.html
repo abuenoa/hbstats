@@ -3007,10 +3007,10 @@ a:focus-visible, input:focus-visible, select:focus-visible, summary:focus-visibl
         ${card('Notas', `<ul class="notes">${noteRows().map(([t, text]) => `<li><span>${t}</span><b>${esc(text)}</b></li>`).join('') || '<li>Sin notas.</li>'}</ul>`)}
       </div>`;
   }
-  function goalGridHtml(shots, group, title, viewKey = 'GK') {
+  function goalGridHtml(shots, group, title, viewKey = 'GK', colours = MAP_VIEWS[viewKey].colors) {
     const grid = goalGrid(shots, group);
     const max = Math.max(1, ...grid.flat());
-    const color = MAP_VIEWS[viewKey].colors[group];
+    const color = colours[group];
     return card(title, `<div class="goal-grid">${grid.flat().map((n) => `<div style="--c:${color};--a:${((n / max) * 0.8).toFixed(2)}"><b>${n}</b></div>`).join('')}</div><p class="note">Portería vista desde el lanzador.</p>`);
   }
   // Who took a shot: one of our players or a rival dorsal; null when it was logged without one.
@@ -4892,7 +4892,7 @@ a:focus-visible, input:focus-visible, select:focus-visible, summary:focus-visibl
       home.seasonOffline = false;
       console.warn(`Season not available: ${cloudErrorText(err)}`);
     }
-    if (['team', 'player'].includes(home.view)) renderHome();
+    if (['team', 'player', 'player-match'].includes(home.view)) renderHome();
   }
   async function showTeamPage() {
     showHomeView('team');
@@ -5005,6 +5005,7 @@ a:focus-visible, input:focus-visible, select:focus-visible, summary:focus-visibl
   function playerMatchHtml() {
     const player = rosterPlayer(home.playerId);
     const match = (home.season || []).find((m) => m.id === home.playerMatchId);
+    if (home.season === null) return '<p class="note">Cargando…</p>';
     const row = match && player && playerMatchRow(match, player);
     // The match or the player is gone (a reload, a deleted match): go back to the card, or to the team page without a player.
     if (!row) { queueMicrotask(() => showPlayer(home.playerId)); return ''; }
@@ -5013,14 +5014,14 @@ a:focus-visible, input:focus-visible, select:focus-visible, summary:focus-visibl
     const mapCard = (title, list, colours) => card(`${title} · ${list.length}`, shotMapSvg(list, gridView, null, { s, colours }));
     const maps = keeper
       ? `<div class="match-grid">${MAP_GROUPS.map(([group, title]) => mapCard(title, row.facedList.filter((e) => groupOf(e.result) === group), CARD_ZONE_COLOURS.keeper)).join('')}
-          ${goalGridHtml(row.facedList, 'PARADA', 'Detenidos por zona de portería', gridView)}${goalGridHtml(row.facedList, 'GOL', 'Encajados por zona de portería', gridView)}</div>`
+          ${goalGridHtml(row.facedList, 'PARADA', 'Detenidos por zona de portería', gridView, CARD_ZONE_COLOURS.keeper)}${goalGridHtml(row.facedList, 'GOL', 'Encajados por zona de portería', gridView, CARD_ZONE_COLOURS.keeper)}</div>`
       : `<div class="match-grid">${mapCard('Tiros', row.shotsList, CARD_ZONE_COLOURS.field)}
-          <div class="player-col">${goalGridHtml(row.shotsList, 'GOL', 'Dónde marca', gridView)}${goalGridHtml(row.shotsList, 'PARADA', 'Dónde se lo paran', gridView)}</div></div>`;
+          <div class="player-col">${goalGridHtml(row.shotsList, 'GOL', 'Dónde marca', gridView, CARD_ZONE_COLOURS.field)}${goalGridHtml(row.shotsList, 'PARADA', 'Dónde se lo paran', gridView, CARD_ZONE_COLOURS.field)}</div></div>`;
     const crown = row.mvp ? crownSvg('crown-face') : '';
-    return `<div class="player-page"><div class="player-bar"><button class="btn press" type="button" data-player-back>‹ Ficha</button>
+    return `${statusHtml()}<div class="player-page"><div class="player-bar"><button class="btn press" type="button" data-player-back>‹ Ficha</button>
         <button class="btn primary press" type="button" data-player-match-open="${match.id}">Abrir el partido</button></div>
       <section class="sheet-card match-head"><div class="last-match"><span class="mvp-face-static">${discHtml(player)}${crown}</span>
-        <span class="last-who"><b>${esc(match.them)}</b><small>${esc(dateText(match.date))}${match.venue ? ` · ${esc(match.venue)}` : ''}</small></span>
+        <span class="last-who"><b>${esc(player.name)} · ${esc(match.them)}</b><small>${esc(dateText(match.date))}${match.venue ? ` · ${esc(match.venue)}` : ''}</small></span>
         <span class="res-chip ${resultClass(row)}">${RESULT_LABEL[matchResult(row)]}</span>
         <strong class="last-score ${resultClass(row)}">${row.scoreUs}–${row.scoreThem}</strong></div></section>
       ${figuresHtml(keeper ? gkFigures(row.facedList) : playerFigures(player, s))}
