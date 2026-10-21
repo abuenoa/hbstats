@@ -130,7 +130,7 @@
     --line: rgba(255, 255, 255, .10); --fg: #f2f1ef; --muted: #aca6a0; --faint: #6d6863;
     --shadow: 0 1px 0 rgba(255, 255, 255, .06) inset, 0 10px 30px rgba(0, 0, 0, .4);
     --pop-shadow: 0 1px 0 rgba(255, 255, 255, .08) inset, 0 24px 60px rgba(0, 0, 0, .6);
-    --black: #f2f1ef; --por: #2a2a2e;
+    --black: #f2f1ef; --por: #2a2a2e; --crown-edge: #e8b923;
     --court: #1d242b; --area: #3b3215; --court-line: #e6e6e6; --goal-face: #121417; --goal-hot: #2e2a14; --goal-sector: #7a6412; --net: #2c3238;
     --parada: #4f8bff; --fallo: #7d838c; --gol: #2fbf71; --ataque: #9461ff;
     --act-good: #2fbf71; --act-def: #4f8bff; --act-bad: #ef4444; --act-rival: #9461ff;
@@ -150,7 +150,7 @@
   --line: rgba(255, 255, 255, .10); --fg: #f2f1ef; --muted: #aca6a0; --faint: #6d6863;
   --shadow: 0 1px 0 rgba(255, 255, 255, .06) inset, 0 10px 30px rgba(0, 0, 0, .4);
   --pop-shadow: 0 1px 0 rgba(255, 255, 255, .08) inset, 0 24px 60px rgba(0, 0, 0, .6);
-  --black: #f2f1ef; --por: #2a2a2e;
+  --black: #f2f1ef; --por: #2a2a2e; --crown-edge: #e8b923;
   --court: #1d242b; --area: #3b3215; --court-line: #e6e6e6; --goal-face: #121417; --goal-hot: #2e2a14; --goal-sector: #7a6412; --net: #2c3238;
   --parada: #4f8bff; --fallo: #7d838c; --gol: #2fbf71; --ataque: #9461ff;
     --act-good: #2fbf71; --act-def: #4f8bff; --act-bad: #ef4444; --act-rival: #9461ff;
@@ -2257,23 +2257,37 @@ span.att-foot { visibility: hidden; }
     ui.photos = new Map(roster.filter((p) => p.photo && IMAGE_DATA_URL.test(p.photo)).map((p) => [p.id, p.photo]));
   }
   const photoOf = (id) => ui.photos.get(id) || null;
+  // The crown's geometry in its 120×92 box, shared by the SVG (crownSvg) and the canvas (drawMvpCard). Colours are CSS
+  // tokens; the canvas resolves them from CARD_PALETTE. Jewels are [cx, cy, token, r].
+  const CROWN = {
+    viewBox: '0 0 120 92',
+    body: 'M10 70 L4 22 Q4 18 8 20 L34 40 L56 8 Q60 3 64 8 L86 40 L112 20 Q116 18 116 22 L110 70 Z',
+    bodyStops: [[0, '--crown-light'], [0.45, '--gold'], [1, '--crown-deep']],
+    band: { x: 8, y: 66, w: 104, h: 18, rx: 6 },
+    bandStops: [[0, '--gold'], [1, '--crown-band-deep']],
+    pearls: [[6, 18], [60, 5], [114, 18]],
+    pearlR: 6,
+    jewels: [[60, 75, '--red', 5], [34, 75, '--parada', 4], [86, 75, '--gol', 4]],
+    shine: 'M22 58 L30 48 M44 56 L50 44',
+    edgeWidth: 3, pearlEdgeWidth: 2, shineWidth: 4, shineOpacity: '.7'
+  };
   // Gradients get a fresh id per crown: several crowns can share one document.
   let crownCount = 0;
-  const crownStop = (offset, token) => `<stop offset="${offset}" style="stop-color:var(${token})"/>`;
-  const crownPearl = (cx, cy) => `<circle cx="${cx}" cy="${cy}" r="6" style="fill:var(--crown-light);stroke:var(--crown-edge)" stroke-width="2"/>`;
-  const crownJewel = (cx, r, token) => `<circle cx="${cx}" cy="75" r="${r}" style="fill:var(${token})"/>`;
+  const crownStops = (stops) => stops.map(([offset, token]) => `<stop offset="${offset}" style="stop-color:var(${token})"/>`).join('');
+  const crownPearl = ([cx, cy]) => `<circle cx="${cx}" cy="${cy}" r="${CROWN.pearlR}" style="fill:var(--crown-light);stroke:var(--crown-edge)" stroke-width="${CROWN.pearlEdgeWidth}"/>`;
+  const crownJewel = ([cx, cy, token, r]) => `<circle cx="${cx}" cy="${cy}" r="${r}" style="fill:var(${token})"/>`;
   function crownSvg(cls = '') {
     const n = ++crownCount;
-    const body = `crown-body-${n}`, band = `crown-band-${n}`;
-    const edge = 'style="stroke:var(--crown-edge)" stroke-width="3"';
-    return `<svg class="${esc(cls)}" viewBox="0 0 120 92" aria-hidden="true"><defs>
-      <linearGradient id="${body}" x1="0" y1="0" x2="0" y2="1">${crownStop(0, '--crown-light')}${crownStop(0.45, '--gold')}${crownStop(1, '--crown-deep')}</linearGradient>
-      <linearGradient id="${band}" x1="0" y1="0" x2="0" y2="1">${crownStop(0, '--gold')}${crownStop(1, '--crown-band-deep')}</linearGradient></defs>
-      <path d="M10 70 L4 22 Q4 18 8 20 L34 40 L56 8 Q60 3 64 8 L86 40 L112 20 Q116 18 116 22 L110 70 Z" fill="url(#${body})" ${edge} stroke-linejoin="round"/>
-      <rect x="8" y="66" width="104" height="18" rx="6" fill="url(#${band})" ${edge}/>
-      ${crownPearl(6, 18)}${crownPearl(60, 5)}${crownPearl(114, 18)}
-      ${crownJewel(60, 5, '--red')}${crownJewel(34, 4, '--parada')}${crownJewel(86, 4, '--gol')}
-      <path d="M22 58 L30 48 M44 56 L50 44" style="stroke:var(--crown-shine)" stroke-width="4" stroke-linecap="round" opacity=".7"/></svg>`;
+    const body = `crown-body-${n}`, band = `crown-band-${n}`, { x, y, w, h, rx } = CROWN.band;
+    const edge = `style="stroke:var(--crown-edge)" stroke-width="${CROWN.edgeWidth}"`;
+    return `<svg class="${esc(cls)}" viewBox="${CROWN.viewBox}" aria-hidden="true"><defs>
+      <linearGradient id="${body}" x1="0" y1="0" x2="0" y2="1">${crownStops(CROWN.bodyStops)}</linearGradient>
+      <linearGradient id="${band}" x1="0" y1="0" x2="0" y2="1">${crownStops(CROWN.bandStops)}</linearGradient></defs>
+      <path d="${CROWN.body}" fill="url(#${body})" ${edge} stroke-linejoin="round"/>
+      <rect x="${x}" y="${y}" width="${w}" height="${h}" rx="${rx}" fill="url(#${band})" ${edge}/>
+      ${CROWN.pearls.map(crownPearl).join('')}
+      ${CROWN.jewels.map(crownJewel).join('')}
+      <path d="${CROWN.shine}" style="stroke:var(--crown-shine)" stroke-width="${CROWN.shineWidth}" stroke-linecap="round" opacity="${CROWN.shineOpacity}"/></svg>`;
   }
   function discHtml(p, pos = posOf(p)) {
     // A roster player carries their photo; match players are looked up in the team photos.
