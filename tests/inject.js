@@ -688,9 +688,9 @@
   T('ending the match early is not undone by the clock tick', () => { const snap = snapshot(); state.clock = { period: 2, elapsedMs: 600000, runningSince: null }; finishMatch(); checkTimers(); if (!state.finished) throw new Error('unfinished'); restore(snap); });
   T('the strip ends the match on a second tap, in either half', () => { const snap = snapshot(); state.clock = { period: 1, elapsedMs: 600000, runningSince: null }; renderAll(); const b = $('btn-finish'); if (b.textContent !== 'Finalizar') throw new Error('label ' + b.textContent); b.click(); if (state.finished || !b.classList.contains('armed') || !b.textContent.includes('Seguro')) throw new Error('first tap ended it'); b.click(); if (!state.finished || $('final').hidden || b.textContent !== 'Resumen' || b.classList.contains('armed')) throw new Error('second tap'); $('final').hidden = true; b.click(); if ($('final').hidden) throw new Error('summary not reopened'); $('final').hidden = true; restore(snap); renderAll(); });
   T('an armed «Finalizar» calms down by itself', () => { const snap = snapshot(); renderAll(); $('btn-finish').click(); if (!ui.finishArmedTimer) throw new Error('not armed'); disarmFinish(); if (ui.finishArmedTimer || $('btn-finish').textContent !== 'Finalizar' || state.finished) throw new Error('still armed'); restore(snap); renderAll(); });
-  T('end of the second half opens the final summary', () => { const snap = snapshot(); state.clock = { period: 2, elapsedMs: CONFIG.halfSeconds * 1000 - 500, runningSince: Date.now() - 1000 }; checkTimers(); if (!state.finished || $('final').hidden || isRunning()) throw new Error('not finished'); if ($('final').querySelectorAll('.kpi-tile').length !== summaryKpis().length) throw new Error('kpi tiles'); if (!$('final').querySelector('details.more table')) throw new Error('detail table not folded'); const rows = [...$('final').querySelectorAll('tbody tr')].map((r) => r.children[0].textContent); ['Goles', '% de tiro', 'Paradas del portero', '7 m', 'Máximo goleador'].forEach((label) => { if (!rows.includes(label)) throw new Error('missing ' + label); }); const head = [...$('final').querySelectorAll('th')].map((t) => t.textContent); if (head[1] !== state.us || head[2] !== state.them) throw new Error('teams'); restore(snap); });
+  T('end of the second half opens the final summary', () => { const snap = snapshot(); state.clock = { period: 2, elapsedMs: CONFIG.halfSeconds * 1000 - 500, runningSince: Date.now() - 1000 }; checkTimers(); if (!state.finished || $('final').hidden || isRunning()) throw new Error('not finished'); if ($('final').querySelectorAll('.kpi-tile').length !== summaryKpis().length) throw new Error('kpi tiles'); if (!$('final').querySelector('details.more table')) throw new Error('detail table not folded'); const rows = [...$('final').querySelectorAll('tbody tr')].map((r) => r.children[0].textContent); ['Goles', '% de tiro', '% de tiro 6 m', '% de tiro 9 m+', '% paradas 6 m', '% paradas 9 m+', 'Paradas del portero', '7 m', 'Máximo goleador'].forEach((label) => { if (!rows.includes(label)) throw new Error('missing ' + label); }); const head = [...$('final').querySelectorAll('th')].map((t) => t.textContent); if (head[1] !== state.us || head[2] !== state.them) throw new Error('teams'); restore(snap); });
   T('end of the first half opens the half-time summary once, with key points', () => { const snap = snapshot(); state.fired = state.fired.filter((k) => k !== 'period-1'); state.clock = { period: 1, elapsedMs: CONFIG.halfSeconds * 1000 - 500, runningSince: Date.now() - 1000 }; checkTimers(); if ($('final').hidden || !$('final').textContent.includes('Descanso')) throw new Error('not opened'); if (!$('final').querySelector('.kpi-tile') || $('final').querySelectorAll('.halftime-points .keypoints').length !== 2) throw new Error('content'); $('final').hidden = true; state.clock.runningSince = Date.now() - 1000; checkTimers(); if (!$('final').hidden) throw new Error('reopened'); document.querySelector('[data-halftime]').click(); if ($('final').hidden) throw new Error('alert Resumen'); document.querySelector('[data-second-half]').click(); if (state.clock.period !== 2 || !$('final').hidden || state.alerts.some((a) => a.kind === 'period')) throw new Error('second half'); restore(snap); });
-  T('summary KPIs colour our value against the rival', () => { const goals = summaryKpis()[0]; const losses = summaryKpis().find((k) => k.label === 'Pérdidas'); openHalftime(); const tiles = [...$('final').querySelectorAll('.kpi-tile')]; const toneOf = (k, tile) => tile.querySelector('.us strong').className; const expect = (k, better) => (k.us === k.them ? '' : (better ? k.us > k.them : k.us < k.them) ? 'r-good' : 'r-bad'); if (toneOf(goals, tiles[0]) !== expect(goals, true)) throw new Error('goals ' + toneOf(goals, tiles[0])); if (toneOf(losses, tiles[4]) !== expect(losses, false)) throw new Error('losses'); $('final').hidden = true; });
+  T('summary KPIs colour our value against the rival', () => { const goals = summaryKpis()[0]; const losses = summaryKpis().find((k) => k.label === 'Pérdidas'); openHalftime(); const tiles = [...$('final').querySelectorAll('.kpi-tile')]; const toneOf = (k, tile) => tile.querySelector('.us strong').className; const expect = (k, better) => (k.us === k.them ? '' : (better ? k.us > k.them : k.us < k.them) ? 'r-good' : 'r-bad'); if (toneOf(goals, tiles[0]) !== expect(goals, true)) throw new Error('goals ' + toneOf(goals, tiles[0])); if (toneOf(losses, tiles[summaryKpis().findIndex((k) => k.label === 'Pérdidas')]) !== expect(losses, false)) throw new Error('losses'); $('final').hidden = true; });
   T('turnovers are shown as a count, not a percentage', () => { ui.source = 'US'; renderLive(); const live = liveStats(); const tile = [...$('live').querySelectorAll('.kpi')].find((k) => k.textContent.includes('Pérdidas')); if (tile.querySelector('strong').textContent !== String(live.us.turnovers)) throw new Error('live ' + tile.textContent); const row = finalRows().find((r) => r[0] === 'Pérdidas'); if (row[1] !== live.us.turnovers || row[2] !== live.them.turnovers) throw new Error('final ' + row); if (summaryKpis().find((k) => k.label === 'Pérdidas').sub.some((t) => t.includes('%'))) throw new Error('tile sub'); ui.source = 'GK'; renderLive(); });
   T('shooter leaders: most shots, goals and misses', () => { const l = shooterLeaders(rivalShots()); if (l.scores.shooter.num !== 9 || l.shoots.shooter.num !== 9 || l.misses.shooter.num !== 7) throw new Error([l.shoots.shooter.num, l.scores.shooter.num, l.misses.shooter.num].join()); if (shooterLeaders([]).scores !== null) throw new Error('empty'); ui.sheetTab = 'gk'; ui.sheetGoal = 'GK'; renderSheet(); if (document.querySelectorAll('.shot-map').length !== 2 || !$('sheet').textContent.includes('Más falla')) throw new Error('gk tab'); });
   T('play after the final whistle does not restart the clock', () => { const snap = snapshot(); state.finished = true; pauseClock(); state.clock.elapsedMs = 0; addEvent('TURNOVER', { playerId: 'p8', subtype: 'Pasos' }); if (isRunning()) throw new Error('restarted'); restore(snap); });
@@ -718,6 +718,11 @@
   T('mvp: picking the MVP changes no statistic', () => { const snap = snapshot(); const before = JSON.stringify([liveStats(), score()]); setMvp(state.players[0].id); if (JSON.stringify([liveStats(), score()]) !== before) throw new Error('stats changed'); restore(snap); });
   T('mvp: a restarted match has no MVP', () => { const saved = JSON.parse(snapshot()); saved.mvpId = saved.players[0].id; if (restartedMatch(saved).mvpId !== null) throw new Error('MVP kept'); });
   T('crowns on screen never share gradient ids', () => { const ids = [...(crownSvg() + crownSvg('x')).matchAll(/id="([^"]+)"/g)].map((x) => x[1]); if (!ids.length || new Set(ids).size !== ids.length) throw new Error(ids.join()); });
+  // Captured before the geometry moved into CROWN: the gradient ids are the only part that may differ.
+  T('crown: markup unchanged after the refactor', () => {
+    const normalised = crownSvg('crown-face').replace(/crown-(body|band)-\d+/g, 'crown-$1-N');
+    if (normalised !== "<svg class=\"crown-face\" viewBox=\"0 0 120 92\" aria-hidden=\"true\"><defs>\n      <linearGradient id=\"crown-body-N\" x1=\"0\" y1=\"0\" x2=\"0\" y2=\"1\"><stop offset=\"0\" style=\"stop-color:var(--crown-light)\"/><stop offset=\"0.45\" style=\"stop-color:var(--gold)\"/><stop offset=\"1\" style=\"stop-color:var(--crown-deep)\"/></linearGradient>\n      <linearGradient id=\"crown-band-N\" x1=\"0\" y1=\"0\" x2=\"0\" y2=\"1\"><stop offset=\"0\" style=\"stop-color:var(--gold)\"/><stop offset=\"1\" style=\"stop-color:var(--crown-band-deep)\"/></linearGradient></defs>\n      <path d=\"M10 70 L4 22 Q4 18 8 20 L34 40 L56 8 Q60 3 64 8 L86 40 L112 20 Q116 18 116 22 L110 70 Z\" fill=\"url(#crown-body-N)\" style=\"stroke:var(--crown-edge)\" stroke-width=\"3\" stroke-linejoin=\"round\"/>\n      <rect x=\"8\" y=\"66\" width=\"104\" height=\"18\" rx=\"6\" fill=\"url(#crown-band-N)\" style=\"stroke:var(--crown-edge)\" stroke-width=\"3\"/>\n      <circle cx=\"6\" cy=\"18\" r=\"6\" style=\"fill:var(--crown-light);stroke:var(--crown-edge)\" stroke-width=\"2\"/><circle cx=\"60\" cy=\"5\" r=\"6\" style=\"fill:var(--crown-light);stroke:var(--crown-edge)\" stroke-width=\"2\"/><circle cx=\"114\" cy=\"18\" r=\"6\" style=\"fill:var(--crown-light);stroke:var(--crown-edge)\" stroke-width=\"2\"/>\n      <circle cx=\"60\" cy=\"75\" r=\"5\" style=\"fill:var(--red)\"/><circle cx=\"34\" cy=\"75\" r=\"4\" style=\"fill:var(--parada)\"/><circle cx=\"86\" cy=\"75\" r=\"4\" style=\"fill:var(--gol)\"/>\n      <path d=\"M22 58 L30 48 M44 56 L50 44\" style=\"stroke:var(--crown-shine)\" stroke-width=\"4\" stroke-linecap=\"round\" opacity=\".7\"/></svg>") throw new Error(normalised);
+  });
 
   // ---- Minutes and +/− (M1): derived from the court log and the event stamps ----
   const minutesMatch = (over) => ({
@@ -800,22 +805,427 @@
     if (plusMinus(served).has('c') || plusMinus(served).get('a') !== 1) throw new Error('the stamp, not the log, says who was on court');
   });
 
+  // ---- Rating (M2): a pure function of the events and the minutes ----
+  const rateMatch = (events, over) => ({ players: [], events, gkId: 'g', courtSets: [['a', 'b', 'g']], ...over });
+  const rShot = (playerId, zone, result, i) => ({ id: 's' + playerId + zone + result + i, abs: i, kind: 'SHOT', playerId, zone, result });
+  const rShots = (playerId, zone, goals, misses) => [...Array(goals).keys()].map((i) => rShot(playerId, zone, 'GOL', i))
+    .concat([...Array(misses).keys()].map((i) => rShot(playerId, zone, 'FUERA', 100 + i)));
+  const rAct = (playerId, action, i = 0) => ({ id: 'a' + playerId + action + i, abs: i, kind: 'ACTION', playerId, action });
+  const rMany = (n, make) => [...Array(n).keys()].map(make);
+  const rTurnover = (playerId, subtype, i = 0) => ({ id: 't' + playerId + subtype + i, abs: i, kind: 'TURNOVER', playerId, subtype });
+  const rGkShots = (zone, saves, goals) => [...Array(saves).keys()].map((i) => ({ id: 'rs' + zone + i, abs: i, kind: 'RIVAL_SHOT', gkId: 'g', zone, result: 'PARADA' }))
+    .concat([...Array(goals).keys()].map((i) => ({ id: 'rg' + zone + i, abs: 100 + i, kind: 'RIVAL_SHOT', gkId: 'g', zone, result: 'GOL' })));
+  const fieldA = { id: 'a', pos: 'EXT' }, fieldB = { id: 'b', pos: 'LAT' }, keeperG = { id: 'g', pos: 'POR' };
+  const ratingOf = (events, player = fieldA, opts) => playerRating(rateMatch(events), player, opts);
+  const nearTo = (a, b, tol = 0.001) => Math.abs(a - b) <= tol;
+  T('rating: a player who does nothing gets the base', () => {
+    const r = ratingOf([]);
+    if (r.value !== CONFIG.rating.base || !r.rated || r.confidence !== 1) throw new Error(JSON.stringify(r));
+  });
+  T('rating: shot value follows the zone expectation', () => {
+    const six = ratingOf(rShots('a', '6M', 0, 1)).raw, nine = ratingOf(rShots('a', '9M', 0, 1)).raw;
+    if (!(six < nine && nine < CONFIG.rating.base)) throw new Error(`6 m ${six} 9 m ${nine}`);
+    if (!nearTo(expectedGoal('6M'), 0.625) || !nearTo(expectedGoal('9M'), 0.4) || !nearTo(expectedGoal('CONTRA'), 0.725) || !nearTo(expectedGoal('7M'), 0.675)) throw new Error('expectedGoal');
+    if (ratingOf([rShot('a', '6M', 'BLOCADO', 1)]).raw !== six) throw new Error('a blocked shot is a miss');
+  });
+  T('rating: turnovers cost a lot, rule turnovers and faults a little', () => {
+    const raw = (events) => ratingOf(events).raw - CONFIG.rating.base;
+    const ball = raw([rTurnover('a', 'Pase')]), rule = raw([rTurnover('a', 'Pasos')]), forced = raw([rTurnover('a', 'Falta ataque')]);
+    const fault = raw([rAct('a', 'GOLPE')]), tactical = raw([rAct('a', 'LATE')]);
+    if (!nearTo(ball, -0.4) || !nearTo(forced, -0.3) || !nearTo(rule, -0.15) || !nearTo(fault, -0.15) || !nearTo(tactical, -0.15)) throw new Error([ball, forced, rule, fault, tactical].join());
+    if (!(ball < rule && Math.abs(ball) > 2 * Math.abs(fault))) throw new Error('turnover not much heavier');
+    const f = ratingFeatures(rateMatch([rTurnover('a', 'Pase'), rTurnover('a', 'Bote'), rTurnover('a', 'Pasos'), rTurnover('a', 'Bloqueado'), rTurnover('b', 'Pase')]), fieldA);
+    if (f.turnovers !== 2 || f.ruleTurnovers !== 1 || f.forcedTurnovers !== 1) throw new Error(JSON.stringify(f));
+  });
+  T('rating: provoking a 7 m adds what being beaten subtracts, and 7 m committed subtracts the same', () => {
+    const w = CONFIG.rating.weights, delta = (action) => ratingOf([rAct('a', action)]).raw - CONFIG.rating.base;
+    if (!nearTo(delta('PROV7'), w.oneOnOne) || !nearTo(delta('BEATEN'), -w.oneOnOne) || !nearTo(delta('PEN7C'), -w.oneOnOne)) throw new Error([delta('PROV7'), delta('BEATEN'), delta('PEN7C')].join());
+    const odd = { ...w, oneOnOne: 0.5 };
+    if (!nearTo(ratingOf([rAct('a', 'PROV7')], fieldA, { weights: odd }).raw, CONFIG.rating.base + 0.5)) throw new Error('relation not tied to one weight');
+    const f = ratingFeatures(rateMatch([rAct('a', 'BEATEN'), rAct('a', 'BADEXIT')]), fieldA);
+    if (f.beaten !== 1 || f.tactical !== 1) throw new Error('BEATEN is not a tactical fault: ' + JSON.stringify(f));
+  });
+  T('rating: a team fault costs everyone on court, the goalkeeper less', () => {
+    const fault = { id: 'noatk', abs: 5, kind: 'ACTION', playerId: null, action: 'NOATK', on: 0 };
+    const s = rateMatch([fault], { courtSets: [['a', 'g']] });
+    const field = playerRating(s, fieldA), keeper = playerRating(s, keeperG), bench = playerRating(s, fieldB);
+    if (!nearTo(field.raw, 6.4) || !nearTo(keeper.raw, 6.45) || bench.raw !== CONFIG.rating.base) throw new Error([field.raw, keeper.raw, bench.raw].join());
+    if (!(CONFIG.rating.weights.teamFaultKeeper > CONFIG.rating.weights.teamFaultField)) throw new Error('keeper not lighter');
+  });
+  T('rating: a legacy NOATK with a player counts for that player only', () => {
+    const s = rateMatch([{ id: 'old', abs: 5, kind: 'ACTION', playerId: 'a', action: 'NOATK' }, { id: 'none', abs: 6, kind: 'ACTION', playerId: null, action: 'NOATK' }]);
+    if (ratingFeatures(s, fieldA).teamFaults !== 1 || ratingFeatures(s, fieldB).teamFaults !== 0 || ratingFeatures(s, keeperG).teamFaults !== 0) throw new Error('legacy');
+  });
+  T('rating: goalkeeper save value', () => {
+    const events = [...rGkShots('9M', 4, 6), { id: 'off', abs: 9, kind: 'RIVAL_SHOT', gkId: 'g', zone: '9M', result: 'FUERA' }, { id: 'other', abs: 9, kind: 'RIVAL_SHOT', gkId: 'x', zone: '9M', result: 'PARADA' }];
+    const f = ratingFeatures(rateMatch(events), keeperG);
+    if (!nearTo(f.saveValue, 4 - 10 * 0.4)) throw new Error('save value ' + f.saveValue);
+    const pen = ratingFeatures(rateMatch([{ id: 'p7', abs: 1, kind: 'RIVAL_SHOT', gkId: 'g', zone: '7M', result: 'PARADA' }]), keeperG);
+    if (!nearTo(pen.saveValue, 1 - CONFIG.rating.expectedSave['7M'])) throw new Error('7 m ' + pen.saveValue);
+    const noZone = ratingFeatures(rateMatch([{ id: 'nz', abs: 1, kind: 'RIVAL_SHOT', gkId: 'g', result: 'PARADA' }]), keeperG);
+    if (noZone.saveValue !== 0) throw new Error('unknown zone ' + noZone.saveValue);
+    const contra = ratingFeatures(rateMatch([{ id: 'c', abs: 1, kind: 'RIVAL_SHOT', gkId: 'g', zone: '9M', contra: true, result: 'PARADA' }]), keeperG);
+    if (!nearTo(contra.saveValue, 1 - CONFIG.rating.expectedSave.CONTRA)) throw new Error('contra ' + contra.saveValue);
+  });
+  T('rating: under the minimum minutes is S/C; a short spell is pulled to the base', () => {
+    const events = rShots('a', '6M', 3, 0);
+    const few = ratingOf(events, fieldA, { seconds: 9 * 60 }), edge = ratingOf(events, fieldA, { seconds: 10 * 60 });
+    if (few.rated || few.value !== null || ratingText(few.value) !== 'S/C' || !edge.rated) throw new Error(JSON.stringify([few, edge]));
+    const full = ratingOf(events, fieldA, { seconds: 60 * 60 }).raw, short = edge.raw;
+    if (!(CONFIG.rating.base < short && short < full)) throw new Error(`short ${short} full ${full}`);
+  });
+  T('rating: confidence follows the square root of the match share', () => {
+    const at = (min) => ratingConfidence(min * 60);
+    if (at(60) !== 1 || !nearTo(at(30), 0.707) || !nearTo(at(20), 0.577) || at(75) !== 1 || ratingConfidence(null) !== 1) throw new Error([at(60), at(30), at(20), at(75), ratingConfidence(null)].join());
+  });
+  T('rating: clamped to 3–10 and rounded to one decimal', () => {
+    const none = { keeper: false };
+    const huge = ratingFromFeatures({ ...ratingFeatures(rateMatch([]), fieldA), shotValue: 100 }, none), awful = ratingFromFeatures({ ...ratingFeatures(rateMatch([]), fieldA), turnovers: 100 }, none);
+    if (huge.value !== 10 || awful.value !== 3 || huge.raw <= 10 || awful.raw >= 3) throw new Error(JSON.stringify([huge, awful]));
+    const half = ratingFromFeatures({ ...ratingFeatures(rateMatch([]), fieldA), assists: 1 }, { ...none, weights: { ...CONFIG.rating.weights, assist: 0.25 } });
+    if (half.value !== 6.8) throw new Error('6.75 rounds half up to 6.8, got ' + half.value);
+    const tenth = ratingOf([rAct('a', 'ASIST'), rTurnover('a', 'Pase')], fieldA, { weights: { ...CONFIG.rating.weights, assist: 0.13 } }).value;
+    if (tenth !== 6.2) throw new Error('one decimal, got ' + tenth);
+  });
+  T("rating: the design's three sanity examples", () => {
+    const wing = ratingOf([...rShots('a', '6M', 6, 1), rAct('a', 'ASIST'), rTurnover('a', 'Pase')]).value;
+    const back = ratingOf([...rShots('a', '9M', 2, 7), rTurnover('a', 'Pase', 1), rTurnover('a', 'Pase', 2)]).value;
+    if (wing !== 7.7 || back !== 4.4) throw new Error(`wing ${wing} back ${back}`);
+    // 34 on target (20 from 6 m, 12 from 9 m, 2 counter-attacks), 14 saved: expected 5 + 4.8 + 0.4 = 10.2
+    const faced = [...rGkShots('6M', 8, 12), ...rGkShots('9M', 5, 7), ...rGkShots('CONTRA', 1, 1)].map((e, i) => ({ ...e, id: 'k' + i }));
+    const keeper = playerRating(rateMatch(faced), keeperG);
+    if (!nearTo(keeper.features.saveValue, 3.8) || keeper.value !== 7.8) throw new Error(`keeper ${keeper.features.saveValue} ${keeper.value}`);
+  });
+  T("rating: the design's minutes examples", () => {
+    const back = [...rShots('a', '9M', 5, 4), rAct('a', 'ASIST', 1), rAct('a', 'ASIST', 2), rTurnover('a', 'Pase')];
+    const wing = [...rShots('b', '6M', 7, 1), rAct('b', 'RECUP')];
+    const fullBack = ratingOf(back, fieldA, { seconds: 3600 }).value, halfWing = ratingOf(wing, fieldB, { seconds: 1800 }).value;
+    if (fullBack !== 7.7 || halfWing !== 7.8 || !(halfWing > fullBack)) throw new Error(`back ${fullBack} wing ${halfWing}`);
+    const over = [60, 30, 20].map((min) => ratingOf(wing, fieldB, { seconds: min * 60 }).value);
+    if (over.join() !== '8.4,7.8,7.6') throw new Error(over.join());
+  });
+  T('rating: blocks and every card weigh what the weights say', () => {
+    const w = CONFIG.rating.weights, card = (c) => ({ id: 'c' + c, abs: 1, kind: 'SANCTION', playerId: 'a', card: c });
+    const delta = (events) => ratingOf(events).raw - CONFIG.rating.base;
+    const want = [[rAct('a', 'BLOC'), w.block], [card('A'), w.yellow], [card('2M'), w.twoMin], [card('D'), w.red], [card('AZ'), w.blue]];
+    want.forEach(([event, weight]) => { if (!nearTo(delta([event]), weight)) throw new Error(`${event.action || event.card} ${delta([event])} vs ${weight}`); });
+    if (!(w.block > 0 && w.yellow < 0 && w.yellow > w.twoMin && w.twoMin > w.blue && w.blue > w.red)) throw new Error('weights out of order');
+    const f = ratingFeatures(rateMatch(['A', '2M', 'D', 'AZ', 'unknown'].map(card).concat(rAct('a', 'BLOC'))), fieldA);
+    if (f.yellow !== 1 || f.twoMin !== 1 || f.red !== 1 || f.blue !== 1 || f.blocks !== 1 || Object.values(f).some(Number.isNaN)) throw new Error(JSON.stringify(f));
+  });
+  T('rating: a convocado who never entered is S/C and minutes feed the confidence', () => {
+    const s = rateMatch(rShots('a', '6M', 3, 0), { clock: { period: 1, elapsedMs: CONFIG.halfSeconds * 1000, runningSince: null }, court: [{ abs: 0, set: 0 }], courtSets: [['a', 'g']] });
+    const ratings = matchRatings(s, [fieldA, fieldB, keeperG]);
+    const never = ratings.get('b'), played = ratings.get('a');
+    if (never.rated || ratingText(never.value) !== 'S/C' || !played.rated || !nearTo(played.confidence, 0.707) || !ratings.get('g').rated) throw new Error(JSON.stringify([...ratings]));
+  });
+  T('rating: rating a match changes no statistic', () => {
+    const snap = snapshot(), before = JSON.stringify([liveStats(), score(), state.history]);
+    const ratings = matchRatings(state);
+    if (JSON.stringify([liveStats(), score(), state.history]) !== before) throw new Error('state changed');
+    if (ratings.size !== state.players.length || [...ratings.values()].some((r) => !r.rated || r.confidence !== 1)) throw new Error('sample match without a court log is rated with confidence 1');
+    restore(snap);
+  });
+  T('rating: every chip shows its number and meets contrast in both themes', () => {
+    const samples = [8.4, 7.4, 6.5, 6.2, 4.1, null], bands = samples.map(ratingBand);
+    if (bands.join() !== 'rt-top,rt-good,rt-mid,rt-low,rt-bad,rt-none' || ratingBand(undefined) !== 'rt-none' || ratingBand(8) !== 'rt-top' || ratingBand(6.4) !== 'rt-low' || ratingBand(5.9) !== 'rt-bad') throw new Error(bands.join());
+    if (ratingText(7.4) !== '7,4' || ratingText(null) !== 'S/C' || ratingText(undefined) !== 'S/C') throw new Error('text');
+    const chip = document.createElement('span'); document.body.appendChild(chip);
+    try {
+      ['light', 'dark'].forEach((theme) => inTheme(theme, () => samples.forEach((value, i) => {
+        chip.className = `rating-chip ${bands[i]}`; chip.textContent = ratingText(value);
+        const css = getComputedStyle(chip);
+        if (!chip.textContent) throw new Error('empty chip');
+        const ratio = contrastRatio(hexOfRgb(rgbOf(css.color)), hexOfRgb(rgbOf(css.backgroundColor)));
+        if (ratio < 4.5 || css.whiteSpace !== 'nowrap' || !css.fontVariantNumeric.includes('tabular-nums')) throw new Error(`${theme} ${bands[i]} ${ratio.toFixed(2)} ${css.whiteSpace}`);
+      })));
+    } finally { chip.remove(); }
+  });
+
+  // ---- Final screen: every convocado's rating and the provisional MVP (M2) ----
+  const FULL_MATCH_CLOCK = { period: 2, elapsedMs: CONFIG.halfSeconds * 1000, runningSince: null };
+  const goalAtZone = (id, zone, n, tag) => rShots(id, zone, n, 0).map((e, i) => ({ ...e, id: `${tag}${i}`, abs: 50 + i }));
+  // Opens the final screen on the sample squad with these events and court log; the sample's own match is restored afterwards.
+  const placed = (e) => (e.kind === 'SHOT' || e.kind === 'RIVAL_SHOT' ? { origin: m(0, 6), target: gf(0.5, 0.5), from: e.zone, ...e } : e);
+  // Returns what puts the match back; the async final tests (the MVP preview) wait for ui.mvpCardReady before they close it.
+  const withFinal = (over) => {
+    const snap = snapshot();
+    Object.assign(state, { mvpId: null, history: [], court: undefined, courtSets: undefined, clock: FULL_MATCH_CLOCK, ...over, collapsed: undefined, events: (over.events || []).map(placed) });
+    ui.ratingsAll = !over.collapsed; openFinal();
+    return () => { ui.ratingsAll = false; restore(snap); };
+  };
+  const onFinal = (over, fn) => () => {
+    const done = withFinal(over);
+    try { fn(); } finally { done(); }
+  };
+  const ratingRows = () => [...$('final').querySelectorAll('.rating-row')];
+  const rowIds = () => ratingRows().map((r) => r.dataset.ratingPlayer);
+  const crownedIds = () => ratingRows().filter((r) => r.querySelector('.crown-face')).map((r) => r.dataset.ratingPlayer);
+  const provisionalLabel = () => $('final').querySelector('.ratings').textContent.includes('MVP provisional');
+  // p22 plays the second half only (30 min, 7/8 from 6 m and a recovery); p8 plays the whole match (5/9 from 9 m, 2 assists, 1 turnover).
+  const secondHalfStar = () => ({
+    courtSets: [['p8', 'p1'], ['p8', 'p22', 'p1']], court: [{ abs: 0, set: 0 }, { abs: CONFIG.halfSeconds, set: 1 }],
+    events: [...goalAtZone('p22', '6M', 7, 'sg'), rShot('p22', '6M', 'FUERA', 90), rAct('p22', 'RECUP', 91),
+      ...goalAtZone('p8', '9M', 5, 'bg'), ...[0, 1, 2, 3].map((i) => rShot('p8', '9M', 'FUERA', 60 + i)), rAct('p8', 'ASIST', 70), rAct('p8', 'ASIST', 71), rTurnover('p8', 'Pase', 72)]
+  });
+  const playedFew = () => ({
+    courtSets: [['p22', 'p8', 'p1']], court: [{ abs: 0, set: 0 }],
+    events: [...goalAtZone('p22', '6M', 3, 'g'), rTurnover('p8', 'Pase', 1), rTurnover('p8', 'Bote', 2)]
+  });
+  T('final: ratings list sorted with S/C last and no NaN', onFinal(playedFew(), () => {
+    const ids = rowIds(), chips = ratingRows().map((r) => r.querySelector('.rating-chip').textContent);
+    if (ids.length !== state.players.length || ids.slice(0, 3).join() !== 'p22,p1,p8') throw new Error(ids.join());
+    if (chips.slice(0, 3).some((c) => c === 'S/C') || chips.slice(3).some((c) => c !== 'S/C')) throw new Error(chips.join());
+    if (/NaN|undefined/.test($('final').textContent) || !$('final').textContent.includes('Puntuaciones')) throw new Error('text');
+    const first = ratingRows()[0];
+    if (!first.textContent.includes('3/3') || !first.querySelector('.disc') || !first.textContent.includes('Diego')) throw new Error('row: ' + first.textContent);
+    const keeper = ratingRows()[1];
+    if (!keeper.textContent.includes('0/0')) throw new Error('keeper row: ' + keeper.textContent);
+  }));
+  T('final: the provisional MVP is the top rating', onFinal(playedFew(), () => {
+    const mvp = matchMvp(state, matchRatings(state));
+    if (mvp.id !== 'p22' || mvp.source !== 'rating' || state.mvpId !== null) throw new Error(JSON.stringify(mvp));
+    if (crownedIds().join() !== 'p22' || !provisionalLabel()) throw new Error('crown or label');
+    if (document.querySelector('[data-mvp="p22"]').getAttribute('aria-pressed') !== 'false') throw new Error('provisional is not the coach pick');
+  }));
+  // Each rule decides a tie that the dorsal rule would decide the other way, so removing a rule changes the pick.
+  T('final: provisional MVP ties go to more minutes, then more goals or saves', () => {
+    const player = (id, num, pos = 'EXT') => ({ id, num, pos });
+    const goals = (id, n) => rShots(id, '6M', n, 0).map((e, i) => ({ ...e, id: `${id}${i}` }));
+    const saved = (n) => Array.from({ length: n }, (_, i) => ({ id: 'sv' + i, abs: i, kind: 'RIVAL_SHOT', gkId: 'k', zone: '9M', result: 'PARADA' }));
+    const rate = (...ids) => new Map(ids.map((id) => [id, { value: 7, rated: true }]));
+    const s = { players: [player('a', 9), player('b', 4), player('c', 8), player('d', 3), player('e', 20), player('f', 5), player('k', 12, 'POR'), player('g', 7)],
+      events: [...goals('c', 3), ...goals('d', 1), ...goals('e', 0), ...goals('f', 2), ...saved(5)], mvpId: null };
+    const pick = (seconds, ...ids) => matchMvp(s, rate(...ids), seconds).id;
+    if (pick(new Map([['a', 2400], ['b', 1800]]), 'a', 'b') !== 'a') throw new Error('more minutes beats the lower dorsal');
+    if (pick(new Map([['c', 1800], ['d', 1800]]), 'c', 'd') !== 'c') throw new Error('more goals beat the lower dorsal at equal minutes');
+    if (pick(null, 'c', 'd') !== 'c' || pick(new Map(), 'c', 'd') !== 'c') throw new Error('unknown minutes count as equal, then goals');
+    if (pick(new Map([['e', 2400], ['c', 1800]]), 'e', 'c') !== 'e') throw new Error('minutes come before goals');
+    if (pick(null, 'k', 'f') !== 'k') throw new Error('a goalkeeper counts saves');
+    if (pick(null, 'a', 'g') !== 'g' || pick(null, 'g', 'a') !== 'g') throw new Error('lower dorsal last');
+    const higher = new Map([['a', { value: 7.1, rated: true }], ['b', { value: 7, rated: true }]]);
+    if (matchMvp(s, higher, new Map([['b', 3600]])).id !== 'a') throw new Error('rating first');
+    const none = new Map(s.players.map((p) => [p.id, { value: null, rated: false }]));
+    if (JSON.stringify(matchMvp(s, none, null)) !== '{"id":null,"source":null}') throw new Error('nobody rated');
+    if (matchMvp({ ...s, mvpId: 'zz' }, rate('a'), null).source !== 'rating') throw new Error('a pick outside the squad is ignored');
+    if (JSON.stringify(matchMvp({ ...s, mvpId: 'b' }, rate('a'), null)) !== '{"id":"b","source":"coach"}') throw new Error('coach');
+  });
+  T('final: a second-half player with the top rating is the provisional MVP', onFinal(secondHalfStar(), () => {
+    const ratings = matchRatings(state), star = ratings.get('p22'), full = ratings.get('p8');
+    if (!(star.confidence < 1) || star.value !== 7.8 || full.value !== 7.7) throw new Error([star.confidence, star.value, full.value].join());
+    if (matchMvp(state, ratings).id !== 'p22' || rowIds()[0] !== 'p22' || crownedIds().join() !== 'p22') throw new Error('second-half player not MVP: ' + rowIds().slice(0, 2));
+  }));
+  T('final: the coach\'s pick overrides and clears', onFinal(playedFew(), () => {
+    const click = (id) => document.querySelector(`[data-mvp="${id}"]`).click();
+    click('p8');
+    if (state.mvpId !== 'p8' || crownedIds().join() !== 'p8' || provisionalLabel()) throw new Error('coach pick');
+    if (matchMvp(state, matchRatings(state)).source !== 'coach') throw new Error('source');
+    click('p8');
+    if (state.mvpId !== null || crownedIds().join() !== 'p22' || !provisionalLabel()) throw new Error('clearing returns to the provisional MVP');
+    const before = JSON.stringify([liveStats(), score(), state.history]);
+    matchMvp(state, matchRatings(state)); openFinal();
+    if (JSON.stringify([liveStats(), score(), state.history]) !== before || state.mvpId !== null) throw new Error('the provisional MVP must write nothing');
+  }));
+  T('final: the breakdown lists only non-zero features', onFinal({ events: [rTurnover('p22', 'Pase', 1), rTurnover('p22', 'Bote', 2), rAct('p22', 'ASIST', 3)] }, () => {
+    const row = ratingRows().find((r) => r.dataset.ratingPlayer === 'p22'), items = [...row.querySelectorAll('details li')].map((li) => li.textContent);
+    if (items.join('|') !== 'Pérdidas ×2 −0,8|Asistencias ×1 +0,3') throw new Error(items.join('|'));
+    const idle = ratingRows().find((r) => r.dataset.ratingPlayer === 'p5');
+    if (idle.querySelector('details') || /NaN|undefined/.test($('final').textContent)) throw new Error('a player without events has no breakdown');
+    if (matchRatings(state).get('p22').confidence !== 1) throw new Error('premise: no court log rates with confidence 1');
+  }));
+  T('final: the MVP leads the list and the rest folds behind «Ver todos»', onFinal({ collapsed: true, ...playedFew(), mvpId: 'p8' }, () => {
+    if (rowIds()[0] !== 'p8' || ratingRows().length !== RATINGS_COLLAPSED_ROWS || crownedIds().join() !== 'p8') throw new Error('collapsed: ' + rowIds());
+    const toggle = document.querySelector('[data-ratings-all]');
+    if (!toggle || toggle.getAttribute('aria-expanded') !== 'false' || !toggle.textContent.includes(`(${state.players.length})`) || toggle.getBoundingClientRect().height < 44) throw new Error('toggle');
+    toggle.click();
+    if (ratingRows().length !== state.players.length || document.querySelector('[data-ratings-all]').getAttribute('aria-expanded') !== 'true') throw new Error('expanded');
+    state.mvpId = null; openFinal();
+    if (rowIds()[0] !== 'p22' || !provisionalLabel() || ratingRows()[0].querySelector('.mvp-tag') === null) throw new Error('provisional MVP first with its tag');
+  }));
+  T('final: the breakdown scales by the minutes and escapes names', onFinal({ clock: { period: 1, elapsedMs: CONFIG.halfSeconds * 1000, runningSince: null }, courtSets: [['p22', 'p1']], court: [{ abs: 0, set: 0 }],
+    events: [rTurnover('p22', 'Pase', 1), rTurnover('p22', 'Bote', 2)] }, () => {
+    const items = [...ratingRows().find((r) => r.dataset.ratingPlayer === 'p22').querySelectorAll('details li')].map((li) => li.textContent);
+    if (items.join('|') !== 'Pérdidas ×2 −0,6') throw new Error('30 min: ' + items.join('|'));
+    state.players.find((p) => p.id === 'p22').name = '<i id="injected">x</i>'; openFinal();
+    if (document.getElementById('injected') || !ratingRows().find((r) => r.dataset.ratingPlayer === 'p22').textContent.includes('<i id="injected">')) throw new Error('name not escaped');
+
+  // ---- Visual pages (M5): the «Hoja» summary, half-time and final layout ----
+  const SUMMARY_KPI_LABELS = ['Goles', '% tiro 6 m', '% tiro 9 m+', 'Fallos 6 m', 'Fallos 9 m', 'Pérdidas', 'Recuperaciones', '% paradas 6 m', '% paradas 9 m+'];
+  const onSummary = (over, fn) => () => {
+    const snap = snapshot();
+    try { Object.assign(state, over); Object.assign(ui, { sheetMode: 'sheet', sheetTab: 'summary' }); renderSheet(); $('sheet').hidden = false; fn(); } finally { restore(snap); ui.sheetTab = 'summary'; }
+  };
+  // Tile labels keep «6 m», «9 m+» and «2'» together with non-breaking spaces; compare them as plain spaces.
+  const labelText = (t) => t.querySelector('span').textContent.replace(/\u00a0/g, ' ');
+  const statTiles = (root = $('sheet')) => [...root.querySelectorAll('.stat-tile')];
+  const tileValue = (tiles, label) => tiles.find((t) => labelText(t) === label).querySelector('strong').textContent;
+  const nameOf = (id) => state.players.find((p) => p.id === id).name;
+  T('sheet: Resumen is the first tab and shows the seven KPIs', onSummary(sampleState(), () => {
+    if (Object.keys(SHEET_TABS)[0] !== 'summary' || SHEET_TABS.summary !== 'Resumen' || SHEET_TABS.stats !== 'Tablas') throw new Error(JSON.stringify(SHEET_TABS));
+    const first = document.querySelector('#sheet .tabs button');
+    if (first.textContent !== 'Resumen' || first.getAttribute('aria-pressed') !== 'true') throw new Error('first tab');
+    const labels = statTiles().map((t) => labelText(t));
+    if (labels.join('|') !== SUMMARY_KPI_LABELS.join('|')) throw new Error(labels.join('|'));
+    if ($('sheet').querySelectorAll('.zone-map svg').length !== 2 || $('sheet').querySelectorAll('.goal-chart svg').length !== 2) throw new Error('maps and goal grids');
+    const strip = [...$('sheet').querySelectorAll('[data-pdf-pick]')];
+    if (strip.length !== state.players.length || !strip[0].querySelector('.rating-chip')) throw new Error('player strip');
+    strip[0].click();
+    if (ui.sheetTab !== 'reports' || !$('sheet').querySelector(`[data-pdf="${strip[0].dataset.pdfPick}"]`)) throw new Error('the card opens the player PDF list');
+    if (document.activeElement !== $('sheet').querySelector(`[data-pdf="${strip[0].dataset.pdfPick}"]`)) throw new Error('the player PDF button is not focused');
+    openFinal(); document.querySelector('[data-final-sheet]').click();
+    if (ui.sheetTab !== 'summary' || $('sheet').hidden || !$('final').hidden) throw new Error('«Ver Hoja» must open the summary');
+  }));
+  T('sheet: matchFigures equals liveStats for the sample', onSummary(sampleState(), () => {
+    const f = matchFigures(state), live = liveStats(), zone = (id) => live.us.zones.find((z) => z.id === id).FALLO;
+    const expected = { goals: live.us.goals, shots: live.us.shots, shooting: live.us.shooting, miss6: zone('6M'), miss9: zone('9M') + zone('11M'), turnovers: live.us.turnovers, recoveries: live.recov, saves: live.them.saved, onTarget: live.them.onTarget, savePct: live.them.savedPct };
+    Object.entries(expected).forEach(([k, v]) => { if (f[k] !== v) throw new Error(`${k}: ${f[k]} vs ${v}`); });
+    if (!f.shots || !f.onTarget || !f.turnovers) throw new Error('premise: the sample has shots, saves and turnovers');
+  }));
+  T('sheet: failed shots split 6 m and 9 m (+11 m counts as 9 m)', () => {
+    const shot = (zone, result, kind = 'SHOT') => ({ kind, zone, result });
+    const f = matchFigures({ events: [shot('6M', 'FUERA'), shot('6M', 'GOL'), shot('9M', 'PALO'), shot('11M', 'BLOCADO'), shot('9M', 'PARADA'), shot('7M', 'FUERA'), shot('CONTRA', 'FUERA'), shot('6M', 'FUERA', 'RIVAL_SHOT')] });
+    if (f.miss6 !== 1 || f.miss9 !== 2 || f.shots !== 7 || f.goals !== 1) throw new Error(JSON.stringify(f));
+  });
+  T('sheet: summary with no events shows dashes, no NaN', onSummary({ events: [], history: [] }, () => {
+    if (/NaN|undefined/.test($('sheet').textContent)) throw new Error('NaN or undefined');
+    const tiles = statTiles(), values = Object.fromEntries(SUMMARY_KPI_LABELS.map((l) => [l, tileValue(tiles, l)]));
+    if (['% tiro 6 m', '% tiro 9 m+', '% paradas 6 m', '% paradas 9 m+'].some((l) => values[l] !== '–') || values.Goles !== '0') throw new Error(JSON.stringify(values));
+    if ($('sheet').querySelector('.zone-map svg, .goal-chart svg')) throw new Error('with under four shots the card says so instead of drawing a chart');
+  }));
+  // ---- Shooting and saves by distance: 6 m (6M and 7M) against 9 m+ (9M and +11M) ----
+  const dShot = (kind, zone, result, i, extra = {}) => placed({ id: 'd' + kind + zone + result + i, abs: i, kind, zone, result, ...(kind === 'RIVAL_SHOT' ? { gkId: 'p1' } : { playerId: 'p8' }), ...extra });
+  const distanceEvents = (unknownOrigin = false) => [
+    dShot('SHOT', '6M', 'GOL', 1), dShot('SHOT', '6M', 'PARADA', 2), dShot('SHOT', '7M', 'GOL', 3), dShot('SHOT', '9M', 'FUERA', 4),
+    dShot('SHOT', 'CONTRA', 'GOL', 5, { from: '9M' }), dShot('SHOT', '11M', 'PARADA', 6),
+    dShot('RIVAL_SHOT', '6M', 'PARADA', 8), dShot('RIVAL_SHOT', '6M', 'GOL', 9), dShot('RIVAL_SHOT', '7M', 'PARADA', 10), dShot('RIVAL_SHOT', '6M', 'FUERA', 11),
+    dShot('RIVAL_SHOT', '9M', 'PARADA', 12), dShot('RIVAL_SHOT', '11M', 'GOL', 13, { contra: true }), dShot('RIVAL_SHOT', '9M', 'BLOCADO', 14),
+    ...(unknownOrigin ? [dShot('SHOT', '9M', 'GOL', 7, { origin: undefined }), dShot('RIVAL_SHOT', '9M', 'PARADA', 16, { origin: undefined })] : [])
+  ];
+  T('distance KPIs: 7 m counts as 6 m, +11 m as 9 m+, a counter-attack by its zone, an unknown origin in neither', () => {
+    if (KPI_DISTANCE_GROUPS.near.join() !== '6M,7M' || KPI_DISTANCE_GROUPS.far.join() !== '9M,11M') throw new Error(JSON.stringify(KPI_DISTANCE_GROUPS));
+    const d = distanceKpis(distanceEvents(true));
+    const same = (got, want) => { if (JSON.stringify(got) !== JSON.stringify(want)) throw new Error(JSON.stringify(got) + ' != ' + JSON.stringify(want)); };
+    same(d.shooting.us.near, { goals: 2, shots: 3, pct: 67 });
+    same(d.shooting.us.far, { goals: 1, shots: 3, pct: 33 });
+    same(d.shooting.them.near, { goals: 1, shots: 4, pct: 25 });
+    same(d.shooting.them.far, { goals: 1, shots: 3, pct: 33 });
+  });
+  T('distance KPIs: save % counts only shots on target, by our keeper and by the rival keeper', () => {
+    const d = distanceKpis(distanceEvents(true));
+    const same = (got, want) => { if (JSON.stringify(got) !== JSON.stringify(want)) throw new Error(JSON.stringify(got) + ' != ' + JSON.stringify(want)); };
+    same(d.saves.us.near, { saved: 2, onTarget: 3, pct: 67 });
+    same(d.saves.us.far, { saved: 1, onTarget: 2, pct: 50 });
+    same(d.saves.them.near, { saved: 1, onTarget: 3, pct: 33 });
+    same(d.saves.them.far, { saved: 1, onTarget: 2, pct: 50 });
+  });
+  T('distance KPIs: an empty group has no percentage and reads –', () => {
+    const d = distanceKpis([]);
+    if (d.shooting.us.far.pct !== null || d.saves.them.near.pct !== null || d.shooting.us.near.shots !== 0) throw new Error(JSON.stringify(d));
+    const snap = snapshot();
+    try {
+      state.events = [dShot('SHOT', '6M', 'GOL', 1)]; state.history = []; openHalftime();
+      const tiles = [...$('final').querySelectorAll('.kpi-tile')];
+      const far = tiles.find((t) => labelText(t) === '% tiro 9 m+');
+      if (far.querySelector('.us strong').textContent !== '–' || far.querySelector('.us small').textContent.includes('NaN') || $('final').textContent.includes('NaN')) throw new Error(far.textContent);
+    } finally { restore(snap); }
+  });
+  T('half-time and final show eight KPI tiles with the distance split', () => {
+    const snap = snapshot();
+    const labels = ['Goles', '% tiro 6 m', '% tiro 9 m+', '% de ataque', '% paradas 6 m', '% paradas 9 m+', 'Pérdidas', "Exclusiones 2'"];
+    try {
+      state.events = distanceEvents(); state.history = [];
+      [openHalftime, openFinal].forEach((open) => {
+        open();
+        const tiles = [...$('final').querySelectorAll('.kpi-tile')];
+        if (tiles.map((t) => labelText(t)).join('|') !== labels.join('|')) throw new Error(tiles.map((t) => labelText(t)).join('|'));
+        const near = tiles[1], saves = tiles[4];
+        if (near.querySelector('.us strong').textContent !== '67%' || !near.querySelector('.us small').textContent.endsWith('2/3') || !near.querySelector('.them small').textContent.endsWith('1/4')) throw new Error(near.textContent);
+        if (saves.querySelector('.us strong').textContent !== '67%' || !saves.querySelector('.us small').textContent.endsWith('2/3') || !saves.querySelector('.them small').textContent.endsWith('1/3')) throw new Error(saves.textContent);
+        if (near.querySelector('.us strong').className !== 'r-good') throw new Error('tone ' + near.querySelector('.us strong').className);
+      });
+    } finally { restore(snap); }
+  });
+  T('final rows list shooting and saves by distance, next to the overall rows', () => {
+    const snap = snapshot();
+    try {
+      state.events = distanceEvents(); state.history = [];
+      const rows = Object.fromEntries(finalRows().map((r) => [r[0], r.slice(1)]));
+      if (rows['% de tiro 6 m'].join('|') !== '2/3 · 67%|1/4 · 25%' || rows['% de tiro 9 m+'].join('|') !== '1/3 · 33%|1/3 · 33%') throw new Error(JSON.stringify(rows));
+      if (rows['% paradas 6 m'].join('|') !== '2/3 · 67%|1/3 · 33%' || rows['% paradas 9 m+'].join('|') !== '1/2 · 50%|1/2 · 50%') throw new Error(JSON.stringify(rows));
+      if (!rows['% de tiro'] || !rows['Paradas del portero'] || !finalText().includes('% de tiro 9 m+:')) throw new Error('overall rows or e-mail text');
+    } finally { restore(snap); }
+  });
+  T('halftime: shows failed shots 6 m and 9 m and the top turnovers', () => {
+    const snap = snapshot();
+    try {
+      state.events = [rShot('p8', '6M', 'FUERA', 1), rShot('p8', '9M', 'PALO', 2), rShot('p8', '11M', 'FUERA', 3), rShot('p8', '9M', 'GOL', 4),
+        ...['Pase', 'Bote', 'Pasos'].map((t, i) => rTurnover('p8', t, 10 + i)), rTurnover('p5', 'Pase', 20), rTurnover('p5', 'Bote', 21), rTurnover('p22', 'Pase', 22), rTurnover('p3', 'Pase', 23)].map(placed);
+      state.history = []; openHalftime();
+      const tiles = statTiles($('final'));
+      if (tileValue(tiles, 'Fallos 6 m') !== '1' || tileValue(tiles, 'Fallos 9 m') !== '2') throw new Error('failed shots');
+      const rows = [...$('final').querySelectorAll('.top-turnovers li')].map((li) => li.textContent.replace(/\s+/g, ' ').trim());
+      const want = [['p8', 3], ['p5', 2], ['p3', 1]];
+      if (rows.length !== 3 || want.some(([id, n], i) => !rows[i].includes(nameOf(id)) || !rows[i].endsWith(String(n)))) throw new Error(rows.join('|'));
+      if ($('final').querySelectorAll('.halftime-points .keypoints').length !== 2 || !$('final').querySelector('.final-head')) throw new Error('key points or head');
+      state.events = []; openHalftime();
+      if (/NaN|undefined/.test($('final').textContent) || $('final').querySelector('.top-turnovers li')) throw new Error('empty half');
+    } finally { restore(snap); }
+  });
+  T('final: sections in order', () => {
+    const snap = snapshot();
+    try {
+      openFinal();
+      const order = ['.final-head', '.kpi-tiles', '.mvp-share', '.ratings', '.mvp-pick', 'details.more', '.final-mail'].map((sel) => $('final').querySelector(sel));
+      if (order.some((el) => !el)) throw new Error('missing section ' + order.map(Boolean).join());
+      order.slice(1).forEach((el, i) => { if (!(order[i].compareDocumentPosition(el) & Node.DOCUMENT_POSITION_FOLLOWING)) throw new Error('out of order at ' + i); });
+      ['.mvp-share', '.ratings', '.mvp-pick'].forEach((sel) => { if (!$('final').querySelector(sel).classList.contains('sheet-card')) throw new Error(sel + ' is not a sheet-card'); });
+      const head = $('final').querySelector('.final-head'), s = score();
+      if (head.querySelectorAll('.crest, .rival-crest').length !== 2 || !head.textContent.includes('Final') || !head.textContent.includes(`${s.us}–${s.them}`)) throw new Error(head.textContent);
+    } finally { restore(snap); }
+  });
+  }));
+
+  T('final: rating rows span the card and the actions stay in reach', onFinal(playedFew(), () => {
+    const row = ratingRows().find((r) => r.querySelector('details')), wide = (el) => el.getBoundingClientRect().width;
+    if (!row || Math.abs(wide(row.querySelector('details')) - wide(row)) > 1) throw new Error('the row breakdown must span the row');
+    if ([...$('final').querySelectorAll('button.primary')].map((b) => b.textContent).join() !== 'Compartir MVP') throw new Error('one primary');
+    if (!$('final').querySelector('.final-actions [data-final-sheet]') || !$('final').querySelector('.final-actions [data-final-close]')) throw new Error('sticky footer');
+    const close = $('final').querySelector('[data-final-close]').getBoundingClientRect();
+    if (close.bottom > window.innerHeight) throw new Error('Cerrar below the fold: ' + close.bottom);
+  }));
+  T('halftime: «2ª parte» is inside the viewport', () => {
+    const snap = snapshot();
+    try { openHalftime(); const go = $('final').querySelector('.final-actions [data-second-half]'); if (!go || go.getBoundingClientRect().bottom > window.innerHeight) throw new Error('below the fold'); } finally { restore(snap); }
+  });
+
+  T('final and half-time: the sticky footer is flush with the bottom of the screen', () => {
+    const snap = snapshot(), footerBottom = () => $('final').querySelector('.final-actions').getBoundingClientRect().bottom;
+    try {
+      openHalftime();
+      if (Math.abs(footerBottom() - window.innerHeight) > 0.5) throw new Error('half-time footer ' + footerBottom() + ' vs ' + window.innerHeight);
+      hideFinal(); openFinal();
+      if (Math.abs(footerBottom() - window.innerHeight) > 0.5) throw new Error('final footer ' + footerBottom() + ' vs ' + window.innerHeight);
+    } finally { hideFinal(); restore(snap); }
+  });
+
   // ---- Drill-down: the per-match drawing helpers work over any saved state (M0c) ----
-  // Runs buildPdf('players') with the drawing primitives replaced by recorders, so the player pages can be compared as data.
-  const recordPlayerPages = () => {
-    const saved = { pdfNewDoc, pdfHeader, pdfTable, pdfShotChart };
+  // Runs buildPdf(kind) with the drawing primitives replaced by recorders, so the pages can be compared as data.
+  const recordPdfCalls = (kind, makeState = sampleState) => {
+    const saved = { pdfNewDoc, pdfHeader, pdfTable, pdfShotChart, pdfKeyPoints };
     const calls = [];
     const ids = (shots) => shots.map((e) => `${e.abs}:${e.zone}:${e.result}`);
     pdfNewDoc = () => ({ addPage: () => calls.push(['page']) });
     pdfHeader = (doc, title, subtitle) => calls.push(['header', title, subtitle]);
     pdfTable = (doc, opts) => { calls.push(['table', opts]); return opts.startY + 10; };
     pdfShotChart = (doc, x, y, w, shots, viewKey, dorsals = false) => { calls.push(['chart', x, y, w, ids(shots), viewKey, dorsals]); return y + 50; };
+    pdfKeyPoints = (doc, title, points, x, y) => { calls.push(['points', title, points.map((p) => p.text)]); return y + 20; };
     const snap = snapshot();
-    try { state = sampleState(); buildPdf('players'); } finally { ({ pdfNewDoc, pdfHeader, pdfTable, pdfShotChart } = saved); restore(snap); }
-    return JSON.stringify(calls);
+    try { state = makeState(); buildPdf(kind); } finally { ({ pdfNewDoc, pdfHeader, pdfTable, pdfShotChart, pdfKeyPoints } = saved); restore(snap); }
+    return calls;
   };
+  const recordPlayerPages = () => JSON.stringify(recordPdfCalls('players'));
   // Recorded from the code before the report refactor (sample match): the player pages must not change.
-  const PDF_PLAYERS_SNAPSHOT = [["header","#3 Raulito","Extremo"],["chart",12,26,120,[],"US",false],["table",{"head":["Dato","Valor",""],"body":[["Goles","0/0","– de acierto"],["Parados",0,"por el portero rival"],["Fallados",0,"fuera · palo · bloqueado"],["Pases de gol",0,""],["Provoca 7 m",0,""],["Recuperaciones",0,""],["Blocajes",0,""],["Pérdidas",0,""],["Fallos defensivos",0,""],["Sanciones","–",""]],"startY":30,"left":140,"width":69.5}],["table",{"title":"Por zona","head":["Zona","Lanz.","Goles","Parados","Fallados","% gol"],"body":[["6 m",0,0,0,0,"–"],["9 m",0,0,0,0,"–"],["+11 m",0,0,0,0,"–"],["Contra",0,0,0,0,"–"],["7 m",0,0,0,0,"–"],["Total",0,0,0,0,"–"]],"startY":30,"left":215.5,"width":69.5}],["table",{"title":"Pérdidas por tipo","head":["Tipo","N"],"body":[["Ninguno",0]],"startY":40,"left":140,"width":69.5}],["table",{"title":"Fallos defensivos","head":["Tipo","N"],"body":[["Ninguno",0]],"startY":40,"left":215.5,"width":69.5}],["table",{"title":"Cronología","head":["Min","Acción"],"body":[["-","Sin acciones"]],"startY":50,"left":140}],["page"],["header","#5 Marcos","Lateral"],["chart",12,26,120,[],"US",false],["table",{"head":["Dato","Valor",""],"body":[["Goles","0/0","– de acierto"],["Parados",0,"por el portero rival"],["Fallados",0,"fuera · palo · bloqueado"],["Pases de gol",0,""],["Provoca 7 m",0,""],["Recuperaciones",0,""],["Blocajes",0,""],["Pérdidas",1,""],["Fallos defensivos",0,""],["Sanciones","–",""]],"startY":30,"left":140,"width":69.5}],["table",{"title":"Por zona","head":["Zona","Lanz.","Goles","Parados","Fallados","% gol"],"body":[["6 m",0,0,0,0,"–"],["9 m",0,0,0,0,"–"],["+11 m",0,0,0,0,"–"],["Contra",0,0,0,0,"–"],["7 m",0,0,0,0,"–"],["Total",0,0,0,0,"–"]],"startY":30,"left":215.5,"width":69.5}],["table",{"title":"Pérdidas por tipo","head":["Tipo","N"],"body":[["Pasos",1]],"startY":40,"left":140,"width":69.5}],["table",{"title":"Fallos defensivos","head":["Tipo","N"],"body":[["Ninguno",0]],"startY":40,"left":215.5,"width":69.5}],["table",{"title":"Cronología","head":["Min","Acción"],"body":[["05:20","Pérdida pasos"]],"startY":50,"left":140}],["page"],["header","#8 Alex","Lateral"],["chart",12,26,120,["80:9M:GOL","690:9M:FUERA"],"US",false],["table",{"head":["Dato","Valor",""],"body":[["Goles","1/2","50% de acierto"],["Parados",0,"por el portero rival"],["Fallados",1,"fuera · palo · bloqueado"],["Pases de gol",0,""],["Provoca 7 m",0,""],["Recuperaciones",0,""],["Blocajes",0,""],["Pérdidas",1,""],["Fallos defensivos",0,""],["Sanciones","–",""]],"startY":30,"left":140,"width":69.5}],["table",{"title":"Por zona","head":["Zona","Lanz.","Goles","Parados","Fallados","% gol"],"body":[["6 m",0,0,0,0,"–"],["9 m",2,1,0,1,"50%"],["+11 m",0,0,0,0,"–"],["Contra",0,0,0,0,"–"],["7 m",0,0,0,0,"–"],["Total",2,1,0,1,"50%"]],"startY":30,"left":215.5,"width":69.5}],["table",{"title":"Pérdidas por tipo","head":["Tipo","N"],"body":[["Falta ataque",1]],"startY":40,"left":140,"width":69.5}],["table",{"title":"Fallos defensivos","head":["Tipo","N"],"body":[["Ninguno",0]],"startY":40,"left":215.5,"width":69.5}],["table",{"title":"Cronología","head":["Min","Acción"],"body":[["01:20","Gol 9 m"],["10:50","Pérdida falta ataque"],["11:30","Fuera 9 m"]],"startY":50,"left":140}],["page"],["header","#10 Juni","Pivote"],["chart",12,26,120,[],"US",false],["table",{"head":["Dato","Valor",""],"body":[["Goles","0/0","– de acierto"],["Parados",0,"por el portero rival"],["Fallados",0,"fuera · palo · bloqueado"],["Pases de gol",0,""],["Provoca 7 m",0,""],["Recuperaciones",1,""],["Blocajes",0,""],["Pérdidas",0,""],["Fallos defensivos",0,""],["Sanciones","–",""]],"startY":30,"left":140,"width":69.5}],["table",{"title":"Por zona","head":["Zona","Lanz.","Goles","Parados","Fallados","% gol"],"body":[["6 m",0,0,0,0,"–"],["9 m",0,0,0,0,"–"],["+11 m",0,0,0,0,"–"],["Contra",0,0,0,0,"–"],["7 m",0,0,0,0,"–"],["Total",0,0,0,0,"–"]],"startY":30,"left":215.5,"width":69.5}],["table",{"title":"Pérdidas por tipo","head":["Tipo","N"],"body":[["Ninguno",0]],"startY":40,"left":140,"width":69.5}],["table",{"title":"Fallos defensivos","head":["Tipo","N"],"body":[["Ninguno",0]],"startY":40,"left":215.5,"width":69.5}],["table",{"title":"Cronología","head":["Min","Acción"],"body":[["07:50","Recuperación"]],"startY":50,"left":140}],["page"],["header","#11 Bokiki","Central"],["chart",12,26,120,[],"US",false],["table",{"head":["Dato","Valor",""],"body":[["Goles","0/0","– de acierto"],["Parados",0,"por el portero rival"],["Fallados",0,"fuera · palo · bloqueado"],["Pases de gol",0,""],["Provoca 7 m",0,""],["Recuperaciones",0,""],["Blocajes",0,""],["Pérdidas",0,""],["Fallos defensivos",0,""],["Sanciones","–",""]],"startY":30,"left":140,"width":69.5}],["table",{"title":"Por zona","head":["Zona","Lanz.","Goles","Parados","Fallados","% gol"],"body":[["6 m",0,0,0,0,"–"],["9 m",0,0,0,0,"–"],["+11 m",0,0,0,0,"–"],["Contra",0,0,0,0,"–"],["7 m",0,0,0,0,"–"],["Total",0,0,0,0,"–"]],"startY":30,"left":215.5,"width":69.5}],["table",{"title":"Pérdidas por tipo","head":["Tipo","N"],"body":[["Ninguno",0]],"startY":40,"left":140,"width":69.5}],["table",{"title":"Fallos defensivos","head":["Tipo","N"],"body":[["Ninguno",0]],"startY":40,"left":215.5,"width":69.5}],["table",{"title":"Cronología","head":["Min","Acción"],"body":[["-","Sin acciones"]],"startY":50,"left":140}],["page"],["header","#13 Kike","Pivote"],["chart",12,26,120,[],"US",false],["table",{"head":["Dato","Valor",""],"body":[["Goles","0/0","– de acierto"],["Parados",0,"por el portero rival"],["Fallados",0,"fuera · palo · bloqueado"],["Pases de gol",0,""],["Provoca 7 m",0,""],["Recuperaciones",0,""],["Blocajes",0,""],["Pérdidas",0,""],["Fallos defensivos",0,""],["Sanciones","1 2'",""]],"startY":30,"left":140,"width":69.5}],["table",{"title":"Por zona","head":["Zona","Lanz.","Goles","Parados","Fallados","% gol"],"body":[["6 m",0,0,0,0,"–"],["9 m",0,0,0,0,"–"],["+11 m",0,0,0,0,"–"],["Contra",0,0,0,0,"–"],["7 m",0,0,0,0,"–"],["Total",0,0,0,0,"–"]],"startY":30,"left":215.5,"width":69.5}],["table",{"title":"Pérdidas por tipo","head":["Tipo","N"],"body":[["Ninguno",0]],"startY":40,"left":140,"width":69.5}],["table",{"title":"Fallos defensivos","head":["Tipo","N"],"body":[["Ninguno",0]],"startY":40,"left":215.5,"width":69.5}],["table",{"title":"Cronología","head":["Min","Acción"],"body":[["11:40","Exclusión 2'"]],"startY":50,"left":140}],["page"],["header","#14 Achi","Pivote"],["chart",12,26,120,[],"US",false],["table",{"head":["Dato","Valor",""],"body":[["Goles","0/0","– de acierto"],["Parados",0,"por el portero rival"],["Fallados",0,"fuera · palo · bloqueado"],["Pases de gol",0,""],["Provoca 7 m",0,""],["Recuperaciones",0,""],["Blocajes",0,""],["Pérdidas",0,""],["Fallos defensivos",0,""],["Sanciones","–",""]],"startY":30,"left":140,"width":69.5}],["table",{"title":"Por zona","head":["Zona","Lanz.","Goles","Parados","Fallados","% gol"],"body":[["6 m",0,0,0,0,"–"],["9 m",0,0,0,0,"–"],["+11 m",0,0,0,0,"–"],["Contra",0,0,0,0,"–"],["7 m",0,0,0,0,"–"],["Total",0,0,0,0,"–"]],"startY":30,"left":215.5,"width":69.5}],["table",{"title":"Pérdidas por tipo","head":["Tipo","N"],"body":[["Ninguno",0]],"startY":40,"left":140,"width":69.5}],["table",{"title":"Fallos defensivos","head":["Tipo","N"],"body":[["Ninguno",0]],"startY":40,"left":215.5,"width":69.5}],["table",{"title":"Cronología","head":["Min","Acción"],"body":[["-","Sin acciones"]],"startY":50,"left":140}],["page"],["header","#17 Jenny","Extremo"],["chart",12,26,120,["130:6M:PARADA","745:6M:GOL"],"US",false],["table",{"head":["Dato","Valor",""],"body":[["Goles","1/2","50% de acierto"],["Parados",1,"por el portero rival"],["Fallados",0,"fuera · palo · bloqueado"],["Pases de gol",0,""],["Provoca 7 m",0,""],["Recuperaciones",0,""],["Blocajes",0,""],["Pérdidas",0,""],["Fallos defensivos",0,""],["Sanciones","–",""]],"startY":30,"left":140,"width":69.5}],["table",{"title":"Por zona","head":["Zona","Lanz.","Goles","Parados","Fallados","% gol"],"body":[["6 m",2,1,1,0,"50%"],["9 m",0,0,0,0,"–"],["+11 m",0,0,0,0,"–"],["Contra",0,0,0,0,"–"],["7 m",0,0,0,0,"–"],["Total",2,1,1,0,"50%"]],"startY":30,"left":215.5,"width":69.5}],["table",{"title":"Pérdidas por tipo","head":["Tipo","N"],"body":[["Ninguno",0]],"startY":40,"left":140,"width":69.5}],["table",{"title":"Fallos defensivos","head":["Tipo","N"],"body":[["Ninguno",0]],"startY":40,"left":215.5,"width":69.5}],["table",{"title":"Cronología","head":["Min","Acción"],"body":[["02:10","Parada 6 m"],["12:25","Gol 6 m"]],"startY":50,"left":140}],["page"],["header","#18 Iker","Lateral"],["chart",12,26,120,["190:9M:GOL"],"US",false],["table",{"head":["Dato","Valor",""],"body":[["Goles","1/1","100% de acierto"],["Parados",0,"por el portero rival"],["Fallados",0,"fuera · palo · bloqueado"],["Pases de gol",0,""],["Provoca 7 m",0,""],["Recuperaciones",0,""],["Blocajes",1,""],["Pérdidas",0,""],["Fallos defensivos",0,""],["Sanciones","–",""]],"startY":30,"left":140,"width":69.5}],["table",{"title":"Por zona","head":["Zona","Lanz.","Goles","Parados","Fallados","% gol"],"body":[["6 m",0,0,0,0,"–"],["9 m",1,1,0,0,"100%"],["+11 m",0,0,0,0,"–"],["Contra",0,0,0,0,"–"],["7 m",0,0,0,0,"–"],["Total",1,1,0,0,"100%"]],"startY":30,"left":215.5,"width":69.5}],["table",{"title":"Pérdidas por tipo","head":["Tipo","N"],"body":[["Ninguno",0]],"startY":40,"left":140,"width":69.5}],["table",{"title":"Fallos defensivos","head":["Tipo","N"],"body":[["Ninguno",0]],"startY":40,"left":215.5,"width":69.5}],["table",{"title":"Cronología","head":["Min","Acción"],"body":[["03:10","Gol 9 m"],["12:15","Blocaje"]],"startY":50,"left":140}],["page"],["header","#19 Gonzalo","Central"],["chart",12,26,120,[],"US",false],["table",{"head":["Dato","Valor",""],"body":[["Goles","0/0","– de acierto"],["Parados",0,"por el portero rival"],["Fallados",0,"fuera · palo · bloqueado"],["Pases de gol",1,""],["Provoca 7 m",0,""],["Recuperaciones",0,""],["Blocajes",0,""],["Pérdidas",0,""],["Fallos defensivos",0,""],["Sanciones","–",""]],"startY":30,"left":140,"width":69.5}],["table",{"title":"Por zona","head":["Zona","Lanz.","Goles","Parados","Fallados","% gol"],"body":[["6 m",0,0,0,0,"–"],["9 m",0,0,0,0,"–"],["+11 m",0,0,0,0,"–"],["Contra",0,0,0,0,"–"],["7 m",0,0,0,0,"–"],["Total",0,0,0,0,"–"]],"startY":30,"left":215.5,"width":69.5}],["table",{"title":"Pérdidas por tipo","head":["Tipo","N"],"body":[["Ninguno",0]],"startY":40,"left":140,"width":69.5}],["table",{"title":"Fallos defensivos","head":["Tipo","N"],"body":[["Ninguno",0]],"startY":40,"left":215.5,"width":69.5}],["table",{"title":"Cronología","head":["Min","Acción"],"body":[["06:40","Pase de gol"]],"startY":50,"left":140}],["page"],["header","#21 Jaime","Lateral"],["chart",12,26,120,["401:CONTRA:GOL"],"US",false],["table",{"head":["Dato","Valor",""],"body":[["Goles","1/1","100% de acierto"],["Parados",0,"por el portero rival"],["Fallados",0,"fuera · palo · bloqueado"],["Pases de gol",0,""],["Provoca 7 m",0,""],["Recuperaciones",0,""],["Blocajes",0,""],["Pérdidas",0,""],["Fallos defensivos",0,""],["Sanciones","–",""]],"startY":30,"left":140,"width":69.5}],["table",{"title":"Por zona","head":["Zona","Lanz.","Goles","Parados","Fallados","% gol"],"body":[["6 m",0,0,0,0,"–"],["9 m",0,0,0,0,"–"],["+11 m",0,0,0,0,"–"],["Contra",1,1,0,0,"100%"],["7 m",0,0,0,0,"–"],["Total",1,1,0,0,"100%"]],"startY":30,"left":215.5,"width":69.5}],["table",{"title":"Pérdidas por tipo","head":["Tipo","N"],"body":[["Ninguno",0]],"startY":40,"left":140,"width":69.5}],["table",{"title":"Fallos defensivos","head":["Tipo","N"],"body":[["Ninguno",0]],"startY":40,"left":215.5,"width":69.5}],["table",{"title":"Cronología","head":["Min","Acción"],"body":[["06:41","Gol Contra"]],"startY":50,"left":140}],["page"],["header","#22 Diego","Extremo"],["chart",12,26,120,["480:CONTRA:GOL"],"US",false],["table",{"head":["Dato","Valor",""],"body":[["Goles","1/1","100% de acierto"],["Parados",0,"por el portero rival"],["Fallados",0,"fuera · palo · bloqueado"],["Pases de gol",0,""],["Provoca 7 m",0,""],["Recuperaciones",0,""],["Blocajes",0,""],["Pérdidas",0,""],["Fallos defensivos",0,""],["Sanciones","–",""]],"startY":30,"left":140,"width":69.5}],["table",{"title":"Por zona","head":["Zona","Lanz.","Goles","Parados","Fallados","% gol"],"body":[["6 m",0,0,0,0,"–"],["9 m",0,0,0,0,"–"],["+11 m",0,0,0,0,"–"],["Contra",1,1,0,0,"100%"],["7 m",0,0,0,0,"–"],["Total",1,1,0,0,"100%"]],"startY":30,"left":215.5,"width":69.5}],["table",{"title":"Pérdidas por tipo","head":["Tipo","N"],"body":[["Ninguno",0]],"startY":40,"left":140,"width":69.5}],["table",{"title":"Fallos defensivos","head":["Tipo","N"],"body":[["Ninguno",0]],"startY":40,"left":215.5,"width":69.5}],["table",{"title":"Cronología","head":["Min","Acción"],"body":[["08:00","Gol Contra"]],"startY":50,"left":140}],["page"],["header","#25 Nacho","Extremo"],["chart",12,26,120,[],"US",false],["table",{"head":["Dato","Valor",""],"body":[["Goles","0/0","– de acierto"],["Parados",0,"por el portero rival"],["Fallados",0,"fuera · palo · bloqueado"],["Pases de gol",0,""],["Provoca 7 m",0,""],["Recuperaciones",0,""],["Blocajes",0,""],["Pérdidas",0,""],["Fallos defensivos",0,""],["Sanciones","–",""]],"startY":30,"left":140,"width":69.5}],["table",{"title":"Por zona","head":["Zona","Lanz.","Goles","Parados","Fallados","% gol"],"body":[["6 m",0,0,0,0,"–"],["9 m",0,0,0,0,"–"],["+11 m",0,0,0,0,"–"],["Contra",0,0,0,0,"–"],["7 m",0,0,0,0,"–"],["Total",0,0,0,0,"–"]],"startY":30,"left":215.5,"width":69.5}],["table",{"title":"Pérdidas por tipo","head":["Tipo","N"],"body":[["Ninguno",0]],"startY":40,"left":140,"width":69.5}],["table",{"title":"Fallos defensivos","head":["Tipo","N"],"body":[["Ninguno",0]],"startY":40,"left":215.5,"width":69.5}],["table",{"title":"Cronología","head":["Min","Acción"],"body":[["-","Sin acciones"]],"startY":50,"left":140}],["page"],["header","#77 Sergio","Lateral"],["chart",12,26,120,["590:7M:GOL"],"US",false],["table",{"head":["Dato","Valor",""],"body":[["Goles","1/1","100% de acierto"],["Parados",0,"por el portero rival"],["Fallados",0,"fuera · palo · bloqueado"],["Pases de gol",0,""],["Provoca 7 m",0,""],["Recuperaciones",0,""],["Blocajes",0,""],["Pérdidas",0,""],["Fallos defensivos",0,""],["Sanciones","–",""]],"startY":30,"left":140,"width":69.5}],["table",{"title":"Por zona","head":["Zona","Lanz.","Goles","Parados","Fallados","% gol"],"body":[["6 m",0,0,0,0,"–"],["9 m",0,0,0,0,"–"],["+11 m",0,0,0,0,"–"],["Contra",0,0,0,0,"–"],["7 m",1,1,0,0,"100%"],["Total",1,1,0,0,"100%"]],"startY":30,"left":215.5,"width":69.5}],["table",{"title":"Pérdidas por tipo","head":["Tipo","N"],"body":[["Ninguno",0]],"startY":40,"left":140,"width":69.5}],["table",{"title":"Fallos defensivos","head":["Tipo","N"],"body":[["Ninguno",0]],"startY":40,"left":215.5,"width":69.5}],["table",{"title":"Cronología","head":["Min","Acción"],"body":[["09:50","Gol 7 m"]],"startY":50,"left":140}],["page"],["header","#1 Jose","Portero"],["chart",12,26,120,["45:9M:GOL","160:6M:PARADA","230:6M:GOL","350:9M:GOL","450:9M:PARADA","540:7M:GOL","630:6M:PARADA","670:9M:FUERA","720:6M:GOL"],"GK",true],["table",{"head":["Dato","Valor",""],"body":[["Paradas","38%","3/8 a puerta"],["Detenidos",3,""],["Encajados",5,""],["Fuera · palo · bloq.",1,"sin ir a puerta"],["7 m parados","0/1",""]],"startY":30,"left":140}],["table",{"title":"Por zona de lanzamiento","head":["Zona","Recibidos","A puerta","Detenidos","Encajados","% paradas"],"body":[["6 m",4,4,2,2,"50%"],["9 m",3,2,1,1,"50%"],["+11 m",0,0,0,0,"–"],["Contra",1,1,0,1,"0%"],["7 m",1,1,0,1,"0%"],["Total",9,8,3,5,"38%"]],"startY":40,"left":140}],["table",{"title":"Detenidos (vista del lanzador)","head":["","Izq.","Centro","Der."],"body":[["Arriba",1,0,0],["Medio",0,1,0],["Abajo",1,0,0]],"startY":50,"left":140,"width":69.5}],["table",{"title":"Encajados (vista del lanzador)","head":["","Izq.","Centro","Der."],"body":[["Arriba",1,0,2],["Medio",0,0,0],["Abajo",1,0,1]],"startY":50,"left":215.5,"width":69.5}],["page"],["header","#12 Verdugo","Portero"],["chart",12,26,120,[],"GK",true],["table",{"head":["Dato","Valor",""],"body":[["Paradas","–","0/0 a puerta"],["Detenidos",0,""],["Encajados",0,""],["Fuera · palo · bloq.",0,"sin ir a puerta"],["7 m parados","0/0",""]],"startY":30,"left":140}],["table",{"title":"Por zona de lanzamiento","head":["Zona","Recibidos","A puerta","Detenidos","Encajados","% paradas"],"body":[["6 m",0,0,0,0,"–"],["9 m",0,0,0,0,"–"],["+11 m",0,0,0,0,"–"],["Contra",0,0,0,0,"–"],["7 m",0,0,0,0,"–"],["Total",0,0,0,0,"–"]],"startY":40,"left":140}],["table",{"title":"Detenidos (vista del lanzador)","head":["","Izq.","Centro","Der."],"body":[["Arriba",0,0,0],["Medio",0,0,0],["Abajo",0,0,0]],"startY":50,"left":140,"width":69.5}],["table",{"title":"Encajados (vista del lanzador)","head":["","Izq.","Centro","Der."],"body":[["Arriba",0,0,0],["Medio",0,0,0],["Abajo",0,0,0]],"startY":50,"left":215.5,"width":69.5}]];
+  const PDF_PLAYERS_SNAPSHOT = [["header","#3 Raulito","Extremo"],["chart",12,26,120,[],"US",false],["table",{"head":["Dato","Valor",""],"body":[["Goles","0/0","sin lanzamientos"],["Parados",0,"por el portero rival"],["Fallados",0,"fuera · palo · bloqueado"],["Pases de gol",0,""],["Provoca 7 m",0,""],["Recuperaciones",0,""],["Blocajes",0,""],["Pérdidas",0,""],["Fallos defensivos",0,""],["Sanciones","–",""]],"startY":30,"left":140,"width":69.5}],["table",{"title":"Por zona","head":["Zona","Lanz.","Goles","Parados","Fallados","% gol"],"body":[["6 m",0,0,0,0,"–"],["9 m",0,0,0,0,"–"],["+11 m",0,0,0,0,"–"],["Contra",0,0,0,0,"–"],["7 m",0,0,0,0,"–"],["Total",0,0,0,0,"–"]],"startY":30,"left":215.5,"width":69.5}],["table",{"title":"Pérdidas por tipo","head":["Tipo","N"],"body":[["Ninguno",0]],"startY":40,"left":140,"width":69.5}],["table",{"title":"Fallos defensivos","head":["Tipo","N"],"body":[["Ninguno",0]],"startY":40,"left":215.5,"width":69.5}],["table",{"title":"Cronología","head":["Min","Acción"],"body":[["–","Sin acciones"]],"startY":50,"left":140}],["page"],["header","#5 Marcos","Lateral"],["chart",12,26,120,[],"US",false],["table",{"head":["Dato","Valor",""],"body":[["Goles","0/0","sin lanzamientos"],["Parados",0,"por el portero rival"],["Fallados",0,"fuera · palo · bloqueado"],["Pases de gol",0,""],["Provoca 7 m",0,""],["Recuperaciones",0,""],["Blocajes",0,""],["Pérdidas",1,""],["Fallos defensivos",0,""],["Sanciones","–",""]],"startY":30,"left":140,"width":69.5}],["table",{"title":"Por zona","head":["Zona","Lanz.","Goles","Parados","Fallados","% gol"],"body":[["6 m",0,0,0,0,"–"],["9 m",0,0,0,0,"–"],["+11 m",0,0,0,0,"–"],["Contra",0,0,0,0,"–"],["7 m",0,0,0,0,"–"],["Total",0,0,0,0,"–"]],"startY":30,"left":215.5,"width":69.5}],["table",{"title":"Pérdidas por tipo","head":["Tipo","N"],"body":[["Pasos",1]],"startY":40,"left":140,"width":69.5}],["table",{"title":"Fallos defensivos","head":["Tipo","N"],"body":[["Ninguno",0]],"startY":40,"left":215.5,"width":69.5}],["table",{"title":"Cronología","head":["Min","Acción"],"body":[["05:20","Pérdida pasos"]],"startY":50,"left":140}],["page"],["header","#8 Alex","Lateral"],["chart",12,26,120,["80:9M:GOL","690:9M:FUERA"],"US",false],["table",{"head":["Dato","Valor",""],"body":[["Goles","1/2","50% de acierto"],["Parados",0,"por el portero rival"],["Fallados",1,"fuera · palo · bloqueado"],["Pases de gol",0,""],["Provoca 7 m",0,""],["Recuperaciones",0,""],["Blocajes",0,""],["Pérdidas",1,""],["Fallos defensivos",0,""],["Sanciones","–",""]],"startY":30,"left":140,"width":69.5}],["table",{"title":"Por zona","head":["Zona","Lanz.","Goles","Parados","Fallados","% gol"],"body":[["6 m",0,0,0,0,"–"],["9 m",2,1,0,1,"50%"],["+11 m",0,0,0,0,"–"],["Contra",0,0,0,0,"–"],["7 m",0,0,0,0,"–"],["Total",2,1,0,1,"50%"]],"startY":30,"left":215.5,"width":69.5}],["table",{"title":"Pérdidas por tipo","head":["Tipo","N"],"body":[["Falta ataque",1]],"startY":40,"left":140,"width":69.5}],["table",{"title":"Fallos defensivos","head":["Tipo","N"],"body":[["Ninguno",0]],"startY":40,"left":215.5,"width":69.5}],["table",{"title":"Cronología","head":["Min","Acción"],"body":[["01:20","Gol 9 m"],["10:50","Pérdida falta ataque"],["11:30","Fuera 9 m"]],"startY":50,"left":140}],["page"],["header","#10 Juni","Pivote"],["chart",12,26,120,[],"US",false],["table",{"head":["Dato","Valor",""],"body":[["Goles","0/0","sin lanzamientos"],["Parados",0,"por el portero rival"],["Fallados",0,"fuera · palo · bloqueado"],["Pases de gol",0,""],["Provoca 7 m",0,""],["Recuperaciones",1,""],["Blocajes",0,""],["Pérdidas",0,""],["Fallos defensivos",0,""],["Sanciones","–",""]],"startY":30,"left":140,"width":69.5}],["table",{"title":"Por zona","head":["Zona","Lanz.","Goles","Parados","Fallados","% gol"],"body":[["6 m",0,0,0,0,"–"],["9 m",0,0,0,0,"–"],["+11 m",0,0,0,0,"–"],["Contra",0,0,0,0,"–"],["7 m",0,0,0,0,"–"],["Total",0,0,0,0,"–"]],"startY":30,"left":215.5,"width":69.5}],["table",{"title":"Pérdidas por tipo","head":["Tipo","N"],"body":[["Ninguno",0]],"startY":40,"left":140,"width":69.5}],["table",{"title":"Fallos defensivos","head":["Tipo","N"],"body":[["Ninguno",0]],"startY":40,"left":215.5,"width":69.5}],["table",{"title":"Cronología","head":["Min","Acción"],"body":[["07:50","Recuperación"]],"startY":50,"left":140}],["page"],["header","#11 Bokiki","Central"],["chart",12,26,120,[],"US",false],["table",{"head":["Dato","Valor",""],"body":[["Goles","0/0","sin lanzamientos"],["Parados",0,"por el portero rival"],["Fallados",0,"fuera · palo · bloqueado"],["Pases de gol",0,""],["Provoca 7 m",0,""],["Recuperaciones",0,""],["Blocajes",0,""],["Pérdidas",0,""],["Fallos defensivos",0,""],["Sanciones","–",""]],"startY":30,"left":140,"width":69.5}],["table",{"title":"Por zona","head":["Zona","Lanz.","Goles","Parados","Fallados","% gol"],"body":[["6 m",0,0,0,0,"–"],["9 m",0,0,0,0,"–"],["+11 m",0,0,0,0,"–"],["Contra",0,0,0,0,"–"],["7 m",0,0,0,0,"–"],["Total",0,0,0,0,"–"]],"startY":30,"left":215.5,"width":69.5}],["table",{"title":"Pérdidas por tipo","head":["Tipo","N"],"body":[["Ninguno",0]],"startY":40,"left":140,"width":69.5}],["table",{"title":"Fallos defensivos","head":["Tipo","N"],"body":[["Ninguno",0]],"startY":40,"left":215.5,"width":69.5}],["table",{"title":"Cronología","head":["Min","Acción"],"body":[["–","Sin acciones"]],"startY":50,"left":140}],["page"],["header","#13 Kike","Pivote"],["chart",12,26,120,[],"US",false],["table",{"head":["Dato","Valor",""],"body":[["Goles","0/0","sin lanzamientos"],["Parados",0,"por el portero rival"],["Fallados",0,"fuera · palo · bloqueado"],["Pases de gol",0,""],["Provoca 7 m",0,""],["Recuperaciones",0,""],["Blocajes",0,""],["Pérdidas",0,""],["Fallos defensivos",0,""],["Sanciones","1 2'",""]],"startY":30,"left":140,"width":69.5}],["table",{"title":"Por zona","head":["Zona","Lanz.","Goles","Parados","Fallados","% gol"],"body":[["6 m",0,0,0,0,"–"],["9 m",0,0,0,0,"–"],["+11 m",0,0,0,0,"–"],["Contra",0,0,0,0,"–"],["7 m",0,0,0,0,"–"],["Total",0,0,0,0,"–"]],"startY":30,"left":215.5,"width":69.5}],["table",{"title":"Pérdidas por tipo","head":["Tipo","N"],"body":[["Ninguno",0]],"startY":40,"left":140,"width":69.5}],["table",{"title":"Fallos defensivos","head":["Tipo","N"],"body":[["Ninguno",0]],"startY":40,"left":215.5,"width":69.5}],["table",{"title":"Cronología","head":["Min","Acción"],"body":[["11:40","Exclusión 2'"]],"startY":50,"left":140}],["page"],["header","#14 Achi","Pivote"],["chart",12,26,120,[],"US",false],["table",{"head":["Dato","Valor",""],"body":[["Goles","0/0","sin lanzamientos"],["Parados",0,"por el portero rival"],["Fallados",0,"fuera · palo · bloqueado"],["Pases de gol",0,""],["Provoca 7 m",0,""],["Recuperaciones",0,""],["Blocajes",0,""],["Pérdidas",0,""],["Fallos defensivos",0,""],["Sanciones","–",""]],"startY":30,"left":140,"width":69.5}],["table",{"title":"Por zona","head":["Zona","Lanz.","Goles","Parados","Fallados","% gol"],"body":[["6 m",0,0,0,0,"–"],["9 m",0,0,0,0,"–"],["+11 m",0,0,0,0,"–"],["Contra",0,0,0,0,"–"],["7 m",0,0,0,0,"–"],["Total",0,0,0,0,"–"]],"startY":30,"left":215.5,"width":69.5}],["table",{"title":"Pérdidas por tipo","head":["Tipo","N"],"body":[["Ninguno",0]],"startY":40,"left":140,"width":69.5}],["table",{"title":"Fallos defensivos","head":["Tipo","N"],"body":[["Ninguno",0]],"startY":40,"left":215.5,"width":69.5}],["table",{"title":"Cronología","head":["Min","Acción"],"body":[["–","Sin acciones"]],"startY":50,"left":140}],["page"],["header","#17 Jenny","Extremo"],["chart",12,26,120,["130:6M:PARADA","745:6M:GOL"],"US",false],["table",{"head":["Dato","Valor",""],"body":[["Goles","1/2","50% de acierto"],["Parados",1,"por el portero rival"],["Fallados",0,"fuera · palo · bloqueado"],["Pases de gol",0,""],["Provoca 7 m",0,""],["Recuperaciones",0,""],["Blocajes",0,""],["Pérdidas",0,""],["Fallos defensivos",0,""],["Sanciones","–",""]],"startY":30,"left":140,"width":69.5}],["table",{"title":"Por zona","head":["Zona","Lanz.","Goles","Parados","Fallados","% gol"],"body":[["6 m",2,1,1,0,"50%"],["9 m",0,0,0,0,"–"],["+11 m",0,0,0,0,"–"],["Contra",0,0,0,0,"–"],["7 m",0,0,0,0,"–"],["Total",2,1,1,0,"50%"]],"startY":30,"left":215.5,"width":69.5}],["table",{"title":"Pérdidas por tipo","head":["Tipo","N"],"body":[["Ninguno",0]],"startY":40,"left":140,"width":69.5}],["table",{"title":"Fallos defensivos","head":["Tipo","N"],"body":[["Ninguno",0]],"startY":40,"left":215.5,"width":69.5}],["table",{"title":"Cronología","head":["Min","Acción"],"body":[["02:10","Parada 6 m"],["12:25","Gol 6 m"]],"startY":50,"left":140}],["page"],["header","#18 Iker","Lateral"],["chart",12,26,120,["190:9M:GOL"],"US",false],["table",{"head":["Dato","Valor",""],"body":[["Goles","1/1","100% de acierto"],["Parados",0,"por el portero rival"],["Fallados",0,"fuera · palo · bloqueado"],["Pases de gol",0,""],["Provoca 7 m",0,""],["Recuperaciones",0,""],["Blocajes",1,""],["Pérdidas",0,""],["Fallos defensivos",0,""],["Sanciones","–",""]],"startY":30,"left":140,"width":69.5}],["table",{"title":"Por zona","head":["Zona","Lanz.","Goles","Parados","Fallados","% gol"],"body":[["6 m",0,0,0,0,"–"],["9 m",1,1,0,0,"100%"],["+11 m",0,0,0,0,"–"],["Contra",0,0,0,0,"–"],["7 m",0,0,0,0,"–"],["Total",1,1,0,0,"100%"]],"startY":30,"left":215.5,"width":69.5}],["table",{"title":"Pérdidas por tipo","head":["Tipo","N"],"body":[["Ninguno",0]],"startY":40,"left":140,"width":69.5}],["table",{"title":"Fallos defensivos","head":["Tipo","N"],"body":[["Ninguno",0]],"startY":40,"left":215.5,"width":69.5}],["table",{"title":"Cronología","head":["Min","Acción"],"body":[["03:10","Gol 9 m"],["12:15","Blocaje"]],"startY":50,"left":140}],["page"],["header","#19 Gonzalo","Central"],["chart",12,26,120,[],"US",false],["table",{"head":["Dato","Valor",""],"body":[["Goles","0/0","sin lanzamientos"],["Parados",0,"por el portero rival"],["Fallados",0,"fuera · palo · bloqueado"],["Pases de gol",1,""],["Provoca 7 m",0,""],["Recuperaciones",0,""],["Blocajes",0,""],["Pérdidas",0,""],["Fallos defensivos",0,""],["Sanciones","–",""]],"startY":30,"left":140,"width":69.5}],["table",{"title":"Por zona","head":["Zona","Lanz.","Goles","Parados","Fallados","% gol"],"body":[["6 m",0,0,0,0,"–"],["9 m",0,0,0,0,"–"],["+11 m",0,0,0,0,"–"],["Contra",0,0,0,0,"–"],["7 m",0,0,0,0,"–"],["Total",0,0,0,0,"–"]],"startY":30,"left":215.5,"width":69.5}],["table",{"title":"Pérdidas por tipo","head":["Tipo","N"],"body":[["Ninguno",0]],"startY":40,"left":140,"width":69.5}],["table",{"title":"Fallos defensivos","head":["Tipo","N"],"body":[["Ninguno",0]],"startY":40,"left":215.5,"width":69.5}],["table",{"title":"Cronología","head":["Min","Acción"],"body":[["06:40","Pase de gol"]],"startY":50,"left":140}],["page"],["header","#21 Jaime","Lateral"],["chart",12,26,120,["401:CONTRA:GOL"],"US",false],["table",{"head":["Dato","Valor",""],"body":[["Goles","1/1","100% de acierto"],["Parados",0,"por el portero rival"],["Fallados",0,"fuera · palo · bloqueado"],["Pases de gol",0,""],["Provoca 7 m",0,""],["Recuperaciones",0,""],["Blocajes",0,""],["Pérdidas",0,""],["Fallos defensivos",0,""],["Sanciones","–",""]],"startY":30,"left":140,"width":69.5}],["table",{"title":"Por zona","head":["Zona","Lanz.","Goles","Parados","Fallados","% gol"],"body":[["6 m",0,0,0,0,"–"],["9 m",0,0,0,0,"–"],["+11 m",0,0,0,0,"–"],["Contra",1,1,0,0,"100%"],["7 m",0,0,0,0,"–"],["Total",1,1,0,0,"100%"]],"startY":30,"left":215.5,"width":69.5}],["table",{"title":"Pérdidas por tipo","head":["Tipo","N"],"body":[["Ninguno",0]],"startY":40,"left":140,"width":69.5}],["table",{"title":"Fallos defensivos","head":["Tipo","N"],"body":[["Ninguno",0]],"startY":40,"left":215.5,"width":69.5}],["table",{"title":"Cronología","head":["Min","Acción"],"body":[["06:41","Gol Contra"]],"startY":50,"left":140}],["page"],["header","#22 Diego","Extremo"],["chart",12,26,120,["480:CONTRA:GOL"],"US",false],["table",{"head":["Dato","Valor",""],"body":[["Goles","1/1","100% de acierto"],["Parados",0,"por el portero rival"],["Fallados",0,"fuera · palo · bloqueado"],["Pases de gol",0,""],["Provoca 7 m",0,""],["Recuperaciones",0,""],["Blocajes",0,""],["Pérdidas",0,""],["Fallos defensivos",0,""],["Sanciones","–",""]],"startY":30,"left":140,"width":69.5}],["table",{"title":"Por zona","head":["Zona","Lanz.","Goles","Parados","Fallados","% gol"],"body":[["6 m",0,0,0,0,"–"],["9 m",0,0,0,0,"–"],["+11 m",0,0,0,0,"–"],["Contra",1,1,0,0,"100%"],["7 m",0,0,0,0,"–"],["Total",1,1,0,0,"100%"]],"startY":30,"left":215.5,"width":69.5}],["table",{"title":"Pérdidas por tipo","head":["Tipo","N"],"body":[["Ninguno",0]],"startY":40,"left":140,"width":69.5}],["table",{"title":"Fallos defensivos","head":["Tipo","N"],"body":[["Ninguno",0]],"startY":40,"left":215.5,"width":69.5}],["table",{"title":"Cronología","head":["Min","Acción"],"body":[["08:00","Gol Contra"]],"startY":50,"left":140}],["page"],["header","#25 Nacho","Extremo"],["chart",12,26,120,[],"US",false],["table",{"head":["Dato","Valor",""],"body":[["Goles","0/0","sin lanzamientos"],["Parados",0,"por el portero rival"],["Fallados",0,"fuera · palo · bloqueado"],["Pases de gol",0,""],["Provoca 7 m",0,""],["Recuperaciones",0,""],["Blocajes",0,""],["Pérdidas",0,""],["Fallos defensivos",0,""],["Sanciones","–",""]],"startY":30,"left":140,"width":69.5}],["table",{"title":"Por zona","head":["Zona","Lanz.","Goles","Parados","Fallados","% gol"],"body":[["6 m",0,0,0,0,"–"],["9 m",0,0,0,0,"–"],["+11 m",0,0,0,0,"–"],["Contra",0,0,0,0,"–"],["7 m",0,0,0,0,"–"],["Total",0,0,0,0,"–"]],"startY":30,"left":215.5,"width":69.5}],["table",{"title":"Pérdidas por tipo","head":["Tipo","N"],"body":[["Ninguno",0]],"startY":40,"left":140,"width":69.5}],["table",{"title":"Fallos defensivos","head":["Tipo","N"],"body":[["Ninguno",0]],"startY":40,"left":215.5,"width":69.5}],["table",{"title":"Cronología","head":["Min","Acción"],"body":[["–","Sin acciones"]],"startY":50,"left":140}],["page"],["header","#77 Sergio","Lateral"],["chart",12,26,120,["590:7M:GOL"],"US",false],["table",{"head":["Dato","Valor",""],"body":[["Goles","1/1","100% de acierto"],["Parados",0,"por el portero rival"],["Fallados",0,"fuera · palo · bloqueado"],["Pases de gol",0,""],["Provoca 7 m",0,""],["Recuperaciones",0,""],["Blocajes",0,""],["Pérdidas",0,""],["Fallos defensivos",0,""],["Sanciones","–",""]],"startY":30,"left":140,"width":69.5}],["table",{"title":"Por zona","head":["Zona","Lanz.","Goles","Parados","Fallados","% gol"],"body":[["6 m",0,0,0,0,"–"],["9 m",0,0,0,0,"–"],["+11 m",0,0,0,0,"–"],["Contra",0,0,0,0,"–"],["7 m",1,1,0,0,"100%"],["Total",1,1,0,0,"100%"]],"startY":30,"left":215.5,"width":69.5}],["table",{"title":"Pérdidas por tipo","head":["Tipo","N"],"body":[["Ninguno",0]],"startY":40,"left":140,"width":69.5}],["table",{"title":"Fallos defensivos","head":["Tipo","N"],"body":[["Ninguno",0]],"startY":40,"left":215.5,"width":69.5}],["table",{"title":"Cronología","head":["Min","Acción"],"body":[["09:50","Gol 7 m"]],"startY":50,"left":140}],["page"],["header","#1 Jose","Portero"],["chart",12,26,120,["45:9M:GOL","160:6M:PARADA","230:6M:GOL","350:9M:GOL","450:9M:PARADA","540:7M:GOL","630:6M:PARADA","670:9M:FUERA","720:6M:GOL"],"GK",true],["table",{"head":["Dato","Valor",""],"body":[["Paradas","38%","3/8 a puerta"],["Detenidos",3,""],["Encajados",5,""],["Fuera · palo · bloq.",1,"sin ir a puerta"],["7 m parados","0/1",""]],"startY":30,"left":140}],["table",{"title":"Por zona de lanzamiento","head":["Zona","Recibidos","A puerta","Detenidos","Encajados","% paradas"],"body":[["6 m",4,4,2,2,"50%"],["9 m",3,2,1,1,"50%"],["+11 m",0,0,0,0,"–"],["Contra",1,1,0,1,"0%"],["7 m",1,1,0,1,"0%"],["Total",9,8,3,5,"38%"]],"startY":40,"left":140}],["table",{"title":"Detenidos (vista del lanzador)","head":["","Izq.","Centro","Der."],"body":[["Arriba",1,0,0],["Medio",0,1,0],["Abajo",1,0,0]],"startY":50,"left":140,"width":69.5}],["table",{"title":"Encajados (vista del lanzador)","head":["","Izq.","Centro","Der."],"body":[["Arriba",1,0,2],["Medio",0,0,0],["Abajo",1,0,1]],"startY":50,"left":215.5,"width":69.5}],["page"],["header","#12 Verdugo","Portero"],["chart",12,26,120,[],"GK",true],["table",{"head":["Dato","Valor",""],"body":[["Paradas","–","0/0 a puerta"],["Detenidos",0,""],["Encajados",0,""],["Fuera · palo · bloq.",0,"sin ir a puerta"],["7 m parados","0/0",""]],"startY":30,"left":140}],["table",{"title":"Por zona de lanzamiento","head":["Zona","Recibidos","A puerta","Detenidos","Encajados","% paradas"],"body":[["6 m",0,0,0,0,"–"],["9 m",0,0,0,0,"–"],["+11 m",0,0,0,0,"–"],["Contra",0,0,0,0,"–"],["7 m",0,0,0,0,"–"],["Total",0,0,0,0,"–"]],"startY":40,"left":140}],["table",{"title":"Detenidos (vista del lanzador)","head":["","Izq.","Centro","Der."],"body":[["Arriba",0,0,0],["Medio",0,0,0],["Abajo",0,0,0]],"startY":50,"left":140,"width":69.5}],["table",{"title":"Encajados (vista del lanzador)","head":["","Izq.","Centro","Der."],"body":[["Arriba",0,0,0],["Medio",0,0,0],["Abajo",0,0,0]],"startY":50,"left":215.5,"width":69.5}]];
   // A different match from the sample: shifted dorsals, other team names and other events (shots, a turnover, a 2 min with its early
   // return, a rival sanction), so a helper that reads the global state instead of its argument gives a different answer.
   const SHIFTED_DORSAL = 100;
@@ -879,10 +1289,157 @@
     const now = recordPlayerPages();
     if (now !== JSON.stringify(PDF_PLAYERS_SNAPSHOT)) { const i = [...now].findIndex((c, k) => c !== JSON.stringify(PDF_PLAYERS_SNAPSHOT)[k]); throw new Error('differs at ' + i + ': ' + now.slice(i - 60, i + 60)); }
   });
+  // ---- PDF audit (M6): the row builders and the table helper run offline, over recorded drawing calls ----
+  const tablesOf = (calls) => calls.filter(([kind]) => kind === 'table').map(([, opts]) => opts);
+  const goalsShots = (cell) => cell.split('/').map(Number);
+  T('pdf: every player row has as many cells as PLAYER_HEAD', () => {
+    const snap = snapshot();
+    try {
+      state = sampleState();
+      if (PLAYER_HEAD.slice(2, 5).join() !== 'Min,+/−,Nota') throw new Error('head ' + PLAYER_HEAD.join());
+      fieldPlayers().forEach((p) => {
+        const row = playerRow(p);
+        if (row.length !== PLAYER_HEAD.length) throw new Error(`#${p.num}: ${row.length} cells for ${PLAYER_HEAD.length} columns`);
+        if (row[2] !== '–' || row[3] !== '–') throw new Error('the sample logs no court, Min and +/− read –: ' + row.slice(2, 4));
+        if (row[4] !== ratingText(ratingValue(matchRatings(state), p))) throw new Error('rating cell ' + row[4]);
+      });
+    } finally { restore(snap); }
+  });
+  T('pdf: player rows carry minutes and +/− of a court-logged match', withCourtMatch(() => {
+    setPhase('ATK'); state.autoPhase = false; atSecond(120);
+    const p = benchFieldPlayer();
+    commitShot({ type: 'ourShot', playerId: p.id, origin: m(0, 8), target: { x: 500, y: 120 }, zone: '9M' }, 'GOL');
+    const row = playerRow(p);
+    if (row[3] !== '+1' || !/^\d+$/.test(row[2])) throw new Error('Min and +/− ' + row.slice(2, 4));
+  }));
+  T('pdf: zone cells read goals/shots', () => {
+    const snap = snapshot();
+    try {
+      state = sampleState();
+      const first = PLAYER_HEAD.indexOf('6 m');
+      const rows = fieldPlayers().map((p) => playerRow(p));
+      const cell = (id, zone) => rows[fieldPlayers().findIndex((p) => p.id === id)][first + SHEET_ZONES.indexOf(zone)];
+      if (cell('p8', '9M') !== '1/2' || cell('p17', '6M') !== '1/2') throw new Error('Alex 9 m ' + cell('p8', '9M') + ', Jenny 6 m ' + cell('p17', '6M'));
+      SHEET_ZONES.forEach((zone, i) => {
+        const total = rows.reduce((sum, row) => { const [goals, shots] = goalsShots(row[first + i]); if (goals > shots) throw new Error(`${zone}: ${row[first + i]} reads shots/goals`); return [sum[0] + goals, sum[1] + shots]; }, [0, 0]);
+        const shots = ourShots().filter((e) => e.zone === zone);
+        if (total.join() !== [goalsIn(shots), shots.length].join()) throw new Error(`${zone} adds up to ${total} for ${goalsIn(shots)}/${shots.length}`);
+      });
+    } finally { restore(snap); }
+  });
+  T('pdf: attack-type and turnover-by-player rows add up', () => {
+    const snap = snapshot();
+    try {
+      state = otherMatch();
+      state.events.push({ id: 't1', abs: 100, kind: 'TURNOVER', playerId: 'p5', subtype: 'Pase' }, { id: 't2', abs: 110, kind: 'TURNOVER', playerId: 'p5', subtype: 'Falta ataque' }, { id: 't3', abs: 120, kind: 'TURNOVER', playerId: 'p10', subtype: 'Dobles' });
+      const sum = (rows, col, pick) => rows.reduce((n, row) => n + pick(goalsShots(row[col])), 0);
+      const types = attackTypeTableRows(state.events), body = types.slice(0, -1), total = types.at(-1);
+      if (body.length !== Object.keys(ATTACK_TYPES).length || total[0] !== 'Total') throw new Error('rows ' + JSON.stringify(types));
+      [[1, ourShots()], [3, rivalShots()]].forEach(([col, shots]) => {
+        if (sum(body, col, ([, n]) => n) !== shots.length || sum(body, col, ([g]) => g) !== goalsIn(shots) || total[col] !== `${goalsIn(shots)}/${shots.length}`) throw new Error(`column ${col}: ${JSON.stringify(types)}`);
+      });
+      if (types.some((row) => row.some((c) => /NaN|undefined/.test(c)))) throw new Error('bad cell ' + JSON.stringify(types));
+      const lost = turnoverPlayerRows(state), players = lost.slice(0, -1), all = lost.at(-1);
+      const turnovers = state.events.filter((e) => e.kind === 'TURNOVER' && state.players.some((p) => p.id === e.playerId));
+      if (all[1] !== 'Total' || all.at(-1) !== turnovers.length || lost[0].length !== TURNOVER_PLAYER_HEAD.length) throw new Error('total ' + JSON.stringify(lost));
+      players.forEach((row) => { if (row.slice(2, -1).reduce((a, b) => a + b, 0) !== row.at(-1)) throw new Error('groups of ' + row[1] + ' do not add up to its total'); });
+      if (players.reduce((n, row) => n + row.at(-1), 0) !== all.at(-1)) throw new Error('players do not add up to the total');
+      if (players.some((row, i) => i && row.at(-1) > players[i - 1].at(-1)) || players[0][1] !== 'Marcos') throw new Error('most turnovers first: ' + players.map((r) => r[1]));
+      state.events = state.events.filter((e) => e.kind !== 'TURNOVER');
+      if (turnoverPlayerRows(state).length !== 1 || turnoverPlayerRows(state)[0][1] !== 'Sin pérdidas') throw new Error('empty state ' + JSON.stringify(turnoverPlayerRows(state)));
+    } finally { restore(snap); }
+  });
+  T('pdf: the match report prints the attack types and the turnovers by player', () => {
+    const titles = tablesOf(recordPdfCalls('match')).map((t) => t.title);
+    ['Jugadores (goles/tiros por zona)', 'Tipos de ataque (goles/tiros)', 'Pérdidas por jugador'].forEach((title) => { if (!titles.includes(title)) throw new Error(`no table «${title}» in ${titles}`); });
+  });
+  T('pdf: every table of both reports is rectangular and prints no NaN or undefined', () => {
+    ['sample', 'other'].forEach((name) => ['match', 'players'].forEach((kind) => {
+      const tables = tablesOf(recordPdfCalls(kind, name === 'sample' ? sampleState : otherMatch));
+      if (tables.length < 5) throw new Error(`${name} ${kind}: only ${tables.length} tables`);
+      tables.forEach((t) => {
+        const label = `${name} ${kind} «${t.title || t.head.join('|')}»`;
+        if (!t.body.length) throw new Error(label + ' has no rows, an empty table says so in a row');
+        t.body.forEach((row) => {
+          if (row.length !== t.head.length) throw new Error(`${label}: ${row.length} cells for ${t.head.length} columns`);
+          if (row.some((c) => c == null || /NaN|undefined|null/.test(String(c)))) throw new Error(`${label}: bad cell ${JSON.stringify(row)}`);
+        });
+      });
+    }));
+  });
+  T('pdf: no empty cell uses a hyphen where the screen uses the dash', () => {
+    ['sample', 'other'].forEach((name) => ['match', 'players'].forEach((kind) => {
+      tablesOf(recordPdfCalls(kind, name === 'sample' ? sampleState : otherMatch)).forEach((t) => t.body.forEach((row) => {
+        if (row.some((c) => c === '-')) throw new Error(`${name} ${kind} «${t.title || ''}»: ${JSON.stringify(row)}`);
+      }));
+    }));
+  });
+  T('pdf: the player table has explicit widths that fit the page', () => {
+    const table = tablesOf(recordPdfCalls('match')).find((t) => t.head === PLAYER_HEAD);
+    const widths = PLAYER_HEAD.map((h, i) => (table.columnStyles[i] || {}).cellWidth);
+    const fixed = widths.filter((w) => typeof w === 'number');
+    if (fixed.length !== widths.length - 1 || widths[1] !== undefined) throw new Error('only the name column is flexible: ' + JSON.stringify(widths));
+    const room = PDF_PAGE.w - 2 * PDF_PAGE.margin - fixed.reduce((a, b) => a + b, 0);
+    if (room < MAX_NAME_LENGTH * PDF_NAME_CHAR_MM) throw new Error(`the name column keeps ${room} mm`);
+    if (table.width !== PDF_PAGE.w - 2 * PDF_PAGE.margin) throw new Error('width ' + table.width);
+  });
+  T('pdf: the goalkeeper table heads say what each cell holds', () => {
+    const table = tablesOf(recordPdfCalls('match')).find((t) => t.title === 'Por portero');
+    if (table.head.join() !== 'Portero,% paradas,Paradas/a puerta,Encajados,7 m parados') throw new Error(table.head.join());
+    table.body.forEach(([who, saved, onTarget, conceded, penalties]) => {
+      if (!/^(\d+%|–)$/.test(saved) || !/^\d+\/\d+$/.test(onTarget) || !/^\d+$/.test(String(conceded)) || !/^\d+\/\d+$/.test(penalties)) throw new Error(who + ': ' + JSON.stringify([saved, onTarget, conceded, penalties]));
+    });
+  });
+  // A stand-in for jsPDF that records what pdfTable asks of it.
+  const fakePdfDoc = () => {
+    const calls = [];
+    return { calls, setTextColor() {}, setFont() {}, setFontSize() {}, text: (t, x, y) => calls.push(['title', t, y]), addPage: () => calls.push(['page']), lastAutoTable: { finalY: 0 },
+      autoTable(opts) { calls.push(['table', opts.startY, opts.rowPageBreak]); this.lastAutoTable = { finalY: opts.startY + 10 }; } };
+  };
+  T('pdf: a table title is never left alone at the bottom of a page', () => {
+    const body = [['1'], ['2']], bottom = PDF_PAGE.h - PDF_PAGE.margin;
+    const low = fakePdfDoc();
+    pdfTable(low, { title: 'Notas', head: ['Min'], body, startY: bottom - PDF_TITLE_KEEP_MM + 1 });
+    if (low.calls.map((c) => c[0]).join() !== 'page,title,table' || low.calls[1][2] !== PDF_PAGE.margin || low.calls[2][1] <= low.calls[1][2]) throw new Error('title at the bottom: ' + JSON.stringify(low.calls));
+    const high = fakePdfDoc();
+    pdfTable(high, { title: 'Notas', head: ['Min'], body, startY: bottom - PDF_TITLE_KEEP_MM - 1 });
+    if (high.calls.map((c) => c[0]).join() !== 'title,table') throw new Error('title with room: ' + JSON.stringify(high.calls));
+    if (high.calls[1][2] !== 'avoid') throw new Error('a row may split across pages: ' + high.calls[1][2]);
+  });
+  T('pdf: the shot-chart legend names its owner', () => {
+    const legend = (viewKey) => {
+      const texts = [];
+      const doc = new Proxy({ text: (t) => texts.push(t), getTextWidth: () => 10 }, { get: (target, key) => (key in target ? target[key] : () => {}) });
+      pdfShotChart(doc, 0, 0, 100, [], viewKey);
+      return texts.join(' | ');
+    };
+    if (legend('US') !== 'parados 0 | goles 0 | fuera 0') throw new Error('our shots: ' + legend('US'));
+    if (legend('GK') !== 'Nuestro portero: | detenidos 0 | goles encajados 0 | fallos 0') throw new Error('shots at our goal: ' + legend('GK'));
+  });
+  T('pdf: text keeps the en dash and swaps the characters the font lacks', () => {
+    if (pdfText('Mi equipo 7 – 5 Rival') !== 'Mi equipo 7 – 5 Rival' || pdfText('1–0') !== '1–0' || pdfText('–') !== '–') throw new Error('en dash dropped');
+    if (pdfText('−3') !== '-3' || pdfText("2′") !== "2'" || pdfText('↶ deshecho ›') !== ' deshecho ') throw new Error(pdfText('−3') + pdfText("2′"));
+    if (pdfText('Nº 1ª parte · áéíóúñ') !== 'Nº 1ª parte · áéíóúñ') throw new Error('accents');
+  });
   // ---- Accounts, team and saved matches (device backend; Supabase mapping through a fake client) ----
   const TA = async (name, fn) => { try { await fn(); __results.push('OK ' + name); } catch (e) { __results.push('FAIL ' + name + ': ' + (e && e.message || e) + ' ' + ((e && e.stack) || '').split('\n')[1]); } };
   const tick0 = () => new Promise((r) => setTimeout(r, 0));
+  // Share-sheet and object-URL stubs for the final screen's image tests.
+  const previewImg = () => $('final').querySelector('#mvp-preview img');
+  const sheetStubs = (canShare, share) => {
+    const own = (key) => Object.getOwnPropertyDescriptor(navigator, key);
+    const saved = { canShare: own('canShare'), share: own('share') };
+    Object.defineProperty(navigator, 'canShare', { value: canShare, configurable: true });
+    Object.defineProperty(navigator, 'share', { value: share, configurable: true });
+    return () => ['canShare', 'share'].forEach((key) => { if (saved[key]) Object.defineProperty(navigator, key, saved[key]); else delete navigator[key]; });
+  };
+  const revokedUrls = () => {
+    const revoke = URL.revokeObjectURL.bind(URL), revoked = [];
+    URL.revokeObjectURL = (url) => { revoked.push(url); revoke(url); };
+    return { revoked, stop: () => { URL.revokeObjectURL = revoke; } };
+  };
   const accountTests = async () => {
+    // Awaits requestAnimationFrame under the runner's virtual time, which stalls after heavy canvas work: keep it before the card tests.
     await TA('design: theme switch suppresses transitions for two frames', async () => {
       const frame = () => new Promise((resolve) => requestAnimationFrame(resolve));
       const switchStyle = () => document.getElementById('theme-switch-style');
@@ -895,6 +1452,291 @@
         await frame();
         if (switchStyle()) throw new Error('still there after two frames');
       } finally { applyTheme(before); }
+    });
+    // ---- MVP card (M3): the data, the drawing and the PNG ----
+    const PNG_HEADER_BYTES = 24, PNG_SIGNATURE_HEAD = 0x89504e47, PNG_WIDTH_OFFSET = 16, PNG_HEIGHT_OFFSET = 20;
+    const cardRatings = () => matchRatings(state);
+    const drawnTexts = (data, images) => {
+      const canvas = document.createElement('canvas'), ctx = canvas.getContext('2d'), texts = [], fillText = ctx.fillText.bind(ctx);
+      ctx.fillText = (text, ...rest) => { texts.push({ text, font: ctx.font }); fillText(text, ...rest); };
+      drawMvpCard(canvas, data, images);
+      return { texts, ctx, canvas };
+    };
+    const cardFace = () => { const c = document.createElement('canvas'); c.width = c.height = 64; c.getContext('2d').fillRect(0, 0, 64, 64); return c; };
+    await TA('mvp image: field and keeper KPIs', async () => {
+      const goals = state.events.filter((e) => e.kind === 'SHOT' && e.playerId === 'p17' && e.result === 'GOL').length;
+      const shots = state.events.filter((e) => e.kind === 'SHOT' && e.playerId === 'p17').length;
+      const assists = state.events.filter((e) => e.kind === 'ACTION' && e.playerId === 'p17' && e.action === 'ASIST').length;
+      if (!shots) throw new Error('fixture has no shots for p17');
+      const minutes = new Map([['p17', 25 * 60 + 10], ['p1', 60 * 60]]);
+      const field = mvpCardData(state, 'p17', cardRatings(), team, minutes);
+      const rating = ratingText(cardRatings().get('p17').value);
+      if (field.kpis.map((k) => k[0]).join() !== 'Goles,% tiro,Pases de gol,Min') throw new Error(field.kpis.map((k) => k[0]).join());
+      if (field.kpis.map((k) => k[1]).join() !== `${goals}/${shots},${Math.round(goals * 100 / shots)}%,${assists},25`) throw new Error(field.kpis.map((k) => k[1]).join());
+      if (field.title !== state.them || field.score !== `${score().us}–${score().them}` || field.name !== 'Jenny' || field.num !== 17 || field.rating !== rating) throw new Error(JSON.stringify(field));
+      const faced = state.events.filter((e) => e.kind === 'RIVAL_SHOT' && e.gkId === 'p1');
+      const saved = faced.filter((e) => groupOf(e.result) === 'PARADA').length, onGoal = faced.filter((e) => ['GOL', 'PARADA'].includes(groupOf(e.result))).length;
+      const pens = faced.filter((e) => e.zone === '7M' && ['GOL', 'PARADA'].includes(groupOf(e.result))), pensSaved = pens.filter((e) => groupOf(e.result) === 'PARADA').length;
+      const keeper = mvpCardData(state, 'p1', cardRatings(), team, minutes);
+      if (keeper.kpis.map((k) => k[0]).join() !== 'Paradas,% paradas,7 m parados,Min') throw new Error(keeper.kpis.map((k) => k[0]).join());
+      if (keeper.kpis[0][1] !== `${saved}/${onGoal}` || keeper.kpis[2][1] !== `${pensSaved}/${pens.length}` || keeper.kpis[3][1] !== '60' || keeper.kpis[1][1] !== (onGoal ? `${Math.round(saved * 100 / onGoal)}%` : '–')) throw new Error(JSON.stringify(keeper.kpis));
+      const unknown = mvpCardData(state, 'p17', cardRatings(), team, null);
+      if (unknown.kpis.length !== 3 || unknown.kpis.some((k) => k[0] === 'Min' || k[0] === 'Nota')) throw new Error('unknown minutes: ' + JSON.stringify(unknown.kpis));
+      const other = mvpCardData(state, 'p17', cardRatings(), { ...team, brand: '#123456', name: 'Otro' }, null);
+      if (other.brand !== '#123456') throw new Error('team argument ignored');
+      throws(() => mvpCardData(state, 'nobody', cardRatings()), /nobody/);
+      const picked = state.mvpId;
+      try {
+        state.mvpId = 'p17';
+        if (mvpCardData(state, 'p17', cardRatings()).provisional) throw new Error('coach pick shown as provisional');
+        state.mvpId = null;
+        const top = matchMvp(state, cardRatings()).id;
+        if (!mvpCardData(state, top, cardRatings()).provisional) throw new Error('provisional MVP not flagged');
+        if (mvpCardData(state, top === 'p17' ? 'p1' : 'p17', cardRatings()).provisional) throw new Error('another player flagged');
+      } finally { state.mvpId = picked; }
+    });
+    await TA('mvp image: a PNG of 1080×1350', async () => {
+      const blob = await mvpCardBlob(mvpCardData(state, 'p17', cardRatings()));
+      if (blob.type !== 'image/png') throw new Error(blob.type);
+      // The size is read from the PNG header: Chrome's virtual-time headless run never finishes decoding a card-sized image.
+      const header = new DataView(await blob.slice(0, PNG_HEADER_BYTES).arrayBuffer());
+      if (header.getUint32(0) !== PNG_SIGNATURE_HEAD) throw new Error('not a PNG');
+      const size = `${header.getUint32(PNG_WIDTH_OFFSET)}×${header.getUint32(PNG_HEIGHT_OFFSET)}`;
+      if (size !== '1080×1350') throw new Error(size);
+    });
+    await TA('mvp image: no photo draws initials', async () => {
+      const data = { ...mvpCardData(state, 'p17', cardRatings()), name: 'Ana Pérez', photo: null };
+      if (!drawnTexts(data, { photo: null, crest: null }).texts.some((t) => t.text === 'AP')) throw new Error('no initials');
+      if (drawnTexts(data, { photo: cardFace(), crest: null }).texts.some((t) => t.text === 'AP')) throw new Error('initials over a photo');
+    });
+    await TA('mvp image: a long name is fitted', async () => {
+      const base = mvpCardData(state, 'p17', cardRatings()), noImages = { photo: null, crest: null };
+      const inBox = (texts, ctx) => texts.forEach((t) => { ctx.font = t.font; if (ctx.measureText(t.text).width > MVP_CARD.w - 2 * MVP_CARD.pad + 0.5) throw new Error(`overflow: ${t.text}`); });
+      // A 24-character name with a space is drawn whole, on one line or two, with no ellipsis.
+      const spaced = 'Maximiliano Fernández Lo', drawn = drawnTexts({ ...base, name: spaced }, noImages);
+      if (drawn.texts.some((t) => t.text.includes('…'))) throw new Error('ellipsis: ' + drawn.texts.map((t) => t.text));
+      const lines = drawn.texts.filter((t) => spaced.toUpperCase().includes(t.text) && t.text.length > 3).map((t) => t.text);
+      if (lines.join(' ') !== spaced.toUpperCase()) throw new Error('name not whole: ' + lines);
+      inBox(drawn.texts, drawn.ctx);
+      // A 24-character rival fits the «us vs rival» line by shrinking.
+      const rival = 'Club Deportivo Balonmano', vs = drawnTexts({ ...base, title: rival }, noImages).texts.find((t) => t.text.includes(rival));
+      if (!vs || vs.text.includes('…')) throw new Error('rival cut: ' + (vs && vs.text));
+      // A name with no space shrinks to the floor before any ellipsis; beyond the floor it is cut and still fits.
+      const solid = drawnTexts({ ...base, name: 'X'.repeat(MAX_NAME_LENGTH) }, noImages);
+      if (solid.texts.some((t) => t.text.includes('…'))) throw new Error('24 characters without a space were cut');
+      const huge = 'Maximiliano '.repeat(12).trim(), cut = drawnTexts({ ...base, name: huge, title: huge, venue: huge }, noImages);
+      if (!cut.texts.some((t) => t.text.endsWith('…'))) throw new Error('nothing was cut');
+      inBox(cut.texts, cut.ctx);
+      if (fitText(cut.ctx, 'Jose', MVP_CARD.w) !== 'Jose') throw new Error('short text changed');
+      if (fitText(cut.ctx, huge, 0) !== '…') throw new Error('zero width');
+    });
+    await TA('mvp image: the crown rests on the rim and clears the title', async () => {
+      const matrix = crownPlacement(), M = MVP_CARD, cx = M.w / 2;
+      const at = ([x, y]) => { const p = matrix.transformPoint({ x, y }); return [p.x, p.y]; };
+      const { band } = CROWN, [bandX, bandY] = at([CROWN.viewBox.split(' ')[2] / 2, band.y + band.h]);
+      const fromCentre = Math.hypot(bandX - cx, bandY - M.faceCy);
+      if (fromCentre < M.faceR - M.ringWidth - 1 || fromCentre > M.faceR) throw new Error('band bottom-centre off the rim: ' + fromCentre);
+      const points = [...CROWN.pearls.flatMap(([x, y]) => [[x - CROWN.pearlR, y - CROWN.pearlR], [x + CROWN.pearlR, y - CROWN.pearlR]]), [4, 22], [116, 22]].map(at);
+      const ctx = document.createElement('canvas').getContext('2d');
+      [MVP_TITLE, MVP_PROVISIONAL_TITLE].forEach((title) => {
+        ctx.font = cardFont(M.weights.heavy, M.headerSize, 'display');
+        const half = ctx.measureText(title).width / 2;
+        points.forEach(([x, y]) => { if (x >= cx - half && x <= cx + half && y >= M.headerY - M.headerSize && y <= M.headerY) throw new Error(`crown point (${x | 0}, ${y | 0}) in the «${title}» box`); });
+      });
+      points.forEach(([x, y]) => { if (x < 0 || y < 0 || x > M.w) throw new Error(`crown point off the card: ${x | 0}, ${y | 0}`); });
+    });
+    await TA('mvp image: a broken photo still gives an image', async () => {
+      const broken = 'data:image/png;base64,AAAA';
+      let error = null;
+      try { await loadImage(broken); } catch (e) { error = e; }
+      if (!(error instanceof Error) || !/image/i.test(error.message)) throw new Error('loadImage did not reject clearly: ' + error);
+      const blob = await mvpCardBlob({ ...mvpCardData(state, 'p17', cardRatings()), photo: broken });
+      if (blob.type !== 'image/png' || blob.size < 1000) throw new Error(blob.type + ' ' + blob.size);
+    });
+    // ---- The ratings card for the group (M3) ----
+    const pngSize = async (blob) => {
+      const header = new DataView(await blob.slice(0, PNG_HEADER_BYTES).arrayBuffer());
+      return [header.getUint32(PNG_WIDTH_OFFSET), header.getUint32(PNG_HEIGHT_OFFSET)];
+    };
+    const drawnRatings = (data) => {
+      const canvas = document.createElement('canvas'), ctx = canvas.getContext('2d'), texts = [], fillText = ctx.fillText.bind(ctx);
+      ctx.fillText = (text, ...rest) => { texts.push({ text, font: ctx.font }); fillText(text, ...rest); };
+      drawRatingsCard(canvas, data);
+      return { texts, ctx, canvas };
+    };
+    const fontPx = (font) => Number(/(\d+(?:\.\d+)?)px/.exec(font)[1]);
+    await TA('ratings image: one row per convocado, S/C last', async () => {
+      const done = withFinal(playedFew());
+      let data, expected;
+      try {
+        expected = state.players.length;
+        data = ratingsCardData(state, matchRatings(state));
+        if (data.title !== state.them || data.score !== `${score().us}–${score().them}`) throw new Error(`${data.title} ${data.score}`);
+      } finally { done(); }
+      if (data.rows.length !== expected) throw new Error(`${data.rows.length} rows for ${expected} convocados`);
+      const chips = data.rows.map((r) => r.rating);
+      if (chips.slice(0, 3).some((c) => c === 'S/C') || chips.slice(3).some((c) => c !== 'S/C')) throw new Error(chips.join());
+      if (data.rows.slice(3).some((r) => r.band !== RATING_NONE_BAND)) throw new Error('S/C is not neutral');
+      if (data.rows[0].name !== 'Diego' || !data.rows[0].line.includes('3/3') || /NaN|undefined/.test(JSON.stringify(data))) throw new Error(JSON.stringify(data.rows[0]));
+      if (!data.rows[1].line.includes('Paradas')) throw new Error('keeper line: ' + data.rows[1].line);
+      if (data.rows.filter((r) => r.mvp).map((r) => r.name).join() !== 'Diego') throw new Error('mvp marker: ' + data.rows.filter((r) => r.mvp).map((r) => r.name));
+      // Every name is drawn at 36 px or more, whole when it fits and cut with an ellipsis only beyond the floor; nothing leaves the card.
+      const long = 'Maximiliano Fernández Lo', huge = 'Maximiliano '.repeat(12).trim();
+      const rows = data.rows.map((r, i) => (i === 0 ? { ...r, name: long } : i === 1 ? { ...r, name: huge } : r));
+      const { texts, ctx } = drawnRatings({ ...data, rows });
+      rows.forEach((r, i) => {
+        const drawn = texts.find((t) => t.text === r.name || (i === 1 && t.text.startsWith('Maximiliano') && t.text.endsWith('…')));
+        if (!drawn) throw new Error('name not drawn: ' + r.name);
+        if (fontPx(drawn.font) < RATINGS_CARD.nameFloor) throw new Error(`name at ${fontPx(drawn.font)} px`);
+      });
+      if (texts.filter((t) => t.text === 'S/C').length !== rows.length - 3) throw new Error('S/C chips');
+      rows.forEach((r) => texts.filter((t) => t.text.startsWith(r.name.slice(0, 6))).forEach((t) => { ctx.font = t.font; if (ctx.measureText(t.text).width > ratingsTextColumn().w + 0.5) throw new Error('overflow: ' + t.text); }));
+      texts.forEach((t) => { ctx.font = t.font; if (ctx.measureText(t.text).width > RATINGS_CARD.w) throw new Error('overflow: ' + t.text); });
+    });
+    await TA('ratings image: height grows with the squad', async () => {
+      const done = withFinal(playedFew());
+      const heights = [];
+      try {
+        for (const extra of [0, 4]) {
+          const s = { ...state, players: [...state.players, ...Array.from({ length: extra }, (_, i) => ({ id: 'x' + i, num: 60 + i, name: 'Extra ' + i, pos: 'EXT' }))] };
+          const data = ratingsCardData(s, matchRatings(s)), expected = RATINGS_CARD.head + s.players.length * RATINGS_CARD.row;
+          const canvas = document.createElement('canvas');
+          drawRatingsCard(canvas, data);
+          if (canvas.height !== expected || canvas.width !== RATINGS_CARD.w) throw new Error(`canvas ${canvas.width}×${canvas.height}, expected ${expected}`);
+          const blob = await ratingsCardBlob(data), [w, h] = await pngSize(blob);
+          if (blob.type !== 'image/png' || w !== RATINGS_CARD.w || h !== expected) throw new Error(`png ${w}×${h}, expected ${expected}`);
+          heights.push(h);
+        }
+      } finally { done(); }
+      if (heights[1] - heights[0] !== 4 * RATINGS_CARD.row) throw new Error(heights.join());
+    });
+    // ---- The MVP card at the end of the match, and the share sheet (M3) ----
+    await TA('final: finishing a match shows the MVP preview', async () => {
+      const done = withFinal({ ...playedFew(), finished: false });
+      try {
+        await ui.mvpCardReady;
+        const img = previewImg();
+        if (!img || !img.src.startsWith('blob:') || img.src !== ui.mvpCardUrl) throw new Error('no preview image');
+        if (!img.alt.includes('Diego')) throw new Error('not the provisional MVP: ' + img.alt);
+        if (!$('final').querySelector('[data-final-mvp-share]')) throw new Error('share button missing');
+      } finally { done(); }
+      const noMvp = withFinal({ events: [], courtSets: [[]], court: [{ abs: 0, set: 0 }] });
+      try {
+        await ui.mvpCardReady;
+        if (previewImg() || !$('mvp-preview').textContent.includes('Elige el MVP para generar la imagen.')) throw new Error('no-MVP message: ' + $('mvp-preview').textContent);
+      } finally { noMvp(); }
+    });
+    await TA('final: the coach\'s pick redraws the preview for that player', async () => {
+      const done = withFinal(playedFew());
+      try {
+        await ui.mvpCardReady;
+        const first = previewImg().src;
+        if (!previewImg().alt.includes('Diego')) throw new Error('provisional: ' + previewImg().alt);
+        document.querySelector('[data-mvp="p8"]').click();
+        await ui.mvpCardReady;
+        const picked = state.players.find((p) => p.id === 'p8');
+        if (!previewImg() || previewImg().src === first || !previewImg().alt.includes(picked.name)) throw new Error('preview not redrawn: ' + (previewImg() && previewImg().alt));
+      } finally { done(); }
+    });
+    await TA('final: re-rendering revokes the old preview URL', async () => {
+      const done = withFinal(playedFew()), spy = revokedUrls();
+      try {
+        await ui.mvpCardReady;
+        const first = ui.mvpCardUrl;
+        openFinal();
+        if (!spy.revoked.includes(first)) throw new Error('re-render kept the old URL');
+        await ui.mvpCardReady;
+        const second = ui.mvpCardUrl;
+        $('final').querySelector('[data-final-close]').click();
+        if (!spy.revoked.includes(second) || ui.mvpCardUrl) throw new Error('closing kept the URL');
+        // A card that finishes after the screen was closed leaves no URL behind.
+        const pending = (openFinal(), ui.mvpCardReady);
+        $('final').querySelector('[data-final-close]').click();
+        await pending;
+        if (ui.mvpCardUrl) throw new Error('a stale card kept its URL');
+      } finally { spy.stop(); done(); }
+    });
+    await TA('final: share falls back to a download when files cannot be shared', async () => {
+      const done = withFinal(playedFew());
+      const click = HTMLAnchorElement.prototype.click, clicked = [], spy = revokedUrls();
+      HTMLAnchorElement.prototype.click = function () { clicked.push({ download: this.download, href: this.href }); };
+      let shared = 0, unstub = sheetStubs(() => false, async () => { shared++; });
+      const tap = async () => { $('final').querySelector('[data-final-mvp-share]').click(); await ui.mvpCardReady; for (let i = 0; i < 5; i++) await tick0(); };
+      try {
+        await ui.mvpCardReady;
+        await tap();
+        if (shared || clicked.length !== 1 || !/^mvp-.+\.png$/.test(clicked[0].download) || !clicked[0].href.startsWith('blob:')) throw new Error(JSON.stringify(clicked) + ' shared ' + shared);
+        await new Promise((r) => setTimeout(r, 1100));
+        if (!spy.revoked.includes(clicked[0].href)) throw new Error('download URL not revoked');
+        // A cancelled sheet is not an error; any other failure says so.
+        unstub(); unstub = sheetStubs(() => true, async () => { throw Object.assign(new Error('x'), { name: 'AbortError' }); });
+        await tap();
+        if (clicked.length !== 1 || /No se pudo/.test($('final-status').textContent)) throw new Error('cancel: ' + $('final-status').textContent);
+        unstub(); unstub = sheetStubs(() => true, async () => { throw new Error('boom'); });
+        await tap();
+        if ($('final-status').textContent !== 'No se pudo compartir la imagen.') throw new Error('failure: ' + $('final-status').textContent);
+        unstub(); unstub = sheetStubs(() => true, async () => { throw Object.assign(new Error('Must be handling a user gesture'), { name: 'NotAllowedError' }); });
+        await tap();
+        if (!/vuelve a tocar el botón/.test($('final-status').textContent) || /gesture/.test($('final-status').textContent)) throw new Error('denied: ' + $('final-status').textContent);
+      } finally { unstub(); HTMLAnchorElement.prototype.click = click; spy.stop(); done(); }
+    });
+    await TA('final: the ratings button shares the ratings image', async () => {
+      const done = withFinal(playedFew()), shared = [];
+      const unstub = sheetStubs(() => true, async (data) => { shared.push(data); });
+      try {
+        await ui.mvpCardReady; await ui.ratingsCardReady;
+        $('final').querySelector('[data-final-ratings-share]').click();
+        if (shared.length !== 1 || !/^puntuaciones-.+\.png$/.test(shared[0].files[0].name) || shared[0].files[0].type !== 'image/png') throw new Error(JSON.stringify(shared.map((d) => d.files[0].name)));
+        if (!shared[0].title.startsWith('Puntuaciones')) throw new Error(shared[0].title);
+      } finally { unstub(); done(); }
+    });
+    await TA('final: both share buttons call share() inside the tap, and wait when the card is not ready', async () => {
+      const done = withFinal(playedFew()), shared = [];
+      const unstub = sheetStubs(() => true, async (data) => { shared.push(data.files[0].name); });
+      const tap = (attr) => $('final').querySelector(`[${attr}]`).click();
+      try {
+        // Right after the screen opens the cards are still being drawn: nothing is shared and the coach is told to tap again.
+        tap('data-final-mvp-share'); tap('data-final-ratings-share');
+        if (shared.length || !$('final-status').textContent.includes('se está preparando')) throw new Error('not-ready path: ' + shared + ' ' + $('final-status').textContent);
+        await ui.mvpCardReady; await ui.ratingsCardReady;
+        // With the cards drawn, share() has been called by the time click() returns (no await before it).
+        tap('data-final-mvp-share');
+        if (shared.length !== 1 || !shared[0].startsWith('mvp-')) throw new Error('mvp share not synchronous: ' + shared);
+        tap('data-final-ratings-share');
+        if (shared.length !== 2 || !shared[1].startsWith('puntuaciones-')) throw new Error('ratings share not synchronous: ' + shared);
+      } finally { unstub(); done(); }
+    });
+    await TA('final: leaving the match releases both cards and drops a render in flight', async () => {
+      const done = withFinal(playedFew()), spy = revokedUrls();
+      try {
+        await ui.mvpCardReady; await ui.ratingsCardReady;
+        const url = ui.mvpCardUrl;
+        if (!url || !ui.ratingsCardBlob) throw new Error('cards not ready');
+        leaveMatch(() => {});
+        if (!spy.revoked.includes(url) || ui.mvpCardUrl || ui.mvpCardBlob || ui.ratingsCardBlob || !$('final').hidden) throw new Error('leaving kept the cards');
+        const pending = (openFinal(), Promise.all([ui.mvpCardReady, ui.ratingsCardReady]));
+        leaveMatch(() => {});
+        await pending;
+        if (ui.mvpCardUrl || ui.mvpCardBlob || ui.ratingsCardBlob) throw new Error('a render finishing after leaving kept a card');
+      } finally { spy.stop(); done(); }
+    });
+    await TA('shareFiles: shared, cancelled, unsupported and failures', async () => {
+      const file = new File(['x'], 'a.png', { type: 'image/png' });
+      let unstub = sheetStubs(undefined, undefined);
+      try {
+        if (await shareFiles([file], 't', 'x') !== 'unsupported') throw new Error('no canShare');
+        unstub(); unstub = sheetStubs(() => false, async () => {});
+        if (await shareFiles([file], 't', 'x') !== 'unsupported') throw new Error('canShare false');
+        const calls = [];
+        unstub(); unstub = sheetStubs((data) => !!data.files, async (data) => { calls.push(data); });
+        if (await shareFiles([file], 'Título', 'Texto') !== 'shared' || calls[0].title !== 'Título' || calls[0].text !== 'Texto' || calls[0].files[0] !== file) throw new Error('shared');
+        unstub(); unstub = sheetStubs(() => true, async () => { throw Object.assign(new Error('x'), { name: 'AbortError' }); });
+        if (await shareFiles([file], 't', 'x') !== 'cancelled') throw new Error('abort');
+        unstub(); unstub = sheetStubs(() => true, async () => { throw new Error('boom'); });
+        let message = '';
+        try { await shareFiles([file], 't', 'x'); } catch (e) { message = e.message; }
+        if (message !== 'boom') throw new Error('failure swallowed: ' + message);
+      } finally { unstub(); }
     });
     await TA('home opens on team creation when the device has no team', async () => { await startHome(); if (home.view !== 'team-new' || $('home').hidden || !document.querySelector('[data-form="team-new"]')) throw new Error(home.view); });
     await TA('create team: name, colours and initials crest applied', async () => { $('team-club').value = 'CB Ejemplo'; $('team-name').value = 'Ejemplo Sur'; $('team-brand').value = '#1d4ed8'; $('team-brand2').value = '#facc15'; await submitTeam(document.querySelector('[data-form="team-new"]'), true); if (home.view !== 'team' || team.name !== 'Ejemplo Sur' || !team.id) throw new Error(home.view + ' ' + team.name); if (getComputedStyle($('score-us')).color !== 'rgb(29, 78, 216)') throw new Error('score colour ' + getComputedStyle($('score-us')).color); if (PDF_RGB.brand.join() !== '29,78,216' || team.brandInk !== '#ffffff') throw new Error('pdf/ink'); if (!decodeURIComponent($('bar-crest').src).includes('>ES<')) throw new Error('initials'); if (inkFor('#facc15') !== '#151515') throw new Error('ink for light'); });
@@ -973,6 +1815,9 @@
         if (strip.gridTemplateColumns.split(' ').length !== 3 || strip.columnGap !== '6px' || strip.paddingLeft !== '10px') throw new Error('kpis ' + strip.gridTemplateColumns + ' ' + strip.columnGap + ' ' + strip.paddingLeft);
         if (tile.textAlign !== 'center' || tile.paddingTop !== '6px' || tile.paddingLeft !== '4px') throw new Error('kpi ' + tile.textAlign + ' ' + tile.padding);
         if (chip.minHeight !== '40px' || chip.borderTopLeftRadius !== '20px' || chip.paddingLeft !== '14px') throw new Error('chip ' + chip.minHeight + ' ' + chip.borderTopLeftRadius + ' ' + chip.paddingLeft);
+        const pressed = probe.querySelector('.chip'), ink = document.createElement('i');
+        ink.style.cssText = 'background: var(--fg); color: var(--bg)'; probe.appendChild(ink);
+        if (pressed.getAttribute('aria-pressed') !== 'true' || chip.backgroundColor !== getComputedStyle(ink).backgroundColor || chip.color !== getComputedStyle(ink).color) throw new Error('pressed chip ' + chip.backgroundColor + ' ' + chip.color);
       } finally { probe.remove(); }
     });
     T('season: team record uses finished matches only', () => {
@@ -1016,6 +1861,277 @@
       const b = seasonRow('tt2', { events: [seasonTurnovers(), seasonTurnovers(), recovery, recovery, seasonRivalShot('sp1', 'PARADA'), seasonRivalShot('sp1', 'FUERA')] });
       const t = teamSeason([a, b]);
       if (t.turnovers !== 3 || t.recoveries !== 3 || t.saves !== 2 || t.onTarget !== 3) throw new Error(JSON.stringify(t));
+    });
+    // A played match: the clock ran one half and `court` says who was on (see the rating tests for the numbers).
+    const HALF_CLOCK = { period: 1, elapsedMs: CONFIG.halfSeconds * 1000, runningSince: null };
+    const ratedPlayers = [...seasonPlayers, { id: 'sp3', num: 3, name: 'Back', pos: 'LAT' }];
+    const ratedRow = (id, over) => seasonRow(id, { players: ratedPlayers, clock: HALF_CLOCK, courtSets: [['sp2', 'sp1'], ['sp3', 'sp1']], court: [{ abs: 0, set: 0 }], ...over });
+    const goalsOf = (n) => Array.from({ length: n }, () => ({ ...seasonShot('sp2', 'GOL', '6M'), origin: m(0, 6), target: gf(0.5, 0.5) }));
+    const lossesOf = (n) => Array.from({ length: n }, seasonTurnovers);
+    T('season: rows carry the match rating, S/C under the minutes', () => {
+      const match = ratedRow('rr1', { events: goalsOf(3), court: [{ abs: 0, set: 0 }, { abs: 1500, set: 1 }] });
+      const want = matchRatings(match.state);
+      const [wing] = playerSeason([match], seasonPlayers[1]).rows, [back] = playerSeason([match], ratedPlayers[2]).rows;
+      if (wing.rating !== want.get('sp2').value || !(wing.rating > CONFIG.rating.base)) throw new Error('wing ' + wing.rating);
+      if (back.rating !== null || ratingText(back.rating) !== 'S/C') throw new Error('under the minimum minutes: ' + back.rating);
+      const old = seasonRow('rr0', { events: [] }), [oldRow] = playerSeason([old], seasonPlayers[1]).rows;
+      if (oldRow.seconds !== null || oldRow.rating !== CONFIG.rating.base) throw new Error('no court log rates with confidence 1: ' + oldRow.rating);
+    });
+    T('season: season rating is minutes-weighted', () => {
+      const long = ratedRow('rw1', { events: goalsOf(3) }), short = ratedRow('rw2', { events: lossesOf(3), court: [{ abs: 0, set: 0 }, { abs: 600, set: 1 }] });
+      const season = playerSeason([long, short], seasonPlayers[1]), [a, b] = season.rows;
+      const weighted = roundHalfUp((a.rating * a.seconds + b.rating * b.seconds) / (a.seconds + b.seconds), CONFIG.rating.decimals);
+      const plain = roundHalfUp((a.rating + b.rating) / 2, CONFIG.rating.decimals);
+      if (weighted === plain || season.rating !== weighted) throw new Error(`${season.rating} want ${weighted} (plain ${plain})`);
+      const unknown = seasonRow('rw3', { events: lossesOf(3) });
+      const mixed = playerSeason([long, unknown], seasonPlayers[1]);
+      if (mixed.rating !== roundHalfUp((mixed.rows[0].rating + mixed.rows[1].rating) / 2, CONFIG.rating.decimals)) throw new Error('unknown minutes: plain mean, got ' + mixed.rating);
+      const none = playerSeason([ratedRow('rw4', { court: [{ abs: 0, set: 1 }] })], seasonPlayers[1]);
+      if (none.rating !== null || playerSeason([], seasonPlayers[1]).rating !== null) throw new Error('no rated match is null');
+    });
+    T('team page: Nota leaders need the minimum rated matches', () => {
+      if (CONFIG.leaders.minRated !== 2) throw new Error('premise: minimum rated matches ' + CONFIG.leaders.minRated);
+      const strong = ratedRow('ln1', { events: goalsOf(3) }), weak = ratedRow('ln2', { events: lossesOf(3) });
+      const sc = ratedRow('ln3', { events: goalsOf(2), court: [{ abs: 0, set: 1 }] });
+      const [wingP, backP, keeperP] = [seasonPlayers[1], ratedPlayers[2], seasonPlayers[0]], roster = [wingP, backP, keeperP];
+      if (LEADER_METRICS.find((x) => x.key === 'rating').label !== 'Nota') throw new Error('chip');
+      const one = leaders([strong], roster, 'rating');
+      if (one.length) throw new Error('one rated match qualified: ' + JSON.stringify(one.map((r) => r.value)));
+      const two = leaders([strong, weak, sc], [wingP, backP], 'rating'), wing = two[0];
+      if (two.length !== 1 || wing.value !== playerSeason([strong, weak, sc], wingP).rating || wing.detail !== '#2 · 2 partidos con nota') throw new Error(JSON.stringify(two.map((r) => [r.player.id, r.value, r.detail])));
+      const keeper = leaders([strong, weak], [keeperP], 'rating');
+      if (keeper.length !== 1 || keeper[0].detail !== '#1 · 2 partidos con nota') throw new Error('keeper ' + JSON.stringify(keeper));
+      const keep = { season: home.season, roster: home.roster, view: home.view, leaderMetric: home.leaderMetric };
+      try {
+        home.season = [strong, weak]; home.roster = [wingP, keeperP]; home.leaderMetric = 'rating'; showHomeView('team');
+        const first = document.querySelector('.leaders .leader .value .rating-chip');
+        if (!first || first.textContent !== ratingText(leaders(home.season, home.roster, 'rating')[0].value) || document.querySelector('[data-leader="rating"]').getAttribute('aria-pressed') !== 'true' || /NaN|undefined/.test($('home').textContent)) throw new Error('leaders view');
+      } finally { Object.assign(home, keep); }
+    });
+    T('player card: rating chips in the table and on the poster', () => {
+      const strong = ratedRow('pc1', { events: goalsOf(3) }), unrated = ratedRow('pc2', { events: goalsOf(1), court: [{ abs: 0, set: 1 }] });
+      const keep = { season: home.season, roster: home.roster, view: home.view, playerId: home.playerId, playerMatchId: home.playerMatchId };
+      try {
+        home.season = [strong, unrated]; home.roster = [seasonPlayers[0], seasonPlayers[1]]; home.playerId = 'sp2'; home.playerEdit = false; showHomeView('player');
+        const heads = [...document.querySelectorAll('.match-table th')].map((th) => th.textContent);
+        const chips = [...document.querySelectorAll('.match-table td .rating-chip')];
+        const season = playerSeason(home.season, seasonPlayers[1]);
+        if (!heads.includes('Nota') || chips.map((c) => c.textContent).join() !== [ratingText(season.rows[0].rating), 'S/C'].join()) throw new Error(heads.join() + ' / ' + chips.map((c) => c.textContent));
+        if (chips[1].className.includes('rt-bad') || !chips[1].classList.contains('rt-none')) throw new Error('S/C is neutral');
+        const poster = document.querySelector('.poster .rating-chip');
+        if (!poster || poster.textContent !== ratingText(season.rating) || !poster.classList.contains(ratingBand(season.rating))) throw new Error('poster chip');
+        if (document.querySelector('.evolution .rating-chip') || /NaN|undefined/.test($('home').textContent)) throw new Error('evolution keeps its bars');
+        showPlayerMatch(strong.id);
+        if (!document.querySelector('.match-head .rating-chip') || document.querySelector('.match-head .rating-chip').textContent !== ratingText(season.rows[0].rating)) throw new Error('per-match chip');
+      } finally { Object.assign(home, keep); }
+    });
+    // ---- Rating weights per team (M7) ----
+    const withTeamWeights = (ratingWeights, fn) => { const previous = team; team = { ...previous, ratingWeights }; try { return fn(); } finally { team = previous; } };
+    const warned = (fn) => { const real = console.warn, seen = []; console.warn = (...a) => seen.push(a.join(' ')); try { fn(); } finally { console.warn = real; } return seen; };
+    const knobOf = (key) => RATING_KNOBS.find((k) => k.key === key);
+    T('weights: defaults when the team has none', () => {
+      const before = JSON.stringify(CONFIG.rating.weights);
+      for (const t of [{}, { ratingWeights: null }, { ratingWeights: {} }, undefined]) {
+        const w = t === undefined ? ratingWeights() : ratingWeights(t);
+        if (JSON.stringify(w) !== before) throw new Error('not the defaults for ' + JSON.stringify(t) + ': ' + JSON.stringify(w));
+      }
+      if (ratingWeights({}) === CONFIG.rating.weights || JSON.stringify(CONFIG.rating.weights) !== before) throw new Error('the defaults must be copied, never edited');
+      const keys = new Set(RATING_KNOBS.map((k) => k.key));
+      if (!keys.has('oneOnOne') || !keys.has('teamFaultKeeperShare') || keys.size !== Object.keys(CONFIG.rating.weights).length) throw new Error('one knob per weight: ' + [...keys]);
+      if (!RATING_KNOBS.every((k) => k.label && k.group && k.min < k.max && k.step > 0)) throw new Error('knob fields');
+      if (ratingOf([rTurnover('a', 'Pase')]).raw !== withTeamWeights(undefined, () => ratingOf([rTurnover('a', 'Pase')]).raw)) throw new Error('team without weights rates as before');
+    });
+    T('weights: unknown keys dropped, values clamped', () => {
+      const messages = warned(() => {
+        const w = ratingWeights({ ratingWeights: { bogus: 1, shot: 99, turnover: -99, assist: 'x', recovery: NaN, block: 0.05 } });
+        if ('bogus' in w || Object.keys(w).join() !== Object.keys(CONFIG.rating.weights).join()) throw new Error('unknown key kept: ' + Object.keys(w));
+        if (w.shot !== knobOf('shot').max || w.turnover !== knobOf('turnover').min) throw new Error('not clamped: ' + w.shot + ' ' + w.turnover);
+        if (w.assist !== CONFIG.rating.weights.assist || w.recovery !== CONFIG.rating.weights.recovery || w.block !== 0.05) throw new Error('bad values fall back, good ones stay');
+      });
+      if (messages.length !== 5) throw new Error('one warning per fix: ' + messages.join(' | '));
+      if (warned(() => ratingWeights({ ratingWeights: { shot: 0.9 } })).length) throw new Error('a valid value must not warn');
+      const garbage = warned(() => { if (JSON.stringify(ratingWeights({ ratingWeights: 'oops' })) !== JSON.stringify(CONFIG.rating.weights)) throw new Error('garbage object'); });
+      if (garbage.length !== 1) throw new Error('a non-object warns once: ' + garbage.length);
+    });
+    T('weights: keeper team fault stays below the field one', () => {
+      const keeperShare = knobOf('teamFaultKeeperShare');
+      if (keeperShare.min !== 0 || keeperShare.max !== 1) throw new Error('a share between 0 and 1');
+      warned(() => {
+        const hard = ratingWeights({ ratingWeights: { teamFaultField: -0.2, teamFaultKeeperShare: 5 } });
+        if (hard.teamFaultKeeper !== -0.2 || Math.abs(hard.teamFaultKeeper) > Math.abs(hard.teamFaultField)) throw new Error('share capped at 1: ' + hard.teamFaultKeeper);
+        const none = ratingWeights({ ratingWeights: { teamFaultField: -0.2, teamFaultKeeperShare: -3 } });
+        if (none.teamFaultKeeper !== 0) throw new Error('share floored at 0: ' + none.teamFaultKeeper);
+      });
+      const half = ratingWeights({ ratingWeights: { teamFaultField: -0.4 } });
+      if (!nearTo(half.teamFaultKeeper, -0.4 * CONFIG.rating.weights.teamFaultKeeper / CONFIG.rating.weights.teamFaultField)) throw new Error('default share kept: ' + half.teamFaultKeeper);
+      // The 1x1 knob moves the three terms together.
+      const delta = (action) => withTeamWeights({ oneOnOne: 0.5 }, () => ratingOf([rAct('a', action)]).raw - CONFIG.rating.base);
+      if (!nearTo(delta('PROV7'), 0.5) || !nearTo(delta('BEATEN'), -0.5) || !nearTo(delta('PEN7C'), -0.5)) throw new Error([delta('PROV7'), delta('BEATEN'), delta('PEN7C')].join());
+    });
+    await TA('weights: saved weights reload through the local backend', async () => {
+      const local = localBackend(), created = await local.createTeam({ club: 'W', name: 'W', brand: '#1a4a8a', brand2: '#ffffff', brandInk: '#ffffff', crest: null });
+      try {
+        await local.updateTeam(created.id, { ratingWeights: { turnover: -0.6, oneOnOne: 0.4 } });
+        const [again] = (await local.listTeams()).filter((t) => t.id === created.id);
+        if (again.club !== 'W' || JSON.stringify(again.ratingWeights) !== JSON.stringify({ turnover: -0.6, oneOnOne: 0.4 })) throw new Error(JSON.stringify(again));
+        const w = ratingWeights(again);
+        if (w.turnover !== -0.6 || w.oneOnOne !== 0.4 || w.shot !== CONFIG.rating.weights.shot) throw new Error(JSON.stringify(w));
+        await local.updateTeam(created.id, { club: 'W2' });
+        if (JSON.stringify((await local.listTeams()).find((t) => t.id === created.id).ratingWeights) !== JSON.stringify(again.ratingWeights)) throw new Error('a team edit without weights must keep them');
+        const withTeam = withTeamWeights(again.ratingWeights, () => ratingOf([rTurnover('a', 'Pase')]).raw);
+        if (!nearTo(withTeam, CONFIG.rating.base - 0.6)) throw new Error('rated with the team weights: ' + withTeam);
+        if (!nearTo(ratingOf([rTurnover('a', 'Pase')]).raw, CONFIG.rating.base - 0.4)) throw new Error('premise: default weights');
+      } finally { await local.deleteTeam(created.id); }
+    });
+    // ---- Rating tuning view (M7): the coach moves the weights and the squad's ratings follow before he saves ----
+    const tuneWing = seasonPlayers[1], tuneKeeper = seasonPlayers[0];
+    const tuneMatches = () => [seasonRow('tn1', { events: lossesOf(3) })];
+    const tuneInput = (el, value) => { el.value = String(value); el.dispatchEvent(new Event('input', { bubbles: true })); };
+    const tuneRow = (id) => [...document.querySelectorAll('#tune-rows tr')].find((tr) => tr.dataset.tunePlayer === id);
+    // A team on the local backend, opened on the tuning view over the given matches; everything is put back afterwards.
+    const withTuneTeam = async (fn, { matches = tuneMatches(), roster = [tuneKeeper, tuneWing] } = {}) => {
+      const real = backend, previous = team, cacheKey = CACHE_KEY_PREFIX + `teams:${userKey()}`, cached = readJson(cacheKey);
+      const keep = { season: home.season, roster: home.roster, teams: home.teams, view: home.view, weightsDraft: home.weightsDraft, armed: home.armed };
+      backend = localBackend();
+      const created = await backend.createTeam({ club: 'Tune', name: 'Tune', brand: '#1a4a8a', brand2: '#ffffff', brandInk: '#ffffff', crest: null });
+      applyTeam(created); home.teams = [created]; home.season = matches; home.roster = roster; home.ratingFeatureCache = null;
+      try { await fn(created); } finally {
+        await backend.deleteTeam(created.id); backend = real; applyTeam(previous); Object.assign(home, keep, { ratingFeatureCache: null });
+        if (cached === undefined || cached === null) removeKey(cacheKey); else writeJson(cacheKey, cached);
+        renderHome();
+      }
+    };
+    T('tune: raising the turnover weight lowers a player with turnovers by the expected amount', () => {
+      const matches = tuneMatches(), roster = [tuneKeeper, tuneWing];
+      const before = rosterRatingPreview(matches, roster, ratingWeights()), heavier = rosterRatingPreview(matches, roster, { ...ratingWeights(), turnover: -0.6 });
+      const [wingBefore, wingAfter] = [before, heavier].map((rows) => rows.find((r) => r.player.id === 'sp2'));
+      if (!nearTo(wingBefore.next, CONFIG.rating.base - 3 * 0.4) || !nearTo(wingAfter.next, CONFIG.rating.base - 3 * 0.6)) throw new Error(`next ${wingBefore.next} -> ${wingAfter.next}`);
+      if (!nearTo(wingAfter.current, wingBefore.next) || !nearTo(wingAfter.delta, -0.6) || wingAfter.last !== wingAfter.next) throw new Error(JSON.stringify(wingAfter));
+      if (Object.keys(wingAfter).sort().join() !== 'current,delta,last,next,player') throw new Error('row shape ' + Object.keys(wingAfter));
+      const keeperAfter = heavier.find((r) => r.player.id === 'sp1');
+      if (keeperAfter.delta !== 0 || keeperAfter.next !== CONFIG.rating.base) throw new Error('a keeper without turnovers does not move: ' + JSON.stringify(keeperAfter));
+      const absent = rosterRatingPreview(matches, [{ id: 'nobody', num: 9, name: 'Nobody', pos: 'LAT' }], ratingWeights())[0];
+      if (absent.current !== null || absent.next !== null || absent.delta !== null || absent.last !== null) throw new Error('a player with no matches has no rating: ' + JSON.stringify(absent));
+    });
+    T('tune: preview recombines without recomputing features', () => {
+      const matches = tuneMatches(), roster = [tuneKeeper, tuneWing], real = ratingFeatures;
+      let calls = 0;
+      ratingFeatures = (...args) => { calls++; return real(...args); };
+      try {
+        home.ratingFeatureCache = null;
+        rosterRatingPreview(matches, roster, ratingWeights());
+        const first = calls;
+        if (first !== matches.length * roster.length) throw new Error('features once per player and match: ' + first);
+        for (const turnover of [-0.5, -0.7, -0.9, -1.1]) rosterRatingPreview(matches, roster, { ...ratingWeights(), turnover });
+        if (calls !== first) throw new Error('a knob change recomputed the features: ' + (calls - first));
+        rosterRatingPreview(tuneMatches(), roster, ratingWeights());
+        if (calls !== 2 * first) throw new Error('a new season array starts a new cache: ' + calls);
+      } finally { ratingFeatures = real; home.ratingFeatureCache = null; }
+    });
+    await TA('tune: save persists and the team page uses the new ratings', async () => {
+      await withTuneTeam(async (created) => {
+        await showRatingTune();
+        const saveButton = document.querySelector('[data-tune="save"]');
+        if (home.view !== 'rating-tune' || !saveButton.disabled) throw new Error('opens clean, nothing to save: ' + home.view);
+        tuneInput(document.querySelector('input.tune-num[data-knob="turnover"]'), -0.6);
+        if (saveButton.disabled || !nearTo(Number(tuneRow('sp2').querySelector('[data-col="next"]').textContent.replace(',', '.')), CONFIG.rating.base - 1.8, 0.05)) throw new Error('preview row: ' + tuneRow('sp2').textContent);
+        if (team.ratingWeights) throw new Error('nothing is saved before «Guardar»');
+        saveButton.click();
+        for (let i = 0; i < 8; i++) await tick0();
+        const stored = (await backend.listTeams()).find((t) => t.id === created.id);
+        if (JSON.stringify(stored.ratingWeights) !== JSON.stringify({ turnover: -0.6 }) || JSON.stringify(team.ratingWeights) !== JSON.stringify({ turnover: -0.6 })) throw new Error('stored ' + JSON.stringify(stored.ratingWeights));
+        if (!/guardada/.test($('home-status').textContent) || document.querySelector('[data-tune="save"]').disabled !== true) throw new Error('saved state: ' + $('home-status').textContent);
+        const season = playerSeason(home.season, tuneWing);
+        if (!nearTo(season.rating, CONFIG.rating.base - 1.8, 0.05)) throw new Error('season rating with the new weights ' + season.rating);
+        home.playerId = 'sp2'; home.playerEdit = false; showHomeView('player');
+        const poster = document.querySelector('.poster .rating-chip');
+        if (!poster || poster.textContent !== ratingText(season.rating)) throw new Error('the player card reads the saved weights: ' + (poster && poster.textContent));
+        await showRatingTune();
+        if (home.weightsDraft.turnover !== -0.6) throw new Error('the view reopens on the saved weights');
+      });
+    });
+    await TA('tune: reset restores the defaults', async () => {
+      await withTuneTeam(async (created) => {
+        await backend.updateTeam(created.id, { ratingWeights: { turnover: -0.9, red: -2 } });
+        applyTeam((await backend.listTeams()).find((t) => t.id === created.id));
+        await showRatingTune();
+        if (home.weightsDraft.turnover !== -0.9 || home.weightsDraft.red !== -2) throw new Error('opens on the saved weights');
+        document.querySelector('[data-tune="reset"]').click();
+        if (JSON.stringify(home.weightsDraft) !== JSON.stringify(RATING_KNOB_DEFAULTS)) throw new Error('draft ' + JSON.stringify(home.weightsDraft));
+        const shown = RATING_KNOBS.filter((k) => ['range', 'text'].every((type) => { const el = document.querySelector(`input[type="${type}"][data-knob="${k.key}"]`); return (type === 'range' ? Number(el.value) : parseKnobText(el.value)) !== RATING_KNOB_DEFAULTS[k.key]; }));
+        if (shown.length) throw new Error('controls not reset: ' + shown.map((k) => k.key));
+        if (team.ratingWeights.turnover !== -0.9) throw new Error('reset alone saves nothing');
+        document.querySelector('[data-tune="save"]').click();
+        for (let i = 0; i < 8; i++) await tick0();
+        if (team.ratingWeights !== null || JSON.stringify(ratingWeights()) !== JSON.stringify(CONFIG.rating.weights)) throw new Error('saved defaults are stored as no weights: ' + JSON.stringify(team.ratingWeights));
+        if ((await backend.listTeams()).find((t) => t.id === created.id).ratingWeights !== null) throw new Error('not stored');
+      });
+    });
+    await TA('tune: input keeps focus', async () => {
+      await withTuneTeam(async () => {
+        await showRatingTune();
+        const number = document.querySelector('input.tune-num[data-knob="shot"]'), range = document.querySelector('input.tune-range[data-knob="shot"]');
+        number.focus();
+        const rowsBefore = $('tune-rows').textContent;
+        tuneInput(number, 1.5);
+        if (document.activeElement !== number || document.querySelector('input.tune-num[data-knob="shot"]') !== number) throw new Error('the number input was replaced or lost focus');
+        if (Number(range.value) !== 1.5 || home.weightsDraft.shot !== 1.5) throw new Error('range follows the number: ' + range.value);
+        range.focus(); tuneInput(range, 0.4);
+        if (document.activeElement !== range || parseKnobText(number.value) !== 0.4) throw new Error('number follows the range: ' + number.value);
+        tuneInput(document.querySelector('input.tune-num[data-knob="turnover"]'), -1.2);
+        if ($('tune-rows').textContent === rowsBefore) throw new Error('the preview did not move');
+        number.focus(); number.value = ''; number.dispatchEvent(new Event('input', { bubbles: true }));
+        if (home.weightsDraft.shot !== 0.4 || document.activeElement !== number) throw new Error('a half-typed number changes nothing');
+        number.value = '99'; number.dispatchEvent(new Event('input', { bubbles: true })); number.dispatchEvent(new Event('change', { bubbles: true }));
+        if (home.weightsDraft.shot !== knobOf('shot').max || parseKnobText(number.value) !== knobOf('shot').max) throw new Error('typed values clamp to the knob: ' + number.value);
+      });
+    });
+    T('tune: parseKnobText and knobText speak Spanish', () => {
+      const cases = [['-0,15', -0.15], ['−0,15', -0.15], ['-0.15', -0.15], ['1,10', 1.1], [' 1.5 ', 1.5], ['0', 0], [',5', 0.5], ['2', 2], ['–0,3', -0.3]];
+      for (const [text, want] of cases) if (parseKnobText(text) !== want) throw new Error(`${text} -> ${parseKnobText(text)}`);
+      for (const bad of ['', '-', '−', 'abc', '1,2,3', '--1', '0,1x', '1e3']) if (!Number.isNaN(parseKnobText(bad))) throw new Error('accepted ' + bad);
+      if (knobText(-0.15) !== '−0,15' || knobText(1.1) !== '1,10' || knobText(0) !== '0,00' || knobText(-1) !== '−1,00') throw new Error([knobText(-0.15), knobText(1.1), knobText(0), knobText(-1)].join('|'));
+    });
+    await TA('tune: weight boxes show a comma and a real minus, and bad input reverts with a hint', async () => {
+      await withTuneTeam(async () => {
+        await showRatingTune();
+        const box = (key) => document.querySelector(`input.tune-num[data-knob="${key}"]`);
+        if (box('turnover').value !== '−0,40' || box('shot').value !== '0,80' || box('turnover').type !== 'text' || box('turnover').inputMode !== 'decimal') throw new Error('format ' + box('turnover').value + ' ' + box('shot').value);
+        box('turnover').value = '−0,6'; box('turnover').dispatchEvent(new Event('input', { bubbles: true })); box('turnover').dispatchEvent(new Event('change', { bubbles: true }));
+        if (home.weightsDraft.turnover !== -0.6 || box('turnover').value !== '−0,60' || Number(document.querySelector('input.tune-range[data-knob="turnover"]').value) !== -0.6) throw new Error('typed minus and comma: ' + box('turnover').value);
+        box('turnover').value = 'mucho'; box('turnover').dispatchEvent(new Event('input', { bubbles: true }));
+        if (home.weightsDraft.turnover !== -0.6) throw new Error('garbage must not change the weight');
+        box('turnover').dispatchEvent(new Event('change', { bubbles: true }));
+        if (box('turnover').value !== '−0,60' || !$('home-status').textContent.includes('Escribe un número')) throw new Error('revert + hint: ' + box('turnover').value + ' / ' + $('home-status').textContent);
+        box('turnover').value = '-0,5'; box('turnover').dispatchEvent(new Event('input', { bubbles: true })); box('turnover').dispatchEvent(new Event('change', { bubbles: true }));
+        if ($('home-status').textContent !== '' || box('turnover').value !== '−0,50') throw new Error('a valid entry clears the hint');
+        const keeperBox = box('teamFaultKeeperShare');
+        if (!keeperBox || keeperBox.value !== '0,50') throw new Error('keeper share knob: ' + (keeperBox && keeperBox.value));
+      });
+    });
+    await TA('tune: leaving with unsaved changes asks first, and names are escaped', async () => {
+      const evil = { id: 'sp9', num: 9, name: '<img src=x onerror=alert(1)>', pos: 'LAT' };
+      await withTuneTeam(async () => {
+        await showRatingTune();
+        if (document.querySelector('#tune-rows img[src="x"]') || !tuneRow('sp9') || !tuneRow('sp9').textContent.includes('<img')) throw new Error('names are text: ' + $('tune-rows').innerHTML.slice(0, 200));
+        document.querySelector('.home-head [data-home-view="team"]').click();
+        for (let i = 0; i < 5; i++) await tick0();
+        if (home.view !== 'team') throw new Error('no changes: leaves at once, got ' + home.view);
+        await showRatingTune();
+        tuneInput(document.querySelector('input.tune-num[data-knob="turnover"]'), -0.9);
+        document.querySelector('.home-head [data-home-view="team"]').click();
+        if (home.view !== 'rating-tune' || home.armed !== 'tune-leave' || !document.querySelector('.tune-warn') || home.weightsDraft.turnover !== -0.9) throw new Error('first tap only asks: ' + home.view + ' ' + home.armed);
+        document.querySelector('.home-head [data-home-view="team"]').click();
+        for (let i = 0; i < 5; i++) await tick0();
+        if (home.view !== 'team' || home.armed !== null || team.ratingWeights) throw new Error('second tap leaves without saving: ' + home.view);
+        await showRatingTune();
+        tuneInput(document.querySelector('input.tune-num[data-knob="turnover"]'), -0.9);
+        document.querySelector('[data-tune="save"]').click();
+        for (let i = 0; i < 8; i++) await tick0();
+        document.querySelector('.home-head [data-home-view="team"]').click();
+        for (let i = 0; i < 5; i++) await tick0();
+        if (home.view !== 'team') throw new Error('saved changes do not ask: ' + home.view);
+      }, { roster: [tuneKeeper, tuneWing, evil], matches: [seasonRow('tn2', { players: [...seasonPlayers, evil], events: [...lossesOf(2), { ...seasonTurnovers(), id: 'ev9', playerId: 'sp9' }] })] });
     });
     T('zones: lane and ring from the origin, 7 m and counters apart', () => {
       const shot = (over) => ({ kind: 'SHOT', from: '9M', zone: '9M', origin: m(0, 10), ...over });
@@ -1133,6 +2249,14 @@
         if (d - SIX_M_PX < CLEARANCE || NINE_M_PX - d < CLEARANCE) throw new Error(`${laneOf(origin)} label ${Math.round(d)} px from the goal, lines at ${SIX_M_PX} and ${NINE_M_PX}`);
       });
     });
+    T('charts: far-ring wing labels stay beyond the 9 m line, not pushed into the near ring', () => {
+      const colours = { GOL: 'x', PARADA: 'x', FALLO: 'x' };
+      [m(-9.4, 5), m(9.4, 5)].forEach((origin) => {
+        if (shotZone(chartShot({ origin })) !== `${laneOf(origin)}:far` || !laneOf(origin).startsWith('EXT')) throw new Error('premise ' + shotZone(chartShot({ origin })));
+        const svg = zoneMapSvg([chartShot({ origin })], () => true, colours), [, x, y] = svg.match(/class="zone-pct" x="(-?[\d.]+)" y="(-?[\d.]+)"/);
+        if (+y <= nineMetreY(+x)) throw new Error(`label at y ${y} is inside the 9 m line (${Math.round(nineMetreY(+x))}) at x ${x}`);
+      });
+    });
     T('charts: no NaN with empty axes or missing rates', () => {
       const bad = (svg) => /NaN|undefined/.test(svg);
       if (bad(radarSvg([], '–', 'Nota'))) throw new Error('empty radar');
@@ -1161,6 +2285,151 @@
       const three = evolutionSvg([row('2026-10-01', 2, 0.2), row('2026-10-08', 4, 0.6), row('2026-10-15', 3, 1)], 'goals', (r) => r.made);
       const xs = [...three.matchAll(/class="evo-bar" x="([\d.]+)"/g)].map((x) => +x[1]);
       if (xs.length !== 3 || !(xs[0] < xs[1] && xs[1] < xs[2]) || !three.includes(`>${shortDateText('2026-10-01')}<`) || !three.includes('<polyline')) throw new Error('order ' + xs);
+    });
+    // ---- Attack types: positional, counter-attack and quick restart, for both sides ----
+    const atkShot = (abs, result = 'GOL', over = {}) => ({ id: newId('e'), abs, kind: 'SHOT', playerId: 'sp2', zone: '9M', from: '9M', result, ...over });
+    const atkRival = (abs, result = 'GOL', over = {}) => ({ id: newId('e'), abs, kind: 'RIVAL_SHOT', gkId: 'sp1', zone: '9M', result, contra: false, ...over });
+    const atkLoss = (abs) => ({ id: newId('e'), abs, kind: 'TURNOVER', playerId: 'sp2', subtype: 'Pase' });
+    const atkRecovery = (abs) => ({ id: newId('e'), abs, kind: 'ACTION', playerId: 'sp2', action: 'RECUP' });
+    T('attack types: contra flags win', () => {
+      const goal = atkRival(100), counter = atkShot(103, 'GOL', { zone: 'CONTRA' }), theirs = atkRival(120, 'GOL', { contra: true });
+      const events = [goal, counter, atkShot(110, 'GOL'), theirs];
+      if (attackType(counter, events) !== 'CONTRA') throw new Error('ours ' + attackType(counter, events));
+      if (attackType(theirs, events) !== 'CONTRA') throw new Error('theirs ' + attackType(theirs, events));
+      if (ATTACK_TYPES.CONTRA !== 'Contraataque' || ATTACK_TYPES.POS !== 'Posicional' || ATTACK_TYPES.SAQUE !== 'Saque rápido') throw new Error(JSON.stringify(ATTACK_TYPES));
+    });
+    T('attack types: a shot within the restart window after a rival goal is a quick restart', () => {
+      const window = CONFIG.attackTypes.quickRestartSeconds;
+      if (window !== 15) throw new Error('window ' + window);
+      const type = (before, after) => attackType(after, [before, after]);
+      if (type(atkRival(100), atkShot(100 + window)) !== 'SAQUE') throw new Error('at the limit');
+      if (type(atkRival(100), atkShot(101 + window)) !== 'POS') throw new Error('just after the window');
+      if (type(atkRival(100, 'PARADA'), atkShot(105)) !== 'POS') throw new Error('a save is not a restart');
+      if (type(atkShot(100), atkRival(100 + window)) !== 'SAQUE') throw new Error('the rival restarts after our goal');
+      if (attackType(atkShot(5), [atkShot(5)]) !== 'POS') throw new Error('first event of the match');
+    });
+    T('attack types: a turnover in between makes it positional', () => {
+      const after = atkShot(108);
+      if (attackType(after, [atkRival(100), atkLoss(103), after]) !== 'POS') throw new Error('turnover');
+      if (attackType(after, [atkRival(100), atkRival(104, 'PARADA'), after]) !== 'POS') throw new Error('rival shot');
+      if (attackType(after, [atkRival(100), { id: 'n', abs: 104, kind: 'NOTE', text: 'x' }, after]) !== 'SAQUE') throw new Error('a note is not a possession');
+    });
+    T('attack types: rival goal after our turnover counts, after our shot does not', () => {
+      const goal = atkRival(60);
+      if (!afterOurTurnover(goal, [atkLoss(50), goal])) throw new Error('after a turnover');
+      if (afterOurTurnover(goal, [atkShot(50, 'PARADA'), goal])) throw new Error('after our shot');
+      if (afterOurTurnover(goal, [atkLoss(40), atkRecovery(45), goal])) throw new Error('a recovery ended the possession in between');
+      if (afterOurTurnover(goal, [atkLoss(40), atkRival(45, 'PARADA'), goal])) throw new Error('the rival shot before');
+      if (afterOurTurnover(goal, [goal])) throw new Error('first event of the match');
+      const half = CONFIG.halfSeconds, secondHalf = { ...atkRival(half + 5, 'GOL') };
+      if (afterOurTurnover(secondHalf, [atkLoss(half - 10), secondHalf])) throw new Error('a turnover before half-time is not the possession before the throw-off');
+      if (!afterOurTurnover(secondHalf, [atkLoss(half + 1), secondHalf])) throw new Error('a turnover in the second half');
+      const restart = atkShot(half + 5);
+      if (attackType(restart, [atkRival(half - 5), restart]) !== 'POS') throw new Error('the first shot of the second half is no quick restart');
+      if (attackType(atkShot(95), [atkRival(100), atkShot(95)]) !== 'POS') throw new Error('a clock moved back is no quick restart');
+      const rows = attackTypeRows([atkLoss(10), atkRival(20), atkRival(30, 'FUERA')], 'them');
+      if (rows.map((r) => r.type).join() !== 'POS,CONTRA,SAQUE' || rows[0].shots !== 2 || rows[0].goals !== 1 || rows[0].pct !== 50 || rows[1].pct !== null) throw new Error(JSON.stringify(rows));
+    });
+    T('attack types: works on the sample and an old match without new fields', () => {
+      const sample = sampleState().events;
+      ['us', 'them'].forEach((side) => {
+        const rows = attackTypeRows(sample, side), shots = (side === 'us' ? ourShots : rivalShots)(sample);
+        if (sumOf(rows, (r) => r.shots) !== shots.length || sumOf(rows, (r) => r.goals) !== shots.filter((e) => e.result === 'GOL').length || /NaN|undefined/.test(JSON.stringify(rows))) throw new Error(side + JSON.stringify(rows));
+      });
+      const old = sample.map(({ contra, origin, ...rest }) => rest);
+      if (sumOf(attackTypeRows(old, 'us'), (r) => r.shots) !== ourShots(sample).length || attackTypeRows([], 'us').some((r) => r.shots !== 0 || r.pct !== null)) throw new Error('old match');
+      if (afterOurTurnover(rivalShots(old)[0], old) !== false || attackTypeRows(old, 'them').length !== 3) throw new Error('old match, rival');
+    });
+    // ---- «Estadísticas»: the season dashboards of the team ----
+    const statsPlayers = [...seasonPlayers, { id: 'sp3', num: 3, name: 'Back', pos: 'LAT' }];
+    const statsMatchA = () => seasonRow('st-a', { date: '2026-10-01', players: statsPlayers, events: [atkLoss(10), atkRival(20, 'GOL'), atkShot(30, 'GOL'), atkRival(40, 'PARADA'), atkShot(50, 'FUERA', { zone: '6M' })] });
+    const statsMatchB = () => seasonRow('st-b', { date: '2026-10-08', players: statsPlayers, events: [atkShot(10, 'FUERA'), atkRival(20, 'GOL'), atkLoss(30), atkRival(31, 'GOL', { gkId: 'other' }), { ...atkLoss(60), playerId: 'sp3', subtype: 'Pasos' }] });
+    const withStatsPage = async (matches, fn) => {
+      const keep = { season: home.season, roster: home.roster, statsSort: home.statsSort };
+      try { home.season = matches; home.roster = statsPlayers; showHomeView('team'); await fn(); }
+      finally { Object.assign(home, keep); showHomeView('team'); }
+    };
+    await TA('stats: tab opens the dashboard', async () => {
+      await withStatsPage([statsMatchA(), statsMatchB()], async () => {
+        const tab = document.querySelector('[data-home-view="stats"]');
+        if (!tab || tab.textContent !== 'Estadísticas' || tab.getAttribute('aria-pressed') !== 'false') throw new Error('tab');
+        tab.click(); await tick0();
+        if (home.view !== 'stats' || document.querySelector('[data-home-view="stats"]').getAttribute('aria-pressed') !== 'true') throw new Error('view ' + home.view);
+        const titles = [...document.querySelectorAll('.stats-page > section > h3')].map((h) => h.textContent).join('|');
+        if (titles !== 'Tendencia|Tiro|Tipos de ataque|Goles tras pérdida|Portería|Pérdidas por jugador|Jugadores') throw new Error(titles);
+        if (/NaN|undefined/.test($('home').textContent) || !document.querySelector('.stats-page svg')) throw new Error('content');
+      });
+    });
+    T('stats: per-match rows add up to the season totals of teamSeason', () => {
+      const matches = [statsMatchA(), statsMatchB()], rows = matches.map(teamMatchRow), t = teamSeason(matches);
+      const total = (pick) => sumOf(rows, pick);
+      if (rows[0].id !== 'st-a' || rows[0].date !== '2026-10-01' || rows[0].them !== 'Rival' || rows[0].result !== matchResult(matches[0])) throw new Error(JSON.stringify(rows[0]).slice(0, 200));
+      if (total((r) => r.scoreUs) !== t.goalsFor || total((r) => r.scoreThem) !== t.goalsAgainst || total((r) => r.shots) !== t.shots || total((r) => r.goals) !== t.shotGoals) throw new Error('goals and shots');
+      if (total((r) => r.turnovers) !== t.turnovers || total((r) => r.recoveries) !== t.recoveries || total((r) => r.saves) !== t.saves || total((r) => r.onTarget) !== t.onTarget) throw new Error('turnovers and saves');
+      if (total((r) => sumOf(r.keepers, (k) => k.saves)) !== t.saves || total((r) => sumOf(r.keepers, (k) => k.onTarget)) !== t.onTarget) throw new Error('keepers');
+      if (total((r) => sumOf(r.attack, (a) => a.shots)) !== t.shots || total((r) => sumOf(r.against, (a) => a.shots)) !== 4) throw new Error('attack types');
+      if (rows.map((r) => r.afterTurnoverGoals).join() !== '1,1') throw new Error('after turnovers ' + rows.map((r) => r.afterTurnoverGoals));
+      if (rows[1].keepers.map((k) => k.id).join() !== 'sp1,other') throw new Error('keepers of B');
+    });
+    T('stats: turnovers belong to the player who lost the ball', () => {
+      const loss = (playerId, subtype) => ({ ...atkLoss(5), playerId, subtype });
+      const match = seasonRow('st-t', { players: statsPlayers, events: [loss('sp2', 'Pasos'), loss('sp2', 'Pasos'), loss('sp2', 'Pase'), loss('sp3', 'Bote'), loss('gone', 'Pase'), atkRecovery(9)] });
+      const rows = turnoversByPlayer([match, statsMatchB()], statsPlayers);
+      if (rows.map((r) => r.player.id).join() !== 'sp2,sp3') throw new Error(rows.map((r) => r.player.id + ':' + r.total).join());
+      if (rows[0].total !== 4 || rows[0].byType.Pasos !== 2 || rows[0].byType.Pase !== 2 || rows[1].total !== 2 || rows[1].byType.Bote !== 1 || rows[1].byType.Pasos !== 1) throw new Error(JSON.stringify(rows.map((r) => [r.player.id, r.total, r.byType])));
+      if (turnoversByPlayer([], statsPlayers).length) throw new Error('empty season');
+    });
+    await TA('stats: player table shows – for unknown minutes and plus-minus', async () => {
+      const old = statsMatchA();
+      const logged = seasonRow('st-c', { players: statsPlayers, clock: HALF_CLOCK, courtSets: [['sp2', 'sp1']], court: [{ abs: 0, set: 0 }], events: [{ ...atkShot(10, 'GOL'), on: 0 }, atkRival(20, 'GOL')] });
+      const unknown = seasonPlayerTable([old], statsPlayers), wing = unknown.find((r) => r.player.id === 'sp2');
+      if (wing.seconds !== null || wing.plusMinus !== null || wing.played !== 1 || wing.rating == null) throw new Error(JSON.stringify(wing));
+      const known = seasonPlayerTable([old, logged], statsPlayers).find((r) => r.player.id === 'sp2');
+      if (known.seconds !== courtFiguresOf(logged.state, 'sp2').seconds || !(known.seconds > 0) || known.played !== 2) throw new Error(JSON.stringify(known));
+      if (seasonPlayerTable([old], statsPlayers).some((r) => r.played === 0) || seasonPlayerTable([], statsPlayers).length) throw new Error('players who did not play');
+      await withStatsPage([old], async () => {
+        showHomeView('stats');
+        const cells = (col) => [...document.querySelectorAll(`.stats-players [data-col="${col}"]`)].map((c) => c.textContent);
+        if (!cells('seconds').length || cells('seconds').some((x) => x !== '–') || cells('plusMinus').some((x) => x !== '–')) throw new Error(cells('seconds') + ' / ' + cells('plusMinus'));
+      });
+    });
+    await TA('stats: player table sorts by the clicked column', async () => {
+      const goals = (n) => Array.from({ length: n }, (_, i) => atkShot(10 + i, 'GOL'));
+      const match = seasonRow('st-s', { players: statsPlayers, events: [...goals(1), ...goals(3).map((e) => ({ ...e, playerId: 'sp3' }))] });
+      await withStatsPage([match], async () => {
+        showHomeView('stats');
+        const order = () => [...document.querySelectorAll('.stats-players tbody tr')].map((r) => r.dataset.playerRow).join();
+        document.querySelector('[data-sort="goals"]').click();
+        if (home.statsSort.key !== 'goals' || order() !== 'sp3,sp2,sp1') throw new Error('descending ' + order());
+        document.querySelector('[data-sort="goals"]').click();
+        if (order() !== 'sp1,sp2,sp3') throw new Error('ascending ' + order());
+      });
+    });
+    await TA('stats: no matches shows the empty text and no NaN', async () => {
+      await withStatsPage([], async () => {
+        showHomeView('stats');
+        const text = $('home').textContent;
+        if (!text.includes('Sin partidos todavía') || /NaN|undefined|Infinity/.test($('home').innerHTML) || document.querySelector('.stats-page svg')) throw new Error(text.slice(0, 200));
+      });
+      await withStatsPage([seasonRow('st-z', { players: statsPlayers })], async () => {
+        showHomeView('stats');
+        if (/NaN|undefined|Infinity/.test($('home').innerHTML)) throw new Error('a match without events');
+      });
+    });
+    T('stats: a rate line sits on a 0-100 % scale with a line at 50 %', () => {
+      const svg = trendSvg([{ date: '2026-10-01', rate: 0.38 }, { date: '2026-10-08', rate: 0.38 }], [{ key: 'rate', label: 'Paradas', token: 'act-def', rate: true }], 'line');
+      const mid = Number(/class="evo-mid"[^>]*y1="([\d.]+)"/.exec(svg)[1]), dot = Number(/class="evo-dot"[^>]*cy="([\d.]+)"/.exec(svg)[1]);
+      if (!(dot > mid)) throw new Error(`38 % must sit under the 50 % line: dot ${dot}, line ${mid}`);
+    });
+    T('stats: evolutionSvg output unchanged through trendSvg', () => {
+      const rows = [{ date: '2026-10-01', goals: 2, made: 0.5 }, { date: '2026-10-08', goals: 5, made: NaN }, { date: '2026-10-15', goals: 3, made: 0.25 }];
+      const bar = (x, y, h, n, date) => `<rect class="evo-bar" x="${x}" y="${y}" width="40" height="${h}" rx="4" fill="var(--act-def)" fill-opacity="0.45"/><text class="chart-num" x="${x + 20}" y="${y - 6}" font-size="16" text-anchor="middle">${n}</text><text class="chart-cap" x="${x + 20}" y="210" font-size="11" text-anchor="middle">${shortDateText(date)}</text>`;
+      const want = '<svg viewBox="0 0 360 220" role="img"><line x1="24" y1="186" x2="336" y2="186" stroke="var(--line)" stroke-width="2"/>'
+        + bar(56, 122.8, 63.2, 2, '2026-10-01') + bar(160, 28, 158, 5, '2026-10-08') + bar(264, 91.2, 94.8, 3, '2026-10-15')
+        + '\n      <polyline points="76,107 284,146.5" fill="none" stroke="var(--gold)" stroke-width="3" stroke-linejoin="round" stroke-linecap="round"/><circle class="evo-dot" cx="76" cy="107" r="5" fill="var(--gold)" stroke="var(--surface)" stroke-width="2"/><circle class="evo-dot" cx="284" cy="146.5" r="5" fill="var(--gold)" stroke="var(--surface)" stroke-width="2"/></svg>';
+      if (evolutionSvg(rows, 'goals', (r) => r.made) !== want) throw new Error(evolutionSvg(rows, 'goals', (r) => r.made));
+      const lines = trendSvg(rows, [{ key: 'goals', label: 'Goles', token: 'act-def' }, { key: 'made', label: 'Tiro', token: 'gold', rate: true }], 'line');
+      if (countOf(lines, /<polyline/g) !== 2 || /NaN|undefined/.test(lines) || trendSvg([], [{ key: 'goals', label: 'Goles', token: 'act-def' }], 'line') !== '') throw new Error('line chart');
     });
     await TA('a roster file with card names and photos stores them', async () => { const a = home.roster.find((p) => p.pos === 'POR'); const file = new File([JSON.stringify({ format: ROSTER_FORMAT, players: [{ num: a.num, name: 'Ana', pos: 'POR', fullName: 'Ana Ruiz', photo: TINY_PNG }, { num: 31, name: 'Eva', pos: 'EXT', fullName: 'Eva Gil Mora', photo: TINY_PNG }] })], 'p.json', { type: 'application/json' }); await importTeamRoster(file); const list = await backend.listPlayers(team.id); const ana = list.find((p) => p.id === a.id), eva = list.find((p) => p.num === 31); if (!ana || ana.fullName !== 'Ana Ruiz' || ana.photo !== TINY_PNG || !eva || eva.fullName !== 'Eva Gil Mora' || eva.photo !== TINY_PNG) throw new Error('not stored'); await retireTeamPlayer(rosterPlayer(eva.id)); });
     await TA('the full name and photo are saved and survive a roster file', async () => { const a = home.roster.find((p) => p.pos === 'POR'); await saveTeamPlayer(a, { fullName: 'Ana Ruiz Gómez', photo: TINY_PNG }); const file = new File([JSON.stringify({ format: ROSTER_FORMAT, players: [{ num: a.num, name: 'Ana', pos: 'POR' }] })], 'p.json', { type: 'application/json' }); await importTeamRoster(file); const stored = (await backend.listPlayers(team.id)).find((p) => p.id === a.id); if (!stored || stored.name !== 'Ana' || stored.fullName !== 'Ana Ruiz Gómez' || stored.photo !== TINY_PNG) throw new Error(JSON.stringify(stored && { ...stored, photo: Boolean(stored.photo) })); });
@@ -1338,13 +2607,13 @@
         openCard('ca', [logged, cardMatch({ id: 'cm9' })]);
         const cells = [...document.querySelectorAll('.match-table tbody tr')].map((tr) => [...tr.children].map((c) => c.textContent));
         const heads = [...document.querySelectorAll('.match-table th')].map((c) => c.textContent);
-        if (heads.join() !== 'Fecha,Rival,Res.,Min,Gol,%,Pas,Pér,+/−') throw new Error(heads.join());
-        const logRow = cells.find((r) => r[3] === '47'), oldRow = cells.find((r) => r[3] === '–');
+        if (heads.join() !== 'Fecha,Rival,Res.,Nota,Min,Gol,%,Pas,Pér,+/−') throw new Error(heads.join());
+        const logRow = cells.find((r) => r[4] === '47'), oldRow = cells.find((r) => r[4] === '–');
         if (!logRow || logRow.at(-1) !== plusMinusText(balance) || !oldRow || oldRow.at(-1) !== '–') throw new Error(JSON.stringify(cells));
         const wrap = document.querySelector('.match-table').parentElement;
         if (wrap.scrollWidth > wrap.clientWidth) throw new Error(`field table scrolls sideways by ${wrap.scrollWidth - wrap.clientWidth}px`);
         openCard('cg', [logged]);
-        if ([...document.querySelectorAll('.match-table th')].map((c) => c.textContent).join() !== 'Fecha,Rival,Res.,Min,Par,%,7 m,Gol' || !document.querySelector('.match-table tbody td:nth-child(4)').textContent.includes('47')) throw new Error('keeper table');
+        if ([...document.querySelectorAll('.match-table th')].map((c) => c.textContent).join() !== 'Fecha,Rival,Res.,Nota,Min,Par,%,7 m,Gol' || !document.querySelector('.match-table tbody td:nth-child(5)').textContent.includes('47')) throw new Error('keeper table');
         if (/NaN|undefined/.test($('home').textContent)) throw new Error('NaN or undefined');
         const old = playerMatchRow(seasonRow('old', { events: [seasonShot('sp2', 'GOL')] }), seasonPlayers[1]);
         if (old.seconds !== null || old.plusMinus !== null || playerSeason([seasonRow('old')], seasonPlayers[1]).totals.seconds !== 0) throw new Error('a match without a log must stay unknown');
@@ -1700,6 +2969,16 @@
         if (!document.querySelector('[data-player-match-open="om1"]') || /Cargando/.test($('home').textContent)) throw new Error('match view not drawn again');
       });
     });
+    await TA('open match for player: Escape goes back to the card like «‹ Ficha»; a plain Hoja just closes', async () => {
+      const escape = () => document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape' }));
+      await openFromCard(SAMPLE_WING_ID, sampleMatch(), async () => {
+        escape();
+        for (let i = 0; i < 5; i++) await tick0();
+        if (currentMatchId !== null || !$('sheet').hidden || ui.sheetReturn || home.view !== 'player-match' || home.playerMatchId !== 'om1') throw new Error(home.view + ' ' + currentMatchId);
+      });
+      const snap = snapshot();
+      try { ui.sheetReturn = null; ui.sheetMode = 'sheet'; renderSheet(); $('sheet').hidden = false; escape(); if (!$('sheet').hidden) throw new Error('a plain Hoja ignores Escape'); } finally { restore(snap); }
+    });
     await TA('open match for player: a normal match keeps Volver and lands on the final', async () => {
       const keepState = state, keepId = currentMatchId;
       try {
@@ -1800,6 +3079,11 @@
         next = { data: { id: 't9', club: 'C', name: 'N', brand: '#000000', brand2: '#ffffff', brand_ink: '#ffffff', crest: null }, error: null };
         const created = await cloud.createTeam({ club: 'C', name: 'N', brand: '#000000', brand2: '#ffffff', brandInk: '#ffffff', crest: null });
         if (created.brandInk !== '#ffffff' || calls.find((c) => c[0] === 'rpc')[1] !== 'create_team') throw new Error('create');
+        next = { data: { id: 't9', club: 'C', name: 'N', brand: '#000000', brand2: '#ffffff', brand_ink: '#ffffff', crest: null, rating_weights: { turnover: -0.6 } }, error: null }; calls.length = 0;
+        const weighted = await cloud.updateTeam('t9', { ratingWeights: { turnover: -0.6 } });
+        if (calls.find((c) => c[0] === 'update')[1].rating_weights.turnover !== -0.6 || weighted.ratingWeights.turnover !== -0.6) throw new Error('rating_weights mapping');
+        calls.length = 0; await cloud.updateTeam('t9', { club: 'C', name: 'N' });
+        if (calls.find((c) => c[0] === 'update')[1].rating_weights !== undefined) throw new Error('a team edit must not send the weights');
         next = { data: null, error: { message: 'duplicate key value violates unique constraint "players_team_num_active"' } };
         let msg = ''; try { await cloud.savePlayer('t1', { id: null, num: 4, name: 'X', pos: 'LAT' }); } catch (e) { msg = cloudErrorText(e); }
         if (msg !== 'ese dorsal ya está en la plantilla') throw new Error(msg);
@@ -1964,6 +3248,119 @@
     const showCalendarPage = (fixtures, matches) => { home.fixtures = fixtures; home.teamMatches = matches; home.season = []; showHomeView('team'); };
     const season14 = () => Array.from({ length: 14 }, (_, i) => fx('r' + (i + 1), i + 1, weeksFromNow(i - 2), 'Rival ' + (i + 1), { home: i % 2 === 0 }));
     const flatText = (el) => el.textContent.replace(/\s+/g, ' ').trim();
+    // The match list (cards) and the profile: the grids hold three columns above this width, two below.
+    const CARD_GRID_WIDE_MIN_PX = 1100;
+    const listMatch = (id, them, status, scoreUs, scoreThem, over) => ({ id, date: '2026-10-17', them, venue: 'Pabellón Vivero', status, scoreUs, scoreThem, ...over });
+    const withHomeView = async (fn) => {
+      const keep = { matches: home.matches, season: home.season, fixtures: home.fixtures, teamMatches: home.teamMatches, roster: home.roster, teams: home.teams, templates: home.templates, user: home.user, view: home.view }, hidden = $('home').hidden;
+      try { await fn(); } finally { Object.assign(home, keep); $('home').hidden = hidden; }
+    };
+    const showMatchCards = (matches, over) => { Object.assign(home, { matches, season: null, fixtures: [], teamMatches: [], ...over }); showHomeView('matches'); return [...document.querySelectorAll('.match-card')]; };
+    const columnsOf = (el) => getComputedStyle(el).gridTemplateColumns.split(' ').length;
+    await TA('matches: one card per match with its actions', async () => withHomeView(async () => {
+      const cards = showMatchCards([listMatch('c1', 'BM Norte', 'finished', 7, 5), listMatch('c2', 'CD Sur', 'finished', 6, 6), listMatch('c3', 'Atlético <b data-evil>x</b>', 'finished', 4, 9),
+        listMatch('c4', 'BM Este', 'live', 3, 2), listMatch('c5', 'BM Oeste', 'setup', 0, 0, { pending: true, venue: '' })]);
+      if (cards.length !== 5 || document.querySelector('.home-body table')) throw new Error('cards ' + cards.length);
+      const chips = cards.map((c) => c.querySelector('.match-chip')), chipTexts = chips.map(flatText);
+      if (chipTexts.join() !== 'G,E,P,En juego,Preparando') throw new Error(chipTexts.join());
+      if (!['Victoria', 'Empate', 'Derrota'].every((word, i) => chips[i].getAttribute('aria-label') === word)) throw new Error('chip labels');
+      const scores = cards.map((c) => flatText(c.querySelector('.match-score')));
+      if (scores.join() !== '7–5,6–6,4–9,3–2,–') throw new Error(scores.join());
+      if (!flatText(cards[0]).includes('BM Norte') || !flatText(cards[0]).includes(dateText('2026-10-17')) || !flatText(cards[0]).includes('Pabellón Vivero')) throw new Error(flatText(cards[0]));
+      if (cards[2].querySelector('.match-rival b, [data-evil]')) throw new Error('rival name is not escaped');
+      const openLabels = cards.map((c) => flatText(c.querySelector('[data-open-match]')));
+      if (openLabels.join() !== 'Ver,Ver,Ver,Seguir,Seguir' || cards.some((c, i) => c.querySelector('[data-open-match]').dataset.openMatch !== 'c' + (i + 1))) throw new Error(openLabels.join());
+      const restart = cards.map((c) => Boolean(c.querySelector('[data-restart-match]')));
+      if (restart.join() !== 'true,true,true,true,false' || cards.some((c) => !c.querySelector('[data-delete-match]'))) throw new Error('actions ' + restart.join());
+      if (!cards[0].querySelector('[data-delete-match]').getAttribute('aria-label').includes('BM Norte')) throw new Error('delete label');
+      const pending = cards.map((c) => flatText(c).includes('sin subir'));
+      if (pending.join() !== 'false,false,false,false,true') throw new Error(pending.join());
+      const grid = document.querySelector('.card-grid');
+      if (!grid || getComputedStyle(grid).display !== 'grid' || columnsOf(grid) !== (innerWidth > CARD_GRID_WIDE_MIN_PX ? 3 : 2)) throw new Error('grid ' + (grid && getComputedStyle(grid).gridTemplateColumns));
+      if (cards.some((c) => /NaN|undefined/.test(c.textContent))) throw new Error('NaN');
+    }));
+    await TA('matches: MVP face when the season knows it', async () => withHomeView(async () => {
+      const list = [listMatch('v1', 'BM Norte', 'finished', 7, 5), listMatch('v2', 'CD Sur', 'finished', 6, 6), listMatch('v3', 'BM Este', 'live', 1, 0)];
+      const known = (id, mvpId, players = [cardField, cardKeeper]) => ({ ...list.find((m) => m.id === id), state: { mvpId, players } });
+      const face = (c) => c.querySelector('.mvp-face-static');
+      let cards = showMatchCards(list, { roster: [cardField, cardKeeper], season: [known('v1', 'ca'), known('v2', null)] });
+      if (!face(cards[0]) || !face(cards[0]).querySelector('.disc') || !face(cards[0]).querySelector('.crown-face') || face(cards[0]).getAttribute('aria-label') !== 'MVP del partido: Ari') throw new Error('face missing');
+      if (face(cards[1]) || face(cards[2])) throw new Error('a match with no pick, or a live one, shows a face');
+      cards = showMatchCards(list, { roster: [], season: [known('v1', 'ca')] });
+      if (!face(cards[0])) throw new Error('a player gone from the roster keeps his face, from the match squad');
+      cards = showMatchCards(list, { roster: [cardField], season: [known('v1', 'zz')] });
+      if (face(cards[0]) || /undefined/.test(cards[0].textContent)) throw new Error('an unknown MVP id shows a face');
+      cards = showMatchCards(list, { roster: [cardField], season: null });
+      if (cards.length !== 3 || cards.some((c) => face(c))) throw new Error('no season: no faces');
+    }));
+    await TA('matches: the card names the calendar round of its match', async () => withHomeView(async () => {
+      const list = [listMatch('r1', 'BM Norte', 'finished', 7, 5), listMatch('r2', 'Alcalá', 'finished', 2, 1), listMatch('r3', 'Libre', 'finished', 3, 3)];
+      const fixtures = [fx('f3', 3, '2026-11-01', 'Otro nombre', { matchId: 'r1' }), fx('f4', 4, '2026-10-18', 'BM ALCALA')];
+      const cards = showMatchCards(list, { fixtures, teamMatches: list });
+      const rounds = cards.map((c) => (c.querySelector('.match-round') ? flatText(c.querySelector('.match-round')) : ''));
+      if (rounds.join() !== 'Jornada 3,Jornada 4,') throw new Error(rounds.join());
+    }));
+    await TA('profile: teams, templates and account share one card grid', async () => withHomeView(async () => {
+      const brandTeam = (id, name, brand, brand2) => ({ id, club: 'Club ' + name, name, brand, brand2, brandInk: '#ffffff', crest: null });
+      Object.assign(home, { user: null, teams: [brandTeam('p1', 'Uno', '#112233', '#aabbcc'), brandTeam('p2', 'Dos', 'red;background:url(x)', '#aabbcc')], templates: [{ id: 'pt', name: 'BM Sur', players: [{ id: 'a', num: 4 }] }] });
+      showHomeView('profile');
+      const grid = document.querySelector('.card-grid');
+      const teamCards = [...grid.querySelectorAll('[data-open-team]')];
+      if (teamCards.length !== 2 || !grid.querySelector('[data-new-team]') || !grid.querySelector('[data-template-edit="pt"]') || !grid.textContent.includes('Sin cuenta')) throw new Error('grid content');
+      const brandOf = (c) => c.style.getPropertyValue('--team-brand').trim();
+      if (brandOf(teamCards[0]) !== '#112233' || teamCards[0].style.getPropertyValue('--team-brand2').trim() !== '#aabbcc') throw new Error('brand colours ' + brandOf(teamCards[0]));
+      if (brandOf(teamCards[1]) !== 'var(--brand)') throw new Error('an invalid colour reaches the style: ' + brandOf(teamCards[1]));
+      if (!teamCards[0].querySelector('img.crest') || columnsOf(grid) !== (innerWidth > CARD_GRID_WIDE_MIN_PX ? 3 : 2)) throw new Error('crest or columns');
+      ['Mis equipos', 'Plantillas de rivales', 'Cuenta'].forEach((h) => { if (!flatText(grid).includes(h)) throw new Error('missing ' + h); });
+    }));
+    // Layout (M5.4): no horizontal overflow in any home page or sheet tab, at the window the suite runs in (the matrix probe covers 1024).
+    const overflowing = (root) => {
+      const bad = [];
+      if (root.scrollWidth > root.clientWidth) bad.push(`${root.id || root.className} ${root.scrollWidth}>${root.clientWidth}`);
+      root.querySelectorAll('*').forEach((el) => { if (['auto', 'scroll'].includes(getComputedStyle(el).overflowX) && el.scrollWidth > el.clientWidth) bad.push(`${el.tagName}.${el.className} ${el.scrollWidth}>${el.clientWidth}`); });
+      if (document.documentElement.scrollWidth > innerWidth) bad.push('document');
+      return bad;
+    };
+    await TA('layout: every home page and sheet tab has no horizontal overflow', async () => withHomeView(async () => {
+      const bad = [], snap = snapshot(), field = { ...cardField, num: 5 };
+      try {
+        home.roster = [field, cardKeeper]; home.season = [cardMatch()]; home.fixtures = []; home.teamMatches = []; home.sessions = []; home.playerId = 'ca';
+        home.matches = [listMatch('o1', 'Rival con un nombre muy largo de verdad', 'finished', 28, 23), listMatch('o2', 'BM Este', 'live', 3, 2, { pending: true })];
+        home.teams = [team]; home.templates = [{ id: 'ot', name: 'BM Sur', players: [{ id: 'a', num: 4 }] }]; home.squad = new Set(['ca', 'cg']); home.template = { id: 'ot', name: 'BM Sur', players: [] };
+        const views = [...Object.keys(HOME_VIEWS), ...Object.keys(PROFILE_VIEWS)];
+        for (const view of views) {
+          home.playerId = 'ca'; home.playerMatchId = 'cm1';
+          showHomeView(view);
+          overflowing($('home')).forEach((b) => bad.push(`${view}: ${b}`));
+          if (view === 'player') { home.playerId = 'cg'; showHomeView(view); overflowing($('home')).forEach((b) => bad.push(`keeper: ${b}`)); }
+        }
+        Object.assign(state, sampleState()); ui.sheetMode = 'sheet'; ui.sheetPlayer = 'p17';
+        for (const tab of Object.keys(SHEET_TABS)) {
+          ui.sheetTab = tab; renderSheet(); $('sheet').hidden = false;
+          overflowing($('sheet')).forEach((b) => bad.push(`${tab}: ${b}`));
+        }
+      } finally { restore(snap); ui.sheetTab = 'summary'; $('sheet').hidden = true; }
+      if (bad.length) throw new Error(bad.join(' | '));
+    }));
+    await TA('layout: per-match table headers keep a gap between neighbours', async () => withHomeView(async () => {
+      const MIN_HEADER_GAP_PX = 4;
+      home.roster = [cardField, cardKeeper]; home.season = [cardMatch()]; home.playerId = 'ca';
+      showHomeView('player');
+      const heads = [...document.querySelectorAll('.match-table th')].map((th) => { const r = document.createRange(); r.selectNodeContents(th); return r.getBoundingClientRect(); });
+      if (heads.length < 8) throw new Error('premise: ' + heads.length + ' headers');
+      heads.slice(1).forEach((rect, i) => { if (rect.left - heads[i].right < MIN_HEADER_GAP_PX) throw new Error(`headers ${i} and ${i + 1} are ${Math.round(rect.left - heads[i].right)} px apart`); });
+    }));
+    await TA('layout: pressed leader chip keeps the global chip look', async () => withHomeView(async () => {
+      home.roster = [cardField, cardKeeper]; home.season = [cardMatch()];
+      showHomeView('team');
+      const leader = document.querySelector('.leaders [data-leader][aria-pressed="true"]'), probe = document.createElement('div');
+      probe.innerHTML = '<button class="chip" type="button" aria-pressed="true">x</button>'; $('home').appendChild(probe);
+      try {
+        const a = getComputedStyle(leader), b = getComputedStyle(probe.firstChild);
+        const mismatch = ['backgroundColor', 'color', 'borderTopColor', 'borderTopLeftRadius', 'fontSize', 'fontWeight'].filter((k) => a[k] !== b[k]);
+        if (mismatch.length) throw new Error('differs from .chip: ' + mismatch.map((k) => `${k} ${a[k]} / ${b[k]}`).join('; '));
+      } finally { probe.remove(); }
+    }));
     await TA('team page: next match shows round, weekend, rival and home or away', async () => {
       await withCalendarTeam(async () => {
         showCalendarPage([fx('r1', 1, '2099-10-25', 'BALONMANO GADES - ASISA', { home: false }), fx('r2', 2, '2099-11-01', 'Otro')], []);
@@ -2516,6 +3913,16 @@
     T('pdf match', () => { addNote('Salida fallada del 9 en la 2ª acción — revisar'); const { doc, filename } = buildPdf('match'); undo(); __results.push('match pages ' + doc.getNumberOfPages() + ' ' + filename); window.__pdfMatch = doc.output('datauristring'); });
     T('pdf players', () => { const { doc } = buildPdf('players'); __results.push('players pages ' + doc.getNumberOfPages()); window.__pdfPlayers = doc.output('datauristring'); });
     T('pdf one', () => { const { filename } = buildPdf('p8'); __results.push(filename); });
+    return TA('final: shareReports still shares through shareFiles', async () => {
+      const done = withFinal(playedFew()), shared = [];
+      const unstub = sheetStubs((data) => data.files.every((f) => f.type === 'application/pdf'), async (data) => { shared.push(data); });
+      try {
+        $('final').querySelector('[data-final-share]').click();
+        for (let i = 0; i < 50 && !shared.length; i++) await tick0();
+        if (shared.length !== 1 || shared[0].files.length !== 2 || !/^informe-.+\.pdf$/.test(shared[0].files[0].name) || !shared[0].title.startsWith('Informe')) throw new Error(JSON.stringify(shared.map((d) => d.files.map((f) => f.name))));
+        if ($('final-status').textContent !== 'Compartido.') throw new Error($('final-status').textContent);
+      } finally { unstub(); done(); }
+    });
   }).catch((e) => __results.push('FAIL libs ' + e.message)).finally(() => {
     const pre = document.createElement('pre'); pre.id = 'res'; pre.textContent = __results.join('\n'); document.body.appendChild(pre);
     ['__pdfMatch', '__pdfPlayers'].forEach((k) => { if (window[k]) { const t = document.createElement('textarea'); t.id = k; t.textContent = window[k]; document.body.appendChild(t); } });

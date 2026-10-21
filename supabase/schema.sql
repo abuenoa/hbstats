@@ -18,6 +18,10 @@ create table if not exists public.teams (
   created_at timestamptz not null default now()
 );
 
+-- The coach's own rating weights (only the knobs he changed, keyed as in the app's RATING_KNOBS); null = the defaults.
+alter table public.teams add column if not exists rating_weights jsonb
+  check (rating_weights is null or (jsonb_typeof(rating_weights) = 'object' and pg_column_size(rating_weights) <= 2000));
+
 create table if not exists public.team_members (
   team_id uuid not null references public.teams (id) on delete cascade,
   user_id uuid not null references auth.users (id) on delete cascade,

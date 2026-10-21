@@ -53,9 +53,53 @@ SCENES = {
     "halftime": f"{SAMPLE} commit(); openHalftime();",
     "final": f"{SAMPLE} commit(); openFinal();",
 }
+# The MVP card is drawn on a canvas of its own size; the window is that size, so the screenshot is the card's PNG.
+MVP_CARD_SIZE = "1080,1350"
+MVP_FIELD_NAME = "Maximiliano Fernández Lo"
+MVP_KEEPER_NAME = "Wolfeschlegelsteinhausen"
+MVP_CARD_SNIPPET = (
+    f"{SAMPLE} commit(); (async () => {{ await document.fonts.ready;"
+    " const data = mvpCardData(state, '%s', matchRatings(state)); data.name = '%s';"
+    " %s"
+    " const canvas = document.createElement('canvas'); document.body.replaceChildren(canvas); document.body.style.margin = '0';"
+    " drawMvpCard(canvas, data, { photo: data.photo ? await loadImage(data.photo) : null, crest: await loadImage(data.crest) }); })();"
+)
+MVP_SAMPLE_PHOTO = (
+    "const face = document.createElement('canvas'); face.width = face.height = 160; const f = face.getContext('2d');"
+    " f.fillStyle = '#b7c4d6'; f.fillRect(0, 0, 160, 160); f.fillStyle = '#e0b48f'; f.beginPath(); f.arc(80, 70, 36, 0, 7); f.fill();"
+    " f.fillStyle = '#34495e'; f.beginPath(); f.arc(80, 190, 70, 0, 7); f.fill(); data.photo = face.toDataURL('image/png');"
+)
+# The sample match logs no court, so its minutes are unknown: the field card gets a 4th tile, the keeper card keeps three.
+MVP_SAMPLE_MINUTES = " data.kpis.push(['Min', '52']);"
+# The ratings card of the 16-player sample squad: eleven played (the other five are «S/C»), two photos, two long names.
+RATINGS_CARD_WIDTH, RATINGS_CARD_HEAD, RATINGS_CARD_ROW, SAMPLE_SQUAD = 1080, 300, 120, 16
+RATINGS_CARD_SIZE = f"{RATINGS_CARD_WIDTH},{RATINGS_CARD_HEAD + SAMPLE_SQUAD * RATINGS_CARD_ROW}"
+# The sample match with a court log (eleven on court the whole match) and a full-time clock, so minutes and +/− are known.
+COURT_LOGGED = (
+    "state.courtSets = [state.players.slice(0, 11).map((p) => p.id)]; state.court = [{ abs: 0, set: 0 }];"
+    " state.clock = { period: 2, elapsedMs: CONFIG.halfSeconds * 1000, runningSince: null };"
+)
+RATINGS_CARD_SNIPPET = (
+    f"{SAMPLE} {COURT_LOGGED} commit(); (async () => {{ await document.fonts.ready;"
+    " const data = ratingsCardData(state, matchRatings(state));"
+    f" {MVP_SAMPLE_PHOTO} data.rows[0].photo = data.rows[3].photo = data.photo;"
+    f" data.rows[0].name = '{MVP_FIELD_NAME}'; data.rows[2].name = '{MVP_KEEPER_NAME}';"
+    " const canvas = document.createElement('canvas'); document.body.replaceChildren(canvas); document.body.style.margin = '0';"
+    " drawRatingsCard(canvas, data, { crest: await loadImage(data.crest), faces: await Promise.all(data.rows.map((r) => (r.photo ? loadImage(r.photo) : null))) }); })();"
+)
+# Card scenes: one scene name writes several files, each a card with its own snippet and window size.
+CARD_SCENES = {
+    "mvp-image": {
+        "mvp-field": (MVP_CARD_SNIPPET % ("p17", MVP_FIELD_NAME, MVP_SAMPLE_PHOTO + MVP_SAMPLE_MINUTES), MVP_CARD_SIZE),
+        "mvp-keeper": (MVP_CARD_SNIPPET % ("p1", MVP_KEEPER_NAME, ""), MVP_CARD_SIZE),
+    },
+    "ratings-image": {"ratings-card": (RATINGS_CARD_SNIPPET, RATINGS_CARD_SIZE)},
+}
 # Matrix-only scenes: the season fixture (tools/scenes/season.js) puts the app in the team pages of a club with four matches.
 SHEET_STATS = f"{SAMPLE} commit(); ui.sheetMode = 'sheet'; ui.sheetTab = 'stats'; renderSheet(); $('sheet').hidden = false;"
+SHEET_SUMMARY = SHEET_STATS.replace("'stats'", "'summary'")
 SHEET_PLAYER = SHEET_STATS.replace("'stats'", "'player'")
+SHEET_SUMMARY_COURT = SHEET_SUMMARY.replace("commit();", f"{COURT_LOGGED} commit();", 1)
 TOP_SCORER_SAMPLE_ID = "p17"
 SAMPLE_KEEPER_ID = "p1"
 MATRIX_SCENES = {
@@ -65,15 +109,21 @@ MATRIX_SCENES = {
     "player-match": f"showPlayer((await seedSeason()).get('{TOP_SCORER_SAMPLE_ID}')); showPlayerMatch(home.season[0].id);",
     "keeper-match": "await seedSeason(); showPlayer(home.roster.find((p) => p.pos === 'POR').id); showPlayerMatch(home.season[0].id);",
     "matches": "await seedSeason(); await showMatches();",
+    "stats": "await seedSeason(); await showStats();",
+    "stats-empty": "await seedSeason(); home.season = []; showHomeView('stats');",
     "team-edit": "await seedSeason(); showHomeView('team-edit');",
+    "tuning": "await seedSeason(); await showRatingTune(); Object.assign(home.weightsDraft, { turnover: -0.7, shot: 1.1 }); renderHome();",
     "profile": "await seedSeason(); await showProfile();",
     "attendance": "await seedSeason(); await showAttendance();",
     "attendance-match": "await seedSeason(); await showAttendance(); openAttendanceDay('2026-10-17');",
+    "sheet-summary": SHEET_SUMMARY,
+    "sheet-summary-court": SHEET_SUMMARY_COURT,
     "sheet-stats": SHEET_STATS,
     "sheet-player": f"{SHEET_PLAYER} ui.sheetPlayer = '{TOP_SCORER_SAMPLE_ID}'; renderSheet();",
     "sheet-keeper": f"{SHEET_PLAYER} ui.sheetPlayer = '{SAMPLE_KEEPER_ID}'; renderSheet();",
     "halftime": SCENES["halftime"],
     "final": SCENES["final"],
+    "final-share": f"{SAMPLE} commit(); openFinal(); await ui.mvpCardReady; $('mvp-preview').scrollIntoView({{ block: 'center' }});",
 }
 # Thresholds the probe judges by (contrast: WCAG 1.4.3; the 44 px target is the AAA size of 2.5.5, stricter than the AA 24 px of 2.5.8; in CSS px).
 PROBE_LIMITS = {"textRatio": 4.5, "largeTextRatio": 3, "largeTextPx": 24, "largeBoldTextPx": 18.66, "boldWeight": 700, "targetPx": 44}
@@ -282,14 +332,14 @@ def main() -> None:
     parser.add_argument("--report-only", action="store_true", help="matrix only: print what the probes find but exit 0")
     parser.add_argument("--out", type=pathlib.Path, default=None, help="output folder (default .github/readme, or the matrix folder you choose)")
     args = parser.parse_args()
-    available = MATRIX_SCENES if args.matrix else SCENES
+    available = MATRIX_SCENES if args.matrix else {**SCENES, **CARD_SCENES}
     unknown = [n for n in args.scenes if n not in available]
     if unknown:
         raise SystemExit(f"Unknown scene(s): {', '.join(unknown)}. Available: {', '.join(available)}")
     if not SOURCE_PAGE.exists():
         raise SystemExit(f"{SOURCE_PAGE} not found: run python3 tools/build_site.py first")
     app = SOURCE_PAGE.read_text(encoding="utf-8")
-    names = args.scenes or list(available)
+    names = args.scenes or list(SCENES if not args.matrix else available)
     if args.matrix:
         if args.out is None:
             raise SystemExit("--matrix needs --out DIR")
@@ -299,9 +349,10 @@ def main() -> None:
     out_dir = args.out or OUT_DIR
     out_dir.mkdir(parents=True, exist_ok=True)
     for name in names:
-        out = out_dir / f"{name}.png"
-        capture(app, SCENES[name], out, TABLET_SIZE)
-        print(shown(out))
+        for file, snippet, size in [(name, SCENES[name], TABLET_SIZE)] if name in SCENES else [(f, *card) for f, card in CARD_SCENES[name].items()]:
+            out = out_dir / f"{file}.png"
+            capture(app, snippet, out, size)
+            print(shown(out))
 
 
 if __name__ == "__main__":

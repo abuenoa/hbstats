@@ -1,4 +1,4 @@
-# Next Phase Implementation Plan — ratings, MVP vote, visual pages, dashboards
+# Next Phase Implementation Plan — ratings, MVP, visual pages, dashboards
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development, following the
 > **Agent loop protocol** below. Steps use checkbox (`- [ ]`) syntax for tracking.
@@ -7,7 +7,7 @@
 - a substitution log that gives minutes and +/−;
 - a Sofascore-style rating per player and match;
 - an MVP card for WhatsApp, generated at every final;
-- an MVP vote that feeds the rating and the match MVP;
+- a match MVP: the coach's pick, else the top rating as «MVP provisional» (the vote is a later project);
 - visual «Hoja», half-time, final and home pages;
 - season team dashboards with the other coaches' feedback;
 - a weights editor for the rating.
@@ -22,7 +22,6 @@
   events. Everything else (minutes, +/−, ratings, attack types) comes from pure functions over a match state.
 - The rating is linear in a feature vector, so the tuning preview only recombines it.
 - Images are drawn with the Canvas 2D API.
-- The online vote (M4b) adds two Supabase tables and two anon RPCs.
 - Two new team-scoped tables, `fixtures` and `attendance_sessions`. Both are read through `cachedRead` and have a
   device copy. Attendance writes are device-first, with a sync like matches.
 - Fixture–match links and match-day attendance are derived by pure functions. Only explicit links and marks are
@@ -50,7 +49,7 @@ Chrome); screenshots via `tools/screenshots.py`; Supabase via the existing backe
 - **The live screen gains no tap, popup or visible element.** Every existing live-screen test passes unchanged.
 - **Past matches keep every number.** Matches without `court` or `on` show «–» for Min and +/−, and are rated with
   confidence 1.
-- **Ratings, votes and the MVP never change a statistic**, the score or the undo history.
+- **Ratings and the MVP never change a statistic**, the score or the undo history.
 - Every task adds tests to `tests/inject.js`. The suite passes with `python3 tools/run_tests.py`; only the `libs` test
   may fail, and only offline.
 - **UI tasks** attach the screenshot matrix (1280×800 and 1024×640, light and dark) from
@@ -63,7 +62,7 @@ Chrome); screenshots via `tools/screenshots.py`; Supabase via the existing backe
   - M0d.1 and M0e.1 are applied to the live project by the orchestrator through the Supabase MCP
     (`apply_migration`, then `get_advisors` security), as the coach asked on 2026-10-21. Implementers never touch the
     live project.
-  - M4b.1 and M7.1 stay a human step.
+  - M7.1 stays a human step.
 - **From M0b, UI tasks** also need the probe's `contrast=0 targets=0 motion=0` for their scenes, in both themes.
   Pages outside the live screen use the semantic tokens, type roles, spacing and radii of M0b; raw hex in new CSS is
   a review finding.
@@ -72,9 +71,13 @@ Chrome); screenshots via `tools/screenshots.py`; Supabase via the existing backe
     `1 failed`, with `FAIL libs` as the only FAIL line.
   - **V-matrix `<scenes>`:** `python3 tools/screenshots.py --matrix --out $TMPDIR/<task> <scenes>`. Expected: one
     `ok` line per image, and exit 0.
-  - **V-live:** `python3 tools/screenshots.py` (README mode), then `cmp` of each live scene (`defence`,
-    `attack-picker`, `dark`, and the other README scenes) against the M0 copies kept in `$TMPDIR/m0-readme`.
-    Expected: no output, exit 0.
+  - **V-live:** the live scenes (`defence`, `attack-picker`, the shot, clock, score and sanction popups), rendered
+    with `--motion reduce` in light and dark at both sizes, **before vs after**: a worktree at the task's base and
+    one at its head, each with the head's `tools/`, `build_site.py` in each, then `cmp` of every pair (the method of
+    `review-verdict-M0b.md`). Expected: no output, exit 0. The `$TMPDIR/m0-readme` baseline is stale (README mode
+    needs the network and renders error cards) and is not used.
+  - **Geometry:** `design: live screen geometry unchanged` reads a per-viewport table, `LIVE_GEOMETRY_BY_VIEWPORT`
+    (`1280x800` local, `1280x657` CI). A rect that moves is a live-screen change, not a table to re-record.
 
 ## Review Focus
 
@@ -91,28 +94,24 @@ Chrome); screenshots via `tools/screenshots.py`; Supabase via the existing backe
 2. **Rating purity:**
    - the same inputs give the same rating everywhere;
    - no global `state` read inside `ratingFeatures`;
-   - «S/C» rules;
+   - «S/C» rules and the minutes curve (unknown minutes → confidence 1);
    - clamping and rounding;
+   - the provisional MVP's tie-breaks (minutes, then goals or saves, then dorsal);
    - the coach's fixed relations (PROV7 = −BEATEN = −PEN7C; keeper team fault < field team fault).
-3. **Old data:** matches with no `court`, no `on`, no `votes` or no `mvpSource`, legacy per-player NOATK, and events
-   without an origin.
-4. **Escaping:** user strings in the new HTML and SVG, the vote page and the image texts (the canvas needs no
-   escaping, but long names are fitted).
-5. **The vote's security (M4b):**
-   - no anon table access;
-   - the token only in the URL fragment and stored only as its hash;
-   - the RPCs validate the poll window and the candidate;
-   - the RPCs return nothing from other polls.
-6. **Resources:** object URLs revoked, no listener added per render, timers cleared.
-7. **Design system:** the live screen is unchanged (V-live, the geometry test); no `transition: all`; hover gated;
+3. **Old data:** matches with no `court`, no `on` or no `mvpId`, legacy per-player NOATK, and events without an
+   origin.
+4. **Escaping:** user strings in the new HTML and SVG, and the image texts (the canvas needs no escaping, but long
+   names are fitted).
+5. **Resources:** object URLs revoked, no listener added per render, timers cleared.
+6. **Design system:** the live screen is unchanged (V-live, the geometry test); no `transition: all`; hover gated;
    reduced-motion branch; concentric radii; tokens rather than hex.
-8. **Calendar:** the link rule at the edges (same rival twice in a season; a Saturday match against a Sunday
+7. **Calendar:** the link rule at the edges (same rival twice in a season; a Saturday match against a Sunday
    reference; an explicit link against an auto link; a match deleted); fixture RLS requires the match in the same
    team; re-import keeps the kickoff.
-9. **Attendance:** offline then online; two devices on one day; convocados locked; «No convocado» not counted; notes
+8. **Attendance:** offline then online; two devices on one day; convocados locked; «No convocado» not counted; notes
    escaped; no NaN with zero sessions.
-10. **Drill-down:** the helpers given a state argument read no global `state`; the PDF pages are byte-for-byte the
-    same; the «Volver» path out of the match goes back to the card.
+9. **Drill-down:** the helpers given a state argument read no global `state`; the PDF pages are byte-for-byte the
+   same; the «Volver» path out of the match goes back to the card.
 
 ---
 
@@ -166,16 +165,14 @@ Chrome); screenshots via `tools/screenshots.py`; Supabase via the existing backe
 - **Allowed in parallel** with a running implementer:
   - the orchestrator writing the next brief;
   - planning or design of the next milestone;
-  - tool-only or SQL-only work in its own git worktree (M0.1 `tools/screenshots.py`, M4b.1 `supabase/schema.sql`),
-    cherry-picked by the orchestrator once both are approved.
+  - tool-only or SQL-only work in its own git worktree (M0.1 `tools/screenshots.py`), cherry-picked by the orchestrator once both are approved.
   - M0d.1 and M0e.1: `supabase/schema.sql` and `tools/calendar_sql.py`.
 - **Never in parallel:**
   - two implementers;
   - an implementer and a fix round, on `src/app.html` or `tests/inject.js`;
   - a review overlapping the next task of the same branch.
-- Milestones are strictly sequential: M0 → M0b → M0c → M0d → M0e → M1 → M2 → M3 → M4a → M5 → M4b → M6 → M7.
-  M4b may move after M6 if the coach has not decided decisions 1–2. M0d.1 and M0e.1 (SQL only) may run in their own
-  worktree while an implementer runs.
+- Milestones are strictly sequential: M0 → M0b → M0c → M0d → M0e → M1 (done) → M2 → M3 → M5 → M6 → M7. M4a and M4b
+  (the MVP vote) were dropped on 2026-10-21 and are a later project (design, Non-goals).
 
 **Ledger lines** (as in the previous plan):
 - `Task X: complete (commits a..b, review clean)`;
@@ -974,30 +971,30 @@ Every existing call stays as it is. No behaviour change.
 - Test: `tests/inject.js`.
 
 **Interfaces:**
-- `CONFIG.rating` holds the design's proposal:
-  - `{ base: 6.5, min: 3, max: 10, decimals: 1, minMinutes: 10, fullWeightMinutes: 20 }`;
+- `CONFIG.rating` holds the design's recorded values:
+  - `{ base: 6.5, min: 3, max: 10, decimals: 1, minMinutes: 10, fullMatchMinutes, minutesExponent: 0.5 }`, where
+    `fullMatchMinutes` is `2 × CONFIG.halfSeconds / 60` (60), set after the literal so it follows the match length;
   - `weights: { shot: 0.8, save: 0.35, turnover: -0.40, forcedTurnover: -0.30, ruleTurnover: -0.15, ruleFault: -0.15,
     oneOnOne: 0.30, tactical: -0.15, assist: 0.25, recovery: 0.30, block: 0.20, teamFaultField: -0.10,
     teamFaultKeeper: -0.05, yellow: -0.10, twoMin: -0.30, red: -1.00, blue: -0.50 }`;
   - `expectedSave: { '6M': .25, '9M': .40, '11M': .45, CONTRA: .20, '7M': .25 }`;
-  - `vote: { max: 0.5 }`;
   - `bands: [[8, 'rt-top'], [7, 'rt-good'], [6.5, 'rt-mid'], [6, 'rt-low'], [-Infinity, 'rt-bad']]`.
 - `function expectedGoal(zone) → number`: the midpoint of `CONFIG.targets[zone]` over 100.
 - `function ratingFeatures(s, player) → { shotValue, saveValue, turnovers, forcedTurnovers, ruleTurnovers, ruleFaults,
   prov7, beaten, pen7c, tactical, assists, recoveries, blocks, teamFaults, yellow, twoMin, red, blue }`.
   - It reads only `s.events`. The turnover groups come from `CONFIG.turnoverGroups`.
   - `teamFaults` counts NOATK events whose `on` includes the player, or whose legacy `playerId` is the player.
-- `function ratingFromFeatures(f, { keeper, weights = CONFIG.rating.weights, confidence = 1, voteShare = 0 }) →
+- `function ratingFromFeatures(f, { keeper, weights = CONFIG.rating.weights, confidence = 1 }) →
   { value, raw }`.
   - `oneOnOne` is applied as +PROV7, −BEATEN, −PEN7C.
   - `teamFaults` uses `teamFaultKeeper` for goalkeepers.
   - The value is clamped and rounded half up to `decimals`.
-- `function playerRating(s, player, { seconds, voteShare = 0, weights } = {}) → { value: number | null, raw,
+- `function playerRating(s, player, { seconds, weights } = {}) → { value: number | null, raw,
   features, confidence, rated }`.
   - `rated` is false (and `value` null) when `seconds` is known and under `minMinutes`.
-  - `confidence = seconds == null ? 1 : min(1, seconds / 60 / fullWeightMinutes)`.
-- `function matchRatings(s, players = s.players) → Map<id, rating>`. It uses `minutesOnCourt(s)` and, from M4a,
-  `s.votes`.
+  - `function ratingConfidence(seconds) → number`: 1 when `seconds` is null, else
+    `min(1, (seconds / 60 / fullMatchMinutes) ** minutesExponent)`.
+- `function matchRatings(s, players = s.players) → Map<id, rating>`. It uses `minutesOnCourt(s)`.
 - `const ratingText = (r) → '7,4' | 'S/C'`; `function ratingBand(value) → 'rt-top' | … | 'rt-bad'`.
 - CSS: `.rating-chip` on the M0b `--rating-*` and `--rating-ink-*` tokens, `tabular-nums`, `white-space: nowrap`,
   always holding the number or «S/C».
@@ -1011,8 +1008,12 @@ Every existing call stays as it is. No behaviour change.
   - `rating: a legacy NOATK with a player counts for that player only`.
   - `rating: goalkeeper save value`.
   - `rating: under the minimum minutes is S/C; a short spell is pulled to the base`.
+  - `rating: confidence follows the square root of the match share`: 60 min give 1, 30 min 0.707 ± 0.001, 20 min
+    0.577 ± 0.001, more than 60 min still 1, unknown minutes 1.
   - `rating: clamped to 3–10 and rounded to one decimal`.
   - `rating: the design's three sanity examples`: 7.7, 4.4 and 7.8.
+  - `rating: the design's minutes examples`: the full-match back 7.7, the second-half wing 7.8 (higher), and the same
+    wing performance 8.4 / 7.8 / 7.6 over 60 / 30 / 20 min.
   - `rating: rating a match changes no statistic` (`liveStats`, `score` and `history` are the same).
   - `rating: every chip shows its number and meets contrast in both themes`: the text is non-empty and
     `contrastRatio(ink, fill)` is 4.5 or more for the five bands, under light and dark.
@@ -1022,7 +1023,7 @@ Every existing call stays as it is. No behaviour change.
 - [ ] **Step 5:** commit `feat(rating): rate every player of a match`.
 
 **Goal checks:**
-- [ ] The twelve tests pass.
+- [ ] The fourteen tests pass.
 - [ ] `grep -n "state\." ` over the body of `ratingFeatures` and `ratingFromFeatures` finds nothing. The reviewer
   checks this.
 
@@ -1042,7 +1043,7 @@ Every existing call stays as it is. No behaviour change.
   - the season rating chip on the poster;
   - the evolution chart keeps its bars, and its line stays the rate.
 - Leaders: a new `{ key: 'rating', label: 'Nota' }` chip. It ranks by season rating and needs
-  `CONFIG.leaders.minRated` rated matches (proposal 2). Its detail reads «#N · k partidos con nota».
+  `CONFIG.leaders.minRated` rated matches (2). Its detail reads «#N · k partidos con nota».
 
 - [ ] **Step 1: Write the failing tests.**
   - `season: rows carry the match rating, S/C under the minutes`.
@@ -1065,11 +1066,13 @@ Every existing call stays as it is. No behaviour change.
 - Test: `tests/inject.js`.
 
 **Interfaces:**
-- `function matchMvp(s, ratings) → { id: string | null, source: 'coach' | 'votes' | 'rating' }`.
-  - First `s.mvpId` with `mvpSource` `'coach'`, or missing.
-  - Then (from M4a) the most votes.
-  - Else the highest rated value, with ties broken by `raw`, then by dorsal.
-- `setMvp(id)` sets `mvpSource = 'coach'` and clears it together with `mvpId`.
+- `function matchMvp(s, ratings, seconds = minutesOnCourt(s)) → { id: string | null, source: 'coach' | 'rating' |
+  null }`.
+  - First `s.mvpId` (the coach's pick, already built by `setMvp`), when that player is a convocado.
+  - Else the highest `value` among rated players, with ties broken by more seconds (unknown counts as equal), then
+    more goals (saves for goalkeepers), then the lower dorsal.
+  - Else `{ id: null, source: null }`.
+- `setMvp(id)` is unchanged; no new state field.
 - `openFinal` gains a «Puntuaciones» section, `ratingsListHtml(s, ratings)`, before the MVP pick.
   - One row per convocado, sorted by rating with «S/C» last.
   - Each row shows the face, the name, the `.rating-chip`, Min, and two KPIs (goals/shots, or saves/on target).
@@ -1079,6 +1082,8 @@ Every existing call stays as it is. No behaviour change.
 - [ ] **Step 1: Write the failing tests.**
   - `final: ratings list sorted with S/C last and no NaN`.
   - `final: the provisional MVP is the top rating`.
+  - `final: provisional MVP ties go to more minutes, then more goals or saves`.
+  - `final: a second-half player with the top rating is the provisional MVP`.
   - `final: the coach's pick overrides and clears`.
   - `final: the breakdown lists only non-zero features`.
 - [ ] **Step 2:** run them. Expected: FAIL.
@@ -1088,7 +1093,7 @@ Every existing call stays as it is. No behaviour change.
   `docs/`.
 
 **Goal checks:**
-- [ ] The four tests pass.
+- [ ] The six tests pass.
 - [ ] The `final` matrix passes. At 1024×640 the final card scrolls vertically only.
 
 ---
@@ -1123,7 +1128,9 @@ Every existing call stays as it is. No behaviour change.
 **Interfaces:**
 - `const MVP_CARD = { w: 1080, h: 1350, faceR, crownAngleDeg: -34, … }`. Every size is named here.
 - `function mvpCardData(s, playerId, ratings) → { name, num, pos, photo, rating, band, kpis: [[label, value]…],
-  title, score, date, venue, crest, brand, brand2, brandInk }`.
+  title, score, date, venue, crest, brand, brand2, brandInk, provisional }`.
+  - `title` holds the rival's name; `provisional` is true when `matchMvp` gave source `'rating'`, and the card then
+    reads «MVP provisional».
   - Field KPIs: Goles «g/t», % tiro, Pases de gol, Nota.
   - Goalkeeper KPIs: Paradas «s/o», % paradas, 7 m parados, Nota.
 - `function loadImage(src) → Promise<HTMLImageElement>`. It rejects with a clear `Error`.
@@ -1161,14 +1168,16 @@ Every existing call stays as it is. No behaviour change.
 - `async function shareFiles(files, title, text) → 'shared' | 'cancelled' | 'unsupported'`, extracted from
   `shareReports`, which now uses it.
 - `ui.mvpCardUrl`: the object URL of the preview, revoked when the final screen re-renders or closes.
-- `async function renderMvpPreview()`: after `openFinal`, it builds the card for `matchMvp` and fills `#mvp-preview`.
-  It runs on every `openFinal`, so the card is always generated.
+- `async function renderMvpPreview()`: after `openFinal`, it builds the card for `matchMvp` (the coach's pick, else
+  the provisional MVP) and fills `#mvp-preview`. It runs on every `openFinal`, so the card is always generated. With
+  no MVP (no pick and nobody rated) it shows «Elige el MVP para generar la imagen.» and no card.
 - `async function shareMvpCard()`: `shareFiles([png])`, falling back to `offerFile`.
 - Buttons `data-final-mvp-share` («Compartir MVP»), and `data-final-ratings-share` («Compartir puntuaciones»,
   Task 3.4).
 
 - [ ] **Step 1: Write the failing tests.**
   - `final: finishing a match shows the MVP preview`.
+  - `final: the coach's pick redraws the preview for that player`: the preview URL changes.
   - `final: re-rendering revokes the old preview URL`.
   - `final: share falls back to a download when files cannot be shared`.
   - `final: shareReports still shares through shareFiles`.
@@ -1178,7 +1187,7 @@ Every existing call stays as it is. No behaviour change.
 - [ ] **Step 5:** commit `feat(mvp): generate and share the MVP card`.
 
 **Goal checks:**
-- [ ] The four tests pass.
+- [ ] The five tests pass.
 - [ ] The `final` matrix shows the preview.
 
 ### Task 3.4: Ratings card for the group
@@ -1202,48 +1211,6 @@ Every existing call stays as it is. No behaviour change.
 **Goal checks:**
 - [ ] The two tests pass.
 - [ ] The scene PNG is readable at phone width: names ≥ 36 px tall in the image.
-
----
-
-## M4a — MVP vote, counted by the coach
-
-### Task 4a.1: Vote counts, bonus and the MVP from votes
-
-**Files:**
-- Modify: `src/app.html`: `matchRatings`, `matchMvp`, `openFinal`, a new "Votes" block, `restoreState` defaults
-  (none; `votes` stays optional).
-- Test: `tests/inject.js`.
-
-**Interfaces:**
-- `state.votes = { tally: { [id]: n }, voters: n, updatedAt }`, created on the first edit. It is not an event and is
-  saved with `save()`.
-- `function setVoteCount(playerId, n)` and `function setVoters(n)`. Integers from 0 to `CONFIG.votes.maxVoters`
-  (proposal 12). The tally total can never exceed `voters`; an attempt is refused through `finalStatus`.
-- `voteShare(s, id) = voters ? tally[id] / voters : 0`, passed by `matchRatings` to `playerRating`.
-- `matchMvp`, source `'votes'`: the most votes, with ties broken by rating. A coach override still wins.
-- «Votación MVP» on the final screen:
-  - a voters stepper;
-  - a −/+ stepper per candidate;
-  - the text «Comparte las puntuaciones en el grupo de capitanes, crea una encuesta de WhatsApp y apunta aquí los
-    votos.»
-  - Re-rendering keeps the typed e-mail, as `setMvp` does today.
-
-- [ ] **Step 1: Write the failing tests.**
-  - `votes: counts add a bonus proportional to the share`.
-  - `votes: the most-voted player becomes MVP, ties by rating`.
-  - `votes: votes can never exceed the voters`.
-  - `votes: the coach's pick overrides the votes`.
-  - `votes: votes change no statistic and no history`.
-  - `votes: old matches without votes rate as before`.
-- [ ] **Step 2:** run them. Expected: FAIL.
-- [ ] **Step 3:** implement.
-- [ ] **Step 4:** run the suite. Expected: PASS.
-- [ ] **Step 5:** run `build_site.py`, then commit `feat(mvp): count the MVP votes`, with `docs/`.
-
-**Goal checks:**
-- [ ] The six tests pass.
-- [ ] The `final` matrix passes.
-- [ ] The MVP preview updates after a vote change: a test checks that the preview URL changed.
 
 ---
 
@@ -1295,7 +1262,7 @@ Every existing call stays as it is. No behaviour change.
 **Interfaces:**
 - A shared `finalHeadHtml()`: both crests, the score, and the period or «Final».
 - Half-time: the KPI tiles plus Fallos 6 m and 9 m, the three players with the most turnovers, and the key points.
-- Final order: head → KPI tiles → MVP preview and share → Puntuaciones → Votación → MVP pick → detail → reports.
+- Final order: head → KPI tiles → MVP preview and share → Puntuaciones → MVP pick → detail → reports.
 - Card sections use `.sheet-card` and the team-page spacing.
 
 - [ ] **Step 1: Write the failing tests.**
@@ -1357,85 +1324,6 @@ Every existing call stays as it is. No behaviour change.
 **Goal checks:**
 - [ ] The full matrix probe passes.
 - [ ] The milestone gate's reviewer signs off each scene.
-
----
-
-## M4b — MVP vote by links (after coach decisions 1–2)
-
-### Task 4b.1: Schema and RPCs
-
-**Files:**
-- Modify: `supabase/schema.sql`, `supabase/README.md`.
-- Create: `supabase/checks/votes.sql`, a manual check script: it creates a poll and ballots, then tries anon table
-  reads, a closed poll, a wrong candidate and a double vote, and states the expected outcomes.
-
-**Interfaces:**
-- Tables `mvp_polls` and `mvp_ballots`, the helper `private.is_poll_member(uuid)`, and the RPCs
-  `public.get_ballot(p_token text) → json` and `public.cast_vote(p_token text, p_player uuid) → json`, exactly as in
-  the design (RLS, grants, the token hash, the window and candidate checks).
-- `teams.voters jsonb` with its check.
-- `cast_vote` errors: `poll_closed`, `not_a_candidate`, `unknown_ballot`, and `already_voted` when decision 2 forbids
-  changes.
-
-- [ ] **Step 1:** write the SQL and the check script.
-- [ ] **Step 2:** the orchestrator, **with the coach's approval**, runs it on a Supabase branch (`create_branch`),
-  runs `checks/votes.sql`, and reads `get_advisors` for security.
-- [ ] **Step 3:** commit `feat(db): MVP polls and ballots`.
-
-**Goal checks:**
-- [ ] Every expected outcome in `checks/votes.sql` matches on the branch.
-- [ ] The security advisors report no new warning.
-- [ ] The schema still runs twice without error.
-
-### Task 4b.2: Ballot links and the vote page
-
-**Files:**
-- Modify: `src/app.html`: both backends, the boot, a new "Vote" block, the final screen.
-- Test: `tests/inject.js`.
-
-**Interfaces:**
-- Backend:
-  - `createPoll({ matchId, candidates, voters, closesAt }) → [{ label, role, url }]`. Supabase only. The local
-    backend throws «la votación por enlace necesita una cuenta y conexión».
-  - `getBallot(token) → { title, closesAt, candidates, voted }`.
-  - `castVote(token, playerId) → { voted }`.
-  - `listPollTallies(teamId) → [{ matchId, tally, voters, closesAt }]`.
-- `function newBallotToken() → string`: 16 bytes from `crypto.getRandomValues`, base64url.
-  `async function tokenHash(token) → Uint8Array`, through `crypto.subtle.digest('SHA-256')`.
-- Boot: a `#vote=<token>` fragment runs `startVote(token)` instead of `startHome()`. It needs no login. It clears the
-  fragment from the history after reading it (`history.replaceState`).
-- `voteHtml(ballot)`:
-  - the match title;
-  - candidate buttons with dorsal, court name and rating chip;
-  - a confirmation;
-  - the closed and already-voted states;
-  - every string escaped.
-- Final screen «Enviar votación»:
-  - pick the voters from `team.voters` (editable, saved through `updateTeam`) and the closing time
-    (`CONFIG.votes.closeHours`, proposal 48);
-  - create the poll;
-  - share each link with `navigator.share({ title, text, url })`, falling back to copying it to the clipboard.
-- Tallies: `openFinal` and `loadSeason` merge `listPollTallies` into `state.votes` / `m.state.votes`. The open match
-  is saved when its tally changed.
-
-- [ ] **Step 1: Write the failing tests** (async, with a stub backend that implements the four calls in memory).
-  - `vote: a link opens the ballot without login and votes once`.
-  - `vote: closed poll and unknown link show their messages`.
-  - `vote: candidate names are escaped`.
-  - `vote: the token is in the fragment and never in the backend call except hashed on create`.
-  - `vote: tallies merge into the match and move the MVP`.
-  - `vote: the local backend explains that links need an account`.
-- [ ] **Step 2:** run them. Expected: FAIL.
-- [ ] **Step 3:** implement.
-- [ ] **Step 4:** run the suite. Expected: PASS.
-- [ ] **Step 5:** run `build_site.py`, then commit `feat(mvp): vote by personal link`, with `docs/`.
-
-**Goal checks:**
-- [ ] The six tests pass.
-- [ ] The new `vote` scene (stub ballot) passes the matrix at phone-ish width too (390×844, added for this scene
-  only).
-- [ ] A manual end-to-end run on the Supabase branch: the coach creates a poll, votes from a second browser profile,
-  and the tally appears.
 
 ---
 
