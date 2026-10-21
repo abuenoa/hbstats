@@ -1799,6 +1799,8 @@
       if ('p2' in setMark(marked, 'p2', 'NC').marks) throw new Error('NC stored a mark');
       const match = { state: { players: [{ id: 'p1' }] } }, day = { ...emptySession('2026-10-17', 'PARTIDO'), marks: { p1: { s: 'F' }, p3: { s: 'J' } } };
       if (sessionStatus(day, 'p1', match) !== 'P' || sessionStatus(day, 'p2', match) !== 'NC' || sessionStatus(day, 'p3', match) !== 'J') throw new Error('match day statuses');
+      const orphan = { ...emptySession('2026-10-17', 'PARTIDO'), marks: { p3: { s: 'F' } } };
+      if (sessionStatus(orphan, 'p2', null) !== 'NC' || sessionStatus(orphan, 'p3', null) !== 'F') throw new Error('a match day without a match must not count everybody');
       if (sessionStatus(emptySession(), 'p2', null) !== 'P' || sessionStatus({ ...emptySession(), marks: { p2: { s: 'L' } } }, 'p2', null) !== 'L') throw new Error('training statuses');
     });
     await TA('attendance: a session saved offline is uploaded when back online', async () => {
@@ -1837,29 +1839,57 @@
         if ((await local.listSessions('cal-team')).some((x) => x.id === first.id)) throw new Error('not deleted');
       });
     });
-    await TA('attendance: Supabase backend upserts on team, day and kind and maps the row', async () => {
-      const calls = []; let next = { data: null, error: null };
-      const query = () => new Proxy({}, { get: (t, k) => (k === 'then' ? (ok) => ok(next) : (...a) => { calls.push([k, ...a]); return query(); }) });
-      const savedLib = window.supabase; window.supabase = { createClient: () => ({ from: (tbl) => { calls.push(['from', tbl]); return query(); } }) };
+    await TA('attendance: Supabase backend upserts on team, day and kind; the first id stays; a stale delete errors', async () => {
+      await withAttendanceTeam(async () => {
+      const calls = [], rows = [];
+      // Models the table: the unique key plus the attendance_keep_id trigger (an update keeps the first id).
+      const table = {
+        upsert: (row, options) => {
+          calls.push(['upsert', row, options]);
+          const found = rows.find((r) => r.team_id === row.team_id && r.on_date === row.on_date && r.kind === row.kind);
+          if (found) Object.assign(found, row, { id: found.id }); else rows.push({ ...row });
+          const stored = found || rows[rows.length - 1];
+          return { select: () => ({ single: async () => ({ data: { ...stored }, error: null }) }) };
+        },
+        delete: () => ({ eq: (column, id) => ({ select: async () => { const gone = rows.filter((r) => r.id === id); gone.forEach((r) => rows.splice(rows.indexOf(r), 1)); return { data: gone, error: null }; } }) })
+      };
+      const savedLib = window.supabase; window.supabase = { createClient: () => ({ from: (name) => { calls.push(['from', name]); return table; } }) };
       try {
         const cloud = await supabaseBackend({ url: 'https://x.supabase.co', anonKey: 'k' });
-        next = { data: { id: 'first-id', on_date: '2026-10-20', kind: 'ENTRENO', match_id: null, marks: { p1: { s: 'F' } }, note: null }, error: null };
-        const saved = await cloud.saveSession('t1', { ...emptySession(), id: 'mine', marks: { p1: { s: 'F' } } });
+        const first = await cloud.saveSession('cal-team', { ...emptySession(), id: 'first-id', marks: { p1: { s: 'F' } } });
         const [, row, options] = calls.find((c) => c[0] === 'upsert');
-        if (options.onConflict !== 'team_id,on_date,kind' || row.team_id !== 't1' || row.on_date !== '2026-10-20' || row.id !== 'mine') throw new Error(JSON.stringify(calls));
-        if (saved.id !== 'first-id' || saved.date !== '2026-10-20' || saved.note !== '' || saved.marks.p1.s !== 'F') throw new Error(JSON.stringify(saved));
+        if (options.onConflict !== 'team_id,on_date,kind' || row.team_id !== 'cal-team' || row.on_date !== '2026-10-20' || row.id !== 'first-id') throw new Error(JSON.stringify(calls));
+        if (first.id !== 'first-id' || first.date !== '2026-10-20' || first.note !== '' || first.marks.p1.s !== 'F') throw new Error(JSON.stringify(first));
+        // The second device saves the same day and kind with its own id.
+        const local = backend; backend = cloud;
+        try {
+          storeLocalSession({ ...emptySession(), id: 'second-device-id', marks: { p2: { s: 'J' } } }, true);
+          await syncAttendance();
+          const device = localSessions();
+          if (rows.length !== 1 || device.length !== 1 || device[0].id !== 'first-id' || device[0].dirty || !('p2' in rows[0].marks)) throw new Error(JSON.stringify([rows, device]));
+        } finally { backend = local; }
+        await cloud.deleteSession('first-id');
+        let failure = '';
+        try { await cloud.deleteSession('second-device-id'); } catch (err) { failure = err.message; }
+        if (rows.length || !/ya no existe/.test(failure)) throw new Error('stale delete: ' + failure);
       } finally { window.supabase = savedLib; }
+      });
     });
     await TA('attendance: scheduling replaces the timer and signing out waits for pending sessions', async () => {
       await withAttendanceTeam(async () => {
         const real = backend; let uploads = 0, signedOut = false;
         try {
         backend = { saveSession: async () => { uploads++; throw new TypeError('Failed to fetch'); }, signOut: async () => { signedOut = true; } };
-        scheduleAttendanceSync();
-        const first = attendanceSyncTimer;
-        scheduleAttendanceSync();
-        if (attendanceSyncTimer === first) throw new Error('the timer was not replaced');
-        storeLocalSession(setMark(emptySession(), 'p1', 'F'), true);
+        const delay = CONFIG.attendance.syncDelayMs;
+        CONFIG.attendance.syncDelayMs = 20;
+        try {
+          storeLocalSession(setMark(emptySession(), 'p1', 'F'), true);
+          scheduleAttendanceSync();
+          scheduleAttendanceSync();
+          await new Promise((r) => setTimeout(r, 100));
+        } finally { CONFIG.attendance.syncDelayMs = delay; }
+        if (uploads !== 1) throw new Error('stacked timers uploaded ' + uploads + ' times');
+        uploads = 0;
         await signOut();
         if (uploads !== 1 || signedOut || !localSessions()[0].dirty || !/asistencia sin subir/.test($('home-status').textContent)) throw new Error(JSON.stringify([uploads, signedOut, $('home-status').textContent]));
         } finally { backend = real; }

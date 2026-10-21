@@ -204,6 +204,16 @@ create index if not exists attendance_updated_by on public.attendance_sessions (
 drop trigger if exists attendance_touch on public.attendance_sessions;
 create trigger attendance_touch before update on public.attendance_sessions for each row execute function public.touch_updated_at();
 
+-- A same-day upsert from a second device updates the row; the first id stays, so every device can delete it.
+create or replace function public.attendance_keep_id() returns trigger
+language plpgsql set search_path = '' as $$
+begin
+  new.id := old.id;
+  return new;
+end $$;
+drop trigger if exists attendance_keep_id on public.attendance_sessions;
+create trigger attendance_keep_id before update on public.attendance_sessions for each row execute function public.attendance_keep_id();
+
 alter table public.attendance_sessions enable row level security;
 revoke all on table public.attendance_sessions from anon;
 drop policy if exists attendance_all on public.attendance_sessions;

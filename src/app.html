@@ -4068,6 +4068,7 @@ a:focus-visible, input:focus-visible, select:focus-visible, summary:focus-visibl
   const FIXTURE_KEY = 'team_id,season,competition,round';
   const SESSION_COLUMNS = 'id,on_date,kind,match_id,marks,note';
   const SESSION_KEY = 'team_id,on_date,kind';
+  const SESSION_GONE = 'la sesión ya no existe: recarga la asistencia';
   const byNewestSession = (a, b) => b.date.localeCompare(a.date) || a.kind.localeCompare(b.kind);
   const byWeekend = (a, b) => a.weekend.localeCompare(b.weekend) || a.round - b.round;
   const CLOUD_ERRORS = [
@@ -4169,7 +4170,7 @@ a:focus-visible, input:focus-visible, select:focus-visible, summary:focus-visibl
         write(db);
       },
       async listSessions(teamId) { return read().sessions.filter((x) => x.teamId === teamId).map(plainSession).sort(byNewestSession); },
-      // One session per team, day and kind: the first row keeps its id, like the unique key in the cloud.
+      // One session per team, day and kind: the first row keeps its id, as the cloud's attendance_keep_id trigger does.
       async saveSession(teamId, s) {
         const db = read();
         let row = db.sessions.find((x) => x.teamId === teamId && x.date === s.date && x.kind === s.kind);
@@ -4180,6 +4181,7 @@ a:focus-visible, input:focus-visible, select:focus-visible, summary:focus-visibl
       },
       async deleteSession(id) {
         const db = read();
+        if (!db.sessions.some((x) => x.id === id)) throw new Error(SESSION_GONE);
         db.sessions = db.sessions.filter((x) => x.id !== id);
         write(db);
       },
@@ -4262,12 +4264,14 @@ a:focus-visible, input:focus-visible, select:focus-visible, summary:focus-visibl
       },
       async deleteMatch(id) { check(await client.from('matches').delete().eq('id', id)); },
       async listSessions(teamId) { return check(await client.from('attendance_sessions').select(SESSION_COLUMNS).eq('team_id', teamId).order('on_date', { ascending: false })).map(toSession); },
-      // The unique key makes two devices on the same day one session; the row that comes back carries the id that won.
+      // The unique key makes two devices on the same day one session; the attendance_keep_id trigger keeps the first id, and the row that comes back carries it.
       async saveSession(teamId, s) {
         const row = { id: s.id || newUuid(), team_id: teamId, on_date: s.date, kind: s.kind, match_id: s.matchId || null, marks: s.marks, note: s.note || null };
         return toSession(check(await client.from('attendance_sessions').upsert(row, { onConflict: SESSION_KEY }).select(SESSION_COLUMNS).single()));
       },
-      async deleteSession(id) { check(await client.from('attendance_sessions').delete().eq('id', id)); },
+      async deleteSession(id) {
+        if (!check(await client.from('attendance_sessions').delete().eq('id', id).select('id')).length) throw new Error(SESSION_GONE);
+      },
       // The upsert writes only the file's columns, so a re-import keeps the kickoff, the venue and the match link.
       async saveFixtures(teamId, { season, competition, fixtures }) {
         const rows = fixtures.map((f) => ({ team_id: teamId, season, competition, round: f.round, weekend: f.weekend, home: f.home, opponent: f.opponent }));
@@ -4384,7 +4388,7 @@ a:focus-visible, input:focus-visible, select:focus-visible, summary:focus-visibl
     attendanceSyncTimer = setTimeout(syncAttendance, CONFIG.attendance.syncDelayMs);
   }
   // Uploads every session changed on this device and adopts the row that comes back: on a same-day conflict the
-  // server keeps the first id. A session edited during the upload keeps the adopted id and stays marked.
+  // trigger keeps the first id. A session edited during the upload keeps the adopted id and stays marked.
   async function syncAttendance() {
     clearTimeout(attendanceSyncTimer);
     if (!backend) return;
@@ -4395,8 +4399,10 @@ a:focus-visible, input:focus-visible, select:focus-visible, summary:focus-visibl
           const { dirty, savedAt, ...sent } = pending;
           const saved = await backend.saveSession(teamId, sent);
           const adopt = (x) => (!sameSession(x, pending) ? x : x.savedAt === savedAt ? { ...saved, dirty: false, savedAt } : { ...x, id: saved.id });
-          writeJson(key, (readJson(key) || []).map(adopt));
-          if (team.id === teamId && home.sessions) home.sessions = home.sessions.map((x) => (sameSession(x, pending) ? { ...x, id: saved.id } : x));
+          const stored = (readJson(key) || []).map(adopt);
+          writeJson(key, stored);
+          const uploaded = stored.find((x) => sameSession(x, pending));
+          if (team.id === teamId && home.sessions) home.sessions = home.sessions.map(({ pending: wasPending, ...x }) => (!sameSession(x, pending) ? { ...x, ...(wasPending && { pending: true }) } : { ...x, id: saved.id, ...(uploaded.dirty && { pending: true }) }));
         } catch (err) {
           console.warn(`Attendance of ${pending.date} not uploaded yet: ${cloudErrorText(err)}`);
         }
@@ -4420,11 +4426,12 @@ a:focus-visible, input:focus-visible, select:focus-visible, summary:focus-visibl
     }
     return { ...session, marks };
   }
-  // On a match day the squad of the match is present and cannot be changed; the others are not called up unless marked.
+  // On a match day the squad of the match is present and cannot be changed; the others (everybody, without a match) are not called up unless marked.
   function sessionStatus(session, playerId, match) {
     const mark = session.marks[playerId];
     const marked = mark && MARK_CODES.includes(mark.s) ? mark.s : null;
-    if (session.kind !== SESSION_KINDS.MATCH || !match) return marked || 'P';
+    if (session.kind !== SESSION_KINDS.MATCH) return marked || 'P';
+    if (!match) return marked || 'NC';
     return match.state.players.some((p) => p.id === playerId) ? 'P' : marked || 'NC';
   }
 
