@@ -1069,6 +1069,7 @@
     if (strip.length !== state.players.length || !strip[0].querySelector('.rating-chip')) throw new Error('player strip');
     strip[0].click();
     if (ui.sheetTab !== 'reports' || !$('sheet').querySelector(`[data-pdf="${strip[0].dataset.pdfPick}"]`)) throw new Error('the card opens the player PDF list');
+    if (document.activeElement !== $('sheet').querySelector(`[data-pdf="${strip[0].dataset.pdfPick}"]`)) throw new Error('the player PDF button is not focused');
     openFinal(); document.querySelector('[data-final-sheet]').click();
     if (ui.sheetTab !== 'summary' || $('sheet').hidden || !$('final').hidden) throw new Error('«Ver Hoja» must open the summary');
   }));
@@ -1605,6 +1606,9 @@
         if (strip.gridTemplateColumns.split(' ').length !== 3 || strip.columnGap !== '6px' || strip.paddingLeft !== '10px') throw new Error('kpis ' + strip.gridTemplateColumns + ' ' + strip.columnGap + ' ' + strip.paddingLeft);
         if (tile.textAlign !== 'center' || tile.paddingTop !== '6px' || tile.paddingLeft !== '4px') throw new Error('kpi ' + tile.textAlign + ' ' + tile.padding);
         if (chip.minHeight !== '40px' || chip.borderTopLeftRadius !== '20px' || chip.paddingLeft !== '14px') throw new Error('chip ' + chip.minHeight + ' ' + chip.borderTopLeftRadius + ' ' + chip.paddingLeft);
+        const pressed = probe.querySelector('.chip'), ink = document.createElement('i');
+        ink.style.cssText = 'background: var(--fg); color: var(--bg)'; probe.appendChild(ink);
+        if (pressed.getAttribute('aria-pressed') !== 'true' || chip.backgroundColor !== getComputedStyle(ink).backgroundColor || chip.color !== getComputedStyle(ink).color) throw new Error('pressed chip ' + chip.backgroundColor + ' ' + chip.color);
       } finally { probe.remove(); }
     });
     T('season: team record uses finished matches only', () => {
@@ -1826,6 +1830,14 @@
         const svg = zoneMapSvg([chartShot({ origin })], () => true, colours), [, x, y] = svg.match(/class="zone-pct" x="(-?[\d.]+)" y="(-?[\d.]+)"/);
         const d = lineDistance(+x, +y + LABEL_MIDDLE);
         if (d - SIX_M_PX < CLEARANCE || NINE_M_PX - d < CLEARANCE) throw new Error(`${laneOf(origin)} label ${Math.round(d)} px from the goal, lines at ${SIX_M_PX} and ${NINE_M_PX}`);
+      });
+    });
+    T('charts: far-ring wing labels stay beyond the 9 m line, not pushed into the near ring', () => {
+      const colours = { GOL: 'x', PARADA: 'x', FALLO: 'x' };
+      [m(-9.4, 5), m(9.4, 5)].forEach((origin) => {
+        if (shotZone(chartShot({ origin })) !== `${laneOf(origin)}:far` || !laneOf(origin).startsWith('EXT')) throw new Error('premise ' + shotZone(chartShot({ origin })));
+        const svg = zoneMapSvg([chartShot({ origin })], () => true, colours), [, x, y] = svg.match(/class="zone-pct" x="(-?[\d.]+)" y="(-?[\d.]+)"/);
+        if (+y <= nineMetreY(+x)) throw new Error(`label at y ${y} is inside the 9 m line (${Math.round(nineMetreY(+x))}) at x ${x}`);
       });
     });
     T('charts: no NaN with empty axes or missing rates', () => {
@@ -2395,6 +2407,16 @@
         if (!document.querySelector('[data-player-match-open="om1"]') || /Cargando/.test($('home').textContent)) throw new Error('match view not drawn again');
       });
     });
+    await TA('open match for player: Escape goes back to the card like «‹ Ficha»; a plain Hoja just closes', async () => {
+      const escape = () => document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape' }));
+      await openFromCard(SAMPLE_WING_ID, sampleMatch(), async () => {
+        escape();
+        for (let i = 0; i < 5; i++) await tick0();
+        if (currentMatchId !== null || !$('sheet').hidden || ui.sheetReturn || home.view !== 'player-match' || home.playerMatchId !== 'om1') throw new Error(home.view + ' ' + currentMatchId);
+      });
+      const snap = snapshot();
+      try { ui.sheetReturn = null; ui.sheetMode = 'sheet'; renderSheet(); $('sheet').hidden = false; escape(); if (!$('sheet').hidden) throw new Error('a plain Hoja ignores Escape'); } finally { restore(snap); }
+    });
     await TA('open match for player: a normal match keeps Volver and lands on the final', async () => {
       const keepState = state, keepId = currentMatchId;
       try {
@@ -2723,6 +2745,54 @@
       if (brandOf(teamCards[1]) !== 'var(--brand)') throw new Error('an invalid colour reaches the style: ' + brandOf(teamCards[1]));
       if (!teamCards[0].querySelector('img.crest') || columnsOf(grid) !== (innerWidth > CARD_GRID_WIDE_MIN_PX ? 3 : 2)) throw new Error('crest or columns');
       ['Mis equipos', 'Plantillas de rivales', 'Cuenta'].forEach((h) => { if (!flatText(grid).includes(h)) throw new Error('missing ' + h); });
+    }));
+    // Layout (M5.4): no horizontal overflow in any home page or sheet tab, at the window the suite runs in (the matrix probe covers 1024).
+    const overflowing = (root) => {
+      const bad = [];
+      if (root.scrollWidth > root.clientWidth) bad.push(`${root.id || root.className} ${root.scrollWidth}>${root.clientWidth}`);
+      root.querySelectorAll('*').forEach((el) => { if (['auto', 'scroll'].includes(getComputedStyle(el).overflowX) && el.scrollWidth > el.clientWidth) bad.push(`${el.tagName}.${el.className} ${el.scrollWidth}>${el.clientWidth}`); });
+      if (document.documentElement.scrollWidth > innerWidth) bad.push('document');
+      return bad;
+    };
+    await TA('layout: every home page and sheet tab has no horizontal overflow', async () => withHomeView(async () => {
+      const bad = [], snap = snapshot(), field = { ...cardField, num: 5 };
+      try {
+        home.roster = [field, cardKeeper]; home.season = [cardMatch()]; home.fixtures = []; home.teamMatches = []; home.sessions = []; home.playerId = 'ca';
+        home.matches = [listMatch('o1', 'Rival con un nombre muy largo de verdad', 'finished', 28, 23), listMatch('o2', 'BM Este', 'live', 3, 2, { pending: true })];
+        home.teams = [team]; home.templates = [{ id: 'ot', name: 'BM Sur', players: [{ id: 'a', num: 4 }] }]; home.squad = new Set(['ca', 'cg']); home.template = { id: 'ot', name: 'BM Sur', players: [] };
+        const views = [...Object.keys(HOME_VIEWS), ...Object.keys(PROFILE_VIEWS)];
+        for (const view of views) {
+          home.playerId = 'ca'; home.playerMatchId = 'cm1';
+          showHomeView(view);
+          overflowing($('home')).forEach((b) => bad.push(`${view}: ${b}`));
+          if (view === 'player') { home.playerId = 'cg'; showHomeView(view); overflowing($('home')).forEach((b) => bad.push(`keeper: ${b}`)); }
+        }
+        Object.assign(state, sampleState()); ui.sheetMode = 'sheet'; ui.sheetPlayer = 'p17';
+        for (const tab of Object.keys(SHEET_TABS)) {
+          ui.sheetTab = tab; renderSheet(); $('sheet').hidden = false;
+          overflowing($('sheet')).forEach((b) => bad.push(`${tab}: ${b}`));
+        }
+      } finally { restore(snap); ui.sheetTab = 'summary'; $('sheet').hidden = true; }
+      if (bad.length) throw new Error(bad.join(' | '));
+    }));
+    await TA('layout: per-match table headers keep a gap between neighbours', async () => withHomeView(async () => {
+      const MIN_HEADER_GAP_PX = 4;
+      home.roster = [cardField, cardKeeper]; home.season = [cardMatch()]; home.playerId = 'ca';
+      showHomeView('player');
+      const heads = [...document.querySelectorAll('.match-table th')].map((th) => { const r = document.createRange(); r.selectNodeContents(th); return r.getBoundingClientRect(); });
+      if (heads.length < 8) throw new Error('premise: ' + heads.length + ' headers');
+      heads.slice(1).forEach((rect, i) => { if (rect.left - heads[i].right < MIN_HEADER_GAP_PX) throw new Error(`headers ${i} and ${i + 1} are ${Math.round(rect.left - heads[i].right)} px apart`); });
+    }));
+    await TA('layout: pressed leader chip keeps the global chip look', async () => withHomeView(async () => {
+      home.roster = [cardField, cardKeeper]; home.season = [cardMatch()];
+      showHomeView('team');
+      const leader = document.querySelector('.leaders [data-leader][aria-pressed="true"]'), probe = document.createElement('div');
+      probe.innerHTML = '<button class="chip" type="button" aria-pressed="true">x</button>'; $('home').appendChild(probe);
+      try {
+        const a = getComputedStyle(leader), b = getComputedStyle(probe.firstChild);
+        const mismatch = ['backgroundColor', 'color', 'borderTopColor', 'borderTopLeftRadius', 'fontSize', 'fontWeight'].filter((k) => a[k] !== b[k]);
+        if (mismatch.length) throw new Error('differs from .chip: ' + mismatch.map((k) => `${k} ${a[k]} / ${b[k]}`).join('; '));
+      } finally { probe.remove(); }
     }));
     await TA('team page: next match shows round, weekend, rival and home or away', async () => {
       await withCalendarTeam(async () => {

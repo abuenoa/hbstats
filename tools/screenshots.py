@@ -74,9 +74,13 @@ MVP_SAMPLE_MINUTES = " data.kpis.push(['Min', '52']);"
 # The ratings card of the 16-player sample squad: eleven played (the other five are «S/C»), two photos, two long names.
 RATINGS_CARD_WIDTH, RATINGS_CARD_HEAD, RATINGS_CARD_ROW, SAMPLE_SQUAD = 1080, 300, 120, 16
 RATINGS_CARD_SIZE = f"{RATINGS_CARD_WIDTH},{RATINGS_CARD_HEAD + SAMPLE_SQUAD * RATINGS_CARD_ROW}"
+# The sample match with a court log (eleven on court the whole match) and a full-time clock, so minutes and +/− are known.
+COURT_LOGGED = (
+    "state.courtSets = [state.players.slice(0, 11).map((p) => p.id)]; state.court = [{ abs: 0, set: 0 }];"
+    " state.clock = { period: 2, elapsedMs: CONFIG.halfSeconds * 1000, runningSince: null };"
+)
 RATINGS_CARD_SNIPPET = (
-    f"{SAMPLE} state.courtSets = [state.players.slice(0, 11).map((p) => p.id)]; state.court = [{{ abs: 0, set: 0 }}];"
-    " state.clock = { period: 2, elapsedMs: CONFIG.halfSeconds * 1000, runningSince: null }; commit(); (async () => { await document.fonts.ready;"
+    f"{SAMPLE} {COURT_LOGGED} commit(); (async () => {{ await document.fonts.ready;"
     " const data = ratingsCardData(state, matchRatings(state));"
     f" {MVP_SAMPLE_PHOTO} data.rows[0].photo = data.rows[3].photo = data.photo;"
     f" data.rows[0].name = '{MVP_FIELD_NAME}'; data.rows[2].name = '{MVP_KEEPER_NAME}';"
@@ -95,6 +99,7 @@ CARD_SCENES = {
 SHEET_STATS = f"{SAMPLE} commit(); ui.sheetMode = 'sheet'; ui.sheetTab = 'stats'; renderSheet(); $('sheet').hidden = false;"
 SHEET_SUMMARY = SHEET_STATS.replace("'stats'", "'summary'")
 SHEET_PLAYER = SHEET_STATS.replace("'stats'", "'player'")
+SHEET_SUMMARY_COURT = SHEET_SUMMARY.replace("commit();", f"{COURT_LOGGED} commit();", 1)
 TOP_SCORER_SAMPLE_ID = "p17"
 SAMPLE_KEEPER_ID = "p1"
 MATRIX_SCENES = {
@@ -109,6 +114,7 @@ MATRIX_SCENES = {
     "attendance": "await seedSeason(); await showAttendance();",
     "attendance-match": "await seedSeason(); await showAttendance(); openAttendanceDay('2026-10-17');",
     "sheet-summary": SHEET_SUMMARY,
+    "sheet-summary-court": SHEET_SUMMARY_COURT,
     "sheet-stats": SHEET_STATS,
     "sheet-player": f"{SHEET_PLAYER} ui.sheetPlayer = '{TOP_SCORER_SAMPLE_ID}'; renderSheet();",
     "sheet-keeper": f"{SHEET_PLAYER} ui.sheetPlayer = '{SAMPLE_KEEPER_ID}'; renderSheet();",
