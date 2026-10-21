@@ -564,7 +564,6 @@ button.rex-chip { border: 0; cursor: pointer; position: relative; }
 .mvp-faces { display: flex; flex-wrap: wrap; gap: var(--space-4) var(--space-3); padding-top: var(--space-6); }
 .mvp-face { position: relative; display: grid; justify-items: center; gap: 4px; min-width: var(--tap); min-height: var(--tap); padding: 4px 6px; border: 2px solid transparent; border-radius: var(--radius-md); background: transparent; color: var(--fg); font: var(--type-caption); font-weight: 600; }
 .mvp-face[aria-pressed="true"] { border-color: var(--gold); background: var(--glow-gold); }
-.mvp-face.provisional { border-style: dashed; border-color: var(--gold); }
 .mvp-tag { font: var(--type-caption); font-weight: 800; color: var(--fg); }
 .ratings { display: grid; gap: var(--space-2); }
 .rating-list { margin: 0; padding: 0; list-style: none; }
@@ -572,12 +571,14 @@ button.rex-chip { border: 0; cursor: pointer; position: relative; }
 .rating-line { display: flex; align-items: center; gap: var(--space-3); min-height: 52px; padding: var(--space-1) 0; }
 .rating-line .disc { flex: none; width: var(--face-disc); height: var(--face-disc); font-size: 16px; }
 .rating-line .rating-chip { min-width: 3.5ch; }
-.rating-name { flex: 1; min-width: 0; overflow-wrap: anywhere; }
+.rating-who { flex: 1; min-width: 0; display: grid; overflow-wrap: anywhere; }
+.rating-line::after { content: ""; flex: none; width: var(--space-4); text-align: center; color: var(--muted); }
+.ratings > .btn { justify-self: start; min-height: var(--target); }
 .rating-kpi { display: grid; justify-items: end; min-width: 5ch; font-variant-numeric: tabular-nums; }
 .rating-kpi small { font: var(--type-caption); color: var(--muted); }
 .rating-more > summary { list-style: none; cursor: pointer; }
 .rating-more > summary::-webkit-details-marker { display: none; }
-.rating-more > summary::after { content: "▾"; color: var(--muted); }
+.rating-more > summary::after { content: "▾"; }
 .rating-more[open] > summary::after { content: "▴"; }
 .rating-more ul { margin: 0 0 var(--space-2); padding-left: calc(var(--face-disc) + var(--space-3)); font: var(--type-caption); }
 .rating-more li b { font-variant-numeric: tabular-nums; }
@@ -1315,6 +1316,8 @@ span.att-foot { visibility: hidden; }
   const ui = {
     source: 'GK', sourcePhase: null, show: new Set(), popView: null, hintTimer: null, drag: null,
     lastPenTs: 0, shooter: null, rivalNewPos: null, sheetTab: 'stats', sheetMode: 'sheet', sheetGk: null, sheetGoal: 'GK', sheetShooter: null, sheetPlayer: null, sheetReturn: null, rosterSide: 'team', templatePick: false,
+    // The final screen lists every rating, not just the top rows.
+    ratingsAll: false,
     finishArmedTimer: null,
     // Team photos by player id (see setTeamPhotos).
     photos: new Map(),
@@ -1957,6 +1960,7 @@ span.att-foot { visibility: hidden; }
       || (ratingValue(ratings, b) ?? 0) - (ratingValue(ratings, a) ?? 0)
       || secondsOf(b) - secondsOf(a) || made.get(b.id) - made.get(a.id) || a.num - b.num);
   }
+  const RATINGS_COLLAPSED_ROWS = 5;
   const MVP_SOURCE = { coach: 'coach', rating: 'rating' };
   // The coach's pick wins; otherwise the top rating is only a provisional MVP and is never stored.
   function matchMvp(s, ratings, seconds = minutesOnCourt(s)) {
@@ -1974,17 +1978,25 @@ span.att-foot { visibility: hidden; }
       return `<li>${t.label}${t.counts === false ? '' : ` ×${count}`} <b>${signedText(points)}</b></li>`;
     }).join('');
   }
-  function ratingRowHtml(s, player, rating, seconds) {
+  function ratingRowHtml(s, player, rating, seconds, mvp) {
     const { made, tried } = outcomeOf(s, player), keeper = player.pos === 'POR';
     const kpi = (value, label) => `<span class="rating-kpi"><b>${value}</b><small>${label}</small></span>`;
-    const line = `${discHtml(player)}<b class="rating-name">${esc(player.name)}</b>${ratingChipHtml(rating.value)}
+    const isMvp = player.id === mvp.id, provisional = isMvp && mvp.source === MVP_SOURCE.rating;
+    const face = `<span class="mvp-face-static">${discHtml(player)}${isMvp ? crownSvg('crown-face') : ''}</span>`;
+    const line = `${face}<span class="rating-who"><b>${esc(player.name)}</b>${provisional ? '<small class="mvp-tag">MVP provisional</small>' : ''}</span>${ratingChipHtml(rating.value)}
       ${kpi(minutesText(seconds ? seconds.get(player.id) || 0 : null), 'Min')}${kpi(`${made}/${tried}`, keeper ? 'Paradas' : 'Goles')}${kpi(pctText(pct(made, tried)), '%')}`;
     const items = ratingItemsHtml(rating, keeper);
     return `<li class="rating-row" data-rating-player="${esc(player.id)}">${items ? `<details class="rating-more"><summary class="rating-line">${line}</summary><ul>${items}</ul></details>` : `<div class="rating-line">${line}</div>`}</li>`;
   }
-  function ratingsListHtml(s, ratings, seconds = minutesOnCourt(s)) {
-    const rows = rankedByRating(s, ratings, seconds).map((p) => ratingRowHtml(s, p, ratings.get(p.id), seconds)).join('');
-    return `<section class="ratings"><h3>Puntuaciones</h3><ol class="rating-list">${rows}</ol></section>`;
+  // The MVP leads the list; the others follow by rating. Only the top rows show until the coach asks for all.
+  function ratingsListHtml(s, ratings, seconds = minutesOnCourt(s), showAll = ui.ratingsAll) {
+    const mvp = matchMvp(s, ratings, seconds), ranked = rankedByRating(s, ratings, seconds);
+    const ordered = [...ranked.filter((p) => p.id === mvp.id), ...ranked.filter((p) => p.id !== mvp.id)];
+    const shown = showAll ? ordered : ordered.slice(0, RATINGS_COLLAPSED_ROWS);
+    const toggle = ordered.length > RATINGS_COLLAPSED_ROWS
+      ? `<button class="btn press" type="button" data-ratings-all aria-expanded="${showAll}">${showAll ? 'Ver menos' : `Ver todos (${ordered.length})`}</button>` : '';
+    const rows = shown.map((p) => ratingRowHtml(s, p, ratings.get(p.id), seconds, mvp)).join('');
+    return `<section class="ratings"><h3>Puntuaciones</h3><ol class="rating-list">${rows}</ol>${toggle}</section>`;
   }
 
   // ===================== Audio, vibration, wake lock =====================
@@ -4204,13 +4216,9 @@ span.att-foot { visibility: hidden; }
     </div>`;
     $('final').hidden = false;
   }
-  // The crown goes to the coach's pick, or to the top rating, labelled as provisional; only a tap ever sets `state.mvpId`.
-  function mvpPickHtml(mvp) {
-    const face = (p) => {
-      const provisional = p.id === mvp.id && mvp.source === MVP_SOURCE.rating;
-      return `<button class="mvp-face press${provisional ? ' provisional' : ''}" type="button" data-mvp="${esc(p.id)}" aria-pressed="${p.id === state.mvpId}" aria-label="${esc(p.name)}, MVP del partido${provisional ? ' provisional' : ''}">${discHtml(p)}<span>${esc(p.name)}</span>${provisional ? '<small class="mvp-tag">MVP provisional</small>' : ''}${p.id === mvp.id ? crownSvg('crown-face') : ''}</button>`;
-    };
-    const faces = state.players.slice().sort(byPosition).map(face).join('');
+  // Picking is the coach's tap alone: the crown and the provisional label are on the first row of the ratings.
+  function mvpPickHtml() {
+    const faces = state.players.slice().sort(byPosition).map((p) => `<button class="mvp-face press" type="button" data-mvp="${esc(p.id)}" aria-pressed="${p.id === state.mvpId}" aria-label="${esc(p.name)}, MVP del partido">${discHtml(p)}<span>${esc(p.name)}</span></button>`).join('');
     return `<section class="mvp-pick"><h3>MVP del partido</h3><div class="mvp-faces">${faces}</div></section>`;
   }
   // Not an event: picking the MVP is neither undoable nor part of any statistic.
@@ -4226,7 +4234,7 @@ span.att-foot { visibility: hidden; }
       <h2>Final · ${esc(finalTitle())}</h2>
       ${kpiTilesHtml()}
       ${ratingsListHtml(state, ratings, seconds)}
-      ${mvpPickHtml(matchMvp(state, ratings, seconds))}
+      ${mvpPickHtml()}
       ${summaryDetailHtml()}
       <label class="final-mail">Enviar los PDF a<input class="in" id="final-email" type="email" inputmode="email" autocomplete="email" placeholder="entrenador@club.es, otro@club.es" value="${esc(email || '')}"></label>
       <div class="row-actions">
@@ -4277,6 +4285,7 @@ span.att-foot { visibility: hidden; }
     const b = ev.target.closest('button');
     if (!b) return;
     if (b.dataset.mvp) { setMvp(b.dataset.mvp); return; }
+    if (b.hasAttribute('data-ratings-all')) { ui.ratingsAll = !ui.ratingsAll; openFinal($('final-email').value); return; }
     if (b.hasAttribute('data-final-close')) { $('final').hidden = true; return; }
     if (b.hasAttribute('data-final-sheet')) { $('final').hidden = true; ui.sheetMode = 'sheet'; ui.sheetTab = 'stats'; renderSheet(); $('sheet').hidden = false; return; }
     if (b.hasAttribute('data-second-half')) { startSecondHalf(); return; }

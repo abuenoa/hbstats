@@ -945,13 +945,14 @@
   const onFinal = (over, fn) => () => {
     const snap = snapshot();
     try {
-      Object.assign(state, { mvpId: null, history: [], court: undefined, courtSets: undefined, clock: FULL_MATCH_CLOCK, ...over, events: (over.events || []).map(placed) });
-      openFinal(); fn();
-    } finally { restore(snap); }
+      Object.assign(state, { mvpId: null, history: [], court: undefined, courtSets: undefined, clock: FULL_MATCH_CLOCK, ...over, collapsed: undefined, events: (over.events || []).map(placed) });
+      ui.ratingsAll = !over.collapsed; openFinal(); fn();
+    } finally { ui.ratingsAll = false; restore(snap); }
   };
   const ratingRows = () => [...$('final').querySelectorAll('.rating-row')];
   const rowIds = () => ratingRows().map((r) => r.dataset.ratingPlayer);
-  const crownedIds = () => [...$('final').querySelectorAll('.mvp-face')].filter((b) => b.querySelector('.crown-face')).map((b) => b.dataset.mvp);
+  const crownedIds = () => ratingRows().filter((r) => r.querySelector('.crown-face')).map((r) => r.dataset.ratingPlayer);
+  const provisionalLabel = () => $('final').querySelector('.ratings').textContent.includes('MVP provisional');
   // p22 plays the second half only (30 min, 7/8 from 6 m and a recovery); p8 plays the whole match (5/9 from 9 m, 2 assists, 1 turnover).
   const secondHalfStar = () => ({
     courtSets: [['p8', 'p1'], ['p8', 'p22', 'p1']], court: [{ abs: 0, set: 0 }, { abs: CONFIG.halfSeconds, set: 1 }],
@@ -975,21 +976,24 @@
   T('final: the provisional MVP is the top rating', onFinal(playedFew(), () => {
     const mvp = matchMvp(state, matchRatings(state));
     if (mvp.id !== 'p22' || mvp.source !== 'rating' || state.mvpId !== null) throw new Error(JSON.stringify(mvp));
-    if (crownedIds().join() !== 'p22' || !$('final').querySelector('.mvp-pick').textContent.includes('MVP provisional')) throw new Error('crown or label');
+    if (crownedIds().join() !== 'p22' || !provisionalLabel()) throw new Error('crown or label');
     if (document.querySelector('[data-mvp="p22"]').getAttribute('aria-pressed') !== 'false') throw new Error('provisional is not the coach pick');
   }));
+  // Each rule decides a tie that the dorsal rule would decide the other way, so removing a rule changes the pick.
   T('final: provisional MVP ties go to more minutes, then more goals or saves', () => {
     const player = (id, num, pos = 'EXT') => ({ id, num, pos });
     const goals = (id, n) => rShots(id, '6M', n, 0).map((e, i) => ({ ...e, id: `${id}${i}` }));
     const saved = (n) => Array.from({ length: n }, (_, i) => ({ id: 'sv' + i, abs: i, kind: 'RIVAL_SHOT', gkId: 'k', zone: '9M', result: 'PARADA' }));
     const rate = (...ids) => new Map(ids.map((id) => [id, { value: 7, rated: true }]));
-    const s = { players: [player('a', 9), player('b', 4), player('c', 6), player('k', 1, 'POR')], events: [...goals('a', 2), ...goals('b', 2), ...goals('c', 3), ...saved(5)], mvpId: null };
+    const s = { players: [player('a', 9), player('b', 4), player('c', 8), player('d', 3), player('e', 20), player('f', 5), player('k', 12, 'POR'), player('g', 7)],
+      events: [...goals('c', 3), ...goals('d', 1), ...goals('e', 0), ...goals('f', 2), ...saved(5)], mvpId: null };
     const pick = (seconds, ...ids) => matchMvp(s, rate(...ids), seconds).id;
-    if (pick(new Map([['a', 1800], ['b', 2400]]), 'a', 'b') !== 'b') throw new Error('minutes');
-    if (pick(null, 'a', 'c') !== 'c' || pick(new Map(), 'a', 'c') !== 'c') throw new Error('goals, unknown minutes count as equal');
-    if (pick(new Map([['a', 600], ['c', 600]]), 'a', 'c') !== 'c') throw new Error('goals at equal minutes');
-    if (pick(null, 'a', 'b') !== 'b') throw new Error('lower dorsal');
-    if (pick(null, 'a', 'k') !== 'k') throw new Error('a goalkeeper counts saves');
+    if (pick(new Map([['a', 2400], ['b', 1800]]), 'a', 'b') !== 'a') throw new Error('more minutes beats the lower dorsal');
+    if (pick(new Map([['c', 1800], ['d', 1800]]), 'c', 'd') !== 'c') throw new Error('more goals beat the lower dorsal at equal minutes');
+    if (pick(null, 'c', 'd') !== 'c' || pick(new Map(), 'c', 'd') !== 'c') throw new Error('unknown minutes count as equal, then goals');
+    if (pick(new Map([['e', 2400], ['c', 1800]]), 'e', 'c') !== 'e') throw new Error('minutes come before goals');
+    if (pick(null, 'k', 'f') !== 'k') throw new Error('a goalkeeper counts saves');
+    if (pick(null, 'a', 'g') !== 'g' || pick(null, 'g', 'a') !== 'g') throw new Error('lower dorsal last');
     const higher = new Map([['a', { value: 7.1, rated: true }], ['b', { value: 7, rated: true }]]);
     if (matchMvp(s, higher, new Map([['b', 3600]])).id !== 'a') throw new Error('rating first');
     const none = new Map(s.players.map((p) => [p.id, { value: null, rated: false }]));
@@ -1005,10 +1009,10 @@
   T('final: the coach\'s pick overrides and clears', onFinal(playedFew(), () => {
     const click = (id) => document.querySelector(`[data-mvp="${id}"]`).click();
     click('p8');
-    if (state.mvpId !== 'p8' || crownedIds().join() !== 'p8' || $('final').querySelector('.mvp-pick').textContent.includes('MVP provisional')) throw new Error('coach pick');
+    if (state.mvpId !== 'p8' || crownedIds().join() !== 'p8' || provisionalLabel()) throw new Error('coach pick');
     if (matchMvp(state, matchRatings(state)).source !== 'coach') throw new Error('source');
     click('p8');
-    if (state.mvpId !== null || crownedIds().join() !== 'p22' || !$('final').querySelector('.mvp-pick').textContent.includes('MVP provisional')) throw new Error('clearing returns to the provisional MVP');
+    if (state.mvpId !== null || crownedIds().join() !== 'p22' || !provisionalLabel()) throw new Error('clearing returns to the provisional MVP');
     const before = JSON.stringify([liveStats(), score(), state.history]);
     matchMvp(state, matchRatings(state)); openFinal();
     if (JSON.stringify([liveStats(), score(), state.history]) !== before || state.mvpId !== null) throw new Error('the provisional MVP must write nothing');
@@ -1019,6 +1023,22 @@
     const idle = ratingRows().find((r) => r.dataset.ratingPlayer === 'p5');
     if (idle.querySelector('details') || /NaN|undefined/.test($('final').textContent)) throw new Error('a player without events has no breakdown');
     if (matchRatings(state).get('p22').confidence !== 1) throw new Error('premise: no court log rates with confidence 1');
+  }));
+  T('final: the MVP leads the list and the rest folds behind «Ver todos»', onFinal({ collapsed: true, ...playedFew(), mvpId: 'p8' }, () => {
+    if (rowIds()[0] !== 'p8' || ratingRows().length !== RATINGS_COLLAPSED_ROWS || crownedIds().join() !== 'p8') throw new Error('collapsed: ' + rowIds());
+    const toggle = document.querySelector('[data-ratings-all]');
+    if (!toggle || toggle.getAttribute('aria-expanded') !== 'false' || !toggle.textContent.includes(`(${state.players.length})`) || toggle.getBoundingClientRect().height < 44) throw new Error('toggle');
+    toggle.click();
+    if (ratingRows().length !== state.players.length || document.querySelector('[data-ratings-all]').getAttribute('aria-expanded') !== 'true') throw new Error('expanded');
+    state.mvpId = null; openFinal();
+    if (rowIds()[0] !== 'p22' || !provisionalLabel() || ratingRows()[0].querySelector('.mvp-tag') === null) throw new Error('provisional MVP first with its tag');
+  }));
+  T('final: the breakdown scales by the minutes and escapes names', onFinal({ clock: { period: 1, elapsedMs: CONFIG.halfSeconds * 1000, runningSince: null }, courtSets: [['p22', 'p1']], court: [{ abs: 0, set: 0 }],
+    events: [rTurnover('p22', 'Pase', 1), rTurnover('p22', 'Bote', 2)] }, () => {
+    const items = [...ratingRows().find((r) => r.dataset.ratingPlayer === 'p22').querySelectorAll('details li')].map((li) => li.textContent);
+    if (items.join('|') !== 'Pérdidas ×2 −0,6') throw new Error('30 min: ' + items.join('|'));
+    state.players.find((p) => p.id === 'p22').name = '<i id="injected">x</i>'; openFinal();
+    if (document.getElementById('injected') || !ratingRows().find((r) => r.dataset.ratingPlayer === 'p22').textContent.includes('<i id="injected">')) throw new Error('name not escaped');
   }));
 
   // ---- Drill-down: the per-match drawing helpers work over any saved state (M0c) ----
