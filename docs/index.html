@@ -1339,7 +1339,7 @@ span.att-foot { visibility: hidden; }
     ratingsAll: false,
     // The MVP card shown on the final screen: its PNG and object URL (revoked when the screen re-renders or closes), the
     // promise of the render in flight and a ticket that retires a render the screen has left behind.
-    mvpCardBlob: null, mvpCardUrl: null, mvpCardReady: null, mvpCardTicket: 0,
+    mvpCardBlob: null, mvpCardUrl: null, mvpCardReady: null, ratingsCardBlob: null, ratingsCardReady: null, mvpCardTicket: 0,
     finishArmedTimer: null,
     // Team photos by player id (see setTeamPhotos).
     photos: new Map(),
@@ -4291,10 +4291,10 @@ span.att-foot { visibility: hidden; }
   }
   // The crown on the face's upper-left rim, resting on it like a hat.
   const crownPlacement = () => crownMatrix(...rimPoint(MVP_CARD.w / 2, MVP_CARD.faceCy, MVP_CARD.faceR - MVP_CARD.ringWidth, MVP_CARD.crownRimDeg), MVP_CARD.crownW, MVP_CARD.crownAngleDeg);
-  function drawCrown(ctx) {
+  function drawCrown(ctx, placement) {
     const c = CARD_PALETTE.crown, { band } = CROWN;
     ctx.save();
-    ctx.setTransform(crownPlacement());
+    ctx.setTransform(placement);
     ctx.lineJoin = 'round';
     ctx.strokeStyle = c['--crown-edge'];
     ctx.lineWidth = CROWN.edgeWidth;
@@ -4349,7 +4349,8 @@ span.att-foot { visibility: hidden; }
   function drawRatingBadge(ctx, write, badge, cx, cy, rating, band) {
     const [fill, ink] = CARD_PALETTE.bands[band];
     ctx.beginPath(); ctx.roundRect(cx - badge.w / 2, cy - badge.h / 2, badge.w, badge.h, badge.radius);
-    ctx.fillStyle = fill; ctx.fill(); ctx.strokeStyle = CARD_PALETTE.badgeEdge; ctx.lineWidth = badge.edge; ctx.stroke();
+    ctx.fillStyle = fill; ctx.fill();
+    if (badge.edge) { ctx.strokeStyle = CARD_PALETTE.badgeEdge; ctx.lineWidth = badge.edge; ctx.stroke(); }
     write(rating, cx, cy - badge.h / 2 + badge.baseline, 'center', ink, cardDisplay, badge.size, badge.w);
   }
   // Draws the MVP card on `canvas`; `images` are the loaded { photo, crest } (null when missing or broken).
@@ -4363,7 +4364,7 @@ span.att-foot { visibility: hidden; }
     drawFace(ctx, text, data, images.photo, cx, M.faceCy, M.faceR);
     ctx.beginPath(); ctx.arc(cx, M.faceCy, M.faceR + M.ringWidth / 2, 0, 2 * Math.PI);
     ctx.strokeStyle = accent; ctx.lineWidth = M.ringWidth; ctx.stroke();
-    drawCrown(ctx);
+    drawCrown(ctx, crownPlacement());
     // The rating badge on the lower-right rim.
     const [bx, by] = rimPoint(cx, M.faceCy, M.faceR, badge.rimDeg);
     drawRatingBadge(ctx, text, badge, bx, by, data.rating, data.band);
@@ -4417,7 +4418,8 @@ span.att-foot { visibility: hidden; }
     titleY: 112, titleSize: 72, matchY: 184, matchSize: 44, matchMinSize: 32, metaY: 240, metaSize: 28,
     numW: 64, numSize: 44, faceR: 40, gap: 20,
     nameSize: 44, nameFloor: 36, nameBaseline: 58, lineSize: 30, lineMinSize: 26, lineBaseline: 100,
-    badge: { w: 168, h: 84, radius: 24, edge: 6, size: 60, baseline: 62 },
+    badge: { w: 168, h: 84, radius: 24, edge: 0, size: 60, baseline: 62 },
+    faceRing: 3, crown: { w: 56, rimDeg: -135, angleDeg: -34 },
     minAccentContrast: 3
   };
   const RATINGS_TITLE = 'Puntuaciones';
@@ -4428,11 +4430,11 @@ span.att-foot { visibility: hidden; }
   };
   // What the ratings card shows: one row per player, sorted like the final list (rating, then S/C last); `ratings` is matchRatings(s).
   function ratingsCardData(s, ratings, t = team, seconds = minutesOnCourt(s)) {
-    const sc = score(s.events);
+    const sc = score(s.events), mvp = matchMvp(s, ratings, seconds);
     const rows = rankedByRating(s, ratings, seconds).map((player) => {
       const value = ratingValue(ratings, player), { made, tried } = outcomeOf(s, player);
       const line = [`${player.pos === 'POR' ? 'Paradas' : 'Goles'} ${made}/${tried}`, seconds ? `${minutesText(seconds.get(player.id) || 0)} min` : null].filter(Boolean).join(' · ');
-      return { num: player.num, name: player.name, pos: player.pos, photo: facePhoto(player), rating: ratingText(value), band: ratingBand(value), line };
+      return { num: player.num, name: player.name, pos: player.pos, photo: facePhoto(player), rating: ratingText(value), band: ratingBand(value), line, mvp: player.id === mvp.id };
     });
     return {
       title: s.them, us: s.us, score: `${sc.us}–${sc.them}`, date: dateText(s.date), venue: s.venue, rows,
@@ -4455,6 +4457,9 @@ span.att-foot { visibility: hidden; }
       if (i % 2) { ctx.fillStyle = P.tile; ctx.fillRect(0, top, R.w, R.row); }
       text(String(row.num), R.pad + R.numW / 2, top + R.nameBaseline, 'center', P.inkSoft, cardDisplay, R.numSize, R.numW);
       drawFace(ctx, text, row, images.faces[i], faceX, mid, R.faceR);
+      ctx.beginPath(); ctx.arc(faceX, mid, R.faceR, 0, 2 * Math.PI);
+      ctx.strokeStyle = P.inkSoft; ctx.lineWidth = R.faceRing; ctx.stroke();
+      if (row.mvp) drawCrown(ctx, crownMatrix(...rimPoint(faceX, mid, R.faceR, R.crown.rimDeg), R.crown.w, R.crown.angleDeg));
       text(row.name, column.x, top + R.nameBaseline, 'left', P.ink, cardDisplay, R.nameSize, column.w, R.nameFloor);
       text(row.line, column.x, top + R.lineBaseline, 'left', P.inkSoft, cardBody(semi), R.lineSize, column.w, R.lineMinSize);
       drawRatingBadge(ctx, text, R.badge, R.w - R.pad - R.badge.w / 2, mid, row.rating, row.band);
@@ -4578,6 +4583,7 @@ span.att-foot { visibility: hidden; }
     </div>`;
     $('final').hidden = false;
     ui.mvpCardReady = renderMvpPreview();
+    ui.ratingsCardReady = renderRatingsCard();
   }
   const finalStatus = (text) => sheetStatus('final-status', text);
   function hideFinal() {
@@ -4588,7 +4594,7 @@ span.att-foot { visibility: hidden; }
   function releaseMvpCard() {
     ui.mvpCardTicket++;
     if (ui.mvpCardUrl) URL.revokeObjectURL(ui.mvpCardUrl);
-    ui.mvpCardUrl = ui.mvpCardBlob = null;
+    ui.mvpCardUrl = ui.mvpCardBlob = ui.ratingsCardBlob = null;
   }
   const MVP_PREVIEW_TEXT = { none: 'Elige el MVP para generar la imagen.', busy: 'Generando la imagen…', failed: 'No se pudo generar la imagen del MVP.' };
   // The MVP card of the match (the coach's pick, else the provisional MVP), drawn on every final screen so it is always ready to share.
@@ -4620,7 +4626,23 @@ span.att-foot { visibility: hidden; }
     }
   }
   const SHARE_STATUS = { shared: 'Compartido.', cancelled: 'Compartir cancelado.' };
-  // An image through the share sheet; a device that cannot share files gets a download instead.
+  const IMAGE_TEXT = {
+    preparing: 'La imagen se está preparando, vuelve a tocar en un momento.', denied: 'El menú de compartir no se abrió: vuelve a tocar el botón.',
+    failed: 'No se pudo compartir la imagen.', ratingsFailed: 'No se pudo preparar la imagen de puntuaciones.'
+  };
+  // The ratings card, built as soon as the final screen opens so the share tap needs no wait.
+  async function renderRatingsCard() {
+    const ticket = ui.mvpCardTicket;
+    try {
+      const blob = await ratingsCardBlob(ratingsCardData(state, matchRatings(state)));
+      if (ticket === ui.mvpCardTicket) ui.ratingsCardBlob = blob;
+    } catch (err) {
+      console.error('Ratings card failed', err);
+      if (ticket === ui.mvpCardTicket) finalStatus(IMAGE_TEXT.ratingsFailed);
+    }
+  }
+  // An image through the share sheet, called straight from the tap: the share sheet needs the tap's user activation, so
+  // nothing is awaited before `share()`. A device that cannot share files gets a download instead.
   async function shareImage(blob, filename, title) {
     try {
       const result = await shareFiles([new File([blob], filename, { type: blob.type })], title, title);
@@ -4629,24 +4651,20 @@ span.att-foot { visibility: hidden; }
       finalStatus(`Imagen descargada: ${filename}.`);
     } catch (err) {
       console.error('Image share failed', err);
-      finalStatus(err instanceof Error ? `No se pudo compartir: ${err.message}.` : fileErrorText(err));
+      finalStatus(err && err.name === 'NotAllowedError' ? IMAGE_TEXT.denied : err && err.code ? fileErrorText(err) : IMAGE_TEXT.failed);
     }
   }
   const shareFilename = (prefix) => `${prefix}-${slug(state.us)}-${slug(state.them)}.png`;
-  async function shareRatingsCard() {
-    finalStatus('Preparando la imagen…');
-    try {
-      await shareImage(await ratingsCardBlob(ratingsCardData(state, matchRatings(state))), shareFilename('puntuaciones'), `Puntuaciones ${finalTitle()}`);
-    } catch (err) {
-      console.error('Ratings card failed', err);
-      finalStatus(`No se pudo generar la imagen: ${err.message}.`);
-    }
+  // A card that is not ready yet is not awaited (that would spend the tap): the coach taps again.
+  function shareCard(blob, prefix, title) {
+    if (!blob) { finalStatus(IMAGE_TEXT.preparing); return; }
+    shareImage(blob, shareFilename(prefix), title);
   }
-  async function shareMvpCard() {
-    await ui.mvpCardReady;
-    if (!ui.mvpCardBlob) { finalStatus(MVP_PREVIEW_TEXT.none); return; }
-    await shareImage(ui.mvpCardBlob, shareFilename('mvp'), `MVP ${finalTitle()}`);
+  function shareMvpCard() {
+    if (!ui.mvpCardBlob && !matchMvp(state, matchRatings(state)).id) { finalStatus(MVP_PREVIEW_TEXT.none); return; }
+    shareCard(ui.mvpCardBlob, 'mvp', `MVP ${finalTitle()}`);
   }
+  const shareRatingsCard = () => shareCard(ui.ratingsCardBlob, 'puntuaciones', `Puntuaciones ${finalTitle()}`);
   async function reportFiles() {
     await loadPdfLibs();
     return ['match', 'players'].map((kind) => { const { doc, filename } = buildPdf(kind); return { filename, blob: doc.output('blob') }; });
@@ -6516,7 +6534,8 @@ span.att-foot { visibility: hidden; }
     resetPlayUi();
     ui.sheetMode = 'sheet';
     ui.templatePick = false;
-    ['home', 'sheet', 'final'].forEach((el) => { $(el).hidden = true; });
+    ['home', 'sheet'].forEach((el) => { $(el).hidden = true; });
+    hideFinal();
     renderAll();
     if (!state.setupDone) openSetup();
     else if (sheetPlayer) openSheetPlayer(sheetPlayer);
@@ -6574,7 +6593,8 @@ span.att-foot { visibility: hidden; }
     ui.sheetPlayer = null;
     ui.sheetReturn = null;
     keepScreenOn(false);
-    ['sheet', 'final'].forEach((el) => { $(el).hidden = true; });
+    $('sheet').hidden = true;
+    hideFinal();
     after();
   }
   // The season was cleared on entering the match: the card's match view shows «Cargando…» until it is read again.
@@ -6590,7 +6610,8 @@ span.att-foot { visibility: hidden; }
     removeKey(CURRENT_MATCH_KEY);
     state = sampleState();
     resetPlayUi();
-    ['home', 'sheet', 'final'].forEach((el) => { $(el).hidden = true; });
+    ['home', 'sheet'].forEach((el) => { $(el).hidden = true; });
+    hideFinal();
     renderAll();
     hint('Partido de ejemplo · «‹ Partidos» para volver a tus partidos');
   }

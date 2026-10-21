@@ -1287,6 +1287,7 @@
       if (data.rows.slice(3).some((r) => r.band !== RATING_NONE_BAND)) throw new Error('S/C is not neutral');
       if (data.rows[0].name !== 'Diego' || !data.rows[0].line.includes('3/3') || /NaN|undefined/.test(JSON.stringify(data))) throw new Error(JSON.stringify(data.rows[0]));
       if (!data.rows[1].line.includes('Paradas')) throw new Error('keeper line: ' + data.rows[1].line);
+      if (data.rows.filter((r) => r.mvp).map((r) => r.name).join() !== 'Diego') throw new Error('mvp marker: ' + data.rows.filter((r) => r.mvp).map((r) => r.name));
       // Every name is drawn at 36 px or more, whole when it fits and cut with an ellipsis only beyond the floor; nothing leaves the card.
       const long = 'Maximiliano Fernández Lo', huge = 'Maximiliano '.repeat(12).trim();
       const rows = data.rows.map((r, i) => (i === 0 ? { ...r, name: long } : i === 1 ? { ...r, name: huge } : r));
@@ -1381,19 +1382,51 @@
         if (clicked.length !== 1 || /No se pudo/.test($('final-status').textContent)) throw new Error('cancel: ' + $('final-status').textContent);
         unstub(); unstub = sheetStubs(() => true, async () => { throw new Error('boom'); });
         await tap();
-        if (!/No se pudo compartir: boom/.test($('final-status').textContent)) throw new Error('failure: ' + $('final-status').textContent);
+        if ($('final-status').textContent !== 'No se pudo compartir la imagen.') throw new Error('failure: ' + $('final-status').textContent);
+        unstub(); unstub = sheetStubs(() => true, async () => { throw Object.assign(new Error('Must be handling a user gesture'), { name: 'NotAllowedError' }); });
+        await tap();
+        if (!/vuelve a tocar el botón/.test($('final-status').textContent) || /gesture/.test($('final-status').textContent)) throw new Error('denied: ' + $('final-status').textContent);
       } finally { unstub(); HTMLAnchorElement.prototype.click = click; spy.stop(); done(); }
     });
     await TA('final: the ratings button shares the ratings image', async () => {
       const done = withFinal(playedFew()), shared = [];
       const unstub = sheetStubs(() => true, async (data) => { shared.push(data); });
       try {
-        await ui.mvpCardReady;
+        await ui.mvpCardReady; await ui.ratingsCardReady;
         $('final').querySelector('[data-final-ratings-share]').click();
-        for (let i = 0; i < 1000 && !shared.length; i++) await new Promise((r) => setTimeout(r, 10));
         if (shared.length !== 1 || !/^puntuaciones-.+\.png$/.test(shared[0].files[0].name) || shared[0].files[0].type !== 'image/png') throw new Error(JSON.stringify(shared.map((d) => d.files[0].name)));
         if (!shared[0].title.startsWith('Puntuaciones')) throw new Error(shared[0].title);
       } finally { unstub(); done(); }
+    });
+    await TA('final: both share buttons call share() inside the tap, and wait when the card is not ready', async () => {
+      const done = withFinal(playedFew()), shared = [];
+      const unstub = sheetStubs(() => true, async (data) => { shared.push(data.files[0].name); });
+      const tap = (attr) => $('final').querySelector(`[${attr}]`).click();
+      try {
+        // Right after the screen opens the cards are still being drawn: nothing is shared and the coach is told to tap again.
+        tap('data-final-mvp-share'); tap('data-final-ratings-share');
+        if (shared.length || !$('final-status').textContent.includes('se está preparando')) throw new Error('not-ready path: ' + shared + ' ' + $('final-status').textContent);
+        await ui.mvpCardReady; await ui.ratingsCardReady;
+        // With the cards drawn, share() has been called by the time click() returns (no await before it).
+        tap('data-final-mvp-share');
+        if (shared.length !== 1 || !shared[0].startsWith('mvp-')) throw new Error('mvp share not synchronous: ' + shared);
+        tap('data-final-ratings-share');
+        if (shared.length !== 2 || !shared[1].startsWith('puntuaciones-')) throw new Error('ratings share not synchronous: ' + shared);
+      } finally { unstub(); done(); }
+    });
+    await TA('final: leaving the match releases both cards and drops a render in flight', async () => {
+      const done = withFinal(playedFew()), spy = revokedUrls();
+      try {
+        await ui.mvpCardReady; await ui.ratingsCardReady;
+        const url = ui.mvpCardUrl;
+        if (!url || !ui.ratingsCardBlob) throw new Error('cards not ready');
+        leaveMatch(() => {});
+        if (!spy.revoked.includes(url) || ui.mvpCardUrl || ui.mvpCardBlob || ui.ratingsCardBlob || !$('final').hidden) throw new Error('leaving kept the cards');
+        const pending = (openFinal(), Promise.all([ui.mvpCardReady, ui.ratingsCardReady]));
+        leaveMatch(() => {});
+        await pending;
+        if (ui.mvpCardUrl || ui.mvpCardBlob || ui.ratingsCardBlob) throw new Error('a render finishing after leaving kept a card');
+      } finally { spy.stop(); done(); }
     });
     await TA('shareFiles: shared, cancelled, unsupported and failures', async () => {
       const file = new File(['x'], 'a.png', { type: 'image/png' });
