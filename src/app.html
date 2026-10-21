@@ -1272,7 +1272,7 @@ a:focus-visible, input:focus-visible, select:focus-visible, summary:focus-visibl
   }
 
   // ===================== Derived data (everything comes from the event log) =====================
-  const playerById = (id) => state.players.find((p) => p.id === id);
+  const playerById = (id, s = state) => s.players.find((p) => p.id === id);
   const lineup = () => state.lineups[state.phase];
   const posOf = (p) => CONFIG.positions[p.pos] || CONFIG.positions.CEN;
   // Rival players may have no position yet: shown in neutral grey until one is set.
@@ -1353,9 +1353,9 @@ a:focus-visible, input:focus-visible, select:focus-visible, summary:focus-visibl
     if (!state.clockDown) return mmss(periodSeconds());
     return mmss(Math.ceil((CONFIG.halfSeconds * 1000 - periodElapsedMs()) / 1000));
   }
-  const ourShots = () => state.events.filter((e) => e.kind === 'SHOT');
-  const rivalShots = () => state.events.filter((e) => e.kind === 'RIVAL_SHOT');
-  const gkShots = (gkId) => rivalShots().filter((e) => e.gkId === gkId);
+  const ourShots = (events = state.events) => events.filter((e) => e.kind === 'SHOT');
+  const rivalShots = (events = state.events) => events.filter((e) => e.kind === 'RIVAL_SHOT');
+  const gkShots = (gkId, events = state.events) => rivalShots(events).filter((e) => e.gkId === gkId);
   const countGroups = (shots) => {
     const c = { GOL: 0, PARADA: 0, FALLO: 0 };
     shots.forEach((e) => { c[groupOf(e.result)]++; });
@@ -1423,31 +1423,31 @@ a:focus-visible, input:focus-visible, select:focus-visible, summary:focus-visibl
     };
   }
 
-  const rivalById = (id) => (state.rivals || []).find((r) => r.id === id) || null;
+  const rivalById = (id, s = state) => (s.rivals || []).find((r) => r.id === id) || null;
   const rivalLabel = (r) => (r.name ? `#${r.num} ${r.name}` : `#${r.num}`);
   const sortedRivals = () => state.rivals.slice().sort((a, b) => a.num - b.num);
   // "Rival #7 Pérez", or just the team when the event has no dorsal.
-  const exclusionTargetLabel = (e) => (e.kind === 'SANCTION' ? `#${playerById(e.playerId).num} ${playerById(e.playerId).name}` : rivalTeamLabel(e.rivalId));
-  const rivalTeamLabel = (rivalId) => { const r = rivalById(rivalId); return r ? `${state.them} ${rivalLabel(r)}` : state.them; };
-  function describe(e) {
-    const p = e.playerId ? playerById(e.playerId) : null;
+  const exclusionTargetLabel = (e, s = state) => (e.kind === 'SANCTION' ? `#${playerById(e.playerId, s).num} ${playerById(e.playerId, s).name}` : rivalTeamLabel(e.rivalId, s));
+  const rivalTeamLabel = (rivalId, s = state) => { const r = rivalById(rivalId, s); return r ? `${s.them} ${rivalLabel(r)}` : s.them; };
+  function describe(e, s = state) {
+    const p = e.playerId ? playerById(e.playerId, s) : null;
     const who = p ? ` #${p.num} ${p.name}` : '';
     switch (e.kind) {
       case 'SHOT': return `${RESULTS[e.result].label} ${ZONES[e.zone]} ·${who}`;
       case 'ACTION': return `${ACTIONS[e.action].label} ·${who || ' equipo'}`;
       case 'TURNOVER': return `Pérdida ${e.subtype.toLowerCase()} ·${who}`;
       case 'SANCTION': return `${SANCTIONS[e.card].label} ·${who}`;
-      case 'RIVAL_SANCTION': return `${rivalTeamLabel(e.rivalId)}: ${SANCTIONS[e.card].label}`;
+      case 'RIVAL_SANCTION': return `${rivalTeamLabel(e.rivalId, s)}: ${SANCTIONS[e.card].label}`;
       case 'RIVAL_SHOT': {
-        const gk = playerById(e.gkId);
-        const r = rivalById(e.rivalId);
+        const gk = playerById(e.gkId, s);
+        const r = rivalById(e.rivalId, s);
         return `Rival${r ? ` ${rivalLabel(r)}` : ''}: ${RESULTS[e.result].label.toLowerCase()} ${ZONES[e.zone]}${e.contra ? ' contra' : ''} · ${gk ? gk.name : ''}`;
       }
       case 'EXCLUSION_END': {
-        const sanction = state.events.find((x) => x.id === e.sanctionId);
-        return `Vuelve antes de su 2'${sanction ? ` · ${exclusionTargetLabel(sanction)}` : ''}`;
+        const sanction = s.events.find((x) => x.id === e.sanctionId);
+        return `Vuelve antes de su 2'${sanction ? ` · ${exclusionTargetLabel(sanction, s)}` : ''}`;
       }
-      case 'SCORE_FIX': return `Ajuste ${e.team === 'us' ? state.us : state.them} ${e.delta > 0 ? '+1' : '−1'}`;
+      case 'SCORE_FIX': return `Ajuste ${e.team === 'us' ? s.us : s.them} ${e.delta > 0 ? '+1' : '−1'}`;
       case 'NOTE': return `Nota: ${e.text}`;
       default: return e.kind;
     }
@@ -2798,7 +2798,7 @@ a:focus-visible, input:focus-visible, select:focus-visible, summary:focus-visibl
   }
   const turnoverCounts = (events) => countBy(events.filter((e) => e.kind === 'TURNOVER'), (e) => e.subtype);
   const defFaultCounts = (events) => countBy(events.filter((e) => e.kind === 'ACTION' && DEFENSIVE_FAULTS.includes(e.action)), (e) => ACTIONS[e.action].label);
-  const eventsOf = (id) => state.events.filter((e) => e.playerId === id);
+  const eventsOf = (id, events = state.events) => events.filter((e) => e.playerId === id);
   function playerRow(p) {
     const s = playerStats(p.id);
     // Team faults count too: matches logged before they became team faults have them per player.
@@ -2939,21 +2939,21 @@ a:focus-visible, input:focus-visible, select:focus-visible, summary:focus-visibl
       ["Exclusiones 2'", `${exclusionEvents().length}–${rivalExclusionEvents().length}`, `${state.us}–${state.them}`]
     ];
   }
-  function playerFigures(p) {
-    const s = playerStats(p.id);
-    const shots = ourShots().filter((e) => e.playerId === p.id);
+  function playerFigures(p, s = state) {
+    const stats = playerStats(p.id, s.events);
+    const shots = ourShots(s.events).filter((e) => e.playerId === p.id);
     const c = countGroups(shots);
-    const faults = DEFENSIVE_FAULTS.reduce((n, k) => n + s[k], 0);
-    const cards = Object.entries(SANCTIONS).filter(([k]) => s[k]).map(([k, v]) => `${s[k]} ${v.short}`).join(' · ') || '–';
+    const faults = DEFENSIVE_FAULTS.reduce((n, k) => n + stats[k], 0);
+    const cards = Object.entries(SANCTIONS).filter(([k]) => stats[k]).map(([k, v]) => `${stats[k]} ${v.short}`).join(' · ') || '–';
     return [
       ['Goles', `${c.GOL}/${shots.length}`, `${pctText(pct(c.GOL, shots.length))} de acierto`],
       ['Parados', c.PARADA, 'por el portero rival'],
       ['Fallados', c.FALLO, 'fuera · palo · bloqueado'],
-      ['Pases de gol', s.ASIST, ''],
-      ['Provoca 7 m', s.PROV7, ''],
-      ['Recuperaciones', s.RECUP, ''],
-      ['Blocajes', s.BLOC, ''],
-      ['Pérdidas', s.TURNOVER, ''],
+      ['Pases de gol', stats.ASIST, ''],
+      ['Provoca 7 m', stats.PROV7, ''],
+      ['Recuperaciones', stats.RECUP, ''],
+      ['Blocajes', stats.BLOC, ''],
+      ['Pérdidas', stats.TURNOVER, ''],
       ['Fallos defensivos', faults, ''],
       ['Sanciones', cards, '']
     ];
@@ -3002,8 +3002,8 @@ a:focus-visible, input:focus-visible, select:focus-visible, summary:focus-visibl
     return card(title, `<div class="goal-grid">${grid.flat().map((n) => `<div style="--c:${color};--a:${((n / max) * 0.8).toFixed(2)}"><b>${n}</b></div>`).join('')}</div><p class="note">Portería vista desde el lanzador.</p>`);
   }
   // Who took a shot: one of our players or a rival dorsal; null when it was logged without one.
-  const shooterOf = (e) => (e.kind === 'SHOT' ? playerById(e.playerId) : rivalById(e.rivalId)) || null;
-  const shooterKey = (e) => { const s = shooterOf(e); return s ? s.id : ''; };
+  const shooterOf = (e, s = state) => (e.kind === 'SHOT' ? playerById(e.playerId, s) : rivalById(e.rivalId, s)) || null;
+  const shooterKey = (e, s = state) => { const shooter = shooterOf(e, s); return shooter ? shooter.id : ''; };
   // Shooters on one goal ranked by the damage they did: goals, then shots, then dorsal; unidentified shots go last.
   function shooterRanking(shots) {
     const groups = new Map();
@@ -3029,15 +3029,14 @@ a:focus-visible, input:focus-visible, select:focus-visible, summary:focus-visibl
     });
   }
   // Trajectories with the shooter's dorsal at the release point. With a focused shooter, the other shots fade.
-  function shotMapSvg(shots, viewKey, focusId) {
-    const colors = MAP_VIEWS[viewKey].colors;
-    const focused = (e) => focusId == null || shooterKey(e) === focusId;
+  function shotMapSvg(shots, viewKey, focusId, { s = state, colours = MAP_VIEWS[viewKey].colors } = {}) {
+    const focused = (e) => focusId == null || shooterKey(e, s) === focusId;
     const marks = shots.slice().sort((a, b) => Number(focused(a)) - Number(focused(b))).map((e) => {
-      const color = colors[groupOf(e.result)];
-      const s = shooterOf(e);
+      const color = colours[groupOf(e.result)];
+      const shooter = shooterOf(e, s);
       const { x, y } = e.origin;
-      const release = s
-        ? `<circle cx="${x}" cy="${y}" r="${MAP_DORSAL_R}" fill="${color}" stroke="var(--surface)" stroke-width="3"/><text class="map-dorsal" x="${x}" y="${y}">${s.num}</text>`
+      const release = shooter
+        ? `<circle cx="${x}" cy="${y}" r="${MAP_DORSAL_R}" fill="${color}" stroke="var(--surface)" stroke-width="3"/><text class="map-dorsal" x="${x}" y="${y}">${shooter.num}</text>`
         : `<circle cx="${x}" cy="${y}" r="9" fill="${color}"/>`;
       return `<g${focused(e) ? '' : ` opacity="${MAP_FADED_OPACITY}"`}>${shotLineSvg(e, color)}${release}</g>`;
     }).join('');
@@ -3680,27 +3679,40 @@ a:focus-visible, input:focus-visible, select:focus-visible, summary:focus-visibl
     const sanctions = sanctionRows();
     pdfTable(doc, { title: 'Sanciones', head: ['Min', 'Quién', 'Sanción'], body: sanctions.length ? sanctions : [['-', '-', 'Sin sanciones']], startY: right, left: PDF_PAGE.rightX });
   }
+  // Everything one player's page shows, from the events of any saved match. A goalkeeper has only the shots he faced.
+  function playerReport(p, s = state) {
+    const keeper = p.pos === 'POR';
+    const mine = eventsOf(p.id, s.events);
+    const shots = keeper ? gkShots(p.id, s.events) : ourShots(mine);
+    return {
+      keeper,
+      shots,
+      figures: keeper ? gkFigures(shots) : playerFigures(p, s),
+      zoneHead: keeper ? GK_ZONE_HEAD : SHOT_ZONE_HEAD,
+      zoneRows: keeper ? gkZoneRows(shots) : shotZoneRows(shots),
+      turnoverRows: countRows(turnoverCounts(mine)),
+      faultRows: countRows(defFaultCounts(mine)),
+      timeline: mine.slice().sort((a, b) => a.abs - b.abs).map((e) => [absToClock(e.abs), describe(e, s).split(' ·')[0]])
+    };
+  }
   function pdfPlayer(doc, p) {
-    const isGk = p.pos === 'POR';
+    const report = playerReport(p);
     pdfHeader(doc, `#${p.num} ${p.name}`, posOf(p).label);
-    if (isGk) {
-      const shots = gkShots(p.id);
-      pdfShotChart(doc, PDF_PAGE.margin, PDF_PAGE.top, PDF_PAGE.chartW, shots, 'GK', true);
-      const y = figuresTable(doc, gkFigures(shots), PDF_PAGE.top + 4, PDF_PAGE.rightX);
-      pdfGkBlock(doc, shots, y);
+    if (report.keeper) {
+      pdfShotChart(doc, PDF_PAGE.margin, PDF_PAGE.top, PDF_PAGE.chartW, report.shots, 'GK', true);
+      const y = figuresTable(doc, report.figures, PDF_PAGE.top + 4, PDF_PAGE.rightX);
+      pdfGkBlock(doc, report.shots, y);
       return;
     }
-    const mine = eventsOf(p.id);
-    pdfShotChart(doc, PDF_PAGE.margin, PDF_PAGE.top, PDF_PAGE.chartW, ourShots().filter((e) => e.playerId === p.id), 'US');
+    pdfShotChart(doc, PDF_PAGE.margin, PDF_PAGE.top, PDF_PAGE.chartW, report.shots, 'US');
     const half = (PDF_PAGE.w - PDF_PAGE.rightX - PDF_PAGE.margin - 6) / 2;
-    const yFig = figuresTable(doc, playerFigures(p), PDF_PAGE.top + 4, PDF_PAGE.rightX, half);
-    const yZone = pdfTable(doc, { title: 'Por zona', head: SHOT_ZONE_HEAD, body: shotZoneRows(ourShots().filter((e) => e.playerId === p.id)), startY: PDF_PAGE.top + 4, left: PDF_PAGE.rightX + half + 6, width: half });
+    const yFig = figuresTable(doc, report.figures, PDF_PAGE.top + 4, PDF_PAGE.rightX, half);
+    const yZone = pdfTable(doc, { title: 'Por zona', head: report.zoneHead, body: report.zoneRows, startY: PDF_PAGE.top + 4, left: PDF_PAGE.rightX + half + 6, width: half });
     let y = Math.max(yFig, yZone);
-    const yT = pdfTable(doc, { title: 'Pérdidas por tipo', head: ['Tipo', 'N'], body: countRows(turnoverCounts(mine)), startY: y, left: PDF_PAGE.rightX, width: half });
-    const yD = pdfTable(doc, { title: 'Fallos defensivos', head: ['Tipo', 'N'], body: countRows(defFaultCounts(mine)), startY: y, left: PDF_PAGE.rightX + half + 6, width: half });
+    const yT = pdfTable(doc, { title: 'Pérdidas por tipo', head: ['Tipo', 'N'], body: report.turnoverRows, startY: y, left: PDF_PAGE.rightX, width: half });
+    const yD = pdfTable(doc, { title: 'Fallos defensivos', head: ['Tipo', 'N'], body: report.faultRows, startY: y, left: PDF_PAGE.rightX + half + 6, width: half });
     y = Math.max(yT, yD);
-    const timeline = mine.slice().sort((a, b) => a.abs - b.abs).map((e) => [absToClock(e.abs), describe(e).split(' ·')[0]]);
-    pdfTable(doc, { title: 'Cronología', head: ['Min', 'Acción'], body: timeline.length ? timeline : [['-', 'Sin acciones']], startY: y, left: PDF_PAGE.rightX });
+    pdfTable(doc, { title: 'Cronología', head: ['Min', 'Acción'], body: report.timeline.length ? report.timeline : [['-', 'Sin acciones']], startY: y, left: PDF_PAGE.rightX });
   }
   function buildPdf(kind) {
     const doc = pdfNewDoc();
