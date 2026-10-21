@@ -488,6 +488,12 @@
     await TA('restarting a match asks twice and keeps the setup with an empty log', async () => { await showMatches(); const row = home.matches.find((x) => x.status !== 'setup'); const id = row.id; const before = await loadLatestMatch(id); if (!before.state.events.length) throw new Error('nothing to restart'); document.querySelector(`[data-restart-match="${id}"]`).click(); if ((await loadLatestMatch(id)).state.events.length !== before.state.events.length) throw new Error('restarted on first tap'); document.querySelector(`[data-restart-match="${id}"]`).click(); for (let i = 0; i < 5; i++) await tick0(); const after = (await loadLatestMatch(id)).state; if (after.events.length || after.history.length || after.finished || after.clock.elapsedMs || after.clock.period !== 1 || after.timeoutsUsed) throw new Error(JSON.stringify(after.clock)); if (after.them !== before.state.them || after.players.length !== before.state.players.length || !after.setupDone) throw new Error('setup lost'); const listed = home.matches.find((x) => x.id === id); if (listed.scoreUs || listed.scoreThem || !$('home-status').textContent.includes('reiniciado')) throw new Error(JSON.stringify(listed)); if (document.querySelector('[data-restart-match]') && home.matches.some((x) => x.status === 'setup' && document.querySelector(`[data-restart-match="${x.id}"]`))) throw new Error('offered on a match not started'); });
     await TA('deleting a match asks twice', async () => { await showMatches(); const id = home.matches[0].id; document.querySelector(`[data-delete-match="${id}"]`).click(); if (!home.matches.some((x) => x.id === id)) throw new Error('deleted on first tap'); document.querySelector(`[data-delete-match="${id}"]`).click(); for (let i = 0; i < 5; i++) await tick0(); if (home.matches.some((x) => x.id === id) || localMatch(id)) throw new Error('still there'); });
     await TA('match from the previous release is offered and imported', async () => { const old = sampleState(); old.sample = false; localStorage.setItem('hbstats:triana:v4', JSON.stringify(old)); await showMatches(); if (!document.querySelector('[data-legacy-import]')) throw new Error('no offer'); await importLegacyMatch(); if (localStorage.getItem('hbstats:triana:v4') || legacyMatch()) throw new Error('kept'); if (!home.matches.some((x) => x.them === old.them && x.scoreUs === score(old.events).us)) throw new Error('not listed'); });
+    await TA('season: importing a legacy match clears the season', async () => {
+      const old = sampleState(); old.sample = false; localStorage.setItem('hbstats:triana:v4', JSON.stringify(old));
+      const keep = home.season;
+      try { home.season = [seasonRow('lg1')]; await importLegacyMatch(); if (home.season !== null) throw new Error('season kept after the import'); }
+      finally { home.season = keep; }
+    });
     await TA('sample match is never saved over a real one', async () => { openSample(); const keys = storedKeys(MATCH_KEY_PREFIX).length; addEvent('TURNOVER', { playerId: 'p8', subtype: 'Pasos' }); if (currentMatchId || storedKeys(MATCH_KEY_PREFIX).length !== keys) throw new Error('saved'); $('btn-home').click(); await showMatches(); });
     await TA('setup screen goes back home', async () => { openSquad(); createMatch(); document.querySelector('[data-go-home]').click(); await tick0(); if ($('home').hidden || !$('sheet').hidden) throw new Error('not home'); });
     await TA('team page: opening a team shows the team page first', async () => { await selectTeam(team); if (home.view !== 'team' || !document.querySelector('.team-page')) throw new Error(home.view); const faces = document.querySelectorAll('.squad [data-player]'); if (!home.roster.length || faces.length !== home.roster.length) throw new Error(faces.length + ' faces for ' + home.roster.length); if (!document.querySelector('[data-home-view="matches"]') || !document.querySelector('[data-new-match]')) throw new Error('tabs or new match missing'); document.querySelector('[data-home-view="matches"]').click(); for (let i = 0; i < 5; i++) await tick0(); if (home.view !== 'matches') throw new Error('matches tab ' + home.view); document.querySelector('[data-home-view="team"]').click(); for (let i = 0; i < 5; i++) await tick0(); if (home.view !== 'team') throw new Error('team tab ' + home.view); });
@@ -654,6 +660,77 @@
         if (downloads !== 2) throw new Error('season kept after a match was deleted: ' + downloads);
       } finally { backend = real; team.id = savedId; Object.assign(home, keep); }
     });
+    // The tests below swap the team and the backend; this puts both back.
+    const withTeams = async (fn) => {
+      const real = backend, savedTeam = team, keep = { roster: home.roster, season: home.season, offline: home.offline, seasonOffline: home.seasonOffline };
+      try { await fn(); } finally { backend = real; applyTeam(savedTeam); Object.assign(home, keep); }
+    };
+    await TA('season: entering, restarting and switching team clear the season', async () => withTeams(async () => {
+      const marker = [seasonRow('cl1')], other = { ...team, id: 'season-clear-team' };
+      let downloads = 0;
+      backend = { listMatchStates: async () => { downloads++; return []; }, listPlayers: async () => [cardField], listMatches: async () => [], loadMatch: async () => null, saveMatch: async () => { throw new Error('Failed to fetch'); } };
+      home.season = marker;
+      await selectTeam(other);
+      if (home.season === marker || downloads !== 1) throw new Error('switching team kept the season: downloads ' + downloads);
+      const keepState = state, keepId = currentMatchId, id = 'season-clear-match';
+      try {
+        home.season = marker;
+        enterMatch(id, sampleState(), false);
+        if (home.season !== null) throw new Error('entering a match kept the season');
+        home.season = marker;
+        await restartMatch(id);
+        if (home.season !== null) throw new Error('restarting a match kept the season');
+      } finally { state = keepState; currentMatchId = keepId; removeKey(MATCH_KEY_PREFIX + id); removeKey(CURRENT_MATCH_KEY); renderAll(); }
+    }));
+    await TA('season: a team switch during loading keeps the new team\'s season', async () => withTeams(async () => {
+      const teamA = { ...team, id: 'race-a' }, teamB = { ...team, id: 'race-b' };
+      let releaseA;
+      backend = { listMatchStates: (id) => (id === teamA.id ? new Promise((resolve) => { releaseA = () => resolve([seasonRow('ra', { them: 'Rival A' })]); }) : Promise.resolve([seasonRow('rb', { them: 'Rival B' })])) };
+      applyTeam(teamA); home.season = null;
+      const first = showTeamPage();
+      applyTeam(teamB); home.season = null;
+      await showTeamPage();
+      releaseA(); await first;
+      if (!home.season || home.season.length !== 1 || home.season[0].them !== 'Rival B') throw new Error('the old team\'s season replaced the new one: ' + JSON.stringify(home.season && home.season.map((x) => x.them)));
+    }));
+    await TA('season: coming back online reloads an offline season', async () => withTeams(async () => {
+      let online = false, downloads = 0;
+      backend = { listMatchStates: async () => { downloads++; if (!online) throw new Error('Failed to fetch'); return [seasonRow('on1', { them: 'Rival On' })]; }, saveMatch: async () => { throw new Error('Failed to fetch'); } };
+      applyTeam({ ...team, id: 'season-online-team' }); home.season = null;
+      await showTeamPage();
+      if (!home.seasonOffline || !$('home').textContent.includes('Sin conexión')) throw new Error('premise: not offline');
+      online = true;
+      window.dispatchEvent(new Event('online'));
+      for (let i = 0; i < 5; i++) await tick0();
+      if (downloads !== 2 || home.seasonOffline || !home.season.some((x) => x.them === 'Rival On') || $('home').textContent.includes('Sin conexión') || home.view !== 'team') throw new Error(`downloads ${downloads} offline ${home.seasonOffline}`);
+      window.dispatchEvent(new Event('online'));
+      for (let i = 0; i < 5; i++) await tick0();
+      if (downloads !== 2) throw new Error('an online season was downloaded again');
+      home.seasonOffline = true; showHomeView('matches');
+      window.dispatchEvent(new Event('online'));
+      for (let i = 0; i < 5; i++) await tick0();
+      if (home.season !== null || downloads !== 2) throw new Error('away from the team pages: cleared, not downloaded');
+    }));
+    await TA('player card: a player removed from the roster falls back to the team page', async () => withTeams(async () => {
+      backend = { listMatchStates: async () => [] };
+      openCard('ca', [cardMatch()]);
+      if (home.view !== 'player') throw new Error('premise ' + home.view);
+      home.roster = [cardKeeper]; renderHome();
+      for (let i = 0; i < 3; i++) await tick0();
+      if (home.view !== 'team' || !document.querySelector('.team-page') || document.querySelector('.player-page') || /NaN|undefined/.test($('home').textContent)) throw new Error(home.view);
+    }));
+    await TA('player card: a malicious name is escaped in the poster, the table and every SVG', async () => withTeams(async () => {
+      const evil = '<u data-evil>x</u>"\'&';
+      const hostile = { id: 'ce', num: 7, name: evil, pos: 'EXT', fullName: evil };
+      const shot = (result) => ({ ...seasonShot('ce', result), origin: m(0, 10), target: gf(0.5, 0.5) });
+      home.roster = [hostile, cardKeeper];
+      home.season = [seasonRow('ev9', { players: [hostile, cardKeeper], them: evil, venue: evil, mvpId: 'ce', events: [shot('GOL'), shot('FUERA'), shot('GOL')] })];
+      showPlayer('ce');
+      const page = document.querySelector('.player-page');
+      if (!page || page.querySelector('[data-evil]') || $('home').querySelector('[data-evil]')) throw new Error('markup injected');
+      if (!page.querySelector('.poster-name').textContent.includes(evil) || !page.querySelector('.match-table').textContent.includes(evil)) throw new Error('name not shown as text');
+      if (!page.querySelectorAll('svg').length || [...page.querySelectorAll('svg')].some((svg) => svg.querySelector('[data-evil]') || /&(?!amp;|lt;|gt;|quot;|#39;)/.test(svg.innerHTML.replace(/<[^>]*>/g, '')))) throw new Error('svg injected');
+    }));
     await TA('team page: the latest match MVP shows the roster photo', async () => {
       const keep = { roster: home.roster, season: home.season }, photos = ui.photos;
       try {

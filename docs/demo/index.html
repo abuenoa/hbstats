@@ -4141,7 +4141,7 @@ td.zero { color: var(--faint); }
   const IMAGE_QUALITY = 0.85, JPEG_BACKDROP = '#fff';
   // A square crop of the uploaded image, small enough to keep with the team (and offline).
   async function imageFromFile(file, sizePx, type) {
-    if (!IMAGE_FILE_TYPE.test(file.type)) throw new Error('la imagen tiene que ser PNG, JPG o WebP');
+    if (!IMAGE_FILE_TYPE.test(file.type)) throw new Error('tiene que ser PNG, JPG o WebP');
     const bitmap = await createImageBitmap(file, { imageOrientation: 'from-image' });
     const side = Math.min(bitmap.width, bitmap.height);
     const canvas = document.createElement('canvas');
@@ -4408,13 +4408,17 @@ td.zero { color: var(--faint); }
   const sumOf = (list, pick) => list.reduce((n, x) => n + pick(x), 0);
   async function loadSeason() {
     const withState = (m) => ({ ...matchSummary(m.id, m.state), state: m.state });
-    let list, offline = false;
+    const teamId = team.id;
+    let list, failure = null;
     // Full states are not cached on the device (they compete with the match autosave): without coverage, the device copies answer.
-    try { list = await backend.listMatchStates(team.id); }
-    catch (err) {
-      offline = true;
-      list = localMatches().filter((m) => m.teamId === team.id && m.state).map(withState);
-      console.warn(`Season from the device copies: ${cloudErrorText(err)}`);
+    try { list = await backend.listMatchStates(teamId); }
+    catch (err) { failure = err; }
+    // The coach switched team while this one was loading: its season belongs to nobody now.
+    if (team.id !== teamId) return null;
+    const offline = failure !== null;
+    if (offline) {
+      list = localMatches().filter((m) => m.teamId === teamId && m.state).map(withState);
+      console.warn(`Season from the device copies: ${cloudErrorText(failure)}`);
     }
     const matches = withLocalChanges(list, (m) => ({ state: m.state })).filter((m) => m.state && SEASON_STATUSES.includes(m.status) && !m.state.sample);
     home.season = matches;
@@ -4424,6 +4428,7 @@ td.zero { color: var(--faint); }
     if (m.scoreUs === m.scoreThem) return RESULT_OF.draw;
     return m.scoreUs > m.scoreThem ? RESULT_OF.win : RESULT_OF.loss;
   }
+  // `matches` is newest first (as loadSeason returns it): `form` is reversed to oldest first and `latest` is the first finished one.
   function teamSeason(matches) {
     const finished = matches.filter((m) => m.status === 'finished');
     const results = finished.map(matchResult);
@@ -4465,17 +4470,19 @@ td.zero { color: var(--faint); }
     return { rows, totals: Object.fromEntries(fields.map((f) => [f, sumOf(rows, (r) => r[f])])), mvps: rows.filter((r) => r.mvp).length };
   }
   // ---- Season figures: zones, rates and radar axes ----
-  const ZONE_P7 = 'P7', ZONE_CONTRA = 'CONTRA';
+  const ZONE_P7 = 'P7', ZONE_CONTRA = 'CONTRA', ZONE_UNKNOWN = 'NA';
   const RING_NEAR = 'near', RING_FAR = 'far';
   const ON_TARGET_GROUPS = ['GOL', 'PARADA'];
   const RATE_MIDPOINT = 0.5;
   const PERCENT = 100;
   const onTarget = (e) => ON_TARGET_GROUPS.includes(groupOf(e.result));
-  // Where a shot came from: penalty and counter-attack apart, otherwise the lane and whether it was inside the 9 m line.
+  // Where a shot came from: penalty and counter-attack apart, otherwise the lane and whether it was inside the 9 m line;
+  // a shot without an origin has no spot to place.
   function shotZone(e) {
     const rival = e.kind === 'RIVAL_SHOT';
     if (rival ? e.zone === '7M' : e.from === '7M') return ZONE_P7;
     if (rival ? e.contra : e.zone === 'CONTRA') return ZONE_CONTRA;
+    if (!e.origin) return ZONE_UNKNOWN;
     return `${laneOf(e.origin)}:${goalDistance(e.origin) < CONFIG.zones.nineFromM ? RING_NEAR : RING_FAR}`;
   }
   // Shots per zone: ok when success(e), n in all that counts(e); on target by default (a goalkeeper saves those only).
@@ -4546,14 +4553,16 @@ td.zero { color: var(--faint); }
   const fieldRadar = (season, best) => radar(FIELD_AXES, fieldValues(season), best);
   const keeperRadar = (season, best) => radar(KEEPER_AXES, keeperValues(season), best);
   // The highest value of every axis among the roster players who played; security and discipline keep the raw worst.
-  // Like the % tiro leaders, the shooting rate only counts players with CONFIG.leaders.minShots shots.
+  // Like the % tiro leaders, the shooting rate only counts players with CONFIG.leaders.minShots shots;
+  // when nobody has that many, every shooter counts so the axis is not 0 for everyone.
   function teamBest(matches, roster) {
-    const best = (axes, values, seasons) => Object.fromEntries(axes.map(({ key }) => [key, Math.max(0, ...seasons.map((s) => values(s)[key]))]));
     const seasons = roster.map((p) => ({ pos: p.pos, season: playerSeason(matches, p) })).filter((s) => s.season.rows.length);
-    const of = (keepers) => seasons.filter((s) => (s.pos === 'POR') === keepers).map((s) => s.season);
-    const shooters = of(false), field = best(FIELD_AXES, fieldValues, shooters);
-    field.pct = best([{ key: 'pct' }], fieldValues, shooters.filter((x) => x.totals.shots >= CONFIG.leaders.minShots)).pct;
-    return { field, keeper: best(KEEPER_AXES, keeperValues, of(true)) };
+    const valued = (keepers, values) => seasons.filter((s) => (s.pos === 'POR') === keepers).map(({ season }) => ({ season, values: values(season) }));
+    const highest = (axes, list) => Object.fromEntries(axes.map(({ key }) => [key, Math.max(0, ...list.map((x) => x.values[key]))]));
+    const shooters = valued(false, fieldValues), qualified = shooters.filter((x) => x.season.totals.shots >= CONFIG.leaders.minShots);
+    const field = highest(FIELD_AXES, shooters);
+    field.pct = highest([{ key: 'pct' }], qualified.length ? qualified : shooters).pct;
+    return { field, keeper: highest(KEEPER_AXES, valued(true, keeperValues)) };
   }
   // Red at 0, amber at the midpoint, green at 1, mixed from the theme tokens so light and dark both work.
   function rateColour(fraction) {
@@ -4650,10 +4659,10 @@ td.zero { color: var(--faint); }
         + `<text class="chart-num" x="${centre(i)}" y="${svgNum(base - barH - 6)}" font-size="16" text-anchor="middle">${esc(r[barKey])}</text>`
         + `<text class="chart-cap" x="${centre(i)}" y="${EVO.h - 10}" font-size="11" text-anchor="middle">${esc(shortDateText(r.date))}</text>`;
     }).join('');
-    const points = rows.map((r, i) => [centre(i), svgNum(base - clamp(pct(r), 0, 1) * plotH)]);
+    const points = rows.map((r, i) => [r, i]).filter(([r]) => Number.isFinite(pct(r))).map(([r, i]) => [centre(i), svgNum(base - clamp(pct(r), 0, 1) * plotH)]);
     const dots = points.map(([x, y]) => `<circle class="evo-dot" cx="${x}" cy="${y}" r="${EVO.dotR}" fill="var(--gold)" stroke="var(--surface)" stroke-width="2"/>`).join('');
     return `<svg viewBox="0 0 ${width} ${EVO.h}" role="img"><line x1="${EVO.pad}" y1="${base}" x2="${width - EVO.pad}" y2="${base}" stroke="var(--line)" stroke-width="2"/>${bars}
-      <polyline points="${points.map((p) => p.join(',')).join(' ')}" fill="none" stroke="var(--gold)" stroke-width="3" stroke-linejoin="round" stroke-linecap="round"/>${dots}</svg>`;
+      ${points.length ? `<polyline points="${points.map((p) => p.join(',')).join(' ')}" fill="none" stroke="var(--gold)" stroke-width="3" stroke-linejoin="round" stroke-linecap="round"/>` : ''}${dots}</svg>`;
   }
   async function showMatches() {
     showHomeView('matches');
@@ -4687,6 +4696,7 @@ td.zero { color: var(--faint); }
     if (metric === 'pct') return t.shots >= CONFIG.leaders.minShots ? { value: pct(t.goals, t.shots), detail: `${who} · ${shotLine}` } : null;
     return { value: t.recoveries, detail: `${who} · ${plural(season.rows.length, 'partido', 'partidos')}` };
   }
+  // Goalkeepers are ranked for assists and MVPs too; a zero value never makes the list (except the % tiro of a qualified shooter).
   function leaders(matches, roster, metric) {
     return roster.map((player) => ({ player, figure: leaderFigure(player, playerSeason(matches, player), metric) }))
       .filter(({ figure }) => figure && (figure.value > 0 || metric === 'pct'))
@@ -4739,14 +4749,16 @@ td.zero { color: var(--faint); }
       <div class="team-page">${seasonCardHtml(home.season)}${leadersCardHtml(home.season)}${squadCardHtml()}</div>`;
   }
   // The season stays loaded while the coach moves between the team pages; anything that changes it clears it.
-  async function showTeamPage() {
-    showHomeView('team');
+  async function ensureSeason() {
     if (home.season !== null) return;
+    const teamId = team.id;
     try {
-      const { offline } = await loadSeason();
-      home.offline = offline;
-      home.seasonOffline = offline;
+      const loaded = await loadSeason();
+      if (!loaded) return;
+      home.offline = loaded.offline;
+      home.seasonOffline = loaded.offline;
     } catch (err) {
+      if (team.id !== teamId) return;
       home.season = [];
       home.offline = true;
       home.seasonOffline = false;
@@ -4754,6 +4766,18 @@ td.zero { color: var(--faint); }
     }
     if (['team', 'player'].includes(home.view)) renderHome();
   }
+  async function showTeamPage() {
+    showHomeView('team');
+    await ensureSeason();
+  }
+  // A season built from this tablet's copies is replaced by the full one as soon as the connection is back.
+  window.addEventListener('online', () => {
+    if (!home.seasonOffline) return;
+    home.season = null;
+    if (!['team', 'player'].includes(home.view)) return;
+    renderHome();
+    ensureSeason();
+  });
   // ---- Player card: the season of one player, and «Editar ficha» ----
   const unit = (n, one, many) => `<b>${n}</b> ${n === 1 ? one : many}`;
   const CARD_ZONE_COLOURS = {
@@ -4835,6 +4859,8 @@ td.zero { color: var(--faint); }
   }
   function playerPageHtml() {
     const player = rosterPlayer(home.playerId);
+    // After a reload the player may be gone; leave the render before moving to the team page.
+    if (!player) { queueMicrotask(showTeamPage); return ''; }
     if (home.season === null) return '<p class="note">Cargando…</p>';
     const season = playerSeason(home.season, player);
     const body = season.rows.length ? playerSeasonHtml(player, season) : `<div class="player-grid"><div class="player-col">${posterHtml(player, 0)}</div></div><p class="note">Sin partidos todavía</p>`;
@@ -4977,6 +5003,7 @@ td.zero { color: var(--faint); }
     if (!legacy) return;
     const id = newUuid();
     storeLocalMatch(id, restoreState(legacy.state), true);
+    home.season = null;
     removeKey(legacy.key);
     await syncMatches();
     await showMatches();

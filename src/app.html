@@ -4131,7 +4131,7 @@ td.zero { color: var(--faint); }
   const IMAGE_QUALITY = 0.85, JPEG_BACKDROP = '#fff';
   // A square crop of the uploaded image, small enough to keep with the team (and offline).
   async function imageFromFile(file, sizePx, type) {
-    if (!IMAGE_FILE_TYPE.test(file.type)) throw new Error('la imagen tiene que ser PNG, JPG o WebP');
+    if (!IMAGE_FILE_TYPE.test(file.type)) throw new Error('tiene que ser PNG, JPG o WebP');
     const bitmap = await createImageBitmap(file, { imageOrientation: 'from-image' });
     const side = Math.min(bitmap.width, bitmap.height);
     const canvas = document.createElement('canvas');
@@ -4398,13 +4398,17 @@ td.zero { color: var(--faint); }
   const sumOf = (list, pick) => list.reduce((n, x) => n + pick(x), 0);
   async function loadSeason() {
     const withState = (m) => ({ ...matchSummary(m.id, m.state), state: m.state });
-    let list, offline = false;
+    const teamId = team.id;
+    let list, failure = null;
     // Full states are not cached on the device (they compete with the match autosave): without coverage, the device copies answer.
-    try { list = await backend.listMatchStates(team.id); }
-    catch (err) {
-      offline = true;
-      list = localMatches().filter((m) => m.teamId === team.id && m.state).map(withState);
-      console.warn(`Season from the device copies: ${cloudErrorText(err)}`);
+    try { list = await backend.listMatchStates(teamId); }
+    catch (err) { failure = err; }
+    // The coach switched team while this one was loading: its season belongs to nobody now.
+    if (team.id !== teamId) return null;
+    const offline = failure !== null;
+    if (offline) {
+      list = localMatches().filter((m) => m.teamId === teamId && m.state).map(withState);
+      console.warn(`Season from the device copies: ${cloudErrorText(failure)}`);
     }
     const matches = withLocalChanges(list, (m) => ({ state: m.state })).filter((m) => m.state && SEASON_STATUSES.includes(m.status) && !m.state.sample);
     home.season = matches;
@@ -4735,14 +4739,16 @@ td.zero { color: var(--faint); }
       <div class="team-page">${seasonCardHtml(home.season)}${leadersCardHtml(home.season)}${squadCardHtml()}</div>`;
   }
   // The season stays loaded while the coach moves between the team pages; anything that changes it clears it.
-  async function showTeamPage() {
-    showHomeView('team');
+  async function ensureSeason() {
     if (home.season !== null) return;
+    const teamId = team.id;
     try {
-      const { offline } = await loadSeason();
-      home.offline = offline;
-      home.seasonOffline = offline;
+      const loaded = await loadSeason();
+      if (!loaded) return;
+      home.offline = loaded.offline;
+      home.seasonOffline = loaded.offline;
     } catch (err) {
+      if (team.id !== teamId) return;
       home.season = [];
       home.offline = true;
       home.seasonOffline = false;
@@ -4750,6 +4756,18 @@ td.zero { color: var(--faint); }
     }
     if (['team', 'player'].includes(home.view)) renderHome();
   }
+  async function showTeamPage() {
+    showHomeView('team');
+    await ensureSeason();
+  }
+  // A season built from this tablet's copies is replaced by the full one as soon as the connection is back.
+  window.addEventListener('online', () => {
+    if (!home.seasonOffline) return;
+    home.season = null;
+    if (!['team', 'player'].includes(home.view)) return;
+    renderHome();
+    ensureSeason();
+  });
   // ---- Player card: the season of one player, and «Editar ficha» ----
   const unit = (n, one, many) => `<b>${n}</b> ${n === 1 ? one : many}`;
   const CARD_ZONE_COLOURS = {
@@ -4831,6 +4849,8 @@ td.zero { color: var(--faint); }
   }
   function playerPageHtml() {
     const player = rosterPlayer(home.playerId);
+    // After a reload the player may be gone; leave the render before moving to the team page.
+    if (!player) { queueMicrotask(showTeamPage); return ''; }
     if (home.season === null) return '<p class="note">Cargando…</p>';
     const season = playerSeason(home.season, player);
     const body = season.rows.length ? playerSeasonHtml(player, season) : `<div class="player-grid"><div class="player-col">${posterHtml(player, 0)}</div></div><p class="note">Sin partidos todavía</p>`;
@@ -4973,6 +4993,7 @@ td.zero { color: var(--faint); }
     if (!legacy) return;
     const id = newUuid();
     storeLocalMatch(id, restoreState(legacy.state), true);
+    home.season = null;
     removeKey(legacy.key);
     await syncMatches();
     await showMatches();
