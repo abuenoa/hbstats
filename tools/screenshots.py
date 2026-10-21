@@ -112,6 +112,7 @@ MATRIX_SCENES = {
     "stats": "await seedSeason(); await showStats();",
     "stats-empty": "await seedSeason(); home.season = []; showHomeView('stats');",
     "team-edit": "await seedSeason(); showHomeView('team-edit');",
+    "tuning": "await seedSeason(); await showRatingTune(); Object.assign(home.weightsDraft, { turnover: -0.7, shot: 1.1 }); renderHome();",
     "profile": "await seedSeason(); await showProfile();",
     "attendance": "await seedSeason(); await showAttendance();",
     "attendance-match": "await seedSeason(); await showAttendance(); openAttendanceDay('2026-10-17');",

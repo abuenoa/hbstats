@@ -637,6 +637,21 @@ button.rex-chip { border: 0; cursor: pointer; position: relative; }
 table { border-collapse: collapse; width: 100%; font: var(--type-caption); font-variant-numeric: tabular-nums; }
 th, td { padding: var(--space-2); border-bottom: 1px solid var(--line); text-align: center; white-space: nowrap; }
 th { font-weight: 700; letter-spacing: .06em; text-transform: uppercase; color: var(--muted); background: var(--soft); }
+/* Rating tuning: the knobs on one side, the squad's ratings on the other */
+.tune-page { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: var(--space-4); align-items: start; }
+.tune-preview { position: sticky; top: var(--space-3); display: grid; gap: var(--space-3); max-height: calc(100vh - 2 * var(--space-3)); overflow-y: auto; }
+.tune-preview th.who, .tune-preview td.who { text-align: left; }
+.tune-preview .who-cell { display: inline-flex; align-items: center; gap: var(--space-2); }
+.tune-group { margin: var(--space-4) 0 0; padding: 0; border: 0; min-width: 0; display: grid; gap: var(--space-2); }
+.tune-group legend { padding: 0; font: var(--type-caption); font-weight: 700; letter-spacing: .06em; text-transform: uppercase; color: var(--muted); }
+.tune-knob { display: grid; grid-template-columns: minmax(0, 1fr) 96px; grid-template-areas: "name name" "range num"; gap: var(--space-1) var(--space-3); align-items: center; }
+.tune-name { grid-area: name; font: var(--type-caption); font-weight: 600; }
+.tune-range { grid-area: range; width: 100%; min-height: var(--target); margin: 0; accent-color: var(--color-accent); }
+.tune-num { grid-area: num; text-align: right; }
+.tune-delta.up { color: var(--color-success-text); }
+.tune-delta.down { color: var(--color-danger-text); }
+.tune-warn { color: var(--color-danger-text); font-weight: 700; }
+@media (max-width: 900px) { .tune-page { grid-template-columns: minmax(0, 1fr); } .tune-preview { position: static; } }
 /* The player table has one column per figure: tight padding keeps it inside the page at 1280 */
 .stats-table th, .stats-table td { padding-inline: var(--space-1); }
 td.name { text-align: left; font-weight: 600; }
@@ -2049,7 +2064,7 @@ span.att-foot { visibility: hidden; }
   ];
   const RATING_KNOB_DEFAULTS = { ...CONFIG.rating.weights, teamFaultKeeper: CONFIG.rating.weights.teamFaultKeeper / CONFIG.rating.weights.teamFaultField };
   const knobOf = (key) => RATING_KNOBS.find((k) => k.key === key);
-  const roundToKnobStep = (knob, v) => clamp(roundHalfUp(v / knob.step, 0) * knob.step, knob.min, knob.max);
+  const roundToKnobStep = (knob, v) => clamp(roundHalfUp(roundHalfUp(v / knob.step, 0) * knob.step, RATING_KNOB_DECIMALS), knob.min, knob.max);
   // The knob values of a team: the defaults with its saved ones laid over them. A saved value that is unknown, not a
   // number or out of range is dropped or clamped, with a warning, so a bad row can never skew a rating.
   function ratingKnobValues(t = team) {
@@ -5079,7 +5094,7 @@ span.att-foot { visibility: hidden; }
   let currentMatchId = null;
   let syncTimer = null;
   let attendanceSyncTimer = null;
-  const home = { view: 'loading', user: null, teams: [], roster: [], matches: [], season: null, templates: [], template: null, squad: new Set(), leaderMetric: 'goals', playerId: null, playerMatchId: null, playerEdit: false, playerDraft: null, offline: false, error: '', draft: null, crestDraft: undefined, armed: null, passwordChange: false, seasonOffline: false, sessions: null, fixtures: null, teamMatches: [], fixtureEdit: null, squadFixture: null, attendanceDate: null, attendanceKind: null, attendanceNoteFor: null, stateMatches: [], statsSort: null };
+  const home = { view: 'loading', user: null, teams: [], roster: [], matches: [], season: null, templates: [], template: null, squad: new Set(), leaderMetric: 'goals', playerId: null, playerMatchId: null, playerEdit: false, playerDraft: null, offline: false, error: '', draft: null, crestDraft: undefined, armed: null, passwordChange: false, seasonOffline: false, sessions: null, fixtures: null, teamMatches: [], fixtureEdit: null, squadFixture: null, attendanceDate: null, attendanceKind: null, attendanceNoteFor: null, stateMatches: [], statsSort: null, weightsDraft: null, ratingFeatureCache: null };
 
   // ---- Device storage ----
   function readJson(key) {
@@ -5636,7 +5651,7 @@ span.att-foot { visibility: hidden; }
     </form>`;
   }
   function homeHeadHtml() {
-    const tab = (view, label) => `<button class="press" type="button" data-home-view="${view}" aria-pressed="${home.view === view || (view === 'matches' && home.view === 'squad') || (view === 'team' && ['team-edit', 'player', 'player-match', 'attendance'].includes(home.view))}">${label}</button>`;
+    const tab = (view, label) => `<button class="press" type="button" data-home-view="${view}" aria-pressed="${home.view === view || (view === 'matches' && home.view === 'squad') || (view === 'team' && ['team-edit', 'player', 'player-match', 'attendance', 'rating-tune'].includes(home.view))}">${label}</button>`;
     return `<header class="home-head glass">
       <button class="btn press" type="button" data-home-view="profile">‹ Perfil</button>
       <img class="crest home-crest" src="${esc(crestSrc(team))}" alt="">
@@ -5742,7 +5757,7 @@ span.att-foot { visibility: hidden; }
         ${problem ? `<span class="note">${problem}</span>` : ''}</div>
       <div class="squad-grid">${home.roster.slice().sort(byPosition).map(chip).join('')}</div>`;
   }
-  const HOME_VIEWS = { team: teamPageHtml, player: playerPageHtml, 'player-match': playerMatchHtml, 'team-edit': teamEditHtml, matches: matchesHtml, stats: teamStatsHtml, squad: squadHtml, attendance: attendanceHtml };
+  const HOME_VIEWS = { team: teamPageHtml, player: playerPageHtml, 'player-match': playerMatchHtml, 'team-edit': teamEditHtml, matches: matchesHtml, stats: teamStatsHtml, squad: squadHtml, attendance: attendanceHtml, 'rating-tune': ratingTuneHtml };
 
   // ---- Profile: the first screen after signing in (teams, rival templates, account) ----
   const profileHeadHtml = () => `<header class="home-head glass"><span class="app-mark" aria-hidden="true">HB</span>
@@ -6463,7 +6478,7 @@ span.att-foot { visibility: hidden; }
   function squadCardHtml() {
     const groups = positionGroupsHtml(squadFaceHtml(attendanceRowsNow()));
     return `<section class="sheet-card squad"><h3>Plantilla · ${home.roster.length}</h3>${groups || '<p class="note">Todavía no hay jugadores.</p>'}
-      <div class="row-actions"><button class="btn press" type="button" data-home-view="team-edit">Editar equipo</button><button class="btn press" type="button" data-home-view="attendance">Asistencia</button></div></section>`;
+      <div class="row-actions"><button class="btn press" type="button" data-home-view="team-edit">Editar equipo</button><button class="btn press" type="button" data-home-view="attendance">Asistencia</button><button class="btn press" type="button" data-rating-tune>Ajustar puntuación</button></div></section>`;
   }
   // The team rate, the sessions behind it and the players with most absences (faltas, then justificadas).
   function attendanceCardHtml() {
@@ -6555,7 +6570,7 @@ span.att-foot { visibility: hidden; }
       home.seasonOffline = false;
       console.warn(`Season not available: ${cloudErrorText(err)}`);
     }
-    if (['team', 'stats', 'player', 'player-match'].includes(home.view)) renderHome();
+    if (['team', 'stats', 'player', 'player-match', 'rating-tune'].includes(home.view)) renderHome();
   }
   // The attendance sessions feed the rates of the team page and the player card; they load once per team.
   async function ensureSessions() {
@@ -6713,6 +6728,106 @@ span.att-foot { visibility: hidden; }
   async function showStats() {
     showHomeView('stats');
     await ensureSeason();
+  }
+
+  // ---- Rating tuning: the coach moves the weights and sees the squad's ratings change before saving ----
+  const TUNE_LEAVE_ARM = 'tune-leave';
+  const TUNE_GROUP_NOTES = {
+    '1x1 y 7 m': 'Un solo control: un 7 m provocado suma lo mismo que restan un 1x1 superado y un 7 m cometido.',
+    Equipo: 'El portero carga una parte de lo que carga un jugador de campo: 0 no le resta nada y 1 le resta lo mismo.'
+  };
+  const tuneDirty = () => { const saved = ratingKnobValues(); return RATING_KNOBS.some((k) => home.weightsDraft[k.key] !== saved[k.key]); };
+  // Only the knobs that differ from the defaults are saved; none changed means the team has no weights of its own.
+  const tuneChangedKnobs = () => Object.fromEntries(RATING_KNOBS.filter((k) => home.weightsDraft[k.key] !== RATING_KNOB_DEFAULTS[k.key]).map((k) => [k.key, home.weightsDraft[k.key]]));
+  // Features and minutes are counted once per player and match; they live as long as the season array they came from.
+  function ratingFeatureCacheFor(matches) {
+    if (!home.ratingFeatureCache || home.ratingFeatureCache.season !== matches) home.ratingFeatureCache = { season: matches, byMatch: new Map() };
+    return home.ratingFeatureCache.byMatch;
+  }
+  function cachedRatingCounts(cache, match, player) {
+    if (!cache.has(match.id)) cache.set(match.id, { minutes: minutesOnCourt(match.state), byPlayer: new Map() });
+    const entry = cache.get(match.id);
+    if (!entry.byPlayer.has(player.id)) entry.byPlayer.set(player.id, ratingFeatures(match.state, player));
+    return { features: entry.byPlayer.get(player.id), seconds: entry.minutes ? entry.minutes.get(player.id) || 0 : null };
+  }
+  // Each rostered player's season rating with the team's saved weights (`current`) and with `weights` (`next`), plus
+  // the rating of the latest match with `weights`. Moving a knob only recombines the cached features.
+  function rosterRatingPreview(matches, roster, weights) {
+    const cache = ratingFeatureCacheFor(matches), saved = ratingWeights();
+    return roster.map((player) => {
+      const keeper = player.pos === 'POR';
+      const played = matches.filter((m) => m.state.players.some((p) => p.id === player.id)).map((m) => {
+        const { features, seconds } = cachedRatingCounts(cache, m, player);
+        return { seconds, current: ratingFromCounts(features, { seconds, keeper, weights: saved }).value, next: ratingFromCounts(features, { seconds, keeper, weights }).value };
+      });
+      const seasonOf = (field) => seasonRating(played.map((r) => ({ rating: r[field], seconds: r.seconds })));
+      const current = seasonOf('current'), next = seasonOf('next');
+      return { player, current, next, delta: current == null || next == null ? null : roundHalfUp(next - current, CONFIG.rating.decimals), last: played.length ? played[0].next : null };
+    });
+  }
+  const tuneChipHtml = (value) => (value == null ? '–' : ratingChipHtml(value));
+  function tuneDeltaHtml(delta) {
+    if (delta == null) return '–';
+    if (Math.abs(delta) < RATING_ROUNDING_EPSILON) return decimalText(0);
+    return `<span class="tune-delta ${delta > 0 ? 'up' : 'down'}">${signedText(delta)}</span>`;
+  }
+  function tuneRowsHtml() {
+    const byNext = (a, b) => (a.next == null) - (b.next == null) || (b.next ?? 0) - (a.next ?? 0) || a.player.num - b.player.num;
+    return rosterRatingPreview(home.season, home.roster, weightsFromKnobs(home.weightsDraft)).sort(byNext).map((r) => `<tr data-tune-player="${esc(r.player.id)}">
+      <td class="who"><span class="who-cell">${discHtml(r.player)}${esc(r.player.name)}</span></td><td data-col="current">${tuneChipHtml(r.current)}</td>
+      <td data-col="next">${tuneChipHtml(r.next)}</td><td data-col="delta">${tuneDeltaHtml(r.delta)}</td><td data-col="last">${tuneChipHtml(r.last)}</td></tr>`).join('');
+  }
+  function tuneKnobHtml(knob) {
+    const value = home.weightsDraft[knob.key], limits = `min="${knob.min}" max="${knob.max}" step="${knob.step}" value="${value}" data-knob="${knob.key}"`;
+    return `<div class="tune-knob"><span class="tune-name" id="tune-name-${knob.key}">${esc(knob.label)}</span>
+      <input class="tune-range" type="range" ${limits} aria-labelledby="tune-name-${knob.key}">
+      <input class="in tune-num" type="number" inputmode="decimal" ${limits} aria-label="${esc(knob.label)}: valor"></div>`;
+  }
+  function tuneGroupsHtml() {
+    return [...new Set(RATING_KNOBS.map((k) => k.group))].map((group) => `<fieldset class="tune-group"><legend>${group}</legend>
+      ${TUNE_GROUP_NOTES[group] ? `<p class="note">${TUNE_GROUP_NOTES[group]}</p>` : ''}${RATING_KNOBS.filter((k) => k.group === group).map(tuneKnobHtml).join('')}</fieldset>`).join('');
+  }
+  const tuneStateText = () => (tuneDirty() ? 'Cambios sin guardar.' : 'Sin cambios.');
+  function ratingTuneHtml() {
+    home.weightsDraft ??= ratingKnobValues();
+    let preview;
+    if (home.season === null) preview = '<p class="note">Cargando…</p>';
+    else if (!home.season.length) preview = '<p class="note">Sin partidos todavía: la vista previa aparece con el primer partido.</p>';
+    else preview = `<div class="table-wrap"><table><thead><tr><th class="who">Jugador</th><th>Antes</th><th>Ahora</th><th>Cambio</th><th>Último</th></tr></thead><tbody id="tune-rows">${tuneRowsHtml()}</tbody></table></div>`;
+    const warn = home.armed === TUNE_LEAVE_ARM ? '<p class="note tune-warn" role="alert">Hay cambios sin guardar. Vuelve a pulsar para salir sin guardarlos, o pulsa «Guardar».</p>' : '';
+    return `${statusHtml()}${home.seasonOffline ? SEASON_OFFLINE_NOTE : ''}<div class="tune-page">
+      <section class="sheet-card"><h3>Pesos de la nota</h3><p class="note">Mueve un control y mira cómo cambia la nota de la plantilla. Nada cambia hasta que pulses «Guardar».</p>${tuneGroupsHtml()}</section>
+      <section class="sheet-card tune-preview"><h3>Nota de la plantilla</h3>
+        <div class="row-actions"><button class="btn primary press" type="button" id="tune-save" data-tune="save"${tuneDirty() ? '' : ' disabled'}>Guardar</button>
+          <button class="btn press" type="button" data-tune="reset">Restablecer</button>${armedButton(TUNE_LEAVE_ARM, 'Cancelar', 'data-home-view="team"')}</div>
+        ${warn}<p class="note" id="tune-state">${tuneStateText()}</p>${preview}</section></div>`;
+  }
+  // The inputs keep their focus: only the preview rows, the state line and the sibling control change.
+  function tuneKnob(input) {
+    const knob = knobOf(input.dataset.knob), typed = input.valueAsNumber;
+    if (!Number.isFinite(typed)) return;
+    home.weightsDraft[knob.key] = roundToKnobStep(knob, typed);
+    document.querySelectorAll(`[data-knob="${knob.key}"]`).forEach((el) => { if (el !== input) el.value = home.weightsDraft[knob.key]; });
+    if ($('tune-rows')) $('tune-rows').innerHTML = tuneRowsHtml();
+    $('tune-state').textContent = tuneStateText();
+    $('tune-save').disabled = !tuneDirty();
+  }
+  async function showRatingTune() {
+    home.weightsDraft = ratingKnobValues();
+    showHomeView('rating-tune');
+    await ensureSeason();
+  }
+  async function saveRatingWeights() {
+    const changed = tuneChangedKnobs();
+    homeStatus('Guardando…');
+    try {
+      keepUpdatedTeam(await backend.updateTeam(team.id, { ratingWeights: Object.keys(changed).length ? changed : null }));
+      home.weightsDraft = ratingKnobValues();
+      renderHome();
+      homeStatus('Puntuación guardada.');
+    } catch (err) {
+      homeStatus(`No se pudo guardar: ${cloudErrorText(err)}.`);
+    }
   }
 
   // ---- Attendance: today's session by faces; a tap cycles the status ----
@@ -7178,6 +7293,12 @@ span.att-foot { visibility: hidden; }
     if (!HEX_COLOUR.test(brand) || !HEX_COLOUR.test(brand2)) throw new Error('elige los dos colores');
     return { club, name, brand, brand2, brandInk: inkFor(brand), crest: home.crestDraft === undefined ? current.crest : home.crestDraft };
   }
+  // The team as the backend returned it after an edit: in the list, in the device copy and worn by the app.
+  function keepUpdatedTeam(updated) {
+    home.teams = home.teams.map((t) => (t.id === updated.id ? updated : t));
+    writeJson(CACHE_KEY_PREFIX + `teams:${userKey()}`, home.teams);
+    applyTeam(updated);
+  }
   async function submitTeam(form, creating) {
     let fields;
     try { fields = teamFromForm(form, creating ? home.draft : team); } catch (err) { homeStatus(`Revisa los datos: ${err.message}.`); return; }
@@ -7190,11 +7311,8 @@ span.att-foot { visibility: hidden; }
         await selectTeam(created);
         return;
       }
-      const updated = await backend.updateTeam(team.id, fields);
-      home.teams = home.teams.map((t) => (t.id === updated.id ? updated : t));
-      writeJson(CACHE_KEY_PREFIX + `teams:${userKey()}`, home.teams);
+      keepUpdatedTeam(await backend.updateTeam(team.id, fields));
       home.crestDraft = undefined;
-      applyTeam(updated);
       renderHome();
       homeStatus('Equipo guardado.');
     } catch (err) {
@@ -7415,6 +7533,7 @@ span.att-foot { visibility: hidden; }
     if (rowLink) { showPlayerMatch(rowLink.dataset.playerMatch); return; }
     const b = ev.target.closest('button');
     if (!b || b.type === 'submit') return;
+    if (home.view === 'rating-tune' && !b.hasAttribute('data-tune') && tuneDirty() && !confirmTap(TUNE_LEAVE_ARM)) return;
     const armedBefore = home.armed;
     if (b.dataset.restartMatch) { if (confirmTap(`restart-${b.dataset.restartMatch}`)) restartMatch(b.dataset.restartMatch); return; }
     if (b.dataset.deleteMatch) { if (confirmTap(`delete-${b.dataset.deleteMatch}`)) deleteMatch(b.dataset.deleteMatch); return; }
@@ -7445,6 +7564,9 @@ span.att-foot { visibility: hidden; }
     if (b.hasAttribute('data-player-photo-clear')) { editDraft({ photo: null }); return; }
     if (b.hasAttribute('data-player-save')) { savePlayerCard(); return; }
     if (b.dataset.leader) { home.leaderMetric = b.dataset.leader; renderHome(); return; }
+    if (b.dataset.tune === 'save') { saveRatingWeights(); return; }
+    if (b.dataset.tune === 'reset') { home.weightsDraft = { ...RATING_KNOB_DEFAULTS }; renderHome(); return; }
+    if (b.hasAttribute('data-rating-tune')) { showRatingTune(); return; }
     if (b.dataset.homeView === 'profile') { showProfile(); return; }
     if (b.dataset.homeView) { home.crestDraft = undefined; showHomeView(b.dataset.homeView); return; }
     if (b.hasAttribute('data-new-match')) { openSquad({ fixtureId: home.view === 'team' ? nextOpenFixtureId() : null }); return; }
@@ -7481,6 +7603,7 @@ span.att-foot { visibility: hidden; }
   $('home').addEventListener('change', (ev) => {
     const el = ev.target;
     if (el.id === 'tpl-name') { home.template.name = el.value; return; }
+    if (el.dataset.knob) { el.value = home.weightsDraft[el.dataset.knob]; return; }
     if (el.id === 'att-date') { openAttendanceDay(el.value); return; }
     if (el.dataset.tplNum) { editDraftRival(draftRival(el.dataset.tplNum), { num: Number(el.value) }); return; }
     if (el.dataset.tplName) { editDraftRival(draftRival(el.dataset.tplName), { name: el.value.trim().slice(0, MAX_NAME_LENGTH) }); return; }
@@ -7488,7 +7611,10 @@ span.att-foot { visibility: hidden; }
     if (el.dataset.teamName) saveTeamPlayer(rosterPlayer(el.dataset.teamName), { name: el.value.trim().slice(0, MAX_NAME_LENGTH) });
   });
   // A note is kept as it is typed, so no tap can lose it.
-  $('home').addEventListener('input', (ev) => { if (ev.target.dataset.attNoteInput) saveAttendanceNote(ev.target.dataset.attNoteInput, ev.target.value); });
+  $('home').addEventListener('input', (ev) => {
+    if (ev.target.dataset.attNoteInput) saveAttendanceNote(ev.target.dataset.attNoteInput, ev.target.value);
+    if (ev.target.dataset.knob) tuneKnob(ev.target);
+  });
   $('home').addEventListener('keydown', (ev) => { if (ev.key === 'Enter' && ['tpl-dorsals', 'tpl-new-name'].includes(ev.target.id)) addDraftRivals(); });
   $('crest-file').addEventListener('change', (ev) => {
     const file = ev.target.files && ev.target.files[0];

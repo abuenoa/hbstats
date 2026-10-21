@@ -1918,6 +1918,133 @@
         if (!nearTo(ratingOf([rTurnover('a', 'Pase')]).raw, CONFIG.rating.base - 0.4)) throw new Error('premise: default weights');
       } finally { await local.deleteTeam(created.id); }
     });
+    // ---- Rating tuning view (M7): the coach moves the weights and the squad's ratings follow before he saves ----
+    const tuneWing = seasonPlayers[1], tuneKeeper = seasonPlayers[0];
+    const tuneMatches = () => [seasonRow('tn1', { events: lossesOf(3) })];
+    const tuneInput = (el, value) => { el.value = String(value); el.dispatchEvent(new Event('input', { bubbles: true })); };
+    const tuneRow = (id) => [...document.querySelectorAll('#tune-rows tr')].find((tr) => tr.dataset.tunePlayer === id);
+    // A team on the local backend, opened on the tuning view over the given matches; everything is put back afterwards.
+    const withTuneTeam = async (fn, { matches = tuneMatches(), roster = [tuneKeeper, tuneWing] } = {}) => {
+      const real = backend, previous = team, cacheKey = CACHE_KEY_PREFIX + `teams:${userKey()}`, cached = readJson(cacheKey);
+      const keep = { season: home.season, roster: home.roster, teams: home.teams, view: home.view, weightsDraft: home.weightsDraft, armed: home.armed };
+      backend = localBackend();
+      const created = await backend.createTeam({ club: 'Tune', name: 'Tune', brand: '#1a4a8a', brand2: '#ffffff', brandInk: '#ffffff', crest: null });
+      applyTeam(created); home.teams = [created]; home.season = matches; home.roster = roster; home.ratingFeatureCache = null;
+      try { await fn(created); } finally {
+        await backend.deleteTeam(created.id); backend = real; applyTeam(previous); Object.assign(home, keep, { ratingFeatureCache: null });
+        if (cached === undefined || cached === null) removeKey(cacheKey); else writeJson(cacheKey, cached);
+        renderHome();
+      }
+    };
+    T('tune: raising the turnover weight lowers a player with turnovers by the expected amount', () => {
+      const matches = tuneMatches(), roster = [tuneKeeper, tuneWing];
+      const before = rosterRatingPreview(matches, roster, ratingWeights()), heavier = rosterRatingPreview(matches, roster, { ...ratingWeights(), turnover: -0.6 });
+      const [wingBefore, wingAfter] = [before, heavier].map((rows) => rows.find((r) => r.player.id === 'sp2'));
+      if (!nearTo(wingBefore.next, CONFIG.rating.base - 3 * 0.4) || !nearTo(wingAfter.next, CONFIG.rating.base - 3 * 0.6)) throw new Error(`next ${wingBefore.next} -> ${wingAfter.next}`);
+      if (!nearTo(wingAfter.current, wingBefore.next) || !nearTo(wingAfter.delta, -0.6) || wingAfter.last !== wingAfter.next) throw new Error(JSON.stringify(wingAfter));
+      if (Object.keys(wingAfter).sort().join() !== 'current,delta,last,next,player') throw new Error('row shape ' + Object.keys(wingAfter));
+      const keeperAfter = heavier.find((r) => r.player.id === 'sp1');
+      if (keeperAfter.delta !== 0 || keeperAfter.next !== CONFIG.rating.base) throw new Error('a keeper without turnovers does not move: ' + JSON.stringify(keeperAfter));
+      const absent = rosterRatingPreview(matches, [{ id: 'nobody', num: 9, name: 'Nobody', pos: 'LAT' }], ratingWeights())[0];
+      if (absent.current !== null || absent.next !== null || absent.delta !== null || absent.last !== null) throw new Error('a player with no matches has no rating: ' + JSON.stringify(absent));
+    });
+    T('tune: preview recombines without recomputing features', () => {
+      const matches = tuneMatches(), roster = [tuneKeeper, tuneWing], real = ratingFeatures;
+      let calls = 0;
+      ratingFeatures = (...args) => { calls++; return real(...args); };
+      try {
+        home.ratingFeatureCache = null;
+        rosterRatingPreview(matches, roster, ratingWeights());
+        const first = calls;
+        if (first !== matches.length * roster.length) throw new Error('features once per player and match: ' + first);
+        for (const turnover of [-0.5, -0.7, -0.9, -1.1]) rosterRatingPreview(matches, roster, { ...ratingWeights(), turnover });
+        if (calls !== first) throw new Error('a knob change recomputed the features: ' + (calls - first));
+        rosterRatingPreview(tuneMatches(), roster, ratingWeights());
+        if (calls !== 2 * first) throw new Error('a new season array starts a new cache: ' + calls);
+      } finally { ratingFeatures = real; home.ratingFeatureCache = null; }
+    });
+    await TA('tune: save persists and the team page uses the new ratings', async () => {
+      await withTuneTeam(async (created) => {
+        await showRatingTune();
+        const saveButton = document.querySelector('[data-tune="save"]');
+        if (home.view !== 'rating-tune' || !saveButton.disabled) throw new Error('opens clean, nothing to save: ' + home.view);
+        tuneInput(document.querySelector('input.tune-num[data-knob="turnover"]'), -0.6);
+        if (saveButton.disabled || !nearTo(Number(tuneRow('sp2').querySelector('[data-col="next"]').textContent.replace(',', '.')), CONFIG.rating.base - 1.8, 0.05)) throw new Error('preview row: ' + tuneRow('sp2').textContent);
+        if (team.ratingWeights) throw new Error('nothing is saved before «Guardar»');
+        saveButton.click();
+        for (let i = 0; i < 8; i++) await tick0();
+        const stored = (await backend.listTeams()).find((t) => t.id === created.id);
+        if (JSON.stringify(stored.ratingWeights) !== JSON.stringify({ turnover: -0.6 }) || JSON.stringify(team.ratingWeights) !== JSON.stringify({ turnover: -0.6 })) throw new Error('stored ' + JSON.stringify(stored.ratingWeights));
+        if (!/guardada/.test($('home-status').textContent) || document.querySelector('[data-tune="save"]').disabled !== true) throw new Error('saved state: ' + $('home-status').textContent);
+        const season = playerSeason(home.season, tuneWing);
+        if (!nearTo(season.rating, CONFIG.rating.base - 1.8, 0.05)) throw new Error('season rating with the new weights ' + season.rating);
+        home.playerId = 'sp2'; home.playerEdit = false; showHomeView('player');
+        const poster = document.querySelector('.poster .rating-chip');
+        if (!poster || poster.textContent !== ratingText(season.rating)) throw new Error('the player card reads the saved weights: ' + (poster && poster.textContent));
+        await showRatingTune();
+        if (home.weightsDraft.turnover !== -0.6) throw new Error('the view reopens on the saved weights');
+      });
+    });
+    await TA('tune: reset restores the defaults', async () => {
+      await withTuneTeam(async (created) => {
+        await backend.updateTeam(created.id, { ratingWeights: { turnover: -0.9, red: -2 } });
+        applyTeam((await backend.listTeams()).find((t) => t.id === created.id));
+        await showRatingTune();
+        if (home.weightsDraft.turnover !== -0.9 || home.weightsDraft.red !== -2) throw new Error('opens on the saved weights');
+        document.querySelector('[data-tune="reset"]').click();
+        if (JSON.stringify(home.weightsDraft) !== JSON.stringify(RATING_KNOB_DEFAULTS)) throw new Error('draft ' + JSON.stringify(home.weightsDraft));
+        const shown = RATING_KNOBS.filter((k) => ['range', 'number'].every((type) => Number(document.querySelector(`input[type="${type}"][data-knob="${k.key}"]`).value) !== RATING_KNOB_DEFAULTS[k.key]));
+        if (shown.length) throw new Error('controls not reset: ' + shown.map((k) => k.key));
+        if (team.ratingWeights.turnover !== -0.9) throw new Error('reset alone saves nothing');
+        document.querySelector('[data-tune="save"]').click();
+        for (let i = 0; i < 8; i++) await tick0();
+        if (team.ratingWeights !== null || JSON.stringify(ratingWeights()) !== JSON.stringify(CONFIG.rating.weights)) throw new Error('saved defaults are stored as no weights: ' + JSON.stringify(team.ratingWeights));
+        if ((await backend.listTeams()).find((t) => t.id === created.id).ratingWeights !== null) throw new Error('not stored');
+      });
+    });
+    await TA('tune: input keeps focus', async () => {
+      await withTuneTeam(async () => {
+        await showRatingTune();
+        const number = document.querySelector('input.tune-num[data-knob="shot"]'), range = document.querySelector('input.tune-range[data-knob="shot"]');
+        number.focus();
+        const rowsBefore = $('tune-rows').textContent;
+        tuneInput(number, 1.5);
+        if (document.activeElement !== number || document.querySelector('input.tune-num[data-knob="shot"]') !== number) throw new Error('the number input was replaced or lost focus');
+        if (Number(range.value) !== 1.5 || home.weightsDraft.shot !== 1.5) throw new Error('range follows the number: ' + range.value);
+        range.focus(); tuneInput(range, 0.4);
+        if (document.activeElement !== range || Number(number.value) !== 0.4) throw new Error('number follows the range: ' + number.value);
+        tuneInput(document.querySelector('input.tune-num[data-knob="turnover"]'), -1.2);
+        if ($('tune-rows').textContent === rowsBefore) throw new Error('the preview did not move');
+        number.focus(); number.value = ''; number.dispatchEvent(new Event('input', { bubbles: true }));
+        if (home.weightsDraft.shot !== 0.4 || document.activeElement !== number) throw new Error('a half-typed number changes nothing');
+        number.value = '99'; number.dispatchEvent(new Event('input', { bubbles: true })); number.dispatchEvent(new Event('change', { bubbles: true }));
+        if (home.weightsDraft.shot !== knobOf('shot').max || Number(number.value) !== knobOf('shot').max) throw new Error('typed values clamp to the knob: ' + number.value);
+      });
+    });
+    await TA('tune: leaving with unsaved changes asks first, and names are escaped', async () => {
+      const evil = { id: 'sp9', num: 9, name: '<img src=x onerror=alert(1)>', pos: 'LAT' };
+      await withTuneTeam(async () => {
+        await showRatingTune();
+        if (document.querySelector('#tune-rows img[src="x"]') || !tuneRow('sp9') || !tuneRow('sp9').textContent.includes('<img')) throw new Error('names are text: ' + $('tune-rows').innerHTML.slice(0, 200));
+        document.querySelector('.home-head [data-home-view="team"]').click();
+        for (let i = 0; i < 5; i++) await tick0();
+        if (home.view !== 'team') throw new Error('no changes: leaves at once, got ' + home.view);
+        await showRatingTune();
+        tuneInput(document.querySelector('input.tune-num[data-knob="turnover"]'), -0.9);
+        document.querySelector('.home-head [data-home-view="team"]').click();
+        if (home.view !== 'rating-tune' || home.armed !== 'tune-leave' || !document.querySelector('.tune-warn') || home.weightsDraft.turnover !== -0.9) throw new Error('first tap only asks: ' + home.view + ' ' + home.armed);
+        document.querySelector('.home-head [data-home-view="team"]').click();
+        for (let i = 0; i < 5; i++) await tick0();
+        if (home.view !== 'team' || home.armed !== null || team.ratingWeights) throw new Error('second tap leaves without saving: ' + home.view);
+        await showRatingTune();
+        tuneInput(document.querySelector('input.tune-num[data-knob="turnover"]'), -0.9);
+        document.querySelector('[data-tune="save"]').click();
+        for (let i = 0; i < 8; i++) await tick0();
+        document.querySelector('.home-head [data-home-view="team"]').click();
+        for (let i = 0; i < 5; i++) await tick0();
+        if (home.view !== 'team') throw new Error('saved changes do not ask: ' + home.view);
+      }, { roster: [tuneKeeper, tuneWing, evil], matches: [seasonRow('tn2', { players: [...seasonPlayers, evil], events: [...lossesOf(2), { ...seasonTurnovers(), id: 'ev9', playerId: 'sp9' }] })] });
+    });
     T('zones: lane and ring from the origin, 7 m and counters apart', () => {
       const shot = (over) => ({ kind: 'SHOT', from: '9M', zone: '9M', origin: m(0, 10), ...over });
       const zones = [shotZone(shot({ origin: m(-8, 2) })), shotZone(shot()), shotZone(shot({ from: '7M', zone: '7M' })), shotZone(shot({ zone: 'CONTRA' }))];
