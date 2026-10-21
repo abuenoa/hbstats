@@ -238,7 +238,7 @@ past matches reproducible, and the tuning preview cheap.
 
 | Field | Where | Rules |
 |---|---|---|
-| `ratingWeights` | `teams.rating_weights jsonb` (nullable), local backend team object | **M7.** Only the knobs that differ from `CONFIG.rating`. Validated on read: unknown keys are dropped and values are clamped to the knob range, with a `console.warn`. `null` means the defaults. Check: `jsonb_typeof = 'object'` and at most 4 kB. |
+| `ratingWeights` | `teams.rating_weights jsonb` (nullable), local backend team object | **M7.** Only the knobs that differ from `CONFIG.rating`. Validated on read: unknown keys are dropped and values are clamped to the knob range, with a `console.warn`. `null` means the defaults. Check: `jsonb_typeof = 'object'` and `pg_column_size` at most 2000 bytes (largest real payload about 440 bytes). The keeper share is stored as `teamFaultKeeperShare`. |
 
 ## Minutes, +/−, attack types
 
