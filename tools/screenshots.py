@@ -53,6 +53,28 @@ SCENES = {
     "halftime": f"{SAMPLE} commit(); openHalftime();",
     "final": f"{SAMPLE} commit(); openFinal();",
 }
+# The MVP card is drawn on a canvas of its own size; the window is that size, so the screenshot is the card's PNG.
+MVP_CARD_SIZE = "1080,1350"
+MVP_LONG_NAME = "Maximiliano Fernández-Quintero de la Vega"
+MVP_CARD_SNIPPET = (
+    f"{SAMPLE} commit(); (async () => {{ await document.fonts.ready;"
+    " const data = mvpCardData(state, '%s', matchRatings(state)); data.name = '%s';"
+    " %s"
+    " const canvas = document.createElement('canvas'); document.body.replaceChildren(canvas); document.body.style.margin = '0';"
+    " drawMvpCard(canvas, data, { photo: data.photo ? await loadImage(data.photo) : null, crest: await loadImage(data.crest) }); })();"
+)
+MVP_SAMPLE_PHOTO = (
+    "const face = document.createElement('canvas'); face.width = face.height = 160; const f = face.getContext('2d');"
+    " f.fillStyle = '#b7c4d6'; f.fillRect(0, 0, 160, 160); f.fillStyle = '#e0b48f'; f.beginPath(); f.arc(80, 70, 36, 0, 7); f.fill();"
+    " f.fillStyle = '#34495e'; f.beginPath(); f.arc(80, 190, 70, 0, 7); f.fill(); data.photo = face.toDataURL('image/png');"
+)
+# Card scenes: one scene name writes several files, each a card at its own size.
+CARD_SCENES = {
+    "mvp-image": {
+        "mvp-field": MVP_CARD_SNIPPET % ("p17", MVP_LONG_NAME, MVP_SAMPLE_PHOTO),
+        "mvp-keeper": MVP_CARD_SNIPPET % ("p1", MVP_LONG_NAME, ""),
+    },
+}
 # Matrix-only scenes: the season fixture (tools/scenes/season.js) puts the app in the team pages of a club with four matches.
 SHEET_STATS = f"{SAMPLE} commit(); ui.sheetMode = 'sheet'; ui.sheetTab = 'stats'; renderSheet(); $('sheet').hidden = false;"
 SHEET_PLAYER = SHEET_STATS.replace("'stats'", "'player'")
@@ -282,14 +304,14 @@ def main() -> None:
     parser.add_argument("--report-only", action="store_true", help="matrix only: print what the probes find but exit 0")
     parser.add_argument("--out", type=pathlib.Path, default=None, help="output folder (default .github/readme, or the matrix folder you choose)")
     args = parser.parse_args()
-    available = MATRIX_SCENES if args.matrix else SCENES
+    available = MATRIX_SCENES if args.matrix else {**SCENES, **CARD_SCENES}
     unknown = [n for n in args.scenes if n not in available]
     if unknown:
         raise SystemExit(f"Unknown scene(s): {', '.join(unknown)}. Available: {', '.join(available)}")
     if not SOURCE_PAGE.exists():
         raise SystemExit(f"{SOURCE_PAGE} not found: run python3 tools/build_site.py first")
     app = SOURCE_PAGE.read_text(encoding="utf-8")
-    names = args.scenes or list(available)
+    names = args.scenes or list(SCENES if not args.matrix else available)
     if args.matrix:
         if args.out is None:
             raise SystemExit("--matrix needs --out DIR")
@@ -299,9 +321,10 @@ def main() -> None:
     out_dir = args.out or OUT_DIR
     out_dir.mkdir(parents=True, exist_ok=True)
     for name in names:
-        out = out_dir / f"{name}.png"
-        capture(app, SCENES[name], out, TABLET_SIZE)
-        print(shown(out))
+        for file, snippet, size in [(name, SCENES[name], TABLET_SIZE)] if name in SCENES else [(f, s, MVP_CARD_SIZE) for f, s in CARD_SCENES[name].items()]:
+            out = out_dir / f"{file}.png"
+            capture(app, snippet, out, size)
+            print(shown(out))
 
 
 if __name__ == "__main__":

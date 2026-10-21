@@ -1129,6 +1129,7 @@
   const TA = async (name, fn) => { try { await fn(); __results.push('OK ' + name); } catch (e) { __results.push('FAIL ' + name + ': ' + (e && e.message || e) + ' ' + ((e && e.stack) || '').split('\n')[1]); } };
   const tick0 = () => new Promise((r) => setTimeout(r, 0));
   const accountTests = async () => {
+    // ---- MVP card (M3): the data, the drawing and the PNG ----
     await TA('design: theme switch suppresses transitions for two frames', async () => {
       const frame = () => new Promise((resolve) => requestAnimationFrame(resolve));
       const switchStyle = () => document.getElementById('theme-switch-style');
@@ -1141,6 +1142,72 @@
         await frame();
         if (switchStyle()) throw new Error('still there after two frames');
       } finally { applyTheme(before); }
+    });
+    const PNG_HEADER_BYTES = 24, PNG_SIGNATURE_HEAD = 0x89504e47, PNG_WIDTH_OFFSET = 16, PNG_HEIGHT_OFFSET = 20;
+    const cardRatings = () => matchRatings(state);
+    const drawnTexts = (data, images) => {
+      const canvas = document.createElement('canvas'), ctx = canvas.getContext('2d'), texts = [], fillText = ctx.fillText.bind(ctx);
+      ctx.fillText = (text, ...rest) => { texts.push({ text, font: ctx.font }); fillText(text, ...rest); };
+      drawMvpCard(canvas, data, images);
+      return { texts, ctx, canvas };
+    };
+    const cardFace = () => { const c = document.createElement('canvas'); c.width = c.height = 64; c.getContext('2d').fillRect(0, 0, 64, 64); return c; };
+    await TA('mvp image: field and keeper KPIs', async () => {
+      const goals = state.events.filter((e) => e.kind === 'SHOT' && e.playerId === 'p17' && e.result === 'GOL').length;
+      const shots = state.events.filter((e) => e.kind === 'SHOT' && e.playerId === 'p17').length;
+      const assists = state.events.filter((e) => e.kind === 'ACTION' && e.playerId === 'p17' && e.action === 'ASIST').length;
+      if (!shots) throw new Error('fixture has no shots for p17');
+      const field = mvpCardData(state, 'p17', cardRatings());
+      const rating = ratingText(cardRatings().get('p17').value);
+      if (field.kpis.map((k) => k[0]).join() !== 'Goles,% tiro,Pases de gol,Nota') throw new Error(field.kpis.map((k) => k[0]).join());
+      if (field.kpis.map((k) => k[1]).join() !== `${goals}/${shots},${Math.round(goals * 100 / shots)}%,${assists},${rating}`) throw new Error(field.kpis.map((k) => k[1]).join());
+      if (field.title !== state.them || field.score !== `${score().us}–${score().them}` || field.name !== 'Jenny' || field.num !== 17 || field.rating !== rating) throw new Error(JSON.stringify(field));
+      const faced = state.events.filter((e) => e.kind === 'RIVAL_SHOT' && e.gkId === 'p1');
+      const saved = faced.filter((e) => groupOf(e.result) === 'PARADA').length, onGoal = faced.filter((e) => ['GOL', 'PARADA'].includes(groupOf(e.result))).length;
+      const pens = faced.filter((e) => e.zone === '7M' && ['GOL', 'PARADA'].includes(groupOf(e.result))), pensSaved = pens.filter((e) => groupOf(e.result) === 'PARADA').length;
+      const keeper = mvpCardData(state, 'p1', cardRatings());
+      if (keeper.kpis.map((k) => k[0]).join() !== 'Paradas,% paradas,7 m parados,Nota') throw new Error(keeper.kpis.map((k) => k[0]).join());
+      if (keeper.kpis[0][1] !== `${saved}/${onGoal}` || keeper.kpis[2][1] !== `${pensSaved}/${pens.length}` || keeper.kpis[1][1] !== (onGoal ? `${Math.round(saved * 100 / onGoal)}%` : '–')) throw new Error(JSON.stringify(keeper.kpis));
+      const picked = state.mvpId;
+      try {
+        state.mvpId = 'p17';
+        if (mvpCardData(state, 'p17', cardRatings()).provisional) throw new Error('coach pick shown as provisional');
+        state.mvpId = null;
+        const top = matchMvp(state, cardRatings()).id;
+        if (!mvpCardData(state, top, cardRatings()).provisional) throw new Error('provisional MVP not flagged');
+        if (mvpCardData(state, top === 'p17' ? 'p1' : 'p17', cardRatings()).provisional) throw new Error('another player flagged');
+      } finally { state.mvpId = picked; }
+    });
+    await TA('mvp image: a PNG of 1080×1350', async () => {
+      const blob = await mvpCardBlob(mvpCardData(state, 'p17', cardRatings()));
+      if (blob.type !== 'image/png') throw new Error(blob.type);
+      // The size is read from the PNG header: Chrome's virtual-time headless run never finishes decoding a card-sized image.
+      const header = new DataView(await blob.slice(0, PNG_HEADER_BYTES).arrayBuffer());
+      if (header.getUint32(0) !== PNG_SIGNATURE_HEAD) throw new Error('not a PNG');
+      const size = `${header.getUint32(PNG_WIDTH_OFFSET)}×${header.getUint32(PNG_HEIGHT_OFFSET)}`;
+      if (size !== '1080×1350') throw new Error(size);
+    });
+    await TA('mvp image: no photo draws initials', async () => {
+      const data = { ...mvpCardData(state, 'p17', cardRatings()), name: 'Ana Pérez', photo: null };
+      if (!drawnTexts(data, { photo: null, crest: null }).texts.some((t) => t.text === 'AP')) throw new Error('no initials');
+      if (drawnTexts(data, { photo: cardFace(), crest: null }).texts.some((t) => t.text === 'AP')) throw new Error('initials over a photo');
+    });
+    await TA('mvp image: a long name is fitted', async () => {
+      const long = 'Maximiliano '.repeat(12).trim(), data = { ...mvpCardData(state, 'p17', cardRatings()), name: long, title: long, venue: long };
+      const { texts, ctx } = drawnTexts(data, { photo: null, crest: null });
+      const nameText = texts.find((t) => t.text.startsWith('MAXIMILIANO') || t.text.startsWith('Maximiliano'));
+      if (!nameText || !nameText.text.endsWith('…')) throw new Error('name not cut: ' + (nameText && nameText.text));
+      texts.forEach((t) => { ctx.font = t.font; if (ctx.measureText(t.text).width > MVP_CARD.w - 2 * MVP_CARD.pad) throw new Error(`overflow: ${t.text}`); });
+      if (fitText(ctx, 'Jose', MVP_CARD.w) !== 'Jose') throw new Error('short text changed');
+      if (fitText(ctx, long, 0) !== '…') throw new Error('zero width');
+    });
+    await TA('mvp image: a broken photo still gives an image', async () => {
+      const broken = 'data:image/png;base64,AAAA';
+      let error = null;
+      try { await loadImage(broken); } catch (e) { error = e; }
+      if (!(error instanceof Error) || !/image/i.test(error.message)) throw new Error('loadImage did not reject clearly: ' + error);
+      const blob = await mvpCardBlob({ ...mvpCardData(state, 'p17', cardRatings()), photo: broken });
+      if (blob.type !== 'image/png' || blob.size < 1000) throw new Error(blob.type + ' ' + blob.size);
     });
     await TA('home opens on team creation when the device has no team', async () => { await startHome(); if (home.view !== 'team-new' || $('home').hidden || !document.querySelector('[data-form="team-new"]')) throw new Error(home.view); });
     await TA('create team: name, colours and initials crest applied', async () => { $('team-club').value = 'CB Ejemplo'; $('team-name').value = 'Ejemplo Sur'; $('team-brand').value = '#1d4ed8'; $('team-brand2').value = '#facc15'; await submitTeam(document.querySelector('[data-form="team-new"]'), true); if (home.view !== 'team' || team.name !== 'Ejemplo Sur' || !team.id) throw new Error(home.view + ' ' + team.name); if (getComputedStyle($('score-us')).color !== 'rgb(29, 78, 216)') throw new Error('score colour ' + getComputedStyle($('score-us')).color); if (PDF_RGB.brand.join() !== '29,78,216' || team.brandInk !== '#ffffff') throw new Error('pdf/ink'); if (!decodeURIComponent($('bar-crest').src).includes('>ES<')) throw new Error('initials'); if (inkFor('#facc15') !== '#151515') throw new Error('ink for light'); });

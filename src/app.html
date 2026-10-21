@@ -2268,6 +2268,8 @@ span.att-foot { visibility: hidden; }
     pearls: [[6, 18], [60, 5], [114, 18]],
     pearlR: 6,
     jewels: [[60, 75, '--red', 5], [34, 75, '--parada', 4], [86, 75, '--gol', 4]],
+    // The body's vertical extent, for the canvas gradient (the SVG's objectBoundingBox).
+    bodyY: [5, 70],
     shine: 'M22 58 L30 48 M44 56 L50 44',
     edgeWidth: 3, pearlEdgeWidth: 2, shineWidth: 4, shineOpacity: '.7'
   };
@@ -2289,9 +2291,10 @@ span.att-foot { visibility: hidden; }
       ${CROWN.jewels.map(crownJewel).join('')}
       <path d="${CROWN.shine}" style="stroke:var(--crown-shine)" stroke-width="${CROWN.shineWidth}" stroke-linecap="round" opacity="${CROWN.shineOpacity}"/></svg>`;
   }
+  // A roster player carries their photo; match players are looked up in the team photos.
+  const facePhoto = (p) => (p.photo && IMAGE_DATA_URL.test(p.photo) ? p.photo : photoOf(p.id));
   function discHtml(p, pos = posOf(p)) {
-    // A roster player carries their photo; match players are looked up in the team photos.
-    const photo = p.photo && IMAGE_DATA_URL.test(p.photo) ? p.photo : photoOf(p.id);
+    const photo = facePhoto(p);
     if (photo) return `<span class="disc photo" style="background:${pos.color} url('${photo}') center/cover"><b class="${pos.darkText ? 'light-text' : ''}" style="background:${pos.color}">${p.num}</b></span>`;
     return `<span class="disc${pos.darkText ? ' light-text' : ''}" style="background:${pos.color}">${p.num}</span>`;
   }
@@ -4161,6 +4164,161 @@ span.att-foot { visibility: hidden; }
     }
   }
 
+  // ---- Share images: Canvas 2D cards for the share sheet; canvas inherits no CSS, so fonts and colours are set here ----
+  // Every size of the MVP card, in px of its 1080×1350 canvas. The face circle sits over a brand-to-dark gradient, the crown
+  // on its upper-left rim and the rating badge on its lower-right one; then the name, the KPI tiles and the score line.
+  const MVP_CARD = {
+    w: 1080, h: 1350, pad: 72, fadeEnd: 0.6,
+    headerY: 150, headerSize: 84,
+    faceCy: 460, faceR: 230, ringWidth: 14,
+    crownAngleDeg: -34, crownRimDeg: -135, crownW: 290, crownShadowBlur: 24, crownShadowDy: 8,
+    badge: { w: 200, h: 124, radius: 30, rimDeg: 45, edge: 8, size: 88, baseline: 90 },
+    initialsScale: 0.9, initialsBaseline: 0.3,
+    nameY: 810, nameSize: 96, subY: 872, subSize: 40,
+    tiles: { y: 935, h: 210, gap: 20, radius: 28, inner: 12, valueSize: 72, valueBaseline: 120, labelSize: 24, labelBaseline: 176 },
+    footer: { crestSize: 132, crestY: 1172, gap: 36, scoreY: 1222, scoreSize: 84, vsY: 1272, vsSize: 38, metaY: 1318, metaSize: 28 }
+  };
+  // Theme-independent colours: the card is shared outside the app, so it never follows the theme. The values are the light
+  // theme's tokens (crown, rating bands, positions); the team's own colours come from the match data.
+  const CARD_PALETTE = {
+    base: '#101014', ink: '#ffffff', inkSoft: 'rgba(255, 255, 255, .72)', tile: 'rgba(255, 255, 255, .12)', badgeEdge: '#101014',
+    crown: { '--crown-light': '#fff3a6', '--gold': '#f5c400', '--crown-deep': '#b8860b', '--crown-band-deep': '#8a6400', '--crown-edge': '#7a5500',
+      '--crown-shine': '#fffbe0', '--red': '#d4202a', '--parada': '#2563eb', '--gol': '#1f9d55' },
+    bands: { 'rt-top': ['#1d4ed8', '#ffffff'], 'rt-good': ['#15803d', '#ffffff'], 'rt-mid': ['#bf8003', '#151515'], 'rt-low': ['#c2410c', '#ffffff'],
+      'rt-bad': ['#991b1b', '#ffffff'], [RATING_NONE_BAND]: ['#6d6863', '#ffffff'] },
+    positions: { EXT: '#14b8a6', LAT: '#8b5cf6', CEN: '#ec4899', PIV: '#f5b400', POR: '#151515' },
+    darkInk: '#151515'
+  };
+  const MVP_PROVISIONAL_TITLE = 'MVP provisional', MVP_TITLE = 'MVP';
+  const CARD_ELLIPSIS = '…';
+  // What the MVP card shows about one player; `ratings` is matchRatings(s) (or the same for the season's helpers).
+  function mvpCardData(s, playerId, ratings) {
+    const player = s.players.find((p) => p.id === playerId);
+    const keeper = player.pos === 'POR', { made, tried } = outcomeOf(s, player), value = ratingValue(ratings, player);
+    const pens = countGroups(s.events.filter((e) => e.kind === 'RIVAL_SHOT' && e.gkId === playerId && e.zone === '7M'));
+    const kpis = keeper
+      ? [['Paradas', `${made}/${tried}`], ['% paradas', pctText(pct(made, tried))], ['7 m parados', `${pens.PARADA}/${pens.GOL + pens.PARADA}`]]
+      : [['Goles', `${made}/${tried}`], ['% tiro', pctText(pct(made, tried))], ['Pases de gol', playerStats(playerId, s.events).ASIST]];
+    const mvp = matchMvp(s, ratings), sc = score(s.events);
+    return {
+      name: player.name, num: player.num, pos: player.pos, photo: facePhoto(player), rating: ratingText(value), band: ratingBand(value),
+      kpis: [...kpis, ['Nota', ratingText(value)]],
+      us: s.us, title: s.them, score: `${sc.us}–${sc.them}`, date: dateText(s.date), venue: s.venue,
+      crest: crestSrc(team), brand: team.brand, brand2: team.brand2, brandInk: team.brandInk,
+      provisional: mvp.id === playerId && mvp.source === MVP_SOURCE.rating
+    };
+  }
+  const IMAGE_ERROR_SRC_CHARS = 40;
+  // Rejects with a clear error when the image cannot be decoded (a corrupt photo, a blocked URL).
+  const loadImage = (src) => new Promise((resolve, reject) => {
+    const image = new Image();
+    image.onload = () => resolve(image);
+    image.onerror = () => reject(new Error(`Image could not be loaded: ${String(src).slice(0, IMAGE_ERROR_SRC_CHARS)}`));
+    image.src = src;
+  });
+  // The text that fits `maxWidth` in the context's current font: itself, or its start and an ellipsis.
+  function fitText(ctx, text, maxWidth) {
+    if (ctx.measureText(text).width <= maxWidth) return text;
+    let cut = text.length;
+    while (cut > 0 && ctx.measureText(text.slice(0, cut).trimEnd() + CARD_ELLIPSIS).width > maxWidth) cut--;
+    return text.slice(0, cut).trimEnd() + CARD_ELLIPSIS;
+  }
+  const rimPoint = (cx, cy, r, deg) => [cx + r * Math.cos(deg * Math.PI / 180), cy + r * Math.sin(deg * Math.PI / 180)];
+  const cardGradient = (ctx, stops, y0, y1) => {
+    const g = ctx.createLinearGradient(0, y0, 0, y1);
+    stops.forEach(([offset, token]) => g.addColorStop(offset, CARD_PALETTE.crown[token]));
+    return g;
+  };
+  // The crown from the SVG's own geometry: its box is centred on (cx, cy), `width` wide, tilted by `angleDeg`.
+  function drawCrown(ctx, cx, cy, width, angleDeg) {
+    const [, , boxW, boxH] = CROWN.viewBox.split(' ').map(Number), c = CARD_PALETTE.crown, { band } = CROWN;
+    ctx.save();
+    ctx.translate(cx, cy);
+    ctx.rotate(angleDeg * Math.PI / 180);
+    ctx.scale(width / boxW, width / boxW);
+    ctx.translate(-boxW / 2, -boxH / 2);
+    ctx.lineJoin = 'round';
+    ctx.strokeStyle = c['--crown-edge'];
+    ctx.lineWidth = CROWN.edgeWidth;
+    ctx.shadowColor = 'rgba(0, 0, 0, .35)'; ctx.shadowBlur = MVP_CARD.crownShadowBlur; ctx.shadowOffsetY = MVP_CARD.crownShadowDy;
+    const body = new Path2D(CROWN.body);
+    ctx.fillStyle = cardGradient(ctx, CROWN.bodyStops, ...CROWN.bodyY);
+    ctx.fill(body); ctx.shadowColor = 'transparent'; ctx.stroke(body);
+    ctx.fillStyle = cardGradient(ctx, CROWN.bandStops, band.y, band.y + band.h);
+    ctx.beginPath(); ctx.roundRect(band.x, band.y, band.w, band.h, band.rx); ctx.fill(); ctx.stroke();
+    ctx.lineWidth = CROWN.pearlEdgeWidth; ctx.fillStyle = c['--crown-light'];
+    CROWN.pearls.forEach(([px, py]) => { ctx.beginPath(); ctx.arc(px, py, CROWN.pearlR, 0, 2 * Math.PI); ctx.fill(); ctx.stroke(); });
+    CROWN.jewels.forEach(([jx, jy, token, r]) => { ctx.fillStyle = c[token]; ctx.beginPath(); ctx.arc(jx, jy, r, 0, 2 * Math.PI); ctx.fill(); });
+    ctx.strokeStyle = c['--crown-shine']; ctx.lineWidth = CROWN.shineWidth; ctx.lineCap = 'round'; ctx.globalAlpha = Number(CROWN.shineOpacity);
+    ctx.stroke(new Path2D(CROWN.shine));
+    ctx.restore();
+  }
+  // Circle clip for a face or a crest, drawn with `paint(cx, cy, r)` inside it.
+  function inCircle(ctx, cx, cy, r, paint) {
+    ctx.save();
+    ctx.beginPath(); ctx.arc(cx, cy, r, 0, 2 * Math.PI); ctx.clip();
+    paint();
+    ctx.restore();
+  }
+  // Draws the MVP card on `canvas`; `images` are the loaded { photo, crest } (null when missing or broken).
+  function drawMvpCard(canvas, data, images) {
+    const M = MVP_CARD, P = CARD_PALETTE, { badge, tiles, footer } = M, ctx = canvas.getContext('2d'), cx = M.w / 2;
+    const root = getComputedStyle(document.documentElement);
+    const font = (weight, size, token) => `${weight} ${size}px ${root.getPropertyValue(token).trim()}`;
+    const DISPLAY = '--font-display', BODY = '--font-body', HEAVY = 800, SEMI = 600;
+    const maxText = M.w - 2 * M.pad;
+    const text = (value, x, y, align, ink, fontSpec, width = maxText) => {
+      ctx.font = fontSpec; ctx.textAlign = align; ctx.fillStyle = ink;
+      ctx.fillText(fitText(ctx, value, width), x, y);
+    };
+    canvas.width = M.w; canvas.height = M.h;
+    const background = ctx.createLinearGradient(0, 0, 0, M.h * M.fadeEnd);
+    background.addColorStop(0, data.brand); background.addColorStop(1, P.base);
+    ctx.fillStyle = P.base; ctx.fillRect(0, 0, M.w, M.h);
+    ctx.fillStyle = background; ctx.fillRect(0, 0, M.w, M.h * M.fadeEnd);
+    text(data.provisional ? MVP_PROVISIONAL_TITLE : MVP_TITLE, cx, M.headerY, 'center', data.brandInk, font(HEAVY, M.headerSize, DISPLAY));
+    // The face: the photo, or the initials on the position colour (as the dorsal disc does in the app).
+    const pos = posOf(data), posColor = P.positions[data.pos] || P.positions.CEN;
+    inCircle(ctx, cx, M.faceCy, M.faceR, () => {
+      if (images.photo) { ctx.drawImage(images.photo, cx - M.faceR, M.faceCy - M.faceR, 2 * M.faceR, 2 * M.faceR); return; }
+      ctx.fillStyle = posColor; ctx.fillRect(cx - M.faceR, M.faceCy - M.faceR, 2 * M.faceR, 2 * M.faceR);
+      text(initialsOf(data.name), cx, M.faceCy + M.faceR * M.initialsBaseline, 'center', pos.darkText ? P.darkInk : P.ink, font(HEAVY, M.faceR * M.initialsScale, DISPLAY));
+    });
+    ctx.beginPath(); ctx.arc(cx, M.faceCy, M.faceR + M.ringWidth / 2, 0, 2 * Math.PI);
+    ctx.strokeStyle = data.brand2; ctx.lineWidth = M.ringWidth; ctx.stroke();
+    drawCrown(ctx, ...rimPoint(cx, M.faceCy, M.faceR, M.crownRimDeg), M.crownW, M.crownAngleDeg);
+    // The rating badge in its band colour, on the lower-right rim.
+    const [bx, by] = rimPoint(cx, M.faceCy, M.faceR, badge.rimDeg), [fill, ink] = P.bands[data.band];
+    ctx.beginPath(); ctx.roundRect(bx - badge.w / 2, by - badge.h / 2, badge.w, badge.h, badge.radius);
+    ctx.fillStyle = fill; ctx.fill(); ctx.strokeStyle = P.badgeEdge; ctx.lineWidth = badge.edge; ctx.stroke();
+    text(data.rating, bx, by - badge.h / 2 + badge.baseline, 'center', ink, font(HEAVY, badge.size, DISPLAY), badge.w);
+    text(data.name.toUpperCase(), cx, M.nameY, 'center', P.ink, font(HEAVY, M.nameSize, DISPLAY));
+    text(`#${data.num} · ${pos.label}`, cx, M.subY, 'center', P.inkSoft, font(SEMI, M.subSize, BODY));
+    // The KPI tiles.
+    const tileW = (maxText - (data.kpis.length - 1) * tiles.gap) / data.kpis.length;
+    data.kpis.forEach(([label, value], i) => {
+      const x = M.pad + i * (tileW + tiles.gap), mid = x + tileW / 2, inner = tileW - 2 * tiles.inner;
+      ctx.beginPath(); ctx.roundRect(x, tiles.y, tileW, tiles.h, tiles.radius); ctx.fillStyle = P.tile; ctx.fill();
+      text(String(value), mid, tiles.y + tiles.valueBaseline, 'center', P.ink, font(HEAVY, tiles.valueSize, DISPLAY), inner);
+      text(label, mid, tiles.y + tiles.labelBaseline, 'center', P.inkSoft, font(SEMI, tiles.labelSize, BODY), inner);
+    });
+    // The score line: our crest, the score, the match and where and when.
+    const textX = images.crest ? M.pad + footer.crestSize + footer.gap : M.pad, textW = M.w - M.pad - textX;
+    if (images.crest) inCircle(ctx, M.pad + footer.crestSize / 2, footer.crestY + footer.crestSize / 2, footer.crestSize / 2,
+      () => ctx.drawImage(images.crest, M.pad, footer.crestY, footer.crestSize, footer.crestSize));
+    text(data.score, textX, footer.scoreY, 'left', data.brand2, font(HEAVY, footer.scoreSize, DISPLAY), textW);
+    text(`${data.us} vs ${data.title}`, textX, footer.vsY, 'left', P.ink, font(SEMI, footer.vsSize, BODY), textW);
+    text([data.date, data.venue].filter(Boolean).join(' · '), textX, footer.metaY, 'left', P.inkSoft, font(400, footer.metaSize, BODY), textW);
+  }
+  // The card as a PNG. A photo or crest that cannot load is left out: the face falls back to the initials.
+  async function mvpCardBlob(data) {
+    await document.fonts.ready;
+    const [photo, crest] = await Promise.all([data.photo, data.crest].map((src) => (src ? loadImage(src).catch(() => null) : null)));
+    const canvas = document.createElement('canvas');
+    drawMvpCard(canvas, data, { photo, crest });
+    return new Promise((resolve, reject) => canvas.toBlob((blob) => (blob ? resolve(blob) : reject(new Error('The MVP card could not be encoded as a PNG'))), 'image/png'));
+  }
+
   // ---- Final summary: both teams side by side, and the reports by e-mail or share sheet ----
   const EMAIL_PATTERN = /^[^\s@,;]+@[^\s@,;]+\.[^\s@,;]+$/;
   // "a@x.es, b@y.es" → ['a@x.es', 'b@y.es']; null if any address is not valid.
@@ -4844,9 +5002,10 @@ span.att-foot { visibility: hidden; }
     return 0.2126 * r + 0.7152 * g + 0.0722 * b > LIGHT_BRAND_LUMINANCE ? INK_DARK : INK_LIGHT;
   }
   // The uploaded crest, or the team's initials on its colours.
+  const initialsOf = (name) => name.split(/\s+/).filter(Boolean).map((w) => w[0]).join('').slice(0, 2).toUpperCase();
   function crestSrc(t) {
     if (t.crest && IMAGE_DATA_URL.test(t.crest)) return t.crest;
-    const initials = t.name.split(/\s+/).filter(Boolean).map((w) => w[0]).join('').slice(0, 2).toUpperCase();
+    const initials = initialsOf(t.name);
     const svg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 96 96"><circle cx="48" cy="48" r="45" fill="${t.brand}" stroke="${t.brand2}" stroke-width="6"/>`
       + `<text x="48" y="61" font-family="system-ui,sans-serif" font-weight="800" font-size="36" text-anchor="middle" fill="${t.brandInk}">${esc(initials)}</text></svg>`;
     return `data:image/svg+xml,${encodeURIComponent(svg)}`;
