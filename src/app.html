@@ -134,7 +134,7 @@
     --parada: #4f8bff; --fallo: #7d838c; --gol: #2fbf71; --ataque: #9461ff;
     --act-good: #2fbf71; --act-def: #4f8bff; --act-bad: #ef4444; --act-rival: #9461ff;
     --color-text-tertiary: #928d88;
-    --color-success-text: #2fbf71; --color-warning-text: #f08a1c; --color-danger-text: #ef4444; --color-keeper: #71717a;
+    --color-success-text: #2fbf71; --color-warning-text: #f08a1c; --color-danger-text: #ef4444; --color-keeper: #71717a; --rate-tint: 45%;
     --ring: 0 0 0 1px rgba(255, 255, 255, .08); --ring-hover: 0 0 0 1px rgba(255, 255, 255, .13); --photo-outline: rgba(255, 255, 255, .1);
     --rating-top: #5b8cff; --rating-ink-top: #0e0e10; --rating-good: #2fbf71; --rating-ink-good: #0e0e10; --rating-mid: #f5c542; --rating-ink-mid: #0e0e10;
     --rating-low: #ea7a2e; --rating-ink-low: #0e0e10; --rating-bad: #c53030; --rating-ink-bad: #ffffff;
@@ -153,7 +153,7 @@
   --parada: #4f8bff; --fallo: #7d838c; --gol: #2fbf71; --ataque: #9461ff;
     --act-good: #2fbf71; --act-def: #4f8bff; --act-bad: #ef4444; --act-rival: #9461ff;
   --color-text-tertiary: #928d88;
-  --color-success-text: #2fbf71; --color-warning-text: #f08a1c; --color-danger-text: #ef4444; --color-keeper: #71717a;
+  --color-success-text: #2fbf71; --color-warning-text: #f08a1c; --color-danger-text: #ef4444; --color-keeper: #71717a; --rate-tint: 45%;
   --ring: 0 0 0 1px rgba(255, 255, 255, .08); --ring-hover: 0 0 0 1px rgba(255, 255, 255, .13); --photo-outline: rgba(255, 255, 255, .1);
   --rating-top: #5b8cff; --rating-ink-top: #0e0e10; --rating-good: #2fbf71; --rating-ink-good: #0e0e10; --rating-mid: #f5c542; --rating-ink-mid: #0e0e10;
   --rating-low: #ea7a2e; --rating-ink-low: #0e0e10; --rating-bad: #c53030; --rating-ink-bad: #ffffff;
@@ -358,6 +358,7 @@ button.rex-chip { border: 0; cursor: pointer; position: relative; }
 .zone-n { font-size: 22px; font-weight: 700; fill: var(--fg); }
 .home .zone-pct, .home .zone-n, #sheet .zone-pct, #sheet .zone-n, .home .court-label, #sheet .court-label { stroke: var(--surface); stroke-width: 6px; stroke-linejoin: round; paint-order: stroke; }
 .goal-pct, .goal-n { fill: var(--fg); }
+.goal-cell:not([fill*="--soft"]) { fill-opacity: var(--rate-tint); }
 .goal-pct { font-size: 28px; }
 .goal-n { font-size: 13px; font-weight: 700; }
 .zone-dot { stroke: var(--surface); stroke-width: 2; }
@@ -550,7 +551,7 @@ button.rex-chip { border: 0; cursor: pointer; position: relative; }
 .kpi-tile .vs > div { min-width: 0; }
 .kpi-tile strong { display: block; font: var(--type-kpi); font-variant-numeric: tabular-nums; }
 .kpi-tile .them strong { color: var(--muted); }
-.kpi-tile small { display: block; font: var(--type-caption); color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.kpi-tile small { display: block; font: var(--type-caption); color: var(--muted); overflow-wrap: anywhere; }
 .more summary { min-height: 44px; display: flex; align-items: center; font-weight: 700; cursor: pointer; }
 .halftime-points { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
 .halftime-points .acta-h { margin-top: 0; }
@@ -1958,7 +1959,9 @@ a:focus-visible, input:focus-visible, select:focus-visible, summary:focus-visibl
   const AREA_6M_PATH = 'M 125 260 A 300 300 0 0 0 425 560 L 575 560 A 300 300 0 0 0 875 260 Z';
   const LINE_9M_PATH = 'M -25 260 A 450 450 0 0 0 425 710 L 575 710 A 450 450 0 0 0 1025 260';
   // Static court drawing shared by the live court and the sheet's shot maps; each SVG needs its own clip id.
-  const courtFloorSvg = (clipId) => `<defs><clipPath id="${clipId}"><rect x="0" y="260" width="1000" height="${COURT_VIEW_H - GOAL_LINE_Y}"/></clipPath></defs>
+  const COURT_DISTANCE_LABELS = '<text class="court-label" x="600" y="590">6 m</text><text class="court-label" x="535" y="617">7 m</text><text class="court-label" x="600" y="745">9 m</text><text class="court-label" x="600" y="845">+11 m</text>';
+  // The distance labels go last; a map that paints over the floor asks for them apart (labels = false) and draws them on top.
+  const courtFloorSvg = (clipId, labels = true) => `<defs><clipPath id="${clipId}"><rect x="0" y="260" width="1000" height="${COURT_VIEW_H - GOAL_LINE_Y}"/></clipPath></defs>
     <rect x="0" y="260" width="1000" height="${COURT_VIEW_H - GOAL_LINE_Y}" fill="var(--court)" rx="10"/>
     <g clip-path="url(#${clipId})">
       <path d="${AREA_6M_PATH}" fill="var(--area)" stroke="var(--court-line)" stroke-width="4"/>
@@ -1967,10 +1970,7 @@ a:focus-visible, input:focus-visible, select:focus-visible, summary:focus-visibl
     </g>
     <line x1="0" y1="260" x2="1000" y2="260" stroke="var(--court-line)" stroke-width="4"/>
     <line x1="475" y1="610" x2="525" y2="610" stroke="var(--court-line)" stroke-width="6"/>
-    <text class="court-label" x="600" y="590">6 m</text>
-    <text class="court-label" x="535" y="617">7 m</text>
-    <text class="court-label" x="600" y="745">9 m</text>
-    <text class="court-label" x="600" y="845">+11 m</text>`;
+    ${labels ? COURT_DISTANCE_LABELS : ''}`;
   const GOAL_NET_SVG = `<g stroke="var(--net)" stroke-width="2" stroke-dasharray="6 6">
       <line x1="440" y1="20" x2="440" y2="260"/><line x1="560" y1="20" x2="560" y2="260"/>
       <line x1="320" y1="100" x2="680" y2="100"/><line x1="320" y1="180" x2="680" y2="180"/>
@@ -2936,7 +2936,7 @@ a:focus-visible, input:focus-visible, select:focus-visible, summary:focus-visibl
       ['Recuperaciones', s.recov, ''],
       ['Blocajes', s.blocks, `nos bloquean ${us.blocked}`],
       ['Fallos defensivos', s.defFaults, ''],
-      ["Exclusiones 2'", `${exclusionEvents().length} – ${rivalExclusionEvents().length}`, `${state.us} – ${state.them}`]
+      ["Exclusiones 2'", `${exclusionEvents().length}–${rivalExclusionEvents().length}`, `${state.us}–${state.them}`]
     ];
   }
   function playerFigures(p) {
@@ -3208,7 +3208,7 @@ a:focus-visible, input:focus-visible, select:focus-visible, summary:focus-visibl
       return;
     }
     const s = score();
-    $('sheet').innerHTML = `<div class="sheet-head"><h2>${esc(state.us)} ${s.us} – ${s.them} ${esc(state.them)}</h2>
+    $('sheet').innerHTML = `<div class="sheet-head"><h2>${esc(state.us)} ${s.us}–${s.them} ${esc(state.them)}</h2>
         <div class="tabs" role="group" aria-label="Secciones">${Object.entries(SHEET_TABS).map(([k, label]) => `<button class="press" type="button" data-tab="${k}" aria-pressed="${k === ui.sheetTab}">${label}</button>`).join('')}</div>
         <button class="btn primary press" type="button" data-close-sheet>Volver</button></div>
       <div class="sheet-body">${SHEET_RENDERERS[ui.sheetTab]()}</div>`;
@@ -3752,7 +3752,7 @@ a:focus-visible, input:focus-visible, select:focus-visible, summary:focus-visibl
       ['Máximo goleador', scorer('us'), scorer('them')]
     ];
   }
-  const finalTitle = () => { const s = score(); return `${state.us} ${s.us} – ${s.them} ${state.them}`; };
+  const finalTitle = () => { const s = score(); return `${state.us} ${s.us}–${s.them} ${state.them}`; };
   function finalText() {
     const head = [finalTitle(), [state.venue, matchDateText()].filter(Boolean).join(' · ')].filter(Boolean);
     return [...head, '', ...finalRows().map(([label, a, b]) => `${label}: ${state.us} ${a} · ${state.them} ${b}`)].join('\n');
@@ -4336,13 +4336,13 @@ a:focus-visible, input:focus-visible, select:focus-visible, summary:focus-visibl
     if (!legacy) return '';
     const s = legacy.state;
     const sc = score(s.events);
-    return `<div class="legacy glass"><span>En esta tablet hay un partido de la versión anterior: <b>${esc(s.us)} ${sc.us} – ${sc.them} ${esc(s.them)}</b>${s.date ? ` (${esc(dateText(s.date))})` : ''}.</span>
+    return `<div class="legacy glass"><span>En esta tablet hay un partido de la versión anterior: <b>${esc(s.us)} ${sc.us}–${sc.them} ${esc(s.them)}</b>${s.date ? ` (${esc(dateText(s.date))})` : ''}.</span>
       <button class="btn primary press" type="button" data-legacy-import>Importarlo</button>${armedButton('legacy-drop', 'Descartar', 'data-legacy-drop')}</div>`;
   }
   function matchesHtml() {
     const rows = home.matches.map((m) => `<tr>
         <td>${esc(dateText(m.date)) || '–'}</td><td style="text-align:left">${esc(m.them)}</td><td style="text-align:left">${esc(m.venue) || '–'}</td>
-        <td class="score-cell">${m.status === 'setup' ? '–' : `${m.scoreUs} – ${m.scoreThem}`}</td>
+        <td class="score-cell">${m.status === 'setup' ? '–' : `${m.scoreUs}–${m.scoreThem}`}</td>
         <td><span class="status s-${m.status}">${MATCH_STATUS[m.status]}</span>${m.pending ? ' <small class="note">sin subir</small>' : ''}</td>
         <td><div class="row-actions"><button class="btn primary press" type="button" data-open-match="${m.id}">${m.status === 'finished' ? 'Ver' : 'Seguir'}</button>${m.status === 'setup' ? '' : armedButton(`restart-${m.id}`, 'Reiniciar', `data-restart-match="${m.id}" aria-label="Reiniciar el partido contra ${esc(m.them)}"`)}${armedButton(`delete-${m.id}`, 'Borrar', `data-delete-match="${m.id}" aria-label="Borrar el partido contra ${esc(m.them)}"`)}</div></td></tr>`).join('');
     return `<div class="row-actions"><button class="btn go press" type="button" data-new-match>+ Nuevo partido</button><button class="btn press" type="button" data-sample>Ver partido de ejemplo</button></div>
@@ -4730,19 +4730,20 @@ a:focus-visible, input:focus-visible, select:focus-visible, summary:focus-visibl
     const dots = list.filter((e) => e.origin && ![ZONE_P7, ZONE_CONTRA].includes(shotZone(e)))
       .map((e) => `<circle class="zone-dot" cx="${svgNum(e.origin.x)}" cy="${svgNum(e.origin.y)}" r="${ZONE_DOT_R}" fill="${colours[groupOf(e.result)]}" fill-opacity="${ZONE_DOT_OPACITY}"/>`).join('');
     const names = LANES.map((lane, i) => `<text class="court-label" x="${svgNum(((i + 0.5) / LANES.length) * COURT_WIDTH)}" y="${COURT_VIEW_H - LANE_NAME_INSET}" text-anchor="middle">${esc(lane.label)}</text>`).join('');
-    return `<svg viewBox="0 ${ZONE_VIEW_TOP} ${COURT_WIDTH} ${COURT_VIEW_H - ZONE_VIEW_TOP}" role="img"><defs>${masks}</defs>${courtFloorSvg(clip)}
-      <g clip-path="url(#${clip})">${zones.map((z) => z.path).join('')}${dividers}</g>${dots}${zones.map((z) => z.label).join('')}${names}</svg>`;
+    return `<svg viewBox="0 ${ZONE_VIEW_TOP} ${COURT_WIDTH} ${COURT_VIEW_H - ZONE_VIEW_TOP}" role="img"><defs>${masks}</defs>${courtFloorSvg(clip, false)}
+      <g clip-path="url(#${clip})">${zones.map((z) => z.path).join('')}${dividers}</g>${dots}${COURT_DISTANCE_LABELS}${zones.map((z) => z.label).join('')}${names}</svg>`;
   }
 
-  const GOAL_CELL = { w: 108, h: 74, gap: 4, pad: 14, pctDrop: 38, nDrop: 58, corner: 8, frame: 10, tint: 0.3 };
+  const GOAL_CELL = { w: 108, h: 74, gap: 4, pad: 14, pctDrop: 38, nDrop: 58, corner: 8, frame: 10, bar: 4 };
   function goalRateSvg(list, success) {
     const { w, h, gap, pad } = GOAL_CELL;
     const width = GOAL_GRID * w + (GOAL_GRID - 1) * gap + 2 * pad, height = GOAL_GRID * h + (GOAL_GRID - 1) * gap + 2 * pad;
     const half = GOAL_CELL.frame / 2;
     const cells = goalRates(list, success).flatMap((cols, row) => cols.map(({ ok, n }, col) => {
       const x = pad + col * (w + gap), y = pad + row * (h + gap), mid = x + w / 2;
-      const rect = `<rect class="goal-cell" x="${x}" y="${y}" width="${w}" height="${h}" rx="${GOAL_CELL.corner}" fill="${n ? rateColour(ok / n) : 'var(--soft)'}"${n ? ` fill-opacity="${GOAL_CELL.tint}"` : ''}/>`;
-      return n ? `${rect}<text class="goal-pct" x="${mid}" y="${y + GOAL_CELL.pctDrop}" text-anchor="middle">${rateText(ok, n)}</text><text class="goal-n" x="${mid}" y="${y + GOAL_CELL.nDrop}" text-anchor="middle">${ok}/${n}</text>` : rect;
+      const rect = `<rect class="goal-cell" x="${x}" y="${y}" width="${w}" height="${h}" rx="${GOAL_CELL.corner}" fill="${n ? rateColour(ok / n) : 'var(--soft)'}"/>`;
+      const bar = n ? `<rect class="goal-bar" x="${x}" y="${y + GOAL_CELL.corner}" width="${GOAL_CELL.bar}" height="${h - 2 * GOAL_CELL.corner}" fill="${rateColour(ok / n)}"/>` : '';
+      return n ? `${rect}${bar}<text class="goal-pct" x="${mid}" y="${y + GOAL_CELL.pctDrop}" text-anchor="middle">${rateText(ok, n)}</text><text class="goal-n" x="${mid}" y="${y + GOAL_CELL.nDrop}" text-anchor="middle">${ok}/${n}</text>` : rect;
     })).join('');
     return `<svg viewBox="0 0 ${width} ${height}" role="img"><path d="M ${half} ${height} V ${half} H ${width - half} V ${height}" fill="none" stroke="var(--red)" stroke-width="${GOAL_CELL.frame}" stroke-linejoin="round"/>${cells}</svg>`;
   }
@@ -4821,7 +4822,7 @@ a:focus-visible, input:focus-visible, select:focus-visible, summary:focus-visibl
         <span class="last-who"><b>${esc(latest.them)}</b><small>${esc(dateText(latest.date))}${latest.venue ? ` · ${esc(latest.venue)}` : ''}</small></span>
         <strong class="last-score ${resultClass(latest)}">${latest.scoreUs}–${latest.scoreThem}</strong></div>` : '';
     return `<section class="sheet-card season-card"><h3>Temporada</h3>
-      <div class="record"><b>${s.won} – ${s.drawn} – ${s.lost}</b><small>ganados · empatados · perdidos</small></div>
+      <div class="record"><b>${s.won}–${s.drawn}–${s.lost}</b><small>ganados · empatados · perdidos</small></div>
       <div class="form-chips">${form}</div>
       <div class="season-kpis">${tile(s.goalsFor, `goles a favor · ${perMatch} por partido`, ' hot')}${tile(s.goalsAgainst, 'goles en contra')}
         ${tile(pctText(pct(s.shotGoals, s.shots)), `acierto en tiro (${s.shotGoals}/${s.shots})`)}${tile(pctText(pct(s.saves, s.onTarget)), `paradas (${s.saves}/${s.onTarget})`)}

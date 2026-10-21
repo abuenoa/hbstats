@@ -117,11 +117,14 @@ PROBE = """
       return product;
     };
     // SVG text sits on the shapes drawn before it in the same drawing (cells, floors), not only on the page behind the SVG.
-    // Masked shapes are skipped: hit testing ignores masks, so they would count where they are not drawn; text over them carries a halo.
+    // Masked shapes are skipped, because hit testing ignores masks and they would count where they are not drawn. Filled shapes
+    // that are masked or drawn after the text can tint it in ways this cannot compute, so such text is reported as unmeasured.
     const svgBackdrop = (el) => {
       const box = el.getBoundingClientRect();
-      const below = document.elementsFromPoint(box.x + box.width / 2, box.y + box.height / 2)
-        .filter((hit) => hit instanceof SVGGeometryElement && !(hit instanceof SVGLineElement) && !hit.hasAttribute('mask') && hit.ownerSVGElement === el.ownerSVGElement && hit.compareDocumentPosition(el) & Node.DOCUMENT_POSITION_FOLLOWING);
+      const filled = document.elementsFromPoint(box.x + box.width / 2, box.y + box.height / 2)
+        .filter((hit) => hit instanceof SVGGeometryElement && !(hit instanceof SVGLineElement) && hit.ownerSVGElement === el.ownerSVGElement && !/^(none|url)/.test(getComputedStyle(hit).fill));
+      const below = filled.filter((hit) => !hit.hasAttribute('mask') && hit.compareDocumentPosition(el) & Node.DOCUMENT_POSITION_FOLLOWING);
+      const covered = filled.some((hit) => hit.hasAttribute('mask') || hit.compareDocumentPosition(el) & Node.DOCUMENT_POSITION_PRECEDING);
       const base = backdropOf(el.ownerSVGElement);
       const rgba = below.reduceRight((under, shape) => {
         const style = getComputedStyle(shape);
@@ -130,7 +133,7 @@ PROBE = """
         fill[3] = Math.round(fill[3] * Number(style.fillOpacity) * opacityOf(shape));
         return over(fill, under);
       }, base.rgba);
-      return { rgba, image: base.image };
+      return { rgba, image: base.image, covered };
     };
     const contrast = [], unmeasured = [];
     scoped('*').forEach((el) => {
@@ -142,7 +145,8 @@ PROBE = """
       const need = large ? limits.largeTextRatio : limits.textRatio;
       const paint = el instanceof SVGElement ? style.fill : style.color;
       if (el instanceof SVGElement && /^(none|url)/.test(paint)) { unmeasured.push({ text: own.slice(0, 40), why: 'svg fill ' + paint.slice(0, 20) }); return; }
-      const { rgba: back, image } = el instanceof SVGElement ? svgBackdrop(el) : backdropOf(el);
+      const { rgba: back, image, covered } = el instanceof SVGElement ? svgBackdrop(el) : backdropOf(el);
+      if (covered) unmeasured.push({ text: own.slice(0, 40), why: 'under masked or overlaid shapes' });
       if (image) unmeasured.push({ text: own.slice(0, 40), why: 'image backdrop' });
       const ink = rgbaOf(paint);
       ink[3] = Math.round(ink[3] * opacityOf(el));
