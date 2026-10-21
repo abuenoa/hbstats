@@ -885,15 +885,16 @@ span.att-foot { visibility: hidden; }
 .rate-tile.none b, .rate-tile.none span { color: var(--color-text-secondary); }
 .zone-map svg, .goal-chart svg, .radar svg, .evolution svg { display: block; width: 100%; height: auto; }
 .match-table th, .match-table td { padding: var(--space-2) calc(var(--space-1) / 2); }
-.match-table th { letter-spacing: 0; }
-.match-table td:nth-child(2) { white-space: normal; min-width: 48px; }
+.match-table th { letter-spacing: 0; padding-inline: 0; }
+.match-table .row-btn { padding: 0; }
+.match-table td:nth-child(2) { max-width: 0; min-width: 24px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .match-table .res-G, .match-table .res-E, .match-table .res-P { font-weight: 800; }
 .row-link { cursor: pointer; }
 .row-btn { min-height: var(--target); min-width: var(--target); padding: 0 var(--space-1); border: 0; background: none; color: inherit; font: inherit; font-weight: 700; text-align: left; cursor: pointer; }
 .row-btn:focus-visible { outline: var(--focus-ring); outline-offset: -2px; border-radius: var(--radius-sm); }
 .mvp-row { background: linear-gradient(90deg, color-mix(in srgb, var(--gold) 22%, transparent), transparent); }
-.mvp-row td:first-child { position: relative; padding-left: 30px; }
-.mvp-row .crown-face { left: 0; top: 2px; width: 26px; filter: none; }
+.mvp-row td:first-child { position: relative; padding-left: 16px; }
+.mvp-row .crown-face { left: 0; top: 6px; width: 16px; filter: none; }
 .match-head .last-match { margin-top: 0; }
 .res-chip { font: var(--type-caption); font-weight: 800; padding: var(--space-1) var(--space-2); border-radius: var(--radius-sm); }
 .match-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--space-4); align-items: start; }
@@ -1766,13 +1767,19 @@ span.att-foot { visibility: hidden; }
   // ===================== Minutes and +/− (derived from the court log and the event stamps, never stored) =====================
   // Seconds since kick-off at the end of the clock, running time not counted (a half never lasts more than `halfSeconds`).
   const matchEndAbs = (s = state) => (s.clock.period - 1) * CONFIG.halfSeconds + Math.min(s.clock.elapsedMs / 1000, CONFIG.halfSeconds);
-  // Where each of our players is out of play: every 2' window, and for good from a send-off.
+  // Where each of our players is out of play: every 2' window, and for good from a send-off. Overlapping windows (a red card
+  // during a 2', a goalkeeper who stays in the court set) are merged so no second is subtracted twice.
   function awayWindows(s) {
     const away = new Map(), sentOff = sendOffsOf('SANCTION', s.events);
     exclusionsOf('SANCTION', s.events).filter((e) => e.playerId).forEach((e) => {
       const end = sentOff.get(e.playerId) === e ? Infinity : exclusionEnd(e, s.events);
       away.set(e.playerId, [...(away.get(e.playerId) || []), [e.abs, end]]);
     });
+    away.forEach((windows, id) => away.set(id, windows.sort((a, b) => a[0] - b[0]).reduce((merged, [start, end]) => {
+      const last = merged.at(-1);
+      if (last && start <= last[1]) last[1] = Math.max(last[1], end); else merged.push([start, end]);
+      return merged;
+    }, [])));
     return away;
   }
   const overlap = (from, to, [start, end]) => Math.max(0, Math.min(to, end) - Math.max(from, start));
@@ -1786,7 +1793,7 @@ span.att-foot { visibility: hidden; }
       const from = Math.min(entry.abs, end), to = Math.min(i + 1 < s.court.length ? s.court[i + 1].abs : end, end);
       courtSetOf(entry.set, s).forEach((id) => {
         const served = (away.get(id) || []).reduce((sum, window) => sum + overlap(from, to, window), 0);
-        seconds.set(id, (seconds.get(id) || 0) + to - from - served);
+        seconds.set(id, (seconds.get(id) || 0) + Math.max(0, to - from - served));
       });
     });
     return seconds;
@@ -5732,7 +5739,7 @@ span.att-foot { visibility: hidden; }
     ? `<div class="rate-tile" style="--rate:${rateColour(rate.ok / rate.n)}"><b>${rateText(rate.ok, rate.n)}</b><span>${label} · ${rate.ok}/${rate.n}</span></div>`
     : `<div class="rate-tile none"><b>–</b><span>${label}</span></div>`);
   // Minutes of the season, only from the matches that kept a court log (none: no sentence).
-  const minutesSentence = (season) => (season.rows.some((r) => r.seconds != null) ? [unit(Math.floor(season.totals.seconds / SECONDS_PER_MINUTE), 'minuto en pista', 'minutos en pista')] : []);
+  const minutesSentence = (season) => (season.rows.some((r) => r.seconds != null) ? [`${unit(Math.floor(season.totals.seconds / SECONDS_PER_MINUTE), 'minuto en pista', 'minutos en pista')} en partidos con registro`] : []);
   // What differs between a field player's card and a goalkeeper's; `best` is the team best of the player's kind.
   function fieldCard(season, best) {
     const t = season.totals, shots = season.rows.flatMap((r) => r.shotsList), rates = zoneRates(shots, isGoal, anyShot);
@@ -5785,7 +5792,7 @@ span.att-foot { visibility: hidden; }
     const best = teamBest(home.season, home.roster);
     const keeper = player.pos === 'POR';
     const card = keeper ? keeperCard(season, best.keeper) : fieldCard(season, best.field);
-    const rows = season.rows.map((r) => `<tr class="row-link${r.mvp ? ' mvp-row' : ''}" data-player-match="${r.id}"><td>${r.mvp ? crownSvg('crown-face') : ''}<button class="row-btn press" type="button" data-player-match="${r.id}">${esc(shortDateText(r.date))}</button></td><td>${esc(r.them)}</td><td class="${resultClass(r)}">${r.scoreUs}–${r.scoreThem}</td>${card.cells(r)}</tr>`).join('');
+    const rows = season.rows.map((r) => `<tr class="row-link${r.mvp ? ' mvp-row' : ''}" data-player-match="${r.id}"><td>${r.mvp ? crownSvg('crown-face') : ''}<button class="row-btn press" type="button" data-player-match="${r.id}">${esc(shortDateText(r.date))}</button></td><td title="${esc(r.them)}">${esc(r.them)}</td><td class="${resultClass(r)}">${r.scoreUs}–${r.scoreThem}</td>${card.cells(r)}</tr>`).join('');
     const mvp = season.mvps ? `<div class="mvp-tile">${crownSvg()}<b>${season.mvps}</b> <span>MVP del partido · ${season.mvps} de ${season.rows.length} partidos</span></div>` : '';
     const body = `<div class="sentences">${card.sentences.map((x) => `<p>${x}</p>`).join('')}</div>
       <div class="tiles"><div class="tile ${card.lead.cls}"><b>${card.lead.figure}</b><span>${card.lead.label}${card.lead.leads ? ' · el mejor del equipo' : ''}</span></div>

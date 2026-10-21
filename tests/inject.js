@@ -723,6 +723,26 @@
     const third = minutesOnCourt(minutesMatch({ events: [twoMin('a', 100), twoMin('a', 500), twoMin('a', 900)] }));
     if (third.get('a') !== 900 - 2 * CONFIG.exclusionSeconds) throw new Error('third 2′ ' + third.get('a'));
   });
+  T('minutes: a red card during a 2′ is subtracted once and minutes never go negative', () => {
+    const during = minutesOnCourt(minutesMatch({ events: [twoMin('a', 1000), twoMin('a', 1050, 'D')] }));
+    if (during.get('a') !== 1000 || during.get('b') !== CONFIG.halfSeconds) throw new Error('red in a 2′ ' + during.get('a'));
+    const keeper = minutesOnCourt(minutesMatch({ events: [twoMin('g', 100), twoMin('g', 130, 'D')] }));
+    if (keeper.get('g') !== 100) throw new Error('keeper ' + keeper.get('g'));
+    const clamped = minutesOnCourt(minutesMatch({ events: [{ id: 'bad', abs: 0, kind: 'SANCTION', playerId: 'a', card: '2M' }, { id: 'end', abs: 0, kind: 'EXCLUSION_END', sanctionId: 'bad' }, twoMin('a', 0, 'D')] }));
+    if (clamped.get('a') < 0) throw new Error('negative ' + clamped.get('a'));
+  });
+  T('minutes: a played match with a swap, a 2′ and half-time adds up', withCourtMatch(() => {
+    const half = CONFIG.halfSeconds;
+    setPhase('ATK'); state.autoPhase = false; atSecond(100);
+    const inP = benchFieldPlayer(), outId = Object.keys(lineup())[0], served = Object.keys(lineup()).find((id) => id !== outId);
+    substituteFromBench(inP.id, outId); commit();
+    atSecond(400); addSanction(served, '2M');
+    atSecond(half - 30); commit(); startPeriod(2);
+    atSecond(half + 270); commit();
+    const mins = minutesOnCourt(), end = half + 270;
+    const expected = { [outId]: 100, [inP.id]: end - 30 - 100, [served]: end - 30 - CONFIG.exclusionSeconds, [state.gkId]: end - 30 };
+    Object.entries(expected).forEach(([id, sec]) => { if (mins.get(id) !== sec) throw new Error(`${id}: ${mins.get(id)} instead of ${sec}`); });
+  }));
   T('minutes: half-time and an early-ended first half are not counted', () => {
     const half = CONFIG.halfSeconds;
     const early = minutesOnCourt(minutesMatch({ clock: { period: 2, elapsedMs: 600 * 1000, runningSince: null }, court: [{ abs: 0, set: 0 }, { abs: 1500, set: null }, { abs: half, set: 0 }] }));
@@ -1269,8 +1289,10 @@
       const keep = { roster: home.roster, season: home.season };
       const overflow = (where) => { const wide = document.documentElement.scrollWidth - innerWidth; if (wide > 0) throw new Error(`${where} overflows by ${wide}px`); };
       try {
-        const matches = [cardMatch({ mvpId: 'ca' }), seasonRow('cm2', { players: [cardField, cardKeeper], date: '2026-09-01', them: 'Un rival con un nombre largo' })];
+        const matches = [cardMatch({ mvpId: 'ca' }), seasonRow('cm2', { players: [cardField, cardKeeper], date: '2026-09-01', them: 'Un rival con un nombre largo' }), seasonRow('cm3', { players: [cardField, cardKeeper], date: '2026-09-02', them: 'Atlético Bormujos' }), seasonRow('cm4', { players: [cardField, cardKeeper], date: '2026-09-03', them: 'BM Dos Hermanas' })];
         openCard('ca', matches); overflow('field card');
+        const fieldWrap = document.querySelector('.match-table').parentElement;
+        if (fieldWrap.scrollWidth > fieldWrap.clientWidth) throw new Error(`field table scrolls sideways by ${fieldWrap.scrollWidth - fieldWrap.clientWidth}px`);
         showHomeView('team'); overflow('team page');
         openCard('cg', matches); overflow('goalkeeper card');
         const wrap = document.querySelector('.match-table').parentElement;
