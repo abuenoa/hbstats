@@ -1053,7 +1053,7 @@
   const SUMMARY_KPI_LABELS = ['Goles', '% tiro', 'Fallos 6 m', 'Fallos 9 m', 'Pérdidas', 'Recuperaciones', '% paradas'];
   const onSummary = (over, fn) => () => {
     const snap = snapshot();
-    try { Object.assign(state, over); Object.assign(ui, { sheetMode: 'sheet', sheetTab: 'summary' }); renderSheet(); $('sheet').hidden = false; fn(); } finally { restore(snap); ui.sheetTab = 'stats'; }
+    try { Object.assign(state, over); Object.assign(ui, { sheetMode: 'sheet', sheetTab: 'summary' }); renderSheet(); $('sheet').hidden = false; fn(); } finally { restore(snap); ui.sheetTab = 'summary'; }
   };
   const statTiles = (root = $('sheet')) => [...root.querySelectorAll('.stat-tile')];
   const tileValue = (tiles, label) => tiles.find((t) => t.querySelector('span').textContent === label).querySelector('strong').textContent;
@@ -1118,6 +1118,19 @@
     } finally { restore(snap); }
   });
   }));
+
+  T('final: rating rows span the card and the actions stay in reach', onFinal(playedFew(), () => {
+    const row = ratingRows().find((r) => r.querySelector('details')), wide = (el) => el.getBoundingClientRect().width;
+    if (!row || Math.abs(wide(row.querySelector('details')) - wide(row)) > 1) throw new Error('the row breakdown must span the row');
+    if ([...$('final').querySelectorAll('button.primary')].map((b) => b.textContent).join() !== 'Compartir MVP') throw new Error('one primary');
+    if (!$('final').querySelector('.final-actions [data-final-sheet]') || !$('final').querySelector('.final-actions [data-final-close]')) throw new Error('sticky footer');
+    const close = $('final').querySelector('[data-final-close]').getBoundingClientRect();
+    if (close.bottom > window.innerHeight) throw new Error('Cerrar below the fold: ' + close.bottom);
+  }));
+  T('halftime: «2ª parte» is inside the viewport', () => {
+    const snap = snapshot();
+    try { openHalftime(); const go = $('final').querySelector('.final-actions [data-second-half]'); if (!go || go.getBoundingClientRect().bottom > window.innerHeight) throw new Error('below the fold'); } finally { restore(snap); }
+  });
 
   // ---- Drill-down: the per-match drawing helpers work over any saved state (M0c) ----
   // Runs buildPdf('players') with the drawing primitives replaced by recorders, so the player pages can be compared as data.

@@ -558,6 +558,8 @@ button.rex-chip { border: 0; cursor: pointer; position: relative; }
 /* KPI tiles on the left; the share card (final) or the failed shots and turnovers (half-time) beside them */
 .final-hero { display: grid; grid-template-columns: minmax(0, 1fr) minmax(220px, 280px); gap: var(--space-4); align-items: start; }
 .final-side { display: grid; gap: var(--space-4); }
+/* The way out of the screen stays in reach while the card scrolls under it */
+.final-actions { position: sticky; bottom: 0; z-index: 1; margin: 0 calc(-1 * var(--space-5)) calc(-1 * var(--space-5)); padding: var(--space-3) var(--space-5); background: var(--surface); border-top: 1px solid var(--line); border-radius: 0 0 var(--radius-xl) var(--radius-xl); }
 .top-turnovers ul { gap: var(--space-2); }
 .top-turnovers li { justify-content: flex-start; align-items: center; }
 .top-turnovers li span { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
@@ -587,19 +589,21 @@ button.rex-chip { border: 0; cursor: pointer; position: relative; }
 .ratings { display: grid; gap: var(--space-2); }
 .rating-list { margin: 0; padding: 0; list-style: none; }
 .rating-row { --face-disc: 40px; border-bottom: 1px solid var(--line); }
-.rating-line { display: flex; align-items: center; gap: var(--space-3); min-height: 52px; padding: var(--space-1) 0; }
+.ratings .rating-row { display: block; }
+.ratings .rating-row:nth-child(even) { background: var(--soft); }
+.rating-line { display: grid; grid-template-columns: var(--face-disc) minmax(0, 1fr) repeat(3, 7ch) 4.5ch var(--space-4); align-items: center; column-gap: var(--space-3); min-height: 52px; padding: var(--space-1) var(--space-2); }
 .rating-line .disc { flex: none; width: var(--face-disc); height: var(--face-disc); font-size: 16px; }
-.rating-line .rating-chip { min-width: 3.5ch; }
+.rating-line .rating-chip { min-width: 0; }
 .rating-who { flex: 1; min-width: 0; display: grid; overflow-wrap: anywhere; }
 .rating-line::after { content: ""; flex: none; width: var(--space-4); text-align: center; color: var(--muted); }
 .ratings > .btn { justify-self: start; min-height: var(--target); }
-.rating-kpi { display: grid; justify-items: end; min-width: 5ch; font-variant-numeric: tabular-nums; }
+.rating-kpi { display: grid; justify-items: end; font-variant-numeric: tabular-nums; }
 .rating-kpi small { font: var(--type-caption); color: var(--muted); }
 .rating-more > summary { list-style: none; cursor: pointer; }
 .rating-more > summary::-webkit-details-marker { display: none; }
 .rating-more > summary::after { content: "▾"; }
 .rating-more[open] > summary::after { content: "▴"; }
-.rating-more ul { margin: 0 0 var(--space-2); padding-left: calc(var(--face-disc) + var(--space-3)); font: var(--type-caption); }
+.rating-more ul { margin: 0 0 var(--space-2); padding-left: calc(var(--face-disc) + var(--space-3) + var(--space-2)); font: var(--type-caption); }
 .rating-more li b { font-variant-numeric: tabular-nums; }
 .crown-face { position: absolute; left: -6px; top: -22px; width: 38px; height: auto; transform: rotate(-34deg); pointer-events: none; filter: drop-shadow(0 3px 4px rgba(0, 0, 0, .5)); }
 /* «Resumen» of the Hoja and the half-time cards: label, value and a note per tile */
@@ -621,6 +625,8 @@ button.rex-chip { border: 0; cursor: pointer; position: relative; }
 .player-card .disc { flex: none; width: 40px; height: 40px; font-size: 16px; }
 .player-card .figures { display: flex; justify-content: space-between; gap: var(--space-2); }
 .player-card .rating-kpi { justify-items: start; }
+.sheet-card .keypoints { gap: var(--space-2); }
+.stat-tile:last-child:nth-child(4n+3) { grid-column: span 2; }
 .final-mail { display: grid; gap: var(--space-1); font: var(--type-caption); font-weight: 700; color: var(--muted); text-transform: uppercase; letter-spacing: .06em; }
 .sheet-head { display: flex; align-items: center; gap: var(--space-3); flex-wrap: wrap; margin-bottom: var(--space-3); }
 .sheet-head h2 { margin: 0; font: var(--type-title); text-wrap: balance; }
@@ -2035,8 +2041,8 @@ span.att-foot { visibility: hidden; }
     const kpi = (value, label) => `<span class="rating-kpi"><b>${value}</b><small>${label}</small></span>`;
     const isMvp = player.id === mvp.id, provisional = isMvp && mvp.source === MVP_SOURCE.rating;
     const face = `<span class="mvp-face-static">${discHtml(player)}${isMvp ? crownSvg('crown-face') : ''}</span>`;
-    const line = `${face}<span class="rating-who"><b>${esc(player.name)}</b>${provisional ? '<small class="mvp-tag">MVP provisional</small>' : ''}</span>${ratingChipHtml(rating.value)}
-      ${kpi(minutesText(seconds ? seconds.get(player.id) || 0 : null), 'Min')}${kpi(`${made}/${tried}`, keeper ? 'Paradas' : 'Goles')}${kpi(pctText(pct(made, tried)), '%')}`;
+    const line = `${face}<span class="rating-who"><b>${esc(player.name)}</b>${provisional ? '<small class="mvp-tag">MVP provisional</small>' : ''}</span>
+      ${kpi(minutesText(seconds ? seconds.get(player.id) || 0 : null), 'Min')}${kpi(`${made}/${tried}`, keeper ? 'Paradas' : 'Goles')}${kpi(pctText(pct(made, tried)), '%')}${ratingChipHtml(rating.value)}`;
     const items = ratingItemsHtml(rating, keeper);
     return `<li class="rating-row" data-rating-player="${esc(player.id)}">${items ? `<details class="rating-more"><summary class="rating-line">${line}</summary><ul>${items}</ul></details>` : `<div class="rating-line">${line}</div>`}</li>`;
   }
@@ -3684,7 +3690,7 @@ span.att-foot { visibility: hidden; }
       statTileHtml('Goles', f.goals, plural(f.shots, 'lanzamiento', 'lanzamientos')),
       statTileHtml('% tiro', pctText(f.shooting), `${f.goals}/${f.shots}`, rate(f.shooting, 'shooting')),
       failedShotTileHtml('Fallos 6 m', f.miss6), failedShotTileHtml('Fallos 9 m', f.miss9),
-      statTileHtml('Pérdidas', f.turnovers, `de ${plural(possessions, 'posesión', 'posesiones')}`, rate(pct(f.turnovers, possessions), 'turnovers')),
+      statTileHtml('Pérdidas', f.turnovers, `${pctText(pct(f.turnovers, possessions))} · de ${plural(possessions, 'posesión', 'posesiones')}`, rate(pct(f.turnovers, possessions), 'turnovers')),
       statTileHtml('Recuperaciones', f.recoveries, ''),
       statTileHtml('% paradas', pctText(f.savePct), `${f.saves}/${f.onTarget}`, rate(f.savePct, 'gk'))
     ].join('');
@@ -3702,6 +3708,7 @@ span.att-foot { visibility: hidden; }
     const onGoal = (list) => list.filter(onTarget).length;
     const players = state.players.slice().sort(byPosition).map((p) => summaryPlayerHtml(p, ratings)).join('');
     return `<div class="stat-tiles">${summaryTilesHtml(matchFigures())}</div>
+      <p class="note">Color según los objetivos del club; los recuentos sin objetivo no se colorean.</p>
       <div class="summary-cols">
         <div class="summary-col">${summaryChartHtml('Nuestros tiros · % de gol por zona', 'zone-map', ours.length, () => zoneMapSvg(ours, isGoal, CARD_ZONE_COLOURS.field, anyShot))}
           ${summaryChartHtml('Dónde marcamos', 'goal-chart', onGoal(ours), () => goalRateSvg(ours, isGoal))}</div>
@@ -3714,7 +3721,7 @@ span.att-foot { visibility: hidden; }
   function openPdfPick(playerId) {
     ui.sheetTab = 'reports';
     renderSheet();
-    document.querySelector(`#sheet [data-pdf="${playerId}"]`)?.scrollIntoView({ block: 'center' });
+    document.querySelector(`#sheet [data-pdf="${CSS.escape(playerId)}"]`)?.scrollIntoView({ block: 'center' });
   }
   const SHEET_RENDERERS = { summary: sheetSummaryHtml, stats: sheetStatsHtml, player: sheetPlayerHtml, analysis: sheetAnalysisHtml, gk: sheetGkHtml, acta: sheetActaHtml, reports: sheetReportsHtml };
   function renderSheet() {
@@ -4634,7 +4641,7 @@ span.att-foot { visibility: hidden; }
       <div class="final-hero">${kpiTilesHtml()}${halftimeSideHtml()}</div>
       <div class="halftime-points">${block('Defensa: corregir y vigilar', k.defence)}${block('Ataque: corregir y aprovechar', k.attack)}</div>
       ${summaryDetailHtml()}
-      <div class="row-actions">
+      <div class="row-actions final-actions">
         ${state.clock.period === 1 ? '<button class="btn go press" type="button" data-second-half>▶ 2ª parte</button>' : ''}
         <button class="btn press" type="button" data-final-sheet>Ver Hoja</button>
         <button class="btn press" type="button" data-final-close>Cerrar</button>
@@ -4673,13 +4680,15 @@ span.att-foot { visibility: hidden; }
       <section class="sheet-card final-reports"><h3>Informes</h3>
         <label class="final-mail">Enviar los PDF a<input class="in" id="final-email" type="email" inputmode="email" autocomplete="email" placeholder="entrenador@club.es, otro@club.es" value="${esc(email || '')}"></label>
         <div class="row-actions">
-          <button class="btn primary press" type="button" data-final-mail>Enviar por correo</button>
+          <button class="btn press" type="button" data-final-mail>Enviar por correo</button>
           <button class="btn press" type="button" data-final-share>Compartir PDF</button>
-          <button class="btn press" type="button" data-final-sheet>Ver Hoja</button>
-          <button class="btn press" type="button" data-final-close>Cerrar</button>
         </div>
         <p class="note" id="final-status" aria-live="polite">Correo: descarga los PDF y abre el correo con el resumen; adjúntalos desde Descargas. Compartir: envía los PDF ya adjuntos (Gmail, WhatsApp, Drive…).</p>
       </section>
+      <div class="row-actions final-actions">
+        <button class="btn press" type="button" data-final-sheet>Ver Hoja</button>
+        <button class="btn press" type="button" data-final-close>Cerrar</button>
+      </div>
     </div>`;
     $('final').hidden = false;
     ui.mvpCardReady = renderMvpPreview();
