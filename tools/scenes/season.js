@@ -51,6 +51,20 @@ const SEASON_CALENDAR_PLAYED = [2, 3];
 const SEASON_CALENDAR_WEEKS_PLAYED = 2;
 const SEASON_WEEK_DAYS = 7;
 
+// Joined after the four matches, so he is on the roster but was never called up: «No convocado» on a match day.
+const SEASON_RESERVE = { num: 21, name: 'Marcos Gil', pos: 'LAT' };
+// Eight sessions: seven trainings, the first today, and the day of the last match. Marks are [status, note?] by sample id.
+const SEASON_TRAININGS = [
+  { daysAgo: 0, marks: { p17: ['F'], p5: ['J', 'Cita médica'], p10: ['L', 'Esguince de tobillo'] } },
+  { daysAgo: 2, marks: { p5: ['F'] } },
+  { daysAgo: 4, marks: { p10: ['L', 'Esguince de tobillo'], p19: ['J', 'Examen'] } },
+  { daysAgo: 7, marks: { p10: ['L', 'Esguince de tobillo'], p3: ['F'] } },
+  { daysAgo: 9, marks: {} },
+  { daysAgo: 11, marks: { p8: ['J', 'Trabajo'], p17: ['F'] } },
+  { daysAgo: 14, marks: { p12: ['F'] } }
+];
+const SEASON_MATCH_DAY_INDEX = SEASON_MATCHES.length - 1;
+
 // The sample state with the squad's ids swapped for the saved players' ids, so every figure lands on a roster player.
 function seasonMatchState(spec, roster, sampleIds, mvp) {
   const base = sampleState();
@@ -77,6 +91,14 @@ async function seedCalendar(teamId, matchIds) {
   for (const [i, matchIndex] of SEASON_CALENDAR_PLAYED.entries()) await backend.updateFixture(saved[i].id, { matchId: matchIds[matchIndex] });
 }
 
+async function seedSessions(teamId, ids, matchIds) {
+  const marked = (spec) => Object.entries(spec).reduce((session, [sampleId, [code, note]]) => setMark(session, ids.get(sampleId), code, note), { marks: {} });
+  const today = Date.parse(`${todayIso()}T00:00:00Z`);
+  const trainings = SEASON_TRAININGS.map(({ daysAgo, marks }) => ({ date: isoOfUtc(today - daysAgo * DAY_MS), kind: SESSION_KINDS.TRAINING, matchId: null, ...marked(marks) }));
+  const matchDay = { date: SEASON_MATCHES[SEASON_MATCH_DAY_INDEX].date, kind: SESSION_KINDS.MATCH, matchId: matchIds[SEASON_MATCH_DAY_INDEX], marks: {} };
+  for (const session of [...trainings, matchDay]) await backend.saveSession(teamId, { id: newUuid(), note: '', ...session });
+}
+
 async function seedSeason() {
   backend = localBackend();
   const created = await backend.createTeam({ ...DEFAULT_TEAM, ...SEASON_TEAM, id: undefined });
@@ -95,8 +117,11 @@ async function seedSeason() {
     storeLocalMatch(id, matchState, false);
     await backend.saveMatch(created.id, id, matchState);
   }
+  await backend.savePlayer(created.id, { ...SEASON_RESERVE, photo: seasonFace(SEASON_FACES[0]) });
   await seedCalendar(created.id, matchIds);
+  const ids = new Map(SEASON_SQUAD_IDS.map((sampleId, i) => [sampleId, roster[i].id]));
+  await seedSessions(created.id, ids, matchIds);
   home.teams = await backend.listTeams();
   await selectTeam(created);
-  return new Map(SEASON_SQUAD_IDS.map((sampleId, i) => [sampleId, roster[i].id]));
+  return ids;
 }

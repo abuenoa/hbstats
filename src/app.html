@@ -780,6 +780,22 @@ a:focus-visible, input:focus-visible, select:focus-visible, summary:focus-visibl
 .face .disc, .last-match .disc { width: var(--face-disc); height: var(--face-disc); font-size: 22px; }
 .face .disc { box-shadow: 0 0 0 3px var(--pos); }
 .squad .row-actions { margin-top: var(--space-4); }
+/* Attendance: the faces with a status badge that carries a letter and a word, never colour alone */
+.att-bar { display: flex; align-items: end; gap: var(--space-4); flex-wrap: wrap; margin-bottom: var(--space-3); }
+.att-count { margin: 0; font: var(--type-heading); }
+.att .faces { grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); }
+.att-cell { display: grid; align-content: start; gap: var(--space-1); min-width: 0; }
+.att-cell .face { height: 100%; }
+.att-cell .face:disabled { cursor: default; color: var(--fg); opacity: 1; }
+.face span.att-badge { display: inline-flex; align-items: center; justify-content: center; gap: var(--space-1); padding: var(--space-1) var(--space-2); border-radius: var(--radius-full); border: 1px solid currentColor; white-space: normal; text-align: center; }
+.att-badge b { font-weight: 800; }
+.att-P { color: var(--color-success-text); }
+.att-F { color: var(--color-danger-text); }
+.att-J { color: var(--color-warning-text); }
+.att-L { color: var(--color-text); }
+.att-NC { color: var(--color-text-secondary); }
+.att-note { font: var(--type-caption); color: var(--color-text-secondary); overflow-wrap: anywhere; text-align: center; }
+.att-note-in { width: 100%; min-width: 0; }
 /* Team page: «Próximo partido» and «Calendario» use the full width */
 .next-card, .calendar-card { grid-column: 1 / -1; }
 .next-body { display: flex; align-items: center; gap: var(--space-4); flex-wrap: wrap; }
@@ -4033,7 +4049,7 @@ a:focus-visible, input:focus-visible, select:focus-visible, summary:focus-visibl
   let currentMatchId = null;
   let syncTimer = null;
   let attendanceSyncTimer = null;
-  const home = { view: 'loading', user: null, teams: [], roster: [], matches: [], season: null, templates: [], template: null, squad: new Set(), leaderMetric: 'goals', playerId: null, playerMatchId: null, playerEdit: false, playerDraft: null, offline: false, error: '', draft: null, crestDraft: undefined, armed: null, passwordChange: false, seasonOffline: false, sessions: null, fixtures: null, teamMatches: [], fixtureEdit: null, squadFixture: null };
+  const home = { view: 'loading', user: null, teams: [], roster: [], matches: [], season: null, templates: [], template: null, squad: new Set(), leaderMetric: 'goals', playerId: null, playerMatchId: null, playerEdit: false, playerDraft: null, offline: false, error: '', draft: null, crestDraft: undefined, armed: null, passwordChange: false, seasonOffline: false, sessions: null, fixtures: null, teamMatches: [], fixtureEdit: null, squadFixture: null, attendanceDate: null, attendanceKind: null, attendanceNoteFor: null };
 
   // ---- Device storage ----
   function readJson(key) {
@@ -4403,6 +4419,7 @@ a:focus-visible, input:focus-visible, select:focus-visible, summary:focus-visibl
           writeJson(key, stored);
           const uploaded = stored.find((x) => sameSession(x, pending));
           if (team.id === teamId && home.sessions) home.sessions = home.sessions.map(({ pending: wasPending, ...x }) => (!sameSession(x, pending) ? { ...x, ...(wasPending && { pending: true }) } : { ...x, id: saved.id, ...(uploaded.dirty && { pending: true }) }));
+          if (home.view === 'attendance') homeStatus(attendanceStatusText());
         } catch (err) {
           console.warn(`Attendance of ${pending.date} not uploaded yet: ${cloudErrorText(err)}`);
         }
@@ -4505,7 +4522,7 @@ a:focus-visible, input:focus-visible, select:focus-visible, summary:focus-visibl
 
   // ---- Home screen ----
   const homeStatus = (text) => sheetStatus('home-status', text);
-  const statusHtml = () => '<p class="note home-status" id="home-status" role="status" aria-live="polite"></p>';
+  const statusHtml = (text = '') => `<p class="note home-status" id="home-status" role="status" aria-live="polite">${text}</p>`;
   // Destructive buttons ask once more: the first tap arms them ("¿Seguro?"), the second acts.
   const armedButton = (id, label, attrs) => `<button class="btn press${home.armed === id ? ' armed' : ''}" type="button" ${attrs}>${home.armed === id ? '⚠ ¿Seguro?' : label}</button>`;
   function confirmTap(id) {
@@ -4556,7 +4573,7 @@ a:focus-visible, input:focus-visible, select:focus-visible, summary:focus-visibl
     </form>`;
   }
   function homeHeadHtml() {
-    const tab = (view, label) => `<button class="press" type="button" data-home-view="${view}" aria-pressed="${home.view === view || (view === 'matches' && home.view === 'squad') || (view === 'team' && ['team-edit', 'player', 'player-match'].includes(home.view))}">${label}</button>`;
+    const tab = (view, label) => `<button class="press" type="button" data-home-view="${view}" aria-pressed="${home.view === view || (view === 'matches' && home.view === 'squad') || (view === 'team' && ['team-edit', 'player', 'player-match', 'attendance'].includes(home.view))}">${label}</button>`;
     return `<header class="home-head glass">
       <button class="btn press" type="button" data-home-view="profile">‹ Perfil</button>
       <img class="crest home-crest" src="${esc(crestSrc(team))}" alt="">
@@ -4642,7 +4659,7 @@ a:focus-visible, input:focus-visible, select:focus-visible, summary:focus-visibl
         ${problem ? `<span class="note">${problem}</span>` : ''}</div>
       <div class="squad-grid">${home.roster.slice().sort(byPosition).map(chip).join('')}</div>`;
   }
-  const HOME_VIEWS = { team: teamPageHtml, player: playerPageHtml, 'player-match': playerMatchHtml, 'team-edit': teamEditHtml, matches: matchesHtml, squad: squadHtml };
+  const HOME_VIEWS = { team: teamPageHtml, player: playerPageHtml, 'player-match': playerMatchHtml, 'team-edit': teamEditHtml, matches: matchesHtml, squad: squadHtml, attendance: attendanceHtml };
 
   // ---- Profile: the first screen after signing in (teams, rival templates, account) ----
   const profileHeadHtml = () => `<header class="home-head glass"><span class="app-mark" aria-hidden="true">HB</span>
@@ -5280,14 +5297,17 @@ a:focus-visible, input:focus-visible, select:focus-visible, summary:focus-visibl
     const body = !matches || !matches.length ? '' : list ? `<ol class="leader-list">${list}</ol>` : '<p class="note">Nadie con datos en esta categoría.</p>';
     return `<section class="sheet-card leaders"><h3>Líderes</h3><div class="chips">${chips}</div>${body}</section>`;
   }
-  function squadCardHtml() {
-    const groups = SQUAD_GROUP_ORDER.map((pos) => {
+  // The roster by position group, each player drawn by `faceOf`.
+  function positionGroupsHtml(faceOf) {
+    return SQUAD_GROUP_ORDER.map((pos) => {
       const players = home.roster.filter((p) => (POSITION_GROUPS[p.pos] ? p.pos : 'CEN') === pos).sort((a, b) => a.num - b.num);
-      const faces = players.map((p) => `<button class="face press" type="button" data-player="${esc(p.id)}" style="--pos:${posOf(p).color}" aria-label="#${p.num} ${esc(p.name)}">${discHtml(p)}<span>${esc(p.name)}</span></button>`).join('');
-      return players.length ? `<h4 style="--pos:${pos === 'POR' ? 'var(--fg)' : CONFIG.positions[pos].color}">${POSITION_GROUPS[pos]}</h4><div class="faces">${faces}</div>` : '';
+      return players.length ? `<h4 style="--pos:${pos === 'POR' ? 'var(--fg)' : CONFIG.positions[pos].color}">${POSITION_GROUPS[pos]}</h4><div class="faces">${players.map(faceOf).join('')}</div>` : '';
     }).join('');
+  }
+  function squadCardHtml() {
+    const groups = positionGroupsHtml((p) => `<button class="face press" type="button" data-player="${esc(p.id)}" style="--pos:${posOf(p).color}" aria-label="#${p.num} ${esc(p.name)}">${discHtml(p)}<span>${esc(p.name)}</span></button>`);
     return `<section class="sheet-card squad"><h3>Plantilla · ${home.roster.length}</h3>${groups || '<p class="note">Todavía no hay jugadores.</p>'}
-      <div class="row-actions"><button class="btn press" type="button" data-home-view="team-edit">Editar equipo</button></div></section>`;
+      <div class="row-actions"><button class="btn press" type="button" data-home-view="team-edit">Editar equipo</button><button class="btn press" type="button" data-home-view="attendance">Asistencia</button></div></section>`;
   }
   const homeAwayBadge = (f) => `<span class="venue-badge">${f.home ? 'Casa' : 'Fuera'}</span>`;
   function fixtureEditorHtml(f) {
@@ -5370,6 +5390,109 @@ a:focus-visible, input:focus-visible, select:focus-visible, summary:focus-visibl
   async function showTeamPage() {
     showHomeView('team');
     await ensureSeason();
+  }
+
+  // ---- Attendance: today's session by faces; a tap cycles the status ----
+  const ATTENDANCE_CALLED = { letter: 'C', label: 'Convocado' };
+  const SESSION_KIND_LABELS = { [SESSION_KINDS.TRAINING]: 'Entreno', [SESSION_KINDS.MATCH]: 'Partido' };
+  const ATTENDANCE_COUNT_WORDS = { P: ['presente', 'presentes'], F: ['falta', 'faltas'], J: ['justificada', 'justificadas'], L: ['lesionado', 'lesionados'] };
+  const ATTENDANCE_SAVED_TEXT = 'Guardado en la tablet', ATTENDANCE_UPLOADED_TEXT = 'Subido';
+  const attendanceMatch = (date) => (home.season || []).find((m) => m.date === date) || null;
+  // A match day: a season match, or a fixture kicking off, on that date.
+  const isMatchDay = (date) => Boolean(attendanceMatch(date)) || home.teamMatches.some((m) => m.date === date)
+    || (home.fixtures || []).some((f) => f.kickoff && localIso(new Date(f.kickoff)) === date);
+  const kindOn = (date) => (isMatchDay(date) ? SESSION_KINDS.MATCH : SESSION_KINDS.TRAINING);
+  const storedSession = () => (home.sessions || []).find((x) => x.date === home.attendanceDate && x.kind === home.attendanceKind) || null;
+  function currentSession() {
+    const { attendanceDate: date, attendanceKind: kind } = home;
+    const match = kind === SESSION_KINDS.MATCH ? attendanceMatch(date) : null;
+    return storedSession() || { id: newUuid(), date, kind, matchId: match ? match.id : null, marks: {}, note: '' };
+  }
+  function attendanceStatusText() {
+    const stored = storedSession();
+    return !stored ? '' : stored.pending ? ATTENDANCE_SAVED_TEXT : ATTENDANCE_UPLOADED_TEXT;
+  }
+  function attendanceCountText(statuses) {
+    return Object.entries(ATTENDANCE_COUNT_WORDS)
+      .map(([code, [one, many]]) => [code, statuses.filter((x) => x === code).length, one, many])
+      .filter(([code, n]) => n > 0 || code === 'P').map(([, n, one, many]) => plural(n, one, many)).join(' · ');
+  }
+  function attendanceFaceHtml(p, session, match) {
+    const code = sessionStatus(session, p.id, match);
+    const locked = session.kind === SESSION_KINDS.MATCH && code === 'P';
+    const { letter, label } = locked ? ATTENDANCE_CALLED : { letter: code, label: ATTENDANCE[code] };
+    const mark = session.marks[p.id], marked = MARK_CODES.includes(code);
+    const note = home.attendanceNoteFor === p.id
+      ? `<input class="in att-note-in" type="text" maxlength="${CONFIG.attendance.noteMax}" data-att-note-input="${esc(p.id)}" value="${esc((mark && mark.n) || '')}" aria-label="Nota de ${esc(p.name)}">`
+      : mark && mark.n ? `<small class="att-note">${esc(mark.n)}</small>` : '';
+    return `<div class="att-cell"><button class="face press" type="button" data-att="${esc(p.id)}" style="--pos:${posOf(p).color}"${locked ? ' disabled' : ''} aria-label="#${p.num} ${esc(p.name)}: ${label}">${discHtml(p)}<span>${esc(p.name)}</span>
+        <span class="att-badge att-${locked ? 'P' : code}"><b>${letter}</b> ${label}</span></button>
+      ${marked ? `<button class="btn press" type="button" data-att-note="${esc(p.id)}" aria-label="Nota de ${esc(p.name)}">Nota</button>` : ''}${note}</div>`;
+  }
+  function attendanceHtml() {
+    const session = currentSession(), match = session.kind === SESSION_KINDS.MATCH ? attendanceMatch(session.date) : null;
+    const chips = Object.entries(SESSION_KIND_LABELS).map(([kind, label]) => `<button class="chip press" type="button" data-att-kind="${kind}" aria-pressed="${home.attendanceKind === kind}">${label}</button>`).join('');
+    const counted = attendanceCountText(home.roster.map((p) => sessionStatus(session, p.id, match)));
+    const remove = storedSession() ? `<div class="row-actions">${armedButton('att-delete', 'Borrar sesión', 'data-att-delete')}</div>` : '';
+    return `${home.offline ? '<p class="note">Sin conexión: ves la copia guardada en esta tablet.</p>' : ''}
+      <section class="sheet-card squad att"><h3>Asistencia</h3>
+        <div class="att-bar"><label class="field">Fecha<input class="in" type="date" id="att-date" value="${esc(home.attendanceDate)}"></label>
+          <div class="chips" role="group" aria-label="Tipo de sesión">${chips}</div></div>
+        <p class="att-count">${counted}</p>${statusHtml(attendanceStatusText())}
+        ${positionGroupsHtml((p) => attendanceFaceHtml(p, session, match)) || '<p class="note">Todavía no hay jugadores.</p>'}${remove}</section>`;
+  }
+  async function showAttendance() {
+    Object.assign(home, { attendanceDate: todayIso(), attendanceNoteFor: null });
+    home.attendanceKind = kindOn(home.attendanceDate);
+    showHomeView('attendance');
+    try { home.offline = (await loadAttendance()).offline; }
+    catch (err) { home.sessions = withLocalSessions([]); home.offline = true; console.warn(`Attendance not available: ${cloudErrorText(err)}`); }
+    await ensureSeason();
+    if (home.view !== 'attendance') return;
+    home.attendanceKind = kindOn(home.attendanceDate);
+    renderHome();
+  }
+  function openAttendanceDay(date, kind) {
+    Object.assign(home, { attendanceDate: ISO_DATE.test(date) ? date : todayIso(), attendanceNoteFor: null });
+    home.attendanceKind = kind || kindOn(home.attendanceDate);
+    renderHome();
+  }
+  // Every change is kept on the tablet first and uploaded after a pause.
+  function saveAttendance(session) {
+    storeLocalSession(session, true);
+    home.sessions = [...(home.sessions || []).filter((x) => !sameSession(x, session)), { ...session, pending: true }].sort(byNewestSession);
+    scheduleAttendanceSync();
+  }
+  function tapAttendance(playerId) {
+    const session = currentSession(), onMatchDay = session.kind === SESSION_KINDS.MATCH;
+    const match = onMatchDay ? attendanceMatch(session.date) : null;
+    home.attendanceNoteFor = null;
+    saveAttendance(setMark(session, playerId, nextStatus(sessionStatus(session, playerId, match), onMatchDay)));
+    renderHome();
+  }
+  function saveAttendanceNote(playerId, text) {
+    const session = currentSession(), mark = session.marks[playerId];
+    if (!mark) return;
+    saveAttendance(setMark(session, playerId, mark.s, text.trim()));
+    homeStatus(attendanceStatusText());
+  }
+  // The device copy and the cached list go with the cloud row; a session not uploaded yet cannot be deleted from here.
+  async function deleteAttendanceSession() {
+    try {
+      await syncAttendance();
+      const session = storedSession();
+      if (!session) return;
+      if (session.pending) { homeStatus('La sesión aún no está subida: conéctate para borrarla.'); return; }
+      await backend.deleteSession(session.id);
+      const cacheKey = `${CACHE_KEY_PREFIX}attendance:${team.id}`;
+      writeJson(attendanceKey(team.id), localSessions().filter((x) => !sameSession(x, session)));
+      writeJson(cacheKey, (readJson(cacheKey) || []).filter((x) => !sameSession(x, session)));
+      home.sessions = home.sessions.filter((x) => !sameSession(x, session));
+    } catch (err) {
+      homeStatus(`No se pudo borrar: ${cloudErrorText(err)}.`);
+      return;
+    }
+    renderHome();
   }
   // A season built from this tablet's copies is replaced by the full one as soon as the connection is back.
   window.addEventListener('online', () => {
@@ -5937,11 +6060,16 @@ a:focus-visible, input:focus-visible, select:focus-visible, summary:focus-visibl
     if (b.dataset.teamDel) { if (confirmTap(`retire-${b.dataset.teamDel}`)) retireTeamPlayer(rosterPlayer(b.dataset.teamDel)); return; }
     if (b.hasAttribute('data-delete-team')) { if (confirmTap('delete-team')) deleteTeam(); return; }
     if (b.dataset.templateDel) { if (confirmTap(`template-${b.dataset.templateDel}`)) deleteTemplate(b.dataset.templateDel); return; }
+    if (b.hasAttribute('data-att-delete')) { if (confirmTap('att-delete')) deleteAttendanceSession(); return; }
     if (b.hasAttribute('data-legacy-drop')) { if (confirmTap('legacy-drop')) { const l = legacyMatch(); if (l) removeKey(l.key); renderHome(); } return; }
     if (armedBefore) { home.armed = null; renderHome(); }
     if (b.hasAttribute('data-retry')) { startHome(); return; }
     if (b.hasAttribute('data-forgot')) { sendPasswordReset(); return; }
     if (b.hasAttribute('data-sign-out')) { signOut(); return; }
+    if (b.dataset.att) { tapAttendance(b.dataset.att); return; }
+    if (b.dataset.attKind) { openAttendanceDay(home.attendanceDate, b.dataset.attKind); return; }
+    if (b.dataset.attNote) { home.attendanceNoteFor = b.dataset.attNote; renderHome(); document.querySelector(`[data-att-note-input="${b.dataset.attNote}"]`).focus(); return; }
+    if (b.dataset.homeView === 'attendance') { showAttendance(); return; }
     if (b.dataset.homeView === 'matches') { showMatches(); return; }
     if (b.dataset.homeView === 'team') { home.crestDraft = undefined; showTeamPage(); return; }
     if (b.dataset.player) { showPlayer(b.dataset.player); return; }
@@ -5989,6 +6117,8 @@ a:focus-visible, input:focus-visible, select:focus-visible, summary:focus-visibl
   $('home').addEventListener('change', (ev) => {
     const el = ev.target;
     if (el.id === 'tpl-name') { home.template.name = el.value; return; }
+    if (el.id === 'att-date') { openAttendanceDay(el.value); return; }
+    if (el.dataset.attNoteInput) { saveAttendanceNote(el.dataset.attNoteInput, el.value); return; }
     if (el.dataset.tplNum) { editDraftRival(draftRival(el.dataset.tplNum), { num: Number(el.value) }); return; }
     if (el.dataset.tplName) { editDraftRival(draftRival(el.dataset.tplName), { name: el.value.trim().slice(0, MAX_NAME_LENGTH) }); return; }
     if (el.dataset.teamNum) { saveTeamPlayer(rosterPlayer(el.dataset.teamNum), { num: Number(el.value) }); return; }

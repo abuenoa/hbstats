@@ -67,6 +67,8 @@ MATRIX_SCENES = {
     "matches": "await seedSeason(); await showMatches();",
     "team-edit": "await seedSeason(); showHomeView('team-edit');",
     "profile": "await seedSeason(); await showProfile();",
+    "attendance": "await seedSeason(); await showAttendance();",
+    "attendance-match": "await seedSeason(); await showAttendance(); openAttendanceDay('2026-10-17');",
     "sheet-stats": SHEET_STATS,
     "sheet-player": f"{SHEET_PLAYER} ui.sheetPlayer = '{TOP_SCORER_SAMPLE_ID}'; renderSheet();",
     "sheet-keeper": f"{SHEET_PLAYER} ui.sheetPlayer = '{SAMPLE_KEEPER_ID}'; renderSheet();",
