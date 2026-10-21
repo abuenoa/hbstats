@@ -2049,7 +2049,7 @@ span.att-foot { visibility: hidden; }
     { key: 'blue', label: 'Azul', weight: (w) => w.blue }
   ];
   // What the coach can tune, in the order of the tuning view. Keys are `CONFIG.rating.weights` names, with two knobs that
-  // keep his fixed relations: `oneOnOne` alone moves PROV7, BEATEN and PEN7C (+, −, −), and `teamFaultKeeper` is a share (0–1)
+  // keep his fixed relations: `oneOnOne` alone moves PROV7, BEATEN and PEN7C (+, −, −), and `teamFaultKeeperShare` is a share (0–1)
   // of `teamFaultField`, so the goalkeeper's team fault can never weigh more than the field player's.
   const RATING_KNOB_STEP = 0.05;
   const RATING_KNOB_DECIMALS = 2;
@@ -2066,13 +2066,14 @@ span.att-foot { visibility: hidden; }
     { key: 'recovery', label: 'Recuperación', group: 'Acciones', min: 0, max: 1, step: RATING_KNOB_STEP },
     { key: 'block', label: 'Bloqueo', group: 'Acciones', min: 0, max: 1, step: RATING_KNOB_STEP },
     { key: 'teamFaultField', label: 'Falta de contundencia: jugador de campo', group: 'Equipo', min: -0.5, max: 0, step: RATING_KNOB_STEP },
-    { key: 'teamFaultKeeper', label: 'Falta de contundencia: portero (parte de la de campo)', group: 'Equipo', min: 0, max: 1, step: RATING_KNOB_STEP },
+    { key: 'teamFaultKeeperShare', label: 'Falta de contundencia: portero (parte de la de campo)', group: 'Equipo', min: 0, max: 1, step: RATING_KNOB_STEP },
     { key: 'yellow', label: 'Amarilla', group: 'Sanciones', min: -1, max: 0, step: RATING_KNOB_STEP },
     { key: 'twoMin', label: '2 minutos', group: 'Sanciones', min: -1.5, max: 0, step: RATING_KNOB_STEP },
     { key: 'red', label: 'Roja', group: 'Sanciones', min: -3, max: 0, step: RATING_KNOB_STEP },
     { key: 'blue', label: 'Azul', group: 'Sanciones', min: -2, max: 0, step: RATING_KNOB_STEP }
   ];
-  const RATING_KNOB_DEFAULTS = { ...CONFIG.rating.weights, teamFaultKeeper: CONFIG.rating.weights.teamFaultKeeper / CONFIG.rating.weights.teamFaultField };
+  const { teamFaultKeeper: DEFAULT_KEEPER_FAULT, ...DEFAULT_FIELD_WEIGHTS } = CONFIG.rating.weights;
+  const RATING_KNOB_DEFAULTS = { ...DEFAULT_FIELD_WEIGHTS, teamFaultKeeperShare: DEFAULT_KEEPER_FAULT / CONFIG.rating.weights.teamFaultField };
   const knobOf = (key) => RATING_KNOBS.find((k) => k.key === key);
   const roundToKnobStep = (knob, v) => clamp(roundHalfUp(roundHalfUp(v / knob.step, 0) * knob.step, RATING_KNOB_DECIMALS), knob.min, knob.max);
   // The knob values of a team: the defaults with its saved ones laid over them. A saved value that is unknown, not a
@@ -2092,7 +2093,7 @@ span.att-foot { visibility: hidden; }
   }
   // The knobs as `CONFIG.rating.weights`: the keeper's team fault is its share of the field player's.
   const weightsFromKnobs = (knobs) => Object.fromEntries(Object.keys(CONFIG.rating.weights).map((key) => [key,
-    key === 'teamFaultKeeper' ? knobs.teamFaultKeeper * knobs.teamFaultField : knobs[key]]));
+    key === 'teamFaultKeeper' ? knobs.teamFaultKeeperShare * knobs.teamFaultField : knobs[key]]));
   const ratingWeights = (t = team) => weightsFromKnobs(ratingKnobValues(t));
   // The share of shots from a zone that go in, from the middle of the zone's reference range.
   const expectedGoal = (zone) => {
@@ -6787,11 +6788,21 @@ span.att-foot { visibility: hidden; }
       <td class="who"><span class="who-cell">${discHtml(r.player)}${esc(r.player.name)}</span></td><td data-col="current">${tuneChipHtml(r.current)}</td>
       <td data-col="next">${tuneChipHtml(r.next)}</td><td data-col="delta">${tuneDeltaHtml(r.delta)}</td><td data-col="last">${tuneChipHtml(r.last)}</td></tr>`).join('');
   }
+  // The weight boxes are text, so they read the way the coach writes: a comma, a real minus, two decimals.
+  const MINUS_SIGNS = /[\u2212\u2013\u2014]/g;
+  const KNOB_NUMBER = /^-?(\d+([.,]\d*)?|[.,]\d+)$/;
+  const knobText = (value) => `${value < 0 ? '−' : ''}${Math.abs(value).toFixed(RATING_KNOB_DECIMALS).replace('.', ',')}`;
+  const parseKnobText = (text) => {
+    const clean = text.trim().replace(MINUS_SIGNS, '-');
+    return KNOB_NUMBER.test(clean) ? Number(clean.replace(',', '.')) : NaN;
+  };
+  const KNOB_NUMBER_HINT = 'Escribe un número, por ejemplo −0,15.';
+  const setKnobControl = (el, value) => { el.value = el.type === 'range' ? value : knobText(value); };
   function tuneKnobHtml(knob) {
-    const value = home.weightsDraft[knob.key], limits = `min="${knob.min}" max="${knob.max}" step="${knob.step}" value="${value}" data-knob="${knob.key}"`;
+    const value = home.weightsDraft[knob.key];
     return `<div class="tune-knob"><span class="tune-name" id="tune-name-${knob.key}">${esc(knob.label)}</span>
-      <input class="tune-range" type="range" ${limits} aria-labelledby="tune-name-${knob.key}">
-      <input class="in tune-num" type="number" inputmode="decimal" ${limits} aria-label="${esc(knob.label)}: valor"></div>`;
+      <input class="tune-range" type="range" min="${knob.min}" max="${knob.max}" step="${knob.step}" value="${value}" data-knob="${knob.key}" aria-labelledby="tune-name-${knob.key}">
+      <input class="in tune-num" type="text" inputmode="decimal" autocomplete="off" value="${knobText(value)}" data-knob="${knob.key}" aria-label="${esc(knob.label)}: valor"></div>`;
   }
   function tuneGroupsHtml() {
     return [...new Set(RATING_KNOBS.map((k) => k.group))].map((group) => `<fieldset class="tune-group"><legend>${group}</legend>
@@ -6814,10 +6825,10 @@ span.att-foot { visibility: hidden; }
   }
   // The inputs keep their focus: only the preview rows, the state line and the sibling control change.
   function tuneKnob(input) {
-    const knob = knobOf(input.dataset.knob), typed = input.valueAsNumber;
+    const knob = knobOf(input.dataset.knob), typed = input.type === 'range' ? input.valueAsNumber : parseKnobText(input.value);
     if (!Number.isFinite(typed)) return;
     home.weightsDraft[knob.key] = roundToKnobStep(knob, typed);
-    document.querySelectorAll(`[data-knob="${knob.key}"]`).forEach((el) => { if (el !== input) el.value = home.weightsDraft[knob.key]; });
+    document.querySelectorAll(`[data-knob="${knob.key}"]`).forEach((el) => { if (el !== input) setKnobControl(el, home.weightsDraft[knob.key]); });
     if ($('tune-rows')) $('tune-rows').innerHTML = tuneRowsHtml();
     $('tune-state').textContent = tuneStateText();
     $('tune-save').disabled = !tuneDirty();
@@ -7613,7 +7624,7 @@ span.att-foot { visibility: hidden; }
   $('home').addEventListener('change', (ev) => {
     const el = ev.target;
     if (el.id === 'tpl-name') { home.template.name = el.value; return; }
-    if (el.dataset.knob) { el.value = home.weightsDraft[el.dataset.knob]; return; }
+    if (el.dataset.knob) { homeStatus(Number.isFinite(parseKnobText(el.value)) || el.type === 'range' ? '' : KNOB_NUMBER_HINT); setKnobControl(el, home.weightsDraft[el.dataset.knob]); return; }
     if (el.id === 'att-date') { openAttendanceDay(el.value); return; }
     if (el.dataset.tplNum) { editDraftRival(draftRival(el.dataset.tplNum), { num: Number(el.value) }); return; }
     if (el.dataset.tplName) { editDraftRival(draftRival(el.dataset.tplName), { name: el.value.trim().slice(0, MAX_NAME_LENGTH) }); return; }

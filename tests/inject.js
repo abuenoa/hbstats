@@ -1872,7 +1872,7 @@
       }
       if (ratingWeights({}) === CONFIG.rating.weights || JSON.stringify(CONFIG.rating.weights) !== before) throw new Error('the defaults must be copied, never edited');
       const keys = new Set(RATING_KNOBS.map((k) => k.key));
-      if (!keys.has('oneOnOne') || !keys.has('teamFaultKeeper') || keys.size !== Object.keys(CONFIG.rating.weights).length) throw new Error('one knob per weight: ' + [...keys]);
+      if (!keys.has('oneOnOne') || !keys.has('teamFaultKeeperShare') || keys.size !== Object.keys(CONFIG.rating.weights).length) throw new Error('one knob per weight: ' + [...keys]);
       if (!RATING_KNOBS.every((k) => k.label && k.group && k.min < k.max && k.step > 0)) throw new Error('knob fields');
       if (ratingOf([rTurnover('a', 'Pase')]).raw !== withTeamWeights(undefined, () => ratingOf([rTurnover('a', 'Pase')]).raw)) throw new Error('team without weights rates as before');
     });
@@ -1889,12 +1889,12 @@
       if (garbage.length !== 1) throw new Error('a non-object warns once: ' + garbage.length);
     });
     T('weights: keeper team fault stays below the field one', () => {
-      const keeperShare = knobOf('teamFaultKeeper');
+      const keeperShare = knobOf('teamFaultKeeperShare');
       if (keeperShare.min !== 0 || keeperShare.max !== 1) throw new Error('a share between 0 and 1');
       warned(() => {
-        const hard = ratingWeights({ ratingWeights: { teamFaultField: -0.2, teamFaultKeeper: 5 } });
+        const hard = ratingWeights({ ratingWeights: { teamFaultField: -0.2, teamFaultKeeperShare: 5 } });
         if (hard.teamFaultKeeper !== -0.2 || Math.abs(hard.teamFaultKeeper) > Math.abs(hard.teamFaultField)) throw new Error('share capped at 1: ' + hard.teamFaultKeeper);
-        const none = ratingWeights({ ratingWeights: { teamFaultField: -0.2, teamFaultKeeper: -3 } });
+        const none = ratingWeights({ ratingWeights: { teamFaultField: -0.2, teamFaultKeeperShare: -3 } });
         if (none.teamFaultKeeper !== 0) throw new Error('share floored at 0: ' + none.teamFaultKeeper);
       });
       const half = ratingWeights({ ratingWeights: { teamFaultField: -0.4 } });
@@ -1993,7 +1993,7 @@
         if (home.weightsDraft.turnover !== -0.9 || home.weightsDraft.red !== -2) throw new Error('opens on the saved weights');
         document.querySelector('[data-tune="reset"]').click();
         if (JSON.stringify(home.weightsDraft) !== JSON.stringify(RATING_KNOB_DEFAULTS)) throw new Error('draft ' + JSON.stringify(home.weightsDraft));
-        const shown = RATING_KNOBS.filter((k) => ['range', 'number'].every((type) => Number(document.querySelector(`input[type="${type}"][data-knob="${k.key}"]`).value) !== RATING_KNOB_DEFAULTS[k.key]));
+        const shown = RATING_KNOBS.filter((k) => ['range', 'text'].every((type) => { const el = document.querySelector(`input[type="${type}"][data-knob="${k.key}"]`); return (type === 'range' ? Number(el.value) : parseKnobText(el.value)) !== RATING_KNOB_DEFAULTS[k.key]; }));
         if (shown.length) throw new Error('controls not reset: ' + shown.map((k) => k.key));
         if (team.ratingWeights.turnover !== -0.9) throw new Error('reset alone saves nothing');
         document.querySelector('[data-tune="save"]').click();
@@ -2012,13 +2012,36 @@
         if (document.activeElement !== number || document.querySelector('input.tune-num[data-knob="shot"]') !== number) throw new Error('the number input was replaced or lost focus');
         if (Number(range.value) !== 1.5 || home.weightsDraft.shot !== 1.5) throw new Error('range follows the number: ' + range.value);
         range.focus(); tuneInput(range, 0.4);
-        if (document.activeElement !== range || Number(number.value) !== 0.4) throw new Error('number follows the range: ' + number.value);
+        if (document.activeElement !== range || parseKnobText(number.value) !== 0.4) throw new Error('number follows the range: ' + number.value);
         tuneInput(document.querySelector('input.tune-num[data-knob="turnover"]'), -1.2);
         if ($('tune-rows').textContent === rowsBefore) throw new Error('the preview did not move');
         number.focus(); number.value = ''; number.dispatchEvent(new Event('input', { bubbles: true }));
         if (home.weightsDraft.shot !== 0.4 || document.activeElement !== number) throw new Error('a half-typed number changes nothing');
         number.value = '99'; number.dispatchEvent(new Event('input', { bubbles: true })); number.dispatchEvent(new Event('change', { bubbles: true }));
-        if (home.weightsDraft.shot !== knobOf('shot').max || Number(number.value) !== knobOf('shot').max) throw new Error('typed values clamp to the knob: ' + number.value);
+        if (home.weightsDraft.shot !== knobOf('shot').max || parseKnobText(number.value) !== knobOf('shot').max) throw new Error('typed values clamp to the knob: ' + number.value);
+      });
+    });
+    T('tune: parseKnobText and knobText speak Spanish', () => {
+      const cases = [['-0,15', -0.15], ['−0,15', -0.15], ['-0.15', -0.15], ['1,10', 1.1], [' 1.5 ', 1.5], ['0', 0], [',5', 0.5], ['2', 2], ['–0,3', -0.3]];
+      for (const [text, want] of cases) if (parseKnobText(text) !== want) throw new Error(`${text} -> ${parseKnobText(text)}`);
+      for (const bad of ['', '-', '−', 'abc', '1,2,3', '--1', '0,1x', '1e3']) if (!Number.isNaN(parseKnobText(bad))) throw new Error('accepted ' + bad);
+      if (knobText(-0.15) !== '−0,15' || knobText(1.1) !== '1,10' || knobText(0) !== '0,00' || knobText(-1) !== '−1,00') throw new Error([knobText(-0.15), knobText(1.1), knobText(0), knobText(-1)].join('|'));
+    });
+    await TA('tune: weight boxes show a comma and a real minus, and bad input reverts with a hint', async () => {
+      await withTuneTeam(async () => {
+        await showRatingTune();
+        const box = (key) => document.querySelector(`input.tune-num[data-knob="${key}"]`);
+        if (box('turnover').value !== '−0,40' || box('shot').value !== '0,80' || box('turnover').type !== 'text' || box('turnover').inputMode !== 'decimal') throw new Error('format ' + box('turnover').value + ' ' + box('shot').value);
+        box('turnover').value = '−0,6'; box('turnover').dispatchEvent(new Event('input', { bubbles: true })); box('turnover').dispatchEvent(new Event('change', { bubbles: true }));
+        if (home.weightsDraft.turnover !== -0.6 || box('turnover').value !== '−0,60' || Number(document.querySelector('input.tune-range[data-knob="turnover"]').value) !== -0.6) throw new Error('typed minus and comma: ' + box('turnover').value);
+        box('turnover').value = 'mucho'; box('turnover').dispatchEvent(new Event('input', { bubbles: true }));
+        if (home.weightsDraft.turnover !== -0.6) throw new Error('garbage must not change the weight');
+        box('turnover').dispatchEvent(new Event('change', { bubbles: true }));
+        if (box('turnover').value !== '−0,60' || !$('home-status').textContent.includes('Escribe un número')) throw new Error('revert + hint: ' + box('turnover').value + ' / ' + $('home-status').textContent);
+        box('turnover').value = '-0,5'; box('turnover').dispatchEvent(new Event('input', { bubbles: true })); box('turnover').dispatchEvent(new Event('change', { bubbles: true }));
+        if ($('home-status').textContent !== '' || box('turnover').value !== '−0,50') throw new Error('a valid entry clears the hint');
+        const keeperBox = box('teamFaultKeeperShare');
+        if (!keeperBox || keeperBox.value !== '0,50') throw new Error('keeper share knob: ' + (keeperBox && keeperBox.value));
       });
     });
     await TA('tune: leaving with unsaved changes asks first, and names are escaped', async () => {

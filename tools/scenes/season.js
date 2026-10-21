@@ -90,8 +90,10 @@ function seasonMatchState(spec, roster, sampleIds, mvp) {
 // `SEASON_SUBSTITUTION_ABS` (and back after half-time). Every shot and team fault is stamped with the set on court then.
 function withSeasonCourt(matchState, roster) {
   const start = [...Object.keys(matchState.lineups.ATK), matchState.gkId].sort();
+  // Both picks follow the roster's order (the ids are random), so every run seeds the same substitution.
+  const leaving = roster.find((p) => p.pos !== 'POR' && start.includes(p.id));
   const bench = roster.find((p) => p.pos !== 'POR' && !start.includes(p.id));
-  const swapped = [...start.filter((id) => id !== start[0]), bench.id].sort();
+  const swapped = [...start.filter((id) => id !== leaving.id), bench.id].sort();
   const setAt = (abs) => (abs >= SEASON_SUBSTITUTION_ABS && abs < CONFIG.halfSeconds ? 1 : 0);
   const stamped = (e) => (['SHOT', 'RIVAL_SHOT'].includes(e.kind) || (e.kind === 'ACTION' && e.playerId == null) ? { ...e, on: setAt(e.abs) } : e);
   return {
