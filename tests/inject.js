@@ -800,6 +800,124 @@
     if (plusMinus(served).has('c') || plusMinus(served).get('a') !== 1) throw new Error('the stamp, not the log, says who was on court');
   });
 
+  // ---- Rating (M2): a pure function of the events and the minutes ----
+  const rateMatch = (events, over) => ({ players: [], events, gkId: 'g', courtSets: [['a', 'b', 'g']], ...over });
+  const rShot = (playerId, zone, result, i) => ({ id: 's' + playerId + zone + result + i, abs: i, kind: 'SHOT', playerId, zone, result });
+  const rShots = (playerId, zone, goals, misses) => [...Array(goals).keys()].map((i) => rShot(playerId, zone, 'GOL', i))
+    .concat([...Array(misses).keys()].map((i) => rShot(playerId, zone, 'FUERA', 100 + i)));
+  const rAct = (playerId, action, i = 0) => ({ id: 'a' + playerId + action + i, abs: i, kind: 'ACTION', playerId, action });
+  const rMany = (n, make) => [...Array(n).keys()].map(make);
+  const rTurnover = (playerId, subtype, i = 0) => ({ id: 't' + playerId + subtype + i, abs: i, kind: 'TURNOVER', playerId, subtype });
+  const rGkShots = (zone, saves, goals) => [...Array(saves).keys()].map((i) => ({ id: 'rs' + zone + i, abs: i, kind: 'RIVAL_SHOT', gkId: 'g', zone, result: 'PARADA' }))
+    .concat([...Array(goals).keys()].map((i) => ({ id: 'rg' + zone + i, abs: 100 + i, kind: 'RIVAL_SHOT', gkId: 'g', zone, result: 'GOL' })));
+  const fieldA = { id: 'a', pos: 'EXT' }, fieldB = { id: 'b', pos: 'LAT' }, keeperG = { id: 'g', pos: 'POR' };
+  const ratingOf = (events, player = fieldA, opts) => playerRating(rateMatch(events), player, opts);
+  const nearTo = (a, b, tol = 0.001) => Math.abs(a - b) <= tol;
+  T('rating: a player who does nothing gets the base', () => {
+    const r = ratingOf([]);
+    if (r.value !== CONFIG.rating.base || !r.rated || r.confidence !== 1) throw new Error(JSON.stringify(r));
+  });
+  T('rating: shot value follows the zone expectation', () => {
+    const six = ratingOf(rShots('a', '6M', 0, 1)).raw, nine = ratingOf(rShots('a', '9M', 0, 1)).raw;
+    if (!(six < nine && nine < CONFIG.rating.base)) throw new Error(`6 m ${six} 9 m ${nine}`);
+    if (!nearTo(expectedGoal('6M'), 0.625) || !nearTo(expectedGoal('9M'), 0.4) || !nearTo(expectedGoal('CONTRA'), 0.725) || !nearTo(expectedGoal('7M'), 0.675)) throw new Error('expectedGoal');
+    if (ratingOf([rShot('a', '6M', 'BLOCADO', 1)]).raw !== six) throw new Error('a blocked shot is a miss');
+  });
+  T('rating: turnovers cost a lot, rule turnovers and faults a little', () => {
+    const raw = (events) => ratingOf(events).raw - CONFIG.rating.base;
+    const ball = raw([rTurnover('a', 'Pase')]), rule = raw([rTurnover('a', 'Pasos')]), forced = raw([rTurnover('a', 'Falta ataque')]);
+    const fault = raw([rAct('a', 'GOLPE')]), tactical = raw([rAct('a', 'LATE')]);
+    if (!nearTo(ball, -0.4) || !nearTo(forced, -0.3) || !nearTo(rule, -0.15) || !nearTo(fault, -0.15) || !nearTo(tactical, -0.15)) throw new Error([ball, forced, rule, fault, tactical].join());
+    if (!(ball < rule && Math.abs(ball) > 2 * Math.abs(fault))) throw new Error('turnover not much heavier');
+    const f = ratingFeatures(rateMatch([rTurnover('a', 'Pase'), rTurnover('a', 'Bote'), rTurnover('a', 'Pasos'), rTurnover('a', 'Bloqueado'), rTurnover('b', 'Pase')]), fieldA);
+    if (f.turnovers !== 2 || f.ruleTurnovers !== 1 || f.forcedTurnovers !== 1) throw new Error(JSON.stringify(f));
+  });
+  T('rating: provoking a 7 m adds what being beaten subtracts, and 7 m committed subtracts the same', () => {
+    const w = CONFIG.rating.weights, delta = (action) => ratingOf([rAct('a', action)]).raw - CONFIG.rating.base;
+    if (!nearTo(delta('PROV7'), w.oneOnOne) || !nearTo(delta('BEATEN'), -w.oneOnOne) || !nearTo(delta('PEN7C'), -w.oneOnOne)) throw new Error([delta('PROV7'), delta('BEATEN'), delta('PEN7C')].join());
+    const odd = { ...w, oneOnOne: 0.5 };
+    if (!nearTo(ratingOf([rAct('a', 'PROV7')], fieldA, { weights: odd }).raw, CONFIG.rating.base + 0.5)) throw new Error('relation not tied to one weight');
+    const f = ratingFeatures(rateMatch([rAct('a', 'BEATEN'), rAct('a', 'BADEXIT')]), fieldA);
+    if (f.beaten !== 1 || f.tactical !== 1) throw new Error('BEATEN is not a tactical fault: ' + JSON.stringify(f));
+  });
+  T('rating: a team fault costs everyone on court, the goalkeeper less', () => {
+    const fault = { id: 'noatk', abs: 5, kind: 'ACTION', playerId: null, action: 'NOATK', on: 0 };
+    const s = rateMatch([fault], { courtSets: [['a', 'g']] });
+    const field = playerRating(s, fieldA), keeper = playerRating(s, keeperG), bench = playerRating(s, fieldB);
+    if (!nearTo(field.raw, 6.4) || !nearTo(keeper.raw, 6.45) || bench.raw !== CONFIG.rating.base) throw new Error([field.raw, keeper.raw, bench.raw].join());
+    if (!(CONFIG.rating.weights.teamFaultKeeper > CONFIG.rating.weights.teamFaultField)) throw new Error('keeper not lighter');
+  });
+  T('rating: a legacy NOATK with a player counts for that player only', () => {
+    const s = rateMatch([{ id: 'old', abs: 5, kind: 'ACTION', playerId: 'a', action: 'NOATK' }, { id: 'none', abs: 6, kind: 'ACTION', playerId: null, action: 'NOATK' }]);
+    if (ratingFeatures(s, fieldA).teamFaults !== 1 || ratingFeatures(s, fieldB).teamFaults !== 0 || ratingFeatures(s, keeperG).teamFaults !== 0) throw new Error('legacy');
+  });
+  T('rating: goalkeeper save value', () => {
+    const events = [...rGkShots('9M', 4, 6), { id: 'off', abs: 9, kind: 'RIVAL_SHOT', gkId: 'g', zone: '9M', result: 'FUERA' }, { id: 'other', abs: 9, kind: 'RIVAL_SHOT', gkId: 'x', zone: '9M', result: 'PARADA' }];
+    const f = ratingFeatures(rateMatch(events), keeperG);
+    if (!nearTo(f.saveValue, 4 - 10 * 0.4)) throw new Error('save value ' + f.saveValue);
+    const contra = ratingFeatures(rateMatch([{ id: 'c', abs: 1, kind: 'RIVAL_SHOT', gkId: 'g', zone: '9M', contra: true, result: 'PARADA' }]), keeperG);
+    if (!nearTo(contra.saveValue, 1 - CONFIG.rating.expectedSave.CONTRA)) throw new Error('contra ' + contra.saveValue);
+  });
+  T('rating: under the minimum minutes is S/C; a short spell is pulled to the base', () => {
+    const events = rShots('a', '6M', 3, 0);
+    const few = ratingOf(events, fieldA, { seconds: 9 * 60 }), edge = ratingOf(events, fieldA, { seconds: 10 * 60 });
+    if (few.rated || few.value !== null || ratingText(few) !== 'S/C' || !edge.rated) throw new Error(JSON.stringify([few, edge]));
+    const full = ratingOf(events, fieldA, { seconds: 60 * 60 }).raw, short = edge.raw;
+    if (!(CONFIG.rating.base < short && short < full)) throw new Error(`short ${short} full ${full}`);
+  });
+  T('rating: confidence follows the square root of the match share', () => {
+    const at = (min) => ratingConfidence(min * 60);
+    if (at(60) !== 1 || !nearTo(at(30), 0.707) || !nearTo(at(20), 0.577) || at(75) !== 1 || ratingConfidence(null) !== 1) throw new Error([at(60), at(30), at(20), at(75), ratingConfidence(null)].join());
+  });
+  T('rating: clamped to 3–10 and rounded to one decimal', () => {
+    const none = { keeper: false };
+    const huge = ratingFromFeatures({ ...ratingFeatures(rateMatch([]), fieldA), shotValue: 100 }, none), awful = ratingFromFeatures({ ...ratingFeatures(rateMatch([]), fieldA), turnovers: 100 }, none);
+    if (huge.value !== 10 || awful.value !== 3 || huge.raw <= 10 || awful.raw >= 3) throw new Error(JSON.stringify([huge, awful]));
+    const half = ratingFromFeatures({ ...ratingFeatures(rateMatch([]), fieldA), assists: 1 }, { ...none, weights: { ...CONFIG.rating.weights, assist: 0.25 } });
+    if (half.value !== 6.8) throw new Error('6.75 rounds half up to 6.8, got ' + half.value);
+    const tenth = ratingOf([rAct('a', 'ASIST'), rTurnover('a', 'Pase')], fieldA, { weights: { ...CONFIG.rating.weights, assist: 0.13 } }).value;
+    if (tenth !== 6.2) throw new Error('one decimal, got ' + tenth);
+  });
+  T("rating: the design's three sanity examples", () => {
+    const wing = ratingOf([...rShots('a', '6M', 6, 1), rAct('a', 'ASIST'), rTurnover('a', 'Pase')]).value;
+    const back = ratingOf([...rShots('a', '9M', 2, 7), rTurnover('a', 'Pase', 1), rTurnover('a', 'Pase', 2)]).value;
+    if (wing !== 7.7 || back !== 4.4) throw new Error(`wing ${wing} back ${back}`);
+    // 34 on target (20 from 6 m, 12 from 9 m, 2 counter-attacks), 14 saved: expected 5 + 4.8 + 0.4 = 10.2
+    const faced = [...rGkShots('6M', 8, 12), ...rGkShots('9M', 5, 7), ...rGkShots('CONTRA', 1, 1)].map((e, i) => ({ ...e, id: 'k' + i }));
+    const keeper = playerRating(rateMatch(faced), keeperG);
+    if (!nearTo(keeper.features.saveValue, 3.8) || keeper.value !== 7.8) throw new Error(`keeper ${keeper.features.saveValue} ${keeper.value}`);
+  });
+  T("rating: the design's minutes examples", () => {
+    const back = [...rShots('a', '9M', 5, 4), rAct('a', 'ASIST', 1), rAct('a', 'ASIST', 2), rTurnover('a', 'Pase')];
+    const wing = [...rShots('b', '6M', 7, 1), rAct('b', 'RECUP')];
+    const fullBack = ratingOf(back, fieldA, { seconds: 3600 }).value, halfWing = ratingOf(wing, fieldB, { seconds: 1800 }).value;
+    if (fullBack !== 7.7 || halfWing !== 7.8 || !(halfWing > fullBack)) throw new Error(`back ${fullBack} wing ${halfWing}`);
+    const over = [60, 30, 20].map((min) => ratingOf(wing, fieldB, { seconds: min * 60 }).value);
+    if (over.join() !== '8.4,7.8,7.6') throw new Error(over.join());
+  });
+  T('rating: rating a match changes no statistic', () => {
+    const snap = snapshot(), before = JSON.stringify([liveStats(), score(), state.history]);
+    const ratings = matchRatings(state);
+    if (JSON.stringify([liveStats(), score(), state.history]) !== before) throw new Error('state changed');
+    if (ratings.size !== state.players.length || [...ratings.values()].some((r) => !r.rated || r.confidence !== 1)) throw new Error('sample match without a court log is rated with confidence 1');
+    restore(snap);
+  });
+  T('rating: every chip shows its number and meets contrast in both themes', () => {
+    const samples = [8.4, 7.4, 6.5, 6.2, 4.1], bands = samples.map(ratingBand);
+    if (bands.join() !== 'rt-top,rt-good,rt-mid,rt-low,rt-bad' || ratingBand(8) !== 'rt-top' || ratingBand(6.4) !== 'rt-low' || ratingBand(5.9) !== 'rt-bad') throw new Error(bands.join());
+    if (ratingText({ value: 7.4 }) !== '7,4' || ratingText({ value: null }) !== 'S/C') throw new Error('text');
+    const chip = document.createElement('span'); document.body.appendChild(chip);
+    try {
+      ['light', 'dark'].forEach((theme) => inTheme(theme, () => samples.forEach((value, i) => {
+        chip.className = `rating-chip ${bands[i]}`; chip.textContent = ratingText({ value });
+        const css = getComputedStyle(chip);
+        if (!chip.textContent) throw new Error('empty chip');
+        const ratio = contrastRatio(hexOfRgb(rgbOf(css.color)), hexOfRgb(rgbOf(css.backgroundColor)));
+        if (ratio < 4.5 || css.whiteSpace !== 'nowrap' || !css.fontVariantNumeric.includes('tabular-nums')) throw new Error(`${theme} ${bands[i]} ${ratio.toFixed(2)} ${css.whiteSpace}`);
+      })));
+    } finally { chip.remove(); }
+  });
+
   // ---- Drill-down: the per-match drawing helpers work over any saved state (M0c) ----
   // Runs buildPdf('players') with the drawing primitives replaced by recorders, so the player pages can be compared as data.
   const recordPlayerPages = () => {

@@ -748,6 +748,12 @@ a:focus-visible, input:focus-visible, select:focus-visible, summary:focus-visibl
 .res-G { background: var(--rating-good); color: var(--rating-ink-good); }
 .res-E { background: var(--rating-mid); color: var(--rating-ink-mid); }
 .res-P { background: var(--rating-bad); color: var(--rating-ink-bad); }
+.rating-chip { display: inline-block; min-width: 2.75ch; padding: 0 var(--space-2); border-radius: var(--radius-sm); font: var(--type-caption); font-weight: 800; line-height: 28px; text-align: center; white-space: nowrap; font-variant-numeric: tabular-nums; background: var(--soft); color: var(--fg); }
+.rating-chip.rt-top { background: var(--rating-top); color: var(--rating-ink-top); }
+.rating-chip.rt-good { background: var(--rating-good); color: var(--rating-ink-good); }
+.rating-chip.rt-mid { background: var(--rating-mid); color: var(--rating-ink-mid); }
+.rating-chip.rt-low { background: var(--rating-low); color: var(--rating-ink-low); }
+.rating-chip.rt-bad { background: var(--rating-bad); color: var(--rating-ink-bad); }
 .last-score.res-G, .match-table .res-G { background: none; color: var(--color-success-text); }
 .last-score.res-E, .match-table .res-E { background: none; color: var(--color-warning-text); }
 .last-score.res-P, .match-table .res-P { background: none; color: var(--color-danger-text); }
@@ -1085,7 +1091,23 @@ span.att-foot { visibility: hidden; }
     insights: { minShots: 3, minGoals: 2, penetrationShare: 50, minBlocked: 3, minRepeats: 2 },
     // Attendance: a rate under warnPct warns; the excluded codes count neither for nor against; a player's note is
     // cut at noteMax characters; changes reach the cloud after syncDelayMs without further taps.
-    attendance: { warnPct: 75, excludeFromRate: ['L'], noteMax: 60, syncDelayMs: 2000 }
+    attendance: { warnPct: 75, excludeFromRate: ['L'], noteMax: 60, syncDelayMs: 2000 },
+    // Rating: base 6.5 for a player who does nothing of note, clamped to min–max and rounded to `decimals` (half up).
+    // Under minMinutes on court a player is «S/C»; confidence = min(1, (minutes / fullMatchMinutes) ** minutesExponent)
+    // scales the weighted features, so a short spell stays near the base (fullMatchMinutes is set from halfSeconds below).
+    // The weights are per unit of each feature; oneOnOne counts as +provoked 7 m, −beaten 1x1, −7 m committed.
+    rating: {
+      base: 6.5, min: 3, max: 10, decimals: 1, minMinutes: 10, minutesExponent: 0.5,
+      weights: {
+        shot: 0.8, save: 0.35, turnover: -0.40, forcedTurnover: -0.30, ruleTurnover: -0.15, ruleFault: -0.15,
+        oneOnOne: 0.30, tactical: -0.15, assist: 0.25, recovery: 0.30, block: 0.20, teamFaultField: -0.10,
+        teamFaultKeeper: -0.05, yellow: -0.10, twoMin: -0.30, red: -1.00, blue: -0.50
+      },
+      // The share of on-target rival shots an average goalkeeper saves, by zone.
+      expectedSave: { '6M': 0.25, '9M': 0.40, '11M': 0.45, CONTRA: 0.20, '7M': 0.25 },
+      // Lower bound of each band, best first: the chip class that reads the --rating-<band> tokens.
+      bands: [[8, 'rt-top'], [7, 'rt-good'], [6.5, 'rt-mid'], [6, 'rt-low'], [-Infinity, 'rt-bad']]
+    }
   };
   /* CLOUD — tools/build_site.py sets this from config/cloud.json ({ url, anonKey } of the Supabase project).
      null = no accounts: teams and matches stay on this device (tests, previews). */
@@ -1801,6 +1823,81 @@ span.att-foot { visibility: hidden; }
     const minutes = minutesOnCourt(s), balance = plusMinus(s);
     return { seconds: minutes ? minutes.get(id) || 0 : null, plusMinus: balance ? balance.get(id) || 0 : null };
   }
+
+  // ===================== Rating (derived from the events and the minutes, never stored) =====================
+  // A pure function of a match state: `ratingFeatures` counts what a player did and reads only `s.events`; the weights
+  // in `CONFIG.rating` turn the counts into a rating, scaled by the minutes on court (see the design's Rating formula).
+  CONFIG.rating.fullMatchMinutes = (2 * CONFIG.halfSeconds) / SECONDS_PER_MINUTE;
+  const RATING_ROUNDING_EPSILON = 1e-9;
+  const RATING_TURNOVER_FEATURES = { Balón: 'turnovers', Regla: 'ruleTurnovers', Rival: 'forcedTurnovers' };
+  const RATING_RULE_FAULTS = ['FALTA', 'GOLPE'];
+  const RATING_TACTICAL_FAULTS = TACTICAL_FAULTS.filter((action) => action !== 'BEATEN');
+  const RATING_ACTION_FEATURES = { PROV7: 'prov7', BEATEN: 'beaten', PEN7C: 'pen7c', ASIST: 'assists', RECUP: 'recoveries', BLOC: 'blocks' };
+  const RATING_CARD_FEATURES = { A: 'yellow', '2M': 'twoMin', D: 'red', AZ: 'blue' };
+  const RATING_FEATURE_NAMES = ['shotValue', 'saveValue', 'turnovers', 'forcedTurnovers', 'ruleTurnovers', 'ruleFaults', 'prov7', 'beaten', 'pen7c',
+    'tactical', 'assists', 'recoveries', 'blocks', 'teamFaults', 'yellow', 'twoMin', 'red', 'blue'];
+  // The share of shots from a zone that go in, from the middle of the zone's reference range.
+  const expectedGoal = (zone) => {
+    const [good, poor] = CONFIG.targets[zone] || CONFIG.targets.shooting;
+    return (good + poor) / 2 / PERCENT;
+  };
+  const turnoverFeature = (e) => {
+    const group = CONFIG.turnoverGroups.find((g) => g.types.includes(e.subtype));
+    return RATING_TURNOVER_FEATURES[group && group.label] || 'turnovers';
+  };
+  // A team fault (no player) is on everyone in its court stamp; a legacy one named a player and counts for him only.
+  const isTeamFaultOf = (e, player, s) => e.kind === 'ACTION' && TEAM_FAULTS.includes(e.action)
+    && (e.playerId == null ? courtSetOf(e.on, s).includes(player.id) : e.playerId === player.id);
+  // What one player did in the match, from its events alone: shot and save values are goals above what the zone expects.
+  function ratingFeatures(s, player) {
+    const f = Object.fromEntries(RATING_FEATURE_NAMES.map((name) => [name, 0]));
+    s.events.forEach((e) => {
+      if (isTeamFaultOf(e, player, s)) { f.teamFaults++; return; }
+      if (e.kind === 'RIVAL_SHOT') {
+        if (e.gkId === player.id && onTarget(e)) f.saveValue += (groupOf(e.result) === 'PARADA' ? 1 : 0) - CONFIG.rating.expectedSave[e.contra ? 'CONTRA' : e.zone];
+        return;
+      }
+      if (e.playerId !== player.id) return;
+      if (e.kind === 'SHOT') f.shotValue += (e.result === 'GOL' ? 1 : 0) - expectedGoal(e.zone);
+      else if (e.kind === 'TURNOVER') f[turnoverFeature(e)]++;
+      else if (e.kind === 'SANCTION') f[RATING_CARD_FEATURES[e.card]]++;
+      else if (e.kind === 'ACTION') {
+        if (RATING_ACTION_FEATURES[e.action]) f[RATING_ACTION_FEATURES[e.action]]++;
+        else if (RATING_RULE_FAULTS.includes(e.action)) f.ruleFaults++;
+        else if (RATING_TACTICAL_FAULTS.includes(e.action)) f.tactical++;
+      }
+    });
+    return f;
+  }
+  const roundHalfUp = (v, decimals) => Math.round(v * 10 ** decimals + RATING_ROUNDING_EPSILON) / 10 ** decimals;
+  // The weighted features around the base. `raw` is before the clamp and the rounding.
+  function ratingFromFeatures(f, { keeper, weights = CONFIG.rating.weights, confidence = 1 }) {
+    const w = weights, r = CONFIG.rating;
+    const sum = w.shot * f.shotValue + w.save * f.saveValue
+      + w.turnover * f.turnovers + w.forcedTurnover * f.forcedTurnovers + w.ruleTurnover * f.ruleTurnovers + w.ruleFault * f.ruleFaults
+      + w.oneOnOne * (f.prov7 - f.beaten - f.pen7c) + w.tactical * f.tactical
+      + w.assist * f.assists + w.recovery * f.recoveries + w.block * f.blocks
+      + (keeper ? w.teamFaultKeeper : w.teamFaultField) * f.teamFaults
+      + w.yellow * f.yellow + w.twoMin * f.twoMin + w.red * f.red + w.blue * f.blue;
+    const raw = r.base + confidence * sum;
+    return { value: roundHalfUp(clamp(raw, r.min, r.max), r.decimals), raw };
+  }
+  // How far the minutes on court can be trusted: 1 from a full match, and when the minutes are unknown (null).
+  const ratingConfidence = (seconds) => (seconds == null ? 1
+    : Math.min(1, (seconds / SECONDS_PER_MINUTE / CONFIG.rating.fullMatchMinutes) ** CONFIG.rating.minutesExponent));
+  // `value` is null («S/C») when the minutes are known and under the minimum.
+  function playerRating(s, player, { seconds = null, weights } = {}) {
+    const features = ratingFeatures(s, player), confidence = ratingConfidence(seconds);
+    if (seconds != null && seconds / SECONDS_PER_MINUTE < CONFIG.rating.minMinutes) return { value: null, raw: null, features, confidence, rated: false };
+    return { ...ratingFromFeatures(features, { keeper: player.pos === 'POR', weights, confidence }), features, confidence, rated: true };
+  }
+  // Every player's rating by id; minutes unknown (no court log) rates with confidence 1.
+  function matchRatings(s, players = s.players) {
+    const minutes = minutesOnCourt(s);
+    return new Map(players.map((p) => [p.id, playerRating(s, p, { seconds: minutes ? minutes.get(p.id) || 0 : null })]));
+  }
+  const ratingText = (r) => (r.value == null ? 'S/C' : decimalText(r.value));
+  const ratingBand = (value) => CONFIG.rating.bands.find(([from]) => value >= from)[1];
 
   // ===================== Audio, vibration, wake lock =====================
   let audioCtx = null;
