@@ -1048,7 +1048,6 @@
     if (items.join('|') !== 'Pérdidas ×2 −0,6') throw new Error('30 min: ' + items.join('|'));
     state.players.find((p) => p.id === 'p22').name = '<i id="injected">x</i>'; openFinal();
     if (document.getElementById('injected') || !ratingRows().find((r) => r.dataset.ratingPlayer === 'p22').textContent.includes('<i id="injected">')) throw new Error('name not escaped');
-  }));
 
   // ---- Visual pages (M5): the «Hoja» summary, half-time and final layout ----
   const SUMMARY_KPI_LABELS = ['Goles', '% tiro', 'Fallos 6 m', 'Fallos 9 m', 'Pérdidas', 'Recuperaciones', '% paradas'];
@@ -1089,6 +1088,35 @@
     const tiles = statTiles(), values = Object.fromEntries(SUMMARY_KPI_LABELS.map((l) => [l, tileValue(tiles, l)]));
     if (values['% tiro'] !== '–' || values['% paradas'] !== '–' || values.Goles !== '0') throw new Error(JSON.stringify(values));
     if ($('sheet').querySelector('.zone-map svg, .goal-chart svg')) throw new Error('with under four shots the card says so instead of drawing a chart');
+  }));
+  T('halftime: shows failed shots 6 m and 9 m and the top turnovers', () => {
+    const snap = snapshot();
+    try {
+      state.events = [rShot('p8', '6M', 'FUERA', 1), rShot('p8', '9M', 'PALO', 2), rShot('p8', '11M', 'FUERA', 3), rShot('p8', '9M', 'GOL', 4),
+        ...['Pase', 'Bote', 'Pasos'].map((t, i) => rTurnover('p8', t, 10 + i)), rTurnover('p5', 'Pase', 20), rTurnover('p5', 'Bote', 21), rTurnover('p22', 'Pase', 22), rTurnover('p3', 'Pase', 23)].map(placed);
+      state.history = []; openHalftime();
+      const tiles = statTiles($('final'));
+      if (tileValue(tiles, 'Fallos 6 m') !== '1' || tileValue(tiles, 'Fallos 9 m') !== '2') throw new Error('failed shots');
+      const rows = [...$('final').querySelectorAll('.top-turnovers li')].map((li) => li.textContent.replace(/\s+/g, ' ').trim());
+      const want = [['p8', 3], ['p5', 2], ['p3', 1]];
+      if (rows.length !== 3 || want.some(([id, n], i) => !rows[i].includes(nameOf(id)) || !rows[i].endsWith(String(n)))) throw new Error(rows.join('|'));
+      if ($('final').querySelectorAll('.halftime-points .keypoints').length !== 2 || !$('final').querySelector('.final-head')) throw new Error('key points or head');
+      state.events = []; openHalftime();
+      if (/NaN|undefined/.test($('final').textContent) || $('final').querySelector('.top-turnovers li')) throw new Error('empty half');
+    } finally { restore(snap); }
+  });
+  T('final: sections in order', () => {
+    const snap = snapshot();
+    try {
+      openFinal();
+      const order = ['.final-head', '.kpi-tiles', '.mvp-share', '.ratings', '.mvp-pick', 'details.more', '.final-mail'].map((sel) => $('final').querySelector(sel));
+      if (order.some((el) => !el)) throw new Error('missing section ' + order.map(Boolean).join());
+      order.slice(1).forEach((el, i) => { if (!(order[i].compareDocumentPosition(el) & Node.DOCUMENT_POSITION_FOLLOWING)) throw new Error('out of order at ' + i); });
+      ['.mvp-share', '.ratings', '.mvp-pick'].forEach((sel) => { if (!$('final').querySelector(sel).classList.contains('sheet-card')) throw new Error(sel + ' is not a sheet-card'); });
+      const head = $('final').querySelector('.final-head'), s = score();
+      if (head.querySelectorAll('.crest, .rival-crest').length !== 2 || !head.textContent.includes('Final') || !head.textContent.includes(`${s.us}–${s.them}`)) throw new Error(head.textContent);
+    } finally { restore(snap); }
+  });
   }));
 
   // ---- Drill-down: the per-match drawing helpers work over any saved state (M0c) ----

@@ -543,8 +543,26 @@ button.rex-chip { border: 0; cursor: pointer; position: relative; }
 /* ---------- Sheet ---------- */
 .sheet { position: fixed; inset: 0; z-index: 30; background: var(--bg); overflow: auto; padding-block: 16px; padding-inline: 16px; }
 .final { position: fixed; inset: 0; z-index: 35; display: grid; place-items: center; padding: 16px; background: rgba(0, 0, 0, .35); overflow: auto; }
-.final-card { width: min(860px, 100%); box-sizing: border-box; border-radius: var(--radius-xl); padding: var(--space-5); display: grid; gap: var(--space-4); background: var(--glass-strong); border: 1px solid var(--glass-edge); box-shadow: var(--pop-shadow); }
+.final-card { width: min(1040px, 100%); box-sizing: border-box; border-radius: var(--radius-xl); padding: var(--space-5); display: grid; gap: var(--space-4); background: var(--glass-strong); border: 1px solid var(--glass-edge); box-shadow: var(--pop-shadow); }
 .final-card h2 { margin: 0; font: var(--type-title); text-wrap: balance; }
+/* The head: both teams around the score, the period under it */
+.final-head { display: grid; grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr); align-items: center; gap: var(--space-4); }
+.final-team { display: flex; align-items: center; gap: var(--space-3); min-width: 0; font: var(--type-heading); }
+.final-team:last-child { flex-direction: row-reverse; text-align: right; }
+.final-team b { min-width: 0; overflow-wrap: anywhere; }
+.final-team .crest { width: 56px; height: 56px; }
+.rival-crest { display: grid; place-items: center; box-sizing: border-box; border: 1px solid var(--line); background: var(--surface); color: var(--muted); font: var(--type-title); font-weight: 800; }
+.final-mid { display: grid; justify-items: center; }
+.final-card .final-score { font: var(--type-display); font-weight: 800; font-family: var(--font-display); font-variant-numeric: tabular-nums; white-space: nowrap; }
+.final-mid span { font: var(--type-caption); font-weight: 700; color: var(--muted); text-transform: uppercase; letter-spacing: .1em; }
+/* KPI tiles on the left; the share card (final) or the failed shots and turnovers (half-time) beside them */
+.final-hero { display: grid; grid-template-columns: minmax(0, 1fr) minmax(220px, 280px); gap: var(--space-4); align-items: start; }
+.final-side { display: grid; gap: var(--space-4); }
+.top-turnovers ul { gap: var(--space-2); }
+.top-turnovers li { justify-content: flex-start; align-items: center; }
+.top-turnovers li span { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.top-turnovers .disc { flex: none; width: 32px; height: 32px; font-size: 14px; }
+.top-turnovers li b { font-variant-numeric: tabular-nums; }
 .final-card td:first-child { text-align: left; font-weight: 600; }
 /* Summary KPIs: our value (coloured against theirs) beside the rival's, details folded underneath */
 .kpi-tiles { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: var(--space-2); }
@@ -557,18 +575,15 @@ button.rex-chip { border: 0; cursor: pointer; position: relative; }
 .kpi-tile small { display: block; font: var(--type-caption); color: var(--muted); overflow-wrap: anywhere; }
 .more summary { min-height: 44px; display: flex; align-items: center; font-weight: 700; cursor: pointer; }
 .halftime-points { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
-.halftime-points .acta-h { margin-top: 0; }
-@media (max-width: 700px) { .kpi-tiles { grid-template-columns: repeat(2, minmax(0, 1fr)); } .halftime-points { grid-template-columns: 1fr; } }
+@media (max-width: 700px) { .kpi-tiles { grid-template-columns: repeat(2, minmax(0, 1fr)); } .halftime-points, .final-hero { grid-template-columns: minmax(0, 1fr); } }
 .mvp-pick { display: grid; gap: var(--space-2); }
-.mvp-pick h3, .ratings h3 { margin: 0; font: var(--type-caption); font-weight: 700; color: var(--muted); text-transform: uppercase; letter-spacing: .06em; }
 .mvp-faces { display: flex; flex-wrap: wrap; gap: var(--space-4) var(--space-3); padding-top: var(--space-6); }
 .mvp-face { position: relative; display: grid; justify-items: center; gap: 4px; min-width: var(--tap); min-height: var(--tap); padding: 4px 6px; border: 2px solid transparent; border-radius: var(--radius-md); background: transparent; color: var(--fg); font: var(--type-caption); font-weight: 600; }
 .mvp-face[aria-pressed="true"] { border-color: var(--gold); background: var(--glow-gold); }
 .mvp-tag { font: var(--type-caption); font-weight: 800; color: var(--fg); }
 .mvp-share { display: grid; gap: var(--space-2); }
-.mvp-share h3 { margin: 0; font: var(--type-caption); font-weight: 700; color: var(--muted); text-transform: uppercase; letter-spacing: .06em; }
 .mvp-preview { font: var(--type-caption); color: var(--muted); }
-.mvp-preview-img { display: block; width: min(100%, 260px); height: auto; aspect-ratio: 1080 / 1350; border-radius: var(--radius-md); }
+.mvp-preview-img { display: block; margin-inline: auto; width: min(100%, 200px); height: auto; aspect-ratio: 1080 / 1350; border-radius: var(--radius-md); }
 .ratings { display: grid; gap: var(--space-2); }
 .rating-list { margin: 0; padding: 0; list-style: none; }
 .rating-row { --face-disc: 40px; border-bottom: 1px solid var(--line); }
@@ -590,6 +605,7 @@ button.rex-chip { border: 0; cursor: pointer; position: relative; }
 /* «Resumen» of the Hoja and the half-time cards: label, value and a note per tile */
 .stat-tiles { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: var(--space-2); }
 @media (max-width: 700px) { .stat-tiles { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+.failed-shots .stat-tiles { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 .stat-tile { display: grid; align-content: start; gap: var(--space-1); background: var(--surface); border: 1px solid var(--line); border-radius: var(--inner-radius, var(--radius-md)); padding: var(--space-3); min-width: 0; }
 .stat-tile > span { font: var(--type-caption); font-weight: 700; color: var(--muted); text-transform: uppercase; letter-spacing: .08em; overflow-wrap: anywhere; }
 .stat-tile strong { font: var(--type-kpi); font-variant-numeric: tabular-nums; }
@@ -2032,7 +2048,7 @@ span.att-foot { visibility: hidden; }
     const toggle = ordered.length > RATINGS_COLLAPSED_ROWS
       ? `<button class="btn press" type="button" data-ratings-all aria-expanded="${showAll}">${showAll ? 'Ver menos' : `Ver todos (${ordered.length})`}</button>` : '';
     const rows = shown.map((p) => ratingRowHtml(s, p, ratings.get(p.id), seconds, mvp)).join('');
-    return `<section class="ratings"><h3>Puntuaciones</h3><ol class="rating-list">${rows}</ol>${toggle}</section>`;
+    return `<section class="sheet-card ratings"><h3>Puntuaciones</h3><ol class="rating-list">${rows}</ol>${toggle}</section>`;
   }
 
   // ===================== Audio, vibration, wake lock =====================
@@ -4585,14 +4601,37 @@ span.att-foot { visibility: hidden; }
       return `<div class="kpi-tile"><span>${esc(k.label)}</span><div class="vs">${side('us', state.us, k.us, k.sub && k.sub[0], tone)}${side('them', state.them, k.them, k.sub && k.sub[1], '')}</div></div>`;
     }).join('')}</div>`;
   }
-  const summaryDetailHtml = () => `<details class="more"><summary>Ver más detalle</summary>${tableHtml(['', state.us, state.them], finalRows().map((r) => r.map(String)))}</details>`;
+  const summaryDetailHtml = () => `<section class="sheet-card"><details class="more"><summary>Ver más detalle</summary>${tableHtml(['', state.us, state.them], finalRows().map((r) => r.map(String)))}</details></section>`;
+  // The rival has no crest of its own: its initial stands in the same circle.
+  const RIVAL_CREST_FALLBACK = '?';
+  // Both teams and the score, over the period («Descanso» or «Final»).
+  function finalHeadHtml(period) {
+    const s = score(), initial = Array.from(state.them.trim())[0] || RIVAL_CREST_FALLBACK;
+    return `<header class="final-head">
+      <div class="final-team"><img class="crest" src="${esc(crestSrc(team))}" alt=""><b>${esc(state.us)}</b></div>
+      <div class="final-mid"><h2 class="final-score" aria-label="${esc(finalTitle())}">${s.us}–${s.them}</h2><span>${esc(period)}</span></div>
+      <div class="final-team"><span class="crest rival-crest" aria-hidden="true">${esc(initial.toUpperCase())}</span><b>${esc(state.them)}</b></div></header>`;
+  }
+  const TOP_TURNOVER_PLAYERS = 3;
+  // Who lost the ball most: turnovers, then the lower dorsal; players without one do not appear.
+  function topTurnoverPlayers(s = state) {
+    const counts = countBy(s.events.filter((e) => e.kind === 'TURNOVER'), (e) => e.playerId);
+    return s.players.filter((p) => counts[p.id]).map((player) => ({ player, n: counts[player.id] }))
+      .sort((a, b) => b.n - a.n || a.player.num - b.player.num).slice(0, TOP_TURNOVER_PLAYERS);
+  }
+  function halftimeSideHtml() {
+    const f = matchFigures(), rows = topTurnoverPlayers().map(({ player, n }) => `<li>${discHtml(player)}<span>${esc(player.name)}</span><b>${n}</b></li>`).join('');
+    return `<div class="final-side">
+      <section class="sheet-card failed-shots"><h3>Tiros fallados</h3><div class="stat-tiles">${failedShotTileHtml('Fallos 6 m', f.miss6)}${failedShotTileHtml('Fallos 9 m', f.miss9)}</div></section>
+      <section class="sheet-card top-turnovers"><h3>Más pérdidas</h3>${rows ? `<ul>${rows}</ul>` : '<p class="note">Sin pérdidas.</p>'}</section></div>`;
+  }
   function openHalftime() {
     releaseMvpCard();
     const k = keyPoints();
-    const block = (title, items) => `<section><h3 class="acta-h">${title}</h3>${keyPointsHtml(items)}</section>`;
+    const block = (title, items) => `<section class="sheet-card"><h3>${title}</h3>${keyPointsHtml(items)}</section>`;
     $('final').innerHTML = `<div class="final-card glass">
-      <h2>Descanso · ${esc(finalTitle())}</h2>
-      ${kpiTilesHtml()}
+      ${finalHeadHtml('Descanso')}
+      <div class="final-hero">${kpiTilesHtml()}${halftimeSideHtml()}</div>
       <div class="halftime-points">${block('Defensa: corregir y vigilar', k.defence)}${block('Ataque: corregir y aprovechar', k.attack)}</div>
       ${summaryDetailHtml()}
       <div class="row-actions">
@@ -4606,7 +4645,7 @@ span.att-foot { visibility: hidden; }
   // Picking is the coach's tap alone: the crown and the provisional label are on the first row of the ratings.
   function mvpPickHtml() {
     const faces = state.players.slice().sort(byPosition).map((p) => `<button class="mvp-face press" type="button" data-mvp="${esc(p.id)}" aria-pressed="${p.id === state.mvpId}" aria-label="${esc(p.name)}, MVP del partido">${discHtml(p)}<span>${esc(p.name)}</span></button>`).join('');
-    return `<section class="mvp-pick"><h3>MVP del partido</h3><div class="mvp-faces">${faces}</div></section>`;
+    return `<section class="sheet-card mvp-pick"><h3>MVP del partido</h3><div class="mvp-faces">${faces}</div></section>`;
   }
   // Not an event: picking the MVP is neither undoable nor part of any statistic.
   function setMvp(id) {
@@ -4619,26 +4658,28 @@ span.att-foot { visibility: hidden; }
     releaseMvpCard();
     const seconds = minutesOnCourt(state), ratings = matchRatings(state);
     $('final').innerHTML = `<div class="final-card glass">
-      <h2>Final · ${esc(finalTitle())}</h2>
-      ${kpiTilesHtml()}
+      ${finalHeadHtml('Final')}
+      <div class="final-hero">${kpiTilesHtml()}
+        <section class="sheet-card mvp-share"><h3>Imágenes para compartir</h3>
+          <div class="mvp-preview" id="mvp-preview" aria-live="polite"></div>
+          <div class="row-actions">
+            <button class="btn primary press" type="button" data-final-mvp-share>Compartir MVP</button>
+            <button class="btn press" type="button" data-final-ratings-share>Compartir puntuaciones</button>
+          </div>
+        </section></div>
       ${ratingsListHtml(state, ratings, seconds)}
       ${mvpPickHtml()}
-      <section class="mvp-share"><h3>Imágenes para compartir</h3>
-        <div class="mvp-preview" id="mvp-preview" aria-live="polite"></div>
-        <div class="row-actions">
-          <button class="btn primary press" type="button" data-final-mvp-share>Compartir MVP</button>
-          <button class="btn press" type="button" data-final-ratings-share>Compartir puntuaciones</button>
-        </div>
-      </section>
       ${summaryDetailHtml()}
-      <label class="final-mail">Enviar los PDF a<input class="in" id="final-email" type="email" inputmode="email" autocomplete="email" placeholder="entrenador@club.es, otro@club.es" value="${esc(email || '')}"></label>
-      <div class="row-actions">
-        <button class="btn primary press" type="button" data-final-mail>Enviar por correo</button>
-        <button class="btn press" type="button" data-final-share>Compartir PDF</button>
-        <button class="btn press" type="button" data-final-sheet>Ver Hoja</button>
-        <button class="btn press" type="button" data-final-close>Cerrar</button>
-      </div>
-      <p class="note" id="final-status" aria-live="polite">Correo: descarga los PDF y abre el correo con el resumen; adjúntalos desde Descargas. Compartir: envía los PDF ya adjuntos (Gmail, WhatsApp, Drive…).</p>
+      <section class="sheet-card final-reports"><h3>Informes</h3>
+        <label class="final-mail">Enviar los PDF a<input class="in" id="final-email" type="email" inputmode="email" autocomplete="email" placeholder="entrenador@club.es, otro@club.es" value="${esc(email || '')}"></label>
+        <div class="row-actions">
+          <button class="btn primary press" type="button" data-final-mail>Enviar por correo</button>
+          <button class="btn press" type="button" data-final-share>Compartir PDF</button>
+          <button class="btn press" type="button" data-final-sheet>Ver Hoja</button>
+          <button class="btn press" type="button" data-final-close>Cerrar</button>
+        </div>
+        <p class="note" id="final-status" aria-live="polite">Correo: descarga los PDF y abre el correo con el resumen; adjúntalos desde Descargas. Compartir: envía los PDF ya adjuntos (Gmail, WhatsApp, Drive…).</p>
+      </section>
     </div>`;
     $('final').hidden = false;
     ui.mvpCardReady = renderMvpPreview();
