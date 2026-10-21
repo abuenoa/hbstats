@@ -3969,7 +3969,7 @@ a:focus-visible, input:focus-visible, select:focus-visible, summary:focus-visibl
   $('roster-file').addEventListener('change', (ev) => {
     const file = ev.target.files && ev.target.files[0];
     ev.target.value = '';
-    if (file) (ui.rosterSide === 'template' ? importTemplateFile : importTeamRoster)(file);
+    if (file) ({ template: importTemplateFile, [CALENDAR_FILE_SIDE]: importCalendar }[ui.rosterSide] || importTeamRoster)(file);
   });
 
   // ===================== Accounts, team and saved matches =====================
@@ -4000,7 +4000,7 @@ a:focus-visible, input:focus-visible, select:focus-visible, summary:focus-visibl
   let backend = null;
   let currentMatchId = null;
   let syncTimer = null;
-  const home = { view: 'loading', user: null, teams: [], roster: [], matches: [], season: null, templates: [], template: null, squad: new Set(), leaderMetric: 'goals', playerId: null, playerMatchId: null, playerEdit: false, playerDraft: null, offline: false, error: '', draft: null, crestDraft: undefined, armed: null, passwordChange: false, seasonOffline: false };
+  const home = { view: 'loading', user: null, teams: [], roster: [], matches: [], season: null, templates: [], template: null, squad: new Set(), leaderMetric: 'goals', playerId: null, playerMatchId: null, playerEdit: false, playerDraft: null, offline: false, error: '', draft: null, crestDraft: undefined, armed: null, passwordChange: false, seasonOffline: false, fixtures: null };
 
   // ---- Device storage ----
   function readJson(key) {
@@ -4029,6 +4029,11 @@ a:focus-visible, input:focus-visible, select:focus-visible, summary:focus-visibl
   }
 
   // ---- Backends ----
+  // The fields of a fixture the coach sets during the match week, and the column each one is stored in.
+  const FIXTURE_COLUMN_OF = { kickoff: 'kickoff', venue: 'venue', matchId: 'match_id' };
+  const FIXTURE_COLUMNS = 'id,season,competition,round,weekend,home,opponent,kickoff,venue,match_id';
+  const FIXTURE_KEY = 'team_id,season,competition,round';
+  const byWeekend = (a, b) => a.weekend.localeCompare(b.weekend) || a.round - b.round;
   const CLOUD_ERRORS = [
     [/invalid login credentials/i, 'email o contraseña incorrectos'],
     [/email not confirmed/i, 'falta aceptar la invitación del email'],
@@ -4049,11 +4054,14 @@ a:focus-visible, input:focus-visible, select:focus-visible, summary:focus-visibl
 
   // Everything on this device: no sign-in, one store in localStorage. Match states are the device copies themselves.
   function localBackend() {
-    const read = () => ({ teams: [], players: [], matches: {}, templates: [], ...readJson(LOCAL_DB_KEY) });
+    const read = () => ({ teams: [], players: [], matches: {}, templates: [], fixtures: [], ...readJson(LOCAL_DB_KEY) });
     const write = (db) => { if (!writeJson(LOCAL_DB_KEY, db)) throw new Error('no queda espacio en este dispositivo'); };
     const plain = (p) => ({ id: p.id, num: p.num, name: p.name, pos: p.pos, fullName: p.fullName || null, photo: p.photo || null });
+    const plainFixture = ({ id, season, competition, round, weekend, home, opponent, kickoff, venue, matchId }) => ({ id, season, competition, round, weekend, home, opponent, kickoff, venue, matchId });
+    const listFixtures = async (teamId) => read().fixtures.filter((f) => f.teamId === teamId).map(plainFixture).sort(byWeekend);
     return {
       needsLogin: false,
+      listFixtures,
       async listTeams() { return read().teams; },
       async createTeam(fields) {
         const db = read();
@@ -4097,15 +4105,36 @@ a:focus-visible, input:focus-visible, select:focus-visible, summary:focus-visibl
         db.matches[id] = { teamId, summary: matchSummary(id, s) };
         write(db);
       },
+      // Re-importing a calendar updates the file's columns and keeps the kickoff, the venue and the match link.
+      async saveFixtures(teamId, { season, competition, fixtures }) {
+        const db = read();
+        fixtures.forEach((f) => {
+          let row = db.fixtures.find((x) => x.teamId === teamId && x.season === season && x.competition === competition && x.round === f.round);
+          if (!row) { row = { id: newUuid(), teamId, season, competition, round: f.round, kickoff: null, venue: null, matchId: null }; db.fixtures.push(row); }
+          Object.assign(row, { weekend: f.weekend, home: f.home, opponent: f.opponent });
+        });
+        write(db);
+        return listFixtures(teamId);
+      },
+      async updateFixture(id, patch) {
+        const db = read();
+        const row = db.fixtures.find((f) => f.id === id);
+        if (!row) throw new Error('la jornada ya no existe');
+        Object.keys(FIXTURE_COLUMN_OF).filter((k) => k in patch).forEach((k) => { row[k] = patch[k]; });
+        write(db);
+        return plainFixture(row);
+      },
       async deleteMatch(id) {
         const db = read();
         delete db.matches[id];
+        db.fixtures.filter((f) => f.matchId === id).forEach((f) => { f.matchId = null; });
         write(db);
       },
       async deleteTeam(id) {
         const db = read();
         db.teams = db.teams.filter((t) => t.id !== id);
         db.players = db.players.filter((p) => p.teamId !== id);
+        db.fixtures = db.fixtures.filter((f) => f.teamId !== id);
         Object.keys(db.matches).filter((k) => db.matches[k].teamId === id).forEach((k) => { delete db.matches[k]; });
         write(db);
       },
@@ -4139,10 +4168,13 @@ a:focus-visible, input:focus-visible, select:focus-visible, summary:focus-visibl
     const PLAYER_COLUMNS = 'id,num,name,pos,full_name,photo';
     // `name` is the short name shown on court; `fullName` is the one on the official card.
     const toPlayer = (r) => ({ id: r.id, num: r.num, name: r.name, pos: r.pos, fullName: r.full_name, photo: r.photo });
+    const toFixture = (r) => ({ id: r.id, season: r.season, competition: r.competition, round: r.round, weekend: r.weekend, home: r.home, opponent: r.opponent, kickoff: r.kickoff, venue: r.venue, matchId: r.match_id });
+    const listFixtures = async (teamId) => check(await client.from('fixtures').select(FIXTURE_COLUMNS).eq('team_id', teamId).order('weekend').order('round')).map(toFixture);
     const toSummary = (r) => ({ id: r.id, date: r.played_on || '', them: r.rival, venue: r.venue, status: r.status, scoreUs: r.score_us, scoreThem: r.score_them });
     return {
       needsLogin: true,
       passwordLink,
+      listFixtures,
       async currentUser() { const { session } = check(await client.auth.getSession()); return session ? { email: session.user.email } : null; },
       async signIn(email, password) { check(await client.auth.signInWithPassword({ email, password })); },
       async signOut() { check(await client.auth.signOut()); },
@@ -4174,6 +4206,16 @@ a:focus-visible, input:focus-visible, select:focus-visible, summary:focus-visibl
         check(await client.from('matches').upsert({ id, team_id: teamId, played_on: m.date || null, rival: m.them, venue: m.venue, status: m.status, score_us: m.scoreUs, score_them: m.scoreThem, state: s }));
       },
       async deleteMatch(id) { check(await client.from('matches').delete().eq('id', id)); },
+      // The upsert writes only the file's columns, so a re-import keeps the kickoff, the venue and the match link.
+      async saveFixtures(teamId, { season, competition, fixtures }) {
+        const rows = fixtures.map((f) => ({ team_id: teamId, season, competition, round: f.round, weekend: f.weekend, home: f.home, opponent: f.opponent }));
+        check(await client.from('fixtures').upsert(rows, { onConflict: FIXTURE_KEY }));
+        return listFixtures(teamId);
+      },
+      async updateFixture(id, patch) {
+        const row = Object.fromEntries(Object.entries(FIXTURE_COLUMN_OF).filter(([k]) => k in patch).map(([k, column]) => [column, patch[k]]));
+        return toFixture(check(await client.from('fixtures').update(row).eq('id', id).select(FIXTURE_COLUMNS).single()));
+      },
       // Row level security lets only the owner delete; anyone else deletes nothing, which is reported.
       async deleteTeam(id) {
         if (!check(await client.from('teams').delete().eq('id', id).select('id')).length) throw new Error('solo quien creó el equipo puede borrarlo');
@@ -4426,7 +4468,16 @@ a:focus-visible, input:focus-visible, select:focus-visible, summary:focus-visibl
     const remove = `<div class="team-delete"><p class="note">Borrar el equipo borra también su plantilla y todos sus partidos. Solo puede hacerlo quien lo creó.</p>
       ${armedButton('delete-team', 'Borrar equipo', 'data-delete-team')}</div>`;
     return `<div class="row-actions"><button class="btn press" type="button" data-home-view="team">‹ Equipo</button></div>
+      ${calendarRowHtml()}
       <div class="team-layout"><section class="sheet-card"><h3>Equipo</h3>${teamFormHtml(team, false)}${remove}</section><section class="sheet-card">${teamRosterHtml()}</section></div>`;
+  }
+  function calendarRowHtml() {
+    const latest = home.fixtures && home.fixtures.length ? home.fixtures[home.fixtures.length - 1].season : null;
+    const count = latest ? home.fixtures.filter((f) => f.season === latest).length : 0;
+    return `<section class="sheet-card"><h3>Calendario</h3>
+      <div class="row-actions"><b>${latest ? `${plural(count, 'jornada', 'jornadas')} · ${esc(latest)}` : 'Sin calendario'}</b>
+        <button class="btn press" type="button" data-calendar-import>Importar calendario</button></div>
+      <p class="note">Archivo del calendario de la federación (hbstats-calendario). Al importarlo de nuevo se conservan la hora y el lugar ya anotados.</p></section>`;
   }
   const squadReady = () => home.squad.size > 0 && home.squad.size <= MAX_ROSTER && home.roster.some((p) => home.squad.has(p.id) && p.pos === 'POR');
   function squadHtml() {
@@ -4542,8 +4593,11 @@ a:focus-visible, input:focus-visible, select:focus-visible, summary:focus-visibl
     applyTeam(t);
     home.crestDraft = undefined;
     home.season = null;
+    home.fixtures = null;
     try { home.roster = (await cachedRead(`players:${t.id}`, () => backend.listPlayers(t.id))).value; }
     catch (err) { home.roster = []; console.warn(`Roster not available: ${cloudErrorText(err)}`); }
+    try { await loadFixtures(); }
+    catch (err) { home.fixtures = []; console.warn(`Calendar not available: ${cloudErrorText(err)}`); }
     // A reload in the middle of a match goes straight back to it.
     const resume = readJson(CURRENT_MATCH_KEY);
     const saved = resume && localMatch(resume);
@@ -4580,6 +4634,57 @@ a:focus-visible, input:focus-visible, select:focus-visible, summary:focus-visibl
     const matches = withLocalChanges(list, (m) => ({ state: m.state })).filter((m) => m.state && SEASON_STATUSES.includes(m.status) && !m.state.sample);
     home.season = matches;
     return { matches, offline };
+  }
+
+  // ---- Calendar: the federation's fixtures, and the matches played against them ----
+  const CALENDAR_FORMAT = 'hbstats-calendario';
+  const CALENDAR_FILE_SIDE = 'calendar'; // which import the shared file picker serves
+  const MAX_FIXTURE_ROUND = 60, MAX_OPPONENT_LENGTH = 60, MAX_COMPETITION_LENGTH = 120;
+  const SEASON_LENGTH_RANGE = [4, 9];
+  const ISO_DATE = /^\d{4}-\d{2}-\d{2}$/;
+  const isIsoDate = (s) => typeof s === 'string' && ISO_DATE.test(s) && new Date(`${s}T00:00:00Z`).toISOString().startsWith(s);
+  // Validates an imported calendar file; returns the season and its rounds or throws an Error explaining what is wrong.
+  function parseCalendar(text) {
+    let data;
+    try { data = JSON.parse(text); } catch (err) { throw new Error('el archivo no es JSON'); }
+    if (!data || data.format !== CALENDAR_FORMAT || !Array.isArray(data.fixtures)) throw new Error('el archivo no es un calendario de HBStats');
+    const season = typeof data.season === 'string' ? data.season.trim() : '';
+    if (season.length < SEASON_LENGTH_RANGE[0] || season.length > SEASON_LENGTH_RANGE[1]) throw new Error('falta la temporada (por ejemplo 2026/2027)');
+    const seen = new Set();
+    const fixtures = data.fixtures.map((x) => {
+      const round = Number(x && x.round);
+      if (!Number.isInteger(round) || round < 1 || round > MAX_FIXTURE_ROUND) throw new Error(`jornada no válida: ${x && x.round}`);
+      if (seen.has(round)) throw new Error(`jornada repetida: ${round}`);
+      seen.add(round);
+      if (!isIsoDate(x.weekend)) throw new Error(`fecha no válida en la jornada ${round}`);
+      const opponent = typeof x.opponent === 'string' ? x.opponent.trim().slice(0, MAX_OPPONENT_LENGTH) : '';
+      if (!opponent) throw new Error(`falta el rival en la jornada ${round}`);
+      return { round, weekend: x.weekend, home: x.home === true, opponent };
+    });
+    const competition = typeof data.competition === 'string' ? data.competition.trim().slice(0, MAX_COMPETITION_LENGTH) : '';
+    return { team: typeof data.team === 'string' ? data.team.trim() : '', season, competition, fixtures };
+  }
+  async function loadFixtures() {
+    const teamId = team.id;
+    const { value, offline } = await cachedRead(`fixtures:${teamId}`, () => backend.listFixtures(teamId));
+    if (team.id === teamId) home.fixtures = value;
+    return { offline };
+  }
+  async function importCalendar(file) {
+    let calendar;
+    try { calendar = parseCalendar(await file.text()); }
+    catch (err) { homeStatus(`No se pudo cargar: ${err.message}.`); return; }
+    const teamId = team.id;
+    try {
+      const saved = await backend.saveFixtures(teamId, calendar);
+      writeJson(CACHE_KEY_PREFIX + `fixtures:${teamId}`, saved);
+      if (team.id !== teamId) return;
+      home.fixtures = saved;
+      renderHome();
+      homeStatus(`Calendario importado: ${plural(calendar.fixtures.length, 'jornada', 'jornadas')}.`);
+    } catch (err) {
+      homeStatus(`No se pudo guardar el calendario: ${cloudErrorText(err)}.`);
+    }
   }
   function matchResult(m) {
     if (m.scoreUs === m.scoreThem) return RESULT_OF.draw;
@@ -5532,7 +5637,8 @@ a:focus-visible, input:focus-visible, select:focus-visible, summary:focus-visibl
     if (b.hasAttribute('data-team-add')) { addTeamPlayer(); return; }
     if (b.dataset.teamPos) { const [id, pos] = b.dataset.teamPos.split(':'); saveTeamPlayer(rosterPlayer(id), { pos }); return; }
     if (b.hasAttribute('data-team-export')) { exportRoster(team.name, home.roster, 'home-status'); return; }
-    if (b.dataset.rosterImport) { ui.rosterSide = b.dataset.rosterImport; $('roster-file').click(); }
+    if (b.dataset.rosterImport) { ui.rosterSide = b.dataset.rosterImport; $('roster-file').click(); return; }
+    if (b.hasAttribute('data-calendar-import')) { ui.rosterSide = CALENDAR_FILE_SIDE; $('roster-file').click(); }
   });
   $('home').addEventListener('change', (ev) => {
     const el = ev.target;

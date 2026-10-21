@@ -58,6 +58,13 @@ SHEET_STATS = f"{SAMPLE} commit(); ui.sheetMode = 'sheet'; ui.sheetTab = 'stats'
 SHEET_PLAYER = SHEET_STATS.replace("'stats'", "'player'")
 TOP_SCORER_SAMPLE_ID = "p17"
 SAMPLE_KEEPER_ID = "p1"
+CALENDAR_ROUNDS = 14
+# A season calendar of the team in the scene: one round a week from the first Sunday.
+CALENDAR_SEED = (
+    "await backend.saveFixtures(team.id, { season: '2026/2027', competition: 'Primera Andaluza', fixtures: "
+    f"Array.from({{ length: {CALENDAR_ROUNDS} }}, (_, i) => ({{ round: i + 1, weekend: new Date(Date.UTC(2026, 9, 18 + i * 7)).toISOString().slice(0, 10), home: i % 2 === 0, opponent: 'Rival ' + (i + 1) }})) }}); "
+    "await loadFixtures();"
+)
 MATRIX_SCENES = {
     "team": "await seedSeason();",
     "player": f"showPlayer((await seedSeason()).get('{TOP_SCORER_SAMPLE_ID}'));",
@@ -65,6 +72,7 @@ MATRIX_SCENES = {
     "player-match": f"showPlayer((await seedSeason()).get('{TOP_SCORER_SAMPLE_ID}')); showPlayerMatch(home.season[0].id);",
     "keeper-match": "await seedSeason(); showPlayer(home.roster.find((p) => p.pos === 'POR').id); showPlayerMatch(home.season[0].id);",
     "matches": "await seedSeason(); await showMatches();",
+    "team-edit": f"await seedSeason(); {CALENDAR_SEED} showHomeView('team-edit');",
     "profile": "await seedSeason(); await showProfile();",
     "sheet-stats": SHEET_STATS,
     "sheet-player": f"{SHEET_PLAYER} ui.sheetPlayer = '{TOP_SCORER_SAMPLE_ID}'; renderSheet();",

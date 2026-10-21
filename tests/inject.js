@@ -1464,6 +1464,101 @@
         if (msg !== 'ya tienes una plantilla con ese nombre') throw new Error(msg);
       } finally { window.supabase = savedLib; }
     });
+    // ---- Calendar: the federation's fixtures, kept per team and linked to the matches played ----
+    const calFile = (over, fixtures) => JSON.stringify({ format: CALENDAR_FORMAT, version: 1, team: 'Triana', season: '2026/2027', competition: 'Liga', fixtures: fixtures || [
+      { round: 1, weekend: '2026-10-18', home: true, opponent: 'EL JAMON CBM LEPE' }, { round: 2, weekend: '2026-10-25', home: false, opponent: 'BALONMANO GADES - ASISA' }, { round: 3, weekend: '2026-11-08', home: true, opponent: 'BM Nazareno' }], ...over });
+    const fx = (id, round, weekend, opponent, over) => ({ id, season: '2026/2027', competition: 'Liga', round, weekend, home: true, opponent, kickoff: null, venue: null, matchId: null, ...over });
+    await TA('calendar: parses a hbstats-calendario file', async () => {
+      const c = parseCalendar(calFile());
+      if (c.team !== 'Triana' || c.season !== '2026/2027' || c.competition !== 'Liga' || c.fixtures.length !== 3) throw new Error(JSON.stringify(c));
+      if (c.fixtures.map((f) => f.round).join() !== '1,2,3' || c.fixtures.map((f) => f.home).join() !== 'true,false,true') throw new Error(JSON.stringify(c.fixtures));
+      if (c.fixtures.map((f) => f.weekend).join() !== '2026-10-18,2026-10-25,2026-11-08' || c.fixtures[2].opponent !== 'BM Nazareno') throw new Error(JSON.stringify(c.fixtures));
+    });
+    await TA('calendar: refuses a wrong format, a repeated round and a bad date', async () => {
+      throws(() => parseCalendar('{nope'), /no es JSON/);
+      throws(() => parseCalendar(JSON.stringify({ format: ROSTER_FORMAT, players: [] })), /calendario/);
+      throws(() => parseCalendar(calFile({}, [{ round: 1, weekend: '2026-10-18', home: true, opponent: 'A' }, { round: 1, weekend: '2026-10-25', home: true, opponent: 'B' }])), /repetida: 1/);
+      throws(() => parseCalendar(calFile({}, [{ round: 2, weekend: '2026-02-31', home: true, opponent: 'A' }])), /fecha no válida en la jornada 2/);
+      throws(() => parseCalendar(calFile({}, [{ round: 3, weekend: '18/10/2026', home: true, opponent: 'A' }])), /fecha/);
+      throws(() => parseCalendar(calFile({}, [{ round: 4, weekend: '2026-10-18', home: true, opponent: '  ' }])), /falta el rival en la jornada 4/);
+    });
+    await TA('calendar: local backend saves and lists; re-import keeps the kickoff and venue', async () => {
+      const local = localBackend(), file = parseCalendar(calFile());
+      try {
+        const saved = await local.saveFixtures('cal-team', file);
+        if (saved.length !== 3 || saved.map((f) => f.round).join() !== '1,2,3' || saved[0].matchId !== null || saved[0].kickoff !== null) throw new Error(JSON.stringify(saved));
+        const updated = await local.updateFixture(saved[0].id, { kickoff: '2026-10-17T18:00:00.000Z', venue: 'Vivero', matchId: 'm-played' });
+        if (updated.kickoff !== '2026-10-17T18:00:00.000Z' || updated.venue !== 'Vivero' || updated.matchId !== 'm-played') throw new Error(JSON.stringify(updated));
+        const again = await local.saveFixtures('cal-team', { ...file, fixtures: file.fixtures.map((f) => (f.round === 1 ? { ...f, opponent: 'CBM LEPE' } : f)) });
+        const first = again.find((f) => f.round === 1);
+        if (again.length !== 3 || first.id !== saved[0].id || first.opponent !== 'CBM LEPE' || first.kickoff !== updated.kickoff || first.venue !== 'Vivero' || first.matchId !== 'm-played') throw new Error(JSON.stringify(again));
+        if ((await local.listFixtures('other-team')).length) throw new Error('fixtures leak into another team');
+        await local.updateFixture(saved[0].id, { venue: null });
+        if ((await local.listFixtures('cal-team'))[0].kickoff !== updated.kickoff) throw new Error('a partial update cleared the kickoff');
+        await local.deleteMatch('m-played');
+        if ((await local.listFixtures('cal-team'))[0].matchId !== null) throw new Error('a deleted match stays linked');
+      } finally { await local.deleteTeam('cal-team'); }
+      if ((await local.listFixtures('cal-team')).length) throw new Error('fixtures outlive the team');
+    });
+    await TA('calendar: Supabase backend upserts only the file columns', async () => {
+      const calls = []; let next = { data: [], error: null };
+      const query = () => new Proxy({}, { get: (t, k) => (k === 'then' ? (ok) => ok(next) : (...a) => { calls.push([k, ...a]); return query(); }) });
+      const savedLib = window.supabase; window.supabase = { createClient: () => ({ from: (tbl) => { calls.push(['from', tbl]); return query(); } }) };
+      try {
+        const cloud = await supabaseBackend({ url: 'https://x.supabase.co', anonKey: 'k' });
+        const row = { id: 'f1', season: '2026/2027', competition: 'Liga', round: 1, weekend: '2026-10-18', home: true, opponent: 'A', kickoff: null, venue: null, match_id: 'm1' };
+        next = { data: [row], error: null };
+        const list = await cloud.saveFixtures('t1', parseCalendar(calFile({}, [{ round: 1, weekend: '2026-10-18', home: true, opponent: 'A' }])));
+        const [, rows, options] = calls.find((c) => c[0] === 'upsert');
+        if (Object.keys(rows[0]).sort().join() !== 'competition,home,opponent,round,season,team_id,weekend' || options.onConflict !== 'team_id,season,competition,round') throw new Error(JSON.stringify(calls));
+        if (list[0].matchId !== 'm1' || list[0].id !== 'f1') throw new Error(JSON.stringify(list));
+        calls.length = 0; next = { data: row, error: null };
+        await cloud.updateFixture('f1', { venue: 'Vivero' });
+        const [, patch] = calls.find((c) => c[0] === 'update');
+        if (Object.keys(patch).join() !== 'venue') throw new Error(JSON.stringify(patch));
+        calls.length = 0;
+        await cloud.updateFixture('f1', { matchId: 'm2' });
+        if (calls.find((c) => c[0] === 'update')[1].match_id !== 'm2') throw new Error(JSON.stringify(calls));
+      } finally { window.supabase = savedLib; }
+    });
+    const withCalendarTeam = async (fn) => {
+      const real = backend, previous = team, calTeam = { id: 'cal-team', club: 'Cal', name: 'Cal', brand: '#1a4a8a', brand2: '#ffffff', brandInk: '#ffffff', crest: null };
+      backend = localBackend();
+      applyTeam(calTeam);
+      try { await fn(calTeam); } finally { await backend.deleteTeam('cal-team'); backend = real; applyTeam(previous); home.fixtures = null; removeKey(CACHE_KEY_PREFIX + 'fixtures:cal-team'); removeKey(CACHE_KEY_PREFIX + 'players:cal-team'); }
+    };
+    await TA('calendar: fixtures load from the device copy offline', async () => {
+      await withCalendarTeam(async () => {
+        const cached = [fx('f1', 1, '2026-10-18', 'EL JAMON CBM LEPE')];
+        backend = { listFixtures: async () => cached };
+        let r = await loadFixtures();
+        if (r.offline || home.fixtures.length !== 1 || !readJson(CACHE_KEY_PREFIX + 'fixtures:cal-team')) throw new Error('online read');
+        home.fixtures = null;
+        backend = { listFixtures: async () => { throw new TypeError('Failed to fetch'); }, deleteTeam: async () => {} };
+        r = await loadFixtures();
+        if (!r.offline || home.fixtures.length !== 1 || home.fixtures[0].id !== 'f1') throw new Error(JSON.stringify(home.fixtures));
+      });
+    });
+    await TA('calendar: selecting a team clears the fixtures of the previous one and loads its own', async () => {
+      await withCalendarTeam(async (calTeam) => {
+        await backend.saveFixtures('cal-team', parseCalendar(calFile()));
+        home.fixtures = [fx('stale', 1, '2026-10-18', 'A')];
+        await selectTeam(calTeam);
+        if (home.fixtures.length !== 3 || home.fixtures.some((f) => f.id === 'stale')) throw new Error('stale fixtures ' + JSON.stringify(home.fixtures));
+      });
+    });
+    await TA('calendar: «Editar equipo» shows the count and imports a file', async () => {
+      await withCalendarTeam(async () => {
+        home.fixtures = [];
+        showHomeView('team-edit');
+        if (!$('home').textContent.includes('Sin calendario') || !document.querySelector('[data-calendar-import]')) throw new Error('empty row');
+        await importCalendar(new File([calFile()], 'calendario.json', { type: 'application/json' }));
+        if (home.fixtures.length !== 3 || !$('home').textContent.includes('3 jornadas · 2026/2027') || !$('home-status').textContent.includes('Calendario importado: 3 jornadas.')) throw new Error($('home').textContent.slice(0, 300));
+        await importCalendar(new File(['{nope'], 'x.json'));
+        if (!$('home-status').textContent.includes('no es JSON') || home.fixtures.length !== 3) throw new Error('bad file: ' + $('home-status').textContent);
+        showHomeView('profile');
+      });
+    });
     currentMatchId = null; removeKey(CURRENT_MATCH_KEY);
     state = sampleState(); ['home', 'sheet', 'final'].forEach((id) => { $(id).hidden = true; }); commit();
   };
