@@ -855,13 +855,17 @@
     const events = [...rGkShots('9M', 4, 6), { id: 'off', abs: 9, kind: 'RIVAL_SHOT', gkId: 'g', zone: '9M', result: 'FUERA' }, { id: 'other', abs: 9, kind: 'RIVAL_SHOT', gkId: 'x', zone: '9M', result: 'PARADA' }];
     const f = ratingFeatures(rateMatch(events), keeperG);
     if (!nearTo(f.saveValue, 4 - 10 * 0.4)) throw new Error('save value ' + f.saveValue);
+    const pen = ratingFeatures(rateMatch([{ id: 'p7', abs: 1, kind: 'RIVAL_SHOT', gkId: 'g', zone: '7M', result: 'PARADA' }]), keeperG);
+    if (!nearTo(pen.saveValue, 1 - CONFIG.rating.expectedSave['7M'])) throw new Error('7 m ' + pen.saveValue);
+    const noZone = ratingFeatures(rateMatch([{ id: 'nz', abs: 1, kind: 'RIVAL_SHOT', gkId: 'g', result: 'PARADA' }]), keeperG);
+    if (noZone.saveValue !== 0) throw new Error('unknown zone ' + noZone.saveValue);
     const contra = ratingFeatures(rateMatch([{ id: 'c', abs: 1, kind: 'RIVAL_SHOT', gkId: 'g', zone: '9M', contra: true, result: 'PARADA' }]), keeperG);
     if (!nearTo(contra.saveValue, 1 - CONFIG.rating.expectedSave.CONTRA)) throw new Error('contra ' + contra.saveValue);
   });
   T('rating: under the minimum minutes is S/C; a short spell is pulled to the base', () => {
     const events = rShots('a', '6M', 3, 0);
     const few = ratingOf(events, fieldA, { seconds: 9 * 60 }), edge = ratingOf(events, fieldA, { seconds: 10 * 60 });
-    if (few.rated || few.value !== null || ratingText(few) !== 'S/C' || !edge.rated) throw new Error(JSON.stringify([few, edge]));
+    if (few.rated || few.value !== null || ratingText(few.value) !== 'S/C' || !edge.rated) throw new Error(JSON.stringify([few, edge]));
     const full = ratingOf(events, fieldA, { seconds: 60 * 60 }).raw, short = edge.raw;
     if (!(CONFIG.rating.base < short && short < full)) throw new Error(`short ${short} full ${full}`);
   });
@@ -895,6 +899,21 @@
     const over = [60, 30, 20].map((min) => ratingOf(wing, fieldB, { seconds: min * 60 }).value);
     if (over.join() !== '8.4,7.8,7.6') throw new Error(over.join());
   });
+  T('rating: blocks and every card weigh what the weights say', () => {
+    const w = CONFIG.rating.weights, card = (c) => ({ id: 'c' + c, abs: 1, kind: 'SANCTION', playerId: 'a', card: c });
+    const delta = (events) => ratingOf(events).raw - CONFIG.rating.base;
+    const want = [[rAct('a', 'BLOC'), w.block], [card('A'), w.yellow], [card('2M'), w.twoMin], [card('D'), w.red], [card('AZ'), w.blue]];
+    want.forEach(([event, weight]) => { if (!nearTo(delta([event]), weight)) throw new Error(`${event.action || event.card} ${delta([event])} vs ${weight}`); });
+    if (!(w.block > 0 && w.yellow < 0 && w.yellow > w.twoMin && w.twoMin > w.blue && w.blue > w.red)) throw new Error('weights out of order');
+    const f = ratingFeatures(rateMatch(['A', '2M', 'D', 'AZ', 'unknown'].map(card).concat(rAct('a', 'BLOC'))), fieldA);
+    if (f.yellow !== 1 || f.twoMin !== 1 || f.red !== 1 || f.blue !== 1 || f.blocks !== 1 || Object.values(f).some(Number.isNaN)) throw new Error(JSON.stringify(f));
+  });
+  T('rating: a convocado who never entered is S/C and minutes feed the confidence', () => {
+    const s = rateMatch(rShots('a', '6M', 3, 0), { clock: { period: 1, elapsedMs: CONFIG.halfSeconds * 1000, runningSince: null }, court: [{ abs: 0, set: 0 }], courtSets: [['a', 'g']] });
+    const ratings = matchRatings(s, [fieldA, fieldB, keeperG]);
+    const never = ratings.get('b'), played = ratings.get('a');
+    if (never.rated || ratingText(never.value) !== 'S/C' || !played.rated || !nearTo(played.confidence, 0.707) || !ratings.get('g').rated) throw new Error(JSON.stringify([...ratings]));
+  });
   T('rating: rating a match changes no statistic', () => {
     const snap = snapshot(), before = JSON.stringify([liveStats(), score(), state.history]);
     const ratings = matchRatings(state);
@@ -903,13 +922,13 @@
     restore(snap);
   });
   T('rating: every chip shows its number and meets contrast in both themes', () => {
-    const samples = [8.4, 7.4, 6.5, 6.2, 4.1], bands = samples.map(ratingBand);
-    if (bands.join() !== 'rt-top,rt-good,rt-mid,rt-low,rt-bad' || ratingBand(8) !== 'rt-top' || ratingBand(6.4) !== 'rt-low' || ratingBand(5.9) !== 'rt-bad') throw new Error(bands.join());
-    if (ratingText({ value: 7.4 }) !== '7,4' || ratingText({ value: null }) !== 'S/C') throw new Error('text');
+    const samples = [8.4, 7.4, 6.5, 6.2, 4.1, null], bands = samples.map(ratingBand);
+    if (bands.join() !== 'rt-top,rt-good,rt-mid,rt-low,rt-bad,rt-none' || ratingBand(undefined) !== 'rt-none' || ratingBand(8) !== 'rt-top' || ratingBand(6.4) !== 'rt-low' || ratingBand(5.9) !== 'rt-bad') throw new Error(bands.join());
+    if (ratingText(7.4) !== '7,4' || ratingText(null) !== 'S/C' || ratingText(undefined) !== 'S/C') throw new Error('text');
     const chip = document.createElement('span'); document.body.appendChild(chip);
     try {
       ['light', 'dark'].forEach((theme) => inTheme(theme, () => samples.forEach((value, i) => {
-        chip.className = `rating-chip ${bands[i]}`; chip.textContent = ratingText({ value });
+        chip.className = `rating-chip ${bands[i]}`; chip.textContent = ratingText(value);
         const css = getComputedStyle(chip);
         if (!chip.textContent) throw new Error('empty chip');
         const ratio = contrastRatio(hexOfRgb(rgbOf(css.color)), hexOfRgb(rgbOf(css.backgroundColor)));

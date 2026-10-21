@@ -1854,13 +1854,14 @@ span.att-foot { visibility: hidden; }
     s.events.forEach((e) => {
       if (isTeamFaultOf(e, player, s)) { f.teamFaults++; return; }
       if (e.kind === 'RIVAL_SHOT') {
-        if (e.gkId === player.id && onTarget(e)) f.saveValue += (groupOf(e.result) === 'PARADA' ? 1 : 0) - CONFIG.rating.expectedSave[e.contra ? 'CONTRA' : e.zone];
+        const expected = CONFIG.rating.expectedSave[e.contra ? 'CONTRA' : e.zone];
+        if (e.gkId === player.id && onTarget(e) && expected != null) f.saveValue += (groupOf(e.result) === 'PARADA' ? 1 : 0) - expected;
         return;
       }
       if (e.playerId !== player.id) return;
       if (e.kind === 'SHOT') f.shotValue += (e.result === 'GOL' ? 1 : 0) - expectedGoal(e.zone);
       else if (e.kind === 'TURNOVER') f[turnoverFeature(e)]++;
-      else if (e.kind === 'SANCTION') f[RATING_CARD_FEATURES[e.card]]++;
+      else if (e.kind === 'SANCTION' && RATING_CARD_FEATURES[e.card]) f[RATING_CARD_FEATURES[e.card]]++;
       else if (e.kind === 'ACTION') {
         if (RATING_ACTION_FEATURES[e.action]) f[RATING_ACTION_FEATURES[e.action]]++;
         else if (RATING_RULE_FAULTS.includes(e.action)) f.ruleFaults++;
@@ -1896,8 +1897,10 @@ span.att-foot { visibility: hidden; }
     const minutes = minutesOnCourt(s);
     return new Map(players.map((p) => [p.id, playerRating(s, p, { seconds: minutes ? minutes.get(p.id) || 0 : null })]));
   }
-  const ratingText = (r) => (r.value == null ? 'S/C' : decimalText(r.value));
-  const ratingBand = (value) => CONFIG.rating.bands.find(([from]) => value >= from)[1];
+  // «S/C» (no rating) reads in the neutral `rt-none` chip, never in a band.
+  const RATING_NONE_BAND = 'rt-none';
+  const ratingText = (value) => (value == null ? 'S/C' : decimalText(value));
+  const ratingBand = (value) => (value == null ? RATING_NONE_BAND : CONFIG.rating.bands.find(([from]) => value >= from)[1]);
 
   // ===================== Audio, vibration, wake lock =====================
   let audioCtx = null;
