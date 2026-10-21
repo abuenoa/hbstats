@@ -804,6 +804,8 @@ a:focus-visible, input:focus-visible, select:focus-visible, summary:focus-visibl
 .fixture-edit { grid-column: 1 / -1; display: flex; flex-wrap: wrap; align-items: end; gap: var(--space-3); margin-top: var(--space-3); }
 .fixture-edit .field { min-width: 140px; }
 .fixture-venue { flex: 1; min-width: 200px; }
+.fixture-error { flex: 1 0 100%; color: var(--color-danger-text); font-weight: 700; }
+.fixture-error:empty { display: none; }
 /* Player card: poster, sentences, charts, per-match table, edit panel */
 .player-page { display: grid; gap: var(--space-4); }
 .player-bar { display: flex; justify-content: space-between; gap: var(--space-3); }
@@ -4819,7 +4821,7 @@ a:focus-visible, input:focus-visible, select:focus-visible, summary:focus-visibl
   }
   async function saveFixtureEdit(id) {
     const date = $('fx-date').value, time = $('fx-time').value, venue = $('fx-venue').value.trim();
-    if (date && !time) { homeStatus('Pon también la hora del partido.'); return; }
+    if (date && !time) { fixtureEditError('Pon también la hora del partido.'); return; }
     const teamId = team.id;
     try {
       const saved = await backend.updateFixture(id, { kickoff: date ? new Date(`${date}T${time}`).toISOString() : null, venue: venue || null });
@@ -4828,8 +4830,16 @@ a:focus-visible, input:focus-visible, select:focus-visible, summary:focus-visibl
       home.fixtureEdit = null;
       renderHome();
     } catch (err) {
-      homeStatus(`No se pudo guardar la jornada: ${cloudErrorText(err)}.`);
+      fixtureEditError(`No se pudo guardar la jornada: ${cloudErrorText(err)}.`);
     }
+  }
+  // The message sits in the editor that produced it, so a coach deep in the list sees it.
+  const fixtureEditError = (text) => { $('fx-error').textContent = text; };
+  // The next round when it has no match yet: the one «+ Nuevo partido» on the team page creates.
+  function nextOpenFixtureId() {
+    const fixtures = home.fixtures || [], links = linkFixtures(fixtures, home.teamMatches);
+    const next = nextFixture(fixtures, links);
+    return next && !links.has(next.id) ? next.id : null;
   }
   // The new match must be uploaded before a fixture can point at it; if that fails, the auto link covers it later.
   async function linkFixtureToMatch(fixture, matchId) {
@@ -5169,23 +5179,25 @@ a:focus-visible, input:focus-visible, select:focus-visible, summary:focus-visibl
         <label class="field">Fecha<input class="in" type="date" id="fx-date" value="${kickoff ? localIso(kickoff) : ''}"></label>
         <label class="field">Hora<input class="in" type="time" id="fx-time" value="${kickoff ? timeText(kickoff) : ''}"></label>
         <label class="field fixture-venue">Lugar<input class="in" type="text" id="fx-venue" maxlength="${MAX_VENUE_LENGTH}" value="${esc(f.venue || '')}" placeholder="Pabellón, ciudad"></label>
+        <p class="note fixture-error" id="fx-error" role="alert"></p>
         <div class="row-actions"><button class="btn primary press" type="button" data-fixture-save="${f.id}">Guardar</button><button class="btn press" type="button" data-fixture-cancel>Cancelar</button></div>
       </div>`;
   }
-  const fixtureEditButton = (f) => `<button class="btn press" type="button" data-fixture-edit="${f.id}" aria-label="Fecha y lugar de la jornada ${f.round}">Fecha</button>`;
+  const editingFixture = (f, at) => home.fixtureEdit && home.fixtureEdit.id === f.id && home.fixtureEdit.at === at;
+  const fixtureEditButton = (f, at) => `<button class="btn press" type="button" data-fixture-edit="${f.id}" data-fixture-at="${at}" aria-label="Fecha y lugar de la jornada ${f.round}">Fecha</button>`;
   function nextFixtureCardHtml(fixtures, links) {
     if (!fixtures || !fixtures.length) return '';
     const f = nextFixture(fixtures, links);
     if (!f) return '<section class="sheet-card next-card"><h3>Próximo partido</h3><p class="note">No quedan jornadas por jugar.</p></section>';
     const match = links.get(f.id);
-    const play = match ? `<button class="btn go press" type="button" data-open-match="${match.id}">Seguir partido</button>` : `<button class="btn go press" type="button" data-fixture-new="${f.id}">+ Nuevo partido</button>`;
+    const play = match ? `<button class="btn primary press" type="button" data-open-match="${match.id}">Seguir partido</button>` : '';
     return `<section class="sheet-card next-card"><h3>Próximo partido</h3>
       <div class="next-body">
         <div class="next-what"><span class="next-round">Jornada ${f.round}</span><strong class="next-rival">${esc(f.opponent)}</strong>
           <span class="next-when">${esc(fixtureWhenText(f))}${f.venue ? ` · ${esc(f.venue)}` : ''}</span></div>
         ${homeAwayBadge(f)}
-        <div class="row-actions">${play}${fixtureEditButton(f)}</div>
-      </div>${home.fixtureEdit === f.id ? fixtureEditorHtml(f) : ''}</section>`;
+        <div class="row-actions">${play}${fixtureEditButton(f, 'card')}</div>
+      </div>${editingFixture(f, 'card') ? fixtureEditorHtml(f) : ''}</section>`;
   }
   // What the result column of a round says: the result and score of a played match, a way into one in progress, or that none was played.
   function fixtureResultHtml(f, match, over) {
@@ -5197,7 +5209,7 @@ a:focus-visible, input:focus-visible, select:focus-visible, summary:focus-visibl
     }
     return `<button class="cal-result press" type="button" data-open-match="${match.id}" ${label}>Seguir</button>`;
   }
-  function calendarCardHtml(fixtures, links, nextId) {
+  function calendarCardHtml(fixtures, links) {
     if (!fixtures || !fixtures.length) return '<section class="sheet-card calendar-card"><h3>Calendario</h3><p class="note">Importa el calendario en «Editar equipo».</p></section>';
     const today = todayIso();
     const currentId = (fixtures.find((f) => { const [monday, sunday] = weekOf(f.weekend); return monday <= today && today <= sunday; }) || {}).id;
@@ -5207,8 +5219,8 @@ a:focus-visible, input:focus-visible, select:focus-visible, summary:focus-visibl
       return `<li class="cal-row"${now ? ' aria-current="date"' : ''}>
         <span class="cal-round">J${f.round}</span><span class="cal-date">${esc(fixtureDayText(f))}</span>
         <span class="cal-who"><span class="cal-rival">${esc(f.opponent)}</span>${where ? `<small>${where}</small>` : ''}</span>
-        ${homeAwayBadge(f)}<span class="cal-state">${fixtureResultHtml(f, links.get(f.id), weekOf(f.weekend)[1] < today)}</span>${fixtureEditButton(f)}
-        ${home.fixtureEdit === f.id && f.id !== nextId ? fixtureEditorHtml(f) : ''}</li>`;
+        ${homeAwayBadge(f)}<span class="cal-state">${fixtureResultHtml(f, links.get(f.id), weekOf(f.weekend)[1] < today)}</span>${fixtureEditButton(f, 'row')}
+        ${editingFixture(f, 'row') ? fixtureEditorHtml(f) : ''}</li>`;
     }).join('');
     return `<section class="sheet-card calendar-card"><h3>Calendario</h3><ol class="cal-list">${rows}</ol></section>`;
   }
@@ -5217,9 +5229,8 @@ a:focus-visible, input:focus-visible, select:focus-visible, summary:focus-visibl
     const note = home.seasonOffline ? SEASON_OFFLINE_NOTE : home.offline ? '<p class="note">Sin conexión: ves la copia guardada en esta tablet.</p>' : '';
     const fixtures = home.fixtures || [];
     const links = linkFixtures(fixtures, home.teamMatches);
-    const next = nextFixture(fixtures, links);
     return `${statusHtml()}${note}
-      <div class="team-page">${nextFixtureCardHtml(fixtures, links)}${seasonCardHtml(home.season)}${leadersCardHtml(home.season)}${squadCardHtml()}${calendarCardHtml(fixtures, links, next && next.id)}</div>`;
+      <div class="team-page">${nextFixtureCardHtml(fixtures, links)}${seasonCardHtml(home.season)}${leadersCardHtml(home.season)}${squadCardHtml()}${calendarCardHtml(fixtures, links)}</div>`;
   }
   // The season stays loaded while the coach moves between the team pages; anything that changes it clears it.
   async function ensureSeason() {
@@ -5825,9 +5836,8 @@ a:focus-visible, input:focus-visible, select:focus-visible, summary:focus-visibl
     if (b.dataset.leader) { home.leaderMetric = b.dataset.leader; renderHome(); return; }
     if (b.dataset.homeView === 'profile') { showProfile(); return; }
     if (b.dataset.homeView) { home.crestDraft = undefined; showHomeView(b.dataset.homeView); return; }
-    if (b.hasAttribute('data-new-match')) { openSquad(); return; }
-    if (b.dataset.fixtureNew) { openSquad({ fixtureId: b.dataset.fixtureNew }); return; }
-    if (b.dataset.fixtureEdit) { home.fixtureEdit = b.dataset.fixtureEdit; renderHome(); return; }
+    if (b.hasAttribute('data-new-match')) { openSquad({ fixtureId: home.view === 'team' ? nextOpenFixtureId() : null }); return; }
+    if (b.dataset.fixtureEdit) { home.fixtureEdit = { id: b.dataset.fixtureEdit, at: b.dataset.fixtureAt }; renderHome(); $('fx-date').focus(); return; }
     if (b.dataset.fixtureSave) { saveFixtureEdit(b.dataset.fixtureSave); return; }
     if (b.hasAttribute('data-fixture-cancel')) { home.fixtureEdit = null; renderHome(); return; }
     if (b.hasAttribute('data-new-team')) { openNewTeam(); return; }
