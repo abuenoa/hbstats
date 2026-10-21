@@ -1611,6 +1611,160 @@
         if (!warnings.length || home.fixtures[0].matchId !== null) throw new Error('failure not warned');
       } finally { console.warn = warn; backend = real; home.fixtures = savedFixtures; home.teamMatches = savedMatches; delete navigator.onLine; if (online) Object.defineProperty(Navigator.prototype, 'onLine', online); }
     });
+    // ---- Team page: «Próximo partido» and «Calendario» ----
+    const weeksFromNow = (n) => isoOfUtc(Date.parse(`${weekOf(todayIso())[1]}T00:00:00Z`) + n * 7 * DAY_MS);
+    const finishedMatch = (id, them, scoreUs, scoreThem, over) => ({ id, date: weeksFromNow(-2), them, venue: '', status: 'finished', scoreUs, scoreThem, ...over });
+    const showCalendarPage = (fixtures, matches) => { home.fixtures = fixtures; home.teamMatches = matches; home.season = []; showHomeView('team'); };
+    const season14 = () => Array.from({ length: 14 }, (_, i) => fx('r' + (i + 1), i + 1, weeksFromNow(i - 2), 'Rival ' + (i + 1), { home: i % 2 === 0 }));
+    const flatText = (el) => el.textContent.replace(/\s+/g, ' ').trim();
+    await TA('team page: next match shows round, weekend, rival and home or away', async () => {
+      await withCalendarTeam(async () => {
+        showCalendarPage([fx('r1', 1, '2099-10-25', 'BALONMANO GADES - ASISA', { home: false }), fx('r2', 2, '2099-11-01', 'Otro')], []);
+        const card = document.querySelector('.team-page > .next-card:first-child');
+        const text = card && flatText(card);
+        if (!text || !text.includes('Próximo partido') || !text.includes('Jornada 1') || !text.includes('fin de semana 24–25 oct') || !text.includes('BALONMANO GADES - ASISA') || !text.includes('Fuera') || text.includes('Otro')) throw new Error(text);
+        if (!card.querySelector('[data-fixture-new="r1"]') || !card.querySelector('[data-fixture-edit="r1"]')) throw new Error('buttons missing');
+        showCalendarPage([fx('r1', 1, '2099-10-25', 'Local FC', { home: true })], []);
+        if (!flatText(document.querySelector('.next-card')).includes('Casa')) throw new Error('home badge');
+      });
+    });
+    await TA('team page: exact date and time replace the weekend once set', async () => {
+      await withCalendarTeam(async () => {
+        const kickoff = new Date(2026, 9, 24, 18, 0).toISOString();
+        if (fixtureWhenText(fx('a', 1, '2026-10-25', 'X', { kickoff })) !== 'sáb 24 oct · 18:00') throw new Error(fixtureWhenText(fx('a', 1, '2026-10-25', 'X', { kickoff })));
+        if (fixtureWhenText(fx('a', 1, '2026-11-01', 'X')) !== 'fin de semana 31 oct–1 nov') throw new Error(fixtureWhenText(fx('a', 1, '2026-11-01', 'X')));
+        showCalendarPage([fx('r1', 1, '2099-10-25', 'Gades', { kickoff: new Date(2099, 9, 24, 18, 0).toISOString(), venue: 'Pabellón Vivero' })], []);
+        const text = flatText(document.querySelector('.next-card'));
+        if (!text.includes('sáb 24 oct · 18:00') || text.includes('fin de semana') || !text.includes('Pabellón Vivero')) throw new Error(text);
+      });
+    });
+    await TA('team page: calendar lists every round; played ones open their match', async () => {
+      await withCalendarTeam(async () => {
+        const fixtures = season14().map((f) => (f.round === 1 ? { ...f, opponent: 'CBM LEPE' } : f));
+        showCalendarPage(fixtures, [finishedMatch('m1', 'Lepe', 28, 23), finishedMatch('m2', 'Rival 2', 20, 20, { date: weeksFromNow(-1) })]);
+        const rows = document.querySelectorAll('.calendar-card .cal-row');
+        if (rows.length !== 14 || !rows[0].textContent.includes('J1') || !rows[13].textContent.includes('J14')) throw new Error('rows ' + rows.length);
+        const chip = rows[0].querySelector('[data-open-match]');
+        if (!chip || chip.dataset.openMatch !== 'm1' || flatText(chip) !== 'G 28–23') throw new Error(chip && flatText(chip));
+        if (flatText(rows[1].querySelector('[data-open-match]')) !== 'E 20–20') throw new Error('draw chip');
+        if (rows[2].querySelector('[data-open-match]')) throw new Error('an unplayed round opens a match');
+        if (![...rows].every((r) => /Casa|Fuera/.test(r.textContent) && r.querySelector('[data-fixture-edit]'))) throw new Error('badge or edit missing');
+      });
+    });
+    await TA('team page: the current week has a ring and reads Esta semana', async () => {
+      await withCalendarTeam(async () => {
+        showCalendarPage(season14(), []);
+        const current = document.querySelectorAll('[aria-current="date"]');
+        if (current.length !== 1 || !current[0].textContent.includes('J3') || !current[0].textContent.includes('Esta semana')) throw new Error(current.length);
+        if ((document.querySelector('.calendar-card').textContent.match(/Esta semana/g) || []).length !== 1) throw new Error('label repeated');
+        if (nextFixture(season14(), new Map()).round !== 3) throw new Error('next is not this week');
+      });
+    });
+    await TA('team page: nextFixture skips finished matches and past weeks', async () => {
+      const fixtures = [fx('a', 1, '2026-10-18', 'A'), fx('b', 2, '2026-10-25', 'B'), fx('c', 3, '2026-11-01', 'C')];
+      const links = new Map([['b', finishedMatch('mb', 'B', 1, 0)], ['c', { id: 'mc', status: 'live' }]]);
+      if (nextFixture(fixtures, links, '2026-10-24').id !== 'c') throw new Error('finished round not skipped');
+      if (nextFixture(fixtures, new Map(), '2026-10-25').id !== 'b') throw new Error('Sunday of the round must count');
+      if (nextFixture(fixtures, new Map(), '2026-10-26').id !== 'c' || nextFixture(fixtures, new Map(), '2026-11-02') !== null) throw new Error('past weeks');
+      if (nextFixture([], new Map(), '2026-10-24') !== null) throw new Error('empty');
+    });
+    await TA('team page: fixtureRivalName cuts at a word boundary within the limit', async () => {
+      if (fixtureRivalName('BALONMANO GADES - ASISA') !== 'BALONMANO GADES - ASISA') throw new Error('short name changed');
+      const cut = fixtureRivalName('BM PROIN SAN JOSE RINCONADA SUR');
+      if (cut !== 'BM PROIN SAN JOSE') throw new Error(cut);
+      if (fixtureRivalName('A'.repeat(40)) !== 'A'.repeat(MAX_NAME_LENGTH)) throw new Error('no space to cut at');
+      if (fixtureRivalName('X'.repeat(MAX_NAME_LENGTH) + ' Y') !== 'X'.repeat(MAX_NAME_LENGTH)) throw new Error('boundary at the limit');
+    });
+    await TA('team page: the fixture editor saves date, time and venue, and an empty date clears the kickoff', async () => {
+      await withCalendarTeam(async () => {
+        const [saved] = await backend.saveFixtures('cal-team', parseCalendar(calFile({}, [{ round: 1, weekend: '2099-10-25', home: true, opponent: 'Gades' }])));
+        showCalendarPage([saved], []);
+        document.querySelector('[data-fixture-edit]').click();
+        if (!$('fx-date') || !$('fx-time') || !$('fx-venue')) throw new Error('editor not open');
+        $('fx-date').value = '2099-10-24'; $('fx-time').value = '18:30'; $('fx-venue').value = 'Pabellón Vivero';
+        document.querySelector('[data-fixture-save]').click();
+        for (let i = 0; i < 6; i++) await tick0();
+        const stored = (await backend.listFixtures('cal-team'))[0];
+        if (new Date(stored.kickoff).getTime() !== new Date(2099, 9, 24, 18, 30).getTime() || stored.venue !== 'Pabellón Vivero' || home.fixtures[0].kickoff !== stored.kickoff) throw new Error(JSON.stringify(stored));
+        if (!flatText(document.querySelector('.next-card')).includes('sáb 24 oct · 18:30') || document.querySelector('#fx-date')) throw new Error('page not refreshed');
+        document.querySelector('[data-fixture-edit]').click();
+        if ($('fx-date').value !== '2099-10-24' || $('fx-time').value !== '18:30' || $('fx-venue').value !== 'Pabellón Vivero') throw new Error('editor not prefilled');
+        $('fx-time').value = '';
+        document.querySelector('[data-fixture-save]').click();
+        for (let i = 0; i < 3; i++) await tick0();
+        if (!$('fx-date') || !$('home-status').textContent.includes('hora')) throw new Error('a date without a time was accepted');
+        $('fx-date').value = ''; $('fx-venue').value = '';
+        document.querySelector('[data-fixture-save]').click();
+        for (let i = 0; i < 6; i++) await tick0();
+        const cleared = (await backend.listFixtures('cal-team'))[0];
+        if (cleared.kickoff !== null || cleared.venue !== null) throw new Error(JSON.stringify(cleared));
+        document.querySelector('[data-fixture-edit]').click();
+        document.querySelector('[data-fixture-cancel]').click();
+        if (document.querySelector('#fx-date')) throw new Error('cancel left the editor open');
+      });
+    });
+    await TA('new match from a fixture: rival, date and venue prefilled and linked', async () => {
+      await withCalendarTeam(async () => {
+        const [saved] = await backend.saveFixtures('cal-team', parseCalendar(calFile({}, [{ round: 4, weekend: '2026-11-08', home: false, opponent: 'BM PROIN SAN JOSE RINCONADA SUR' }])));
+        const fixture = await backend.updateFixture(saved.id, { kickoff: new Date(2026, 10, 7, 19, 0).toISOString(), venue: 'Pabellón Rinconada' });
+        home.roster = [await backend.savePlayer('cal-team', { num: 1, name: 'Portero', pos: 'POR', photo: null }), await backend.savePlayer('cal-team', { num: 7, name: 'Lateral', pos: 'LAT', photo: null })];
+        home.fixtures = [fixture]; home.teamMatches = [];
+        openSquad({ fixtureId: fixture.id });
+        if (home.view !== 'squad' || !$('home').textContent.includes('Jornada 4')) throw new Error('squad view does not say which round');
+        await createMatch();
+        if (state.them !== 'BM PROIN SAN JOSE' || state.date !== '2026-11-07' || state.venue !== 'Pabellón Rinconada' || state.setupDone) throw new Error(JSON.stringify([state.them, state.date, state.venue]));
+        const linkedTo = currentMatchId;
+        const stored = (await backend.listFixtures('cal-team'))[0];
+        if (stored.matchId !== linkedTo || home.fixtures[0].matchId !== linkedTo) throw new Error('not linked ' + stored.matchId);
+        if (!(await backend.listMatches('cal-team')).some((m) => m.id === linkedTo)) throw new Error('the match was not uploaded before the link');
+        openSquad();
+        await createMatch();
+        if (state.them !== 'Rival' || state.date !== todayIso() || state.venue !== '' || (await backend.listFixtures('cal-team'))[0].matchId !== linkedTo) throw new Error('a plain new match took the fixture');
+        removeKey(MATCH_KEY_PREFIX + linkedTo); removeKey(MATCH_KEY_PREFIX + currentMatchId); removeKey(SQUAD_KEY_PREFIX + 'cal-team');
+        ['home', 'sheet', 'final'].forEach((id) => { $(id).hidden = true; });
+      });
+    });
+    await TA('new match from a fixture: a failed link only warns', async () => {
+      await withCalendarTeam(async () => {
+        const warn = console.warn, warnings = [];
+        console.warn = (m) => warnings.push(m);
+        try {
+          home.roster = [await backend.savePlayer('cal-team', { num: 1, name: 'Portero', pos: 'POR', photo: null })];
+          home.fixtures = [fx('gone', 1, '2099-10-25', 'Gades')]; home.teamMatches = [];
+          openSquad({ fixtureId: 'gone' });
+          await createMatch();
+          if (!warnings.some((w) => /existe/.test(w)) || state.them !== 'Gades') throw new Error(warnings.join() + state.them);
+        } finally { console.warn = warn; removeKey(MATCH_KEY_PREFIX + currentMatchId); removeKey(SQUAD_KEY_PREFIX + 'cal-team'); ['home', 'sheet', 'final'].forEach((id) => { $(id).hidden = true; }); }
+      });
+    });
+    await TA('team page: opponent names are escaped and no fixtures shows the hint, no NaN', async () => {
+      await withCalendarTeam(async () => {
+        showCalendarPage([fx('r1', 1, '2099-10-25', '<img src=x onerror=alert(1)>', { venue: '<b>Pabellón</b>' })], []);
+        if (document.querySelector('.team-page img[src="x"]') || document.querySelector('.team-page .cal-row b:not(.cal-round)') || document.querySelector('.team-page .next-card b')) throw new Error('markup from a name was rendered');
+        if (!$('home').textContent.includes('<img src=x onerror=alert(1)>') || !$('home').textContent.includes('<b>Pabellón</b>')) throw new Error('name not shown as text');
+        for (const none of [[], null]) {
+          showCalendarPage(none, []);
+          const text = $('home').textContent;
+          if (!text.includes('Importa el calendario en «Editar equipo».') || document.querySelector('.next-card') || /NaN|undefined/.test(text)) throw new Error(text.slice(0, 300));
+        }
+      });
+    });
+    await TA('calendar: an explicit matchId pointing at a missing match shows the fixture unlinked', async () => {
+      const gone = fx('r1', 1, '2026-10-18', 'EL JAMON CBM LEPE', { matchId: 'deleted' });
+      if (fixtureMatch(gone, [mt('m1', '2026-10-17', 'CBMLEPE')]) !== null || linkFixtures([gone], [mt('m1', '2026-10-17', 'CBMLEPE')]).size !== 0) throw new Error('fell back to the auto link');
+    });
+    await TA('calendar: deleting a team removes its calendar copy from the device', async () => {
+      const gone = { id: 'cal-gone', club: 'Gone', name: 'Gone', brand: '#1a4a8a', brand2: '#ffffff', brandInk: '#ffffff', crest: null };
+      const real = backend, previous = team, savedTeams = home.teams;
+      try {
+        backend = { deleteTeam: async () => {} };
+        applyTeam(gone);
+        writeJson(CACHE_KEY_PREFIX + 'fixtures:cal-gone', [fx('f', 1, '2026-10-18', 'A')]);
+        home.teams = [gone, previous];
+        await deleteTeam();
+        if (readJson(CACHE_KEY_PREFIX + 'fixtures:cal-gone') !== null) throw new Error('calendar copy kept');
+      } finally { backend = real; applyTeam(previous); home.teams = savedTeams; showHomeView('team'); }
+    });
     currentMatchId = null; removeKey(CURRENT_MATCH_KEY);
     state = sampleState(); ['home', 'sheet', 'final'].forEach((id) => { $(id).hidden = true; }); commit();
   };

@@ -693,7 +693,7 @@ td.zero { color: var(--color-text-tertiary); }
 @media (hover: hover) {
   .home .row-link:hover { background: var(--color-bg-subtle); }
   .home .team-card:hover, .home .face:hover { box-shadow: var(--ring-hover); }
-  .home .leader:hover { background: var(--color-bg-subtle); }
+  .home .leader:hover, .home .cal-result:hover { background: var(--color-bg-subtle); }
 }
 /* Pages outside the live screen: position colours deep enough for white dorsals, and the green, chip and link sizes the probe asks for */
 .home, #sheet, #final { --ext: #0f766e; --lat: #7c3aed; --cen: #cc1d72; --piv: var(--crown-deep); --por: var(--color-keeper); }
@@ -793,6 +793,30 @@ a:focus-visible, input:focus-visible, select:focus-visible, summary:focus-visibl
 .face .disc, .last-match .disc { width: var(--face-disc); height: var(--face-disc); font-size: 22px; }
 .face .disc { box-shadow: 0 0 0 3px var(--pos); }
 .squad .row-actions { margin-top: var(--space-4); }
+/* Team page: «Próximo partido» and «Calendario» use the full width */
+.next-card, .calendar-card { grid-column: 1 / -1; }
+.next-body { display: flex; align-items: center; gap: var(--space-4); flex-wrap: wrap; }
+.next-what { display: grid; gap: var(--space-1); flex: 1; min-width: 0; }
+.next-round { font: var(--type-caption); font-weight: 700; letter-spacing: .1em; text-transform: uppercase; color: var(--muted); }
+.next-rival { font: var(--type-title); overflow-wrap: anywhere; }
+.next-when { font: var(--type-heading); font-variant-numeric: tabular-nums; }
+.venue-badge { justify-self: start; padding: var(--space-1) var(--space-3); border-radius: var(--radius-full); border: 1px solid var(--line); background: var(--soft); font: var(--type-caption); font-weight: 700; white-space: nowrap; }
+.cal-list { margin: 0; padding: 0; list-style: none; display: grid; }
+.calendar-card .cal-row { display: grid; grid-template-columns: 40px 168px minmax(0, 1fr) 64px 128px auto; align-items: center; gap: var(--space-3); min-height: var(--tap); padding: var(--space-2) var(--space-3); border-bottom: 1px solid var(--line); }
+.calendar-card .cal-row:last-child { border-bottom-color: transparent; }
+.calendar-card .cal-row[aria-current="date"] { border-radius: var(--radius-md); box-shadow: 0 0 0 2px var(--fg); border-bottom-color: transparent; }
+.cal-round, .cal-date { white-space: nowrap; font-variant-numeric: tabular-nums; }
+.cal-round { font-weight: 800; }
+.cal-date { font-weight: 600; }
+.cal-who { display: grid; min-width: 0; }
+.cal-rival { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 700; }
+.cal-who small { font: var(--type-caption); font-weight: 700; color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.cal-none { font: var(--type-caption); color: var(--muted); }
+.cal-result { display: inline-flex; align-items: center; gap: var(--space-2); min-height: var(--target); padding: 0 var(--space-3); border: 1px solid var(--line); border-radius: var(--radius-md); background: var(--surface); color: var(--fg); font: inherit; font-weight: 700; white-space: nowrap; }
+.cal-score { font-variant-numeric: tabular-nums; }
+.fixture-edit { grid-column: 1 / -1; display: flex; flex-wrap: wrap; align-items: end; gap: var(--space-3); margin-top: var(--space-3); }
+.fixture-edit .field { min-width: 140px; }
+.fixture-venue { flex: 1; min-width: 200px; }
 /* Player card: poster, sentences, charts, per-match table, edit panel */
 .player-page { display: grid; gap: var(--space-4); }
 .player-bar { display: flex; justify-content: space-between; gap: var(--space-3); }
@@ -846,6 +870,7 @@ a:focus-visible, input:focus-visible, select:focus-visible, summary:focus-visibl
 @media (max-width: 700px) { .match-grid { grid-template-columns: minmax(0, 1fr); } }
 @media (max-width: 700px) { .player-grid, .player-fields { grid-template-columns: minmax(0, 1fr); } }
 @media (max-width: 1100px) { .team-page { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); } .squad { grid-column: 1 / -1; } }
+@media (max-width: 900px) { .calendar-card .cal-row { grid-template-columns: 40px minmax(0, 1fr) auto; } .cal-date { grid-column: 2; } .cal-who { grid-column: 1 / -1; } }
 @media (max-width: 700px) { .team-page { grid-template-columns: minmax(0, 1fr); } }
 @media (max-width: 900px) { .team-layout { grid-template-columns: minmax(0, 1fr); } }
 @media (prefers-reduced-transparency: reduce) {
@@ -1201,12 +1226,13 @@ a:focus-visible, input:focus-visible, select:focus-visible, summary:focus-visibl
 
   // ===================== State =====================
   // A match ready to prepare: our roster and preferences carried over; opponent, venue, clock and log reset.
-  function freshMatch(from) {
+  // `prefill` ({ them, date, venue }, from a fixture) replaces the defaults it names.
+  function freshMatch(from, prefill = {}) {
     return {
       sample: false, setupDone: false, finished: false,
       us: from.us, players: from.players, lineups: from.lineups, gkId: from.gkId,
       autoPhase: from.autoPhase, clockDown: Boolean(from.clockDown), reportEmail: from.reportEmail || '', mvpId: null,
-      them: 'Rival', rivals: [], venue: '', date: todayIso(), phase: DEFAULT_PHASE,
+      them: prefill.them || 'Rival', rivals: [], venue: prefill.venue || '', date: prefill.date || todayIso(), phase: DEFAULT_PHASE,
       clock: { period: 1, elapsedMs: 0, runningSince: null }, timeoutsUsed: 0, timeoutsUsedThem: 0, timeout: null,
       events: [], fired: [], alerts: [], history: [], future: []
     };
@@ -3984,7 +4010,7 @@ a:focus-visible, input:focus-visible, select:focus-visible, summary:focus-visibl
   $('roster-file').addEventListener('change', (ev) => {
     const file = ev.target.files && ev.target.files[0];
     ev.target.value = '';
-    if (file) (ui.rosterSide === 'template' ? importTemplateFile : importTeamRoster)(file);
+    if (file) ({ template: importTemplateFile, [CALENDAR_FILE_SIDE]: importCalendar }[ui.rosterSide] || importTeamRoster)(file);
   });
 
   // ===================== Accounts, team and saved matches =====================
@@ -4015,7 +4041,7 @@ a:focus-visible, input:focus-visible, select:focus-visible, summary:focus-visibl
   let backend = null;
   let currentMatchId = null;
   let syncTimer = null;
-  const home = { view: 'loading', user: null, teams: [], roster: [], matches: [], season: null, templates: [], template: null, squad: new Set(), leaderMetric: 'goals', playerId: null, playerMatchId: null, playerEdit: false, playerDraft: null, offline: false, error: '', draft: null, crestDraft: undefined, armed: null, passwordChange: false, seasonOffline: false };
+  const home = { view: 'loading', user: null, teams: [], roster: [], matches: [], season: null, templates: [], template: null, squad: new Set(), leaderMetric: 'goals', playerId: null, playerMatchId: null, playerEdit: false, playerDraft: null, offline: false, error: '', draft: null, crestDraft: undefined, armed: null, passwordChange: false, seasonOffline: false, fixtures: null, teamMatches: [], fixtureEdit: null, squadFixture: null };
 
   // ---- Device storage ----
   function readJson(key) {
@@ -4044,6 +4070,11 @@ a:focus-visible, input:focus-visible, select:focus-visible, summary:focus-visibl
   }
 
   // ---- Backends ----
+  // The fields of a fixture the coach sets during the match week, and the column each one is stored in.
+  const FIXTURE_COLUMN_OF = { kickoff: 'kickoff', venue: 'venue', matchId: 'match_id' };
+  const FIXTURE_COLUMNS = 'id,season,competition,round,weekend,home,opponent,kickoff,venue,match_id';
+  const FIXTURE_KEY = 'team_id,season,competition,round';
+  const byWeekend = (a, b) => a.weekend.localeCompare(b.weekend) || a.round - b.round;
   const CLOUD_ERRORS = [
     [/invalid login credentials/i, 'email o contraseña incorrectos'],
     [/email not confirmed/i, 'falta aceptar la invitación del email'],
@@ -4064,11 +4095,14 @@ a:focus-visible, input:focus-visible, select:focus-visible, summary:focus-visibl
 
   // Everything on this device: no sign-in, one store in localStorage. Match states are the device copies themselves.
   function localBackend() {
-    const read = () => ({ teams: [], players: [], matches: {}, templates: [], ...readJson(LOCAL_DB_KEY) });
+    const read = () => ({ teams: [], players: [], matches: {}, templates: [], fixtures: [], ...readJson(LOCAL_DB_KEY) });
     const write = (db) => { if (!writeJson(LOCAL_DB_KEY, db)) throw new Error('no queda espacio en este dispositivo'); };
     const plain = (p) => ({ id: p.id, num: p.num, name: p.name, pos: p.pos, fullName: p.fullName || null, photo: p.photo || null });
+    const plainFixture = ({ id, season, competition, round, weekend, home, opponent, kickoff, venue, matchId }) => ({ id, season, competition, round, weekend, home, opponent, kickoff, venue, matchId });
+    const listFixtures = async (teamId) => read().fixtures.filter((f) => f.teamId === teamId).map(plainFixture).sort(byWeekend);
     return {
       needsLogin: false,
+      listFixtures,
       async listTeams() { return read().teams; },
       async createTeam(fields) {
         const db = read();
@@ -4112,15 +4146,36 @@ a:focus-visible, input:focus-visible, select:focus-visible, summary:focus-visibl
         db.matches[id] = { teamId, summary: matchSummary(id, s) };
         write(db);
       },
+      // Re-importing a calendar updates the file's columns and keeps the kickoff, the venue and the match link.
+      async saveFixtures(teamId, { season, competition, fixtures }) {
+        const db = read();
+        fixtures.forEach((f) => {
+          let row = db.fixtures.find((x) => x.teamId === teamId && x.season === season && x.competition === competition && x.round === f.round);
+          if (!row) { row = { id: newUuid(), teamId, season, competition, round: f.round, kickoff: null, venue: null, matchId: null }; db.fixtures.push(row); }
+          Object.assign(row, { weekend: f.weekend, home: f.home, opponent: f.opponent });
+        });
+        write(db);
+        return listFixtures(teamId);
+      },
+      async updateFixture(id, patch) {
+        const db = read();
+        const row = db.fixtures.find((f) => f.id === id);
+        if (!row) throw new Error('la jornada ya no existe');
+        Object.keys(FIXTURE_COLUMN_OF).filter((k) => k in patch).forEach((k) => { row[k] = patch[k]; });
+        write(db);
+        return plainFixture(row);
+      },
       async deleteMatch(id) {
         const db = read();
         delete db.matches[id];
+        db.fixtures.filter((f) => f.matchId === id).forEach((f) => { f.matchId = null; });
         write(db);
       },
       async deleteTeam(id) {
         const db = read();
         db.teams = db.teams.filter((t) => t.id !== id);
         db.players = db.players.filter((p) => p.teamId !== id);
+        db.fixtures = db.fixtures.filter((f) => f.teamId !== id);
         Object.keys(db.matches).filter((k) => db.matches[k].teamId === id).forEach((k) => { delete db.matches[k]; });
         write(db);
       },
@@ -4154,10 +4209,13 @@ a:focus-visible, input:focus-visible, select:focus-visible, summary:focus-visibl
     const PLAYER_COLUMNS = 'id,num,name,pos,full_name,photo';
     // `name` is the short name shown on court; `fullName` is the one on the official card.
     const toPlayer = (r) => ({ id: r.id, num: r.num, name: r.name, pos: r.pos, fullName: r.full_name, photo: r.photo });
+    const toFixture = (r) => ({ id: r.id, season: r.season, competition: r.competition, round: r.round, weekend: r.weekend, home: r.home, opponent: r.opponent, kickoff: r.kickoff, venue: r.venue, matchId: r.match_id });
+    const listFixtures = async (teamId) => check(await client.from('fixtures').select(FIXTURE_COLUMNS).eq('team_id', teamId).order('weekend').order('round')).map(toFixture);
     const toSummary = (r) => ({ id: r.id, date: r.played_on || '', them: r.rival, venue: r.venue, status: r.status, scoreUs: r.score_us, scoreThem: r.score_them });
     return {
       needsLogin: true,
       passwordLink,
+      listFixtures,
       async currentUser() { const { session } = check(await client.auth.getSession()); return session ? { email: session.user.email } : null; },
       async signIn(email, password) { check(await client.auth.signInWithPassword({ email, password })); },
       async signOut() { check(await client.auth.signOut()); },
@@ -4189,6 +4247,16 @@ a:focus-visible, input:focus-visible, select:focus-visible, summary:focus-visibl
         check(await client.from('matches').upsert({ id, team_id: teamId, played_on: m.date || null, rival: m.them, venue: m.venue, status: m.status, score_us: m.scoreUs, score_them: m.scoreThem, state: s }));
       },
       async deleteMatch(id) { check(await client.from('matches').delete().eq('id', id)); },
+      // The upsert writes only the file's columns, so a re-import keeps the kickoff, the venue and the match link.
+      async saveFixtures(teamId, { season, competition, fixtures }) {
+        const rows = fixtures.map((f) => ({ team_id: teamId, season, competition, round: f.round, weekend: f.weekend, home: f.home, opponent: f.opponent }));
+        check(await client.from('fixtures').upsert(rows, { onConflict: FIXTURE_KEY }));
+        return listFixtures(teamId);
+      },
+      async updateFixture(id, patch) {
+        const row = Object.fromEntries(Object.entries(FIXTURE_COLUMN_OF).filter(([k]) => k in patch).map(([k, column]) => [column, patch[k]]));
+        return toFixture(check(await client.from('fixtures').update(row).eq('id', id).select(FIXTURE_COLUMNS).single()));
+      },
       // Row level security lets only the owner delete; anyone else deletes nothing, which is reported.
       async deleteTeam(id) {
         if (!check(await client.from('teams').delete().eq('id', id).select('id')).length) throw new Error('solo quien creó el equipo puede borrarlo');
@@ -4441,9 +4509,22 @@ a:focus-visible, input:focus-visible, select:focus-visible, summary:focus-visibl
     const remove = `<div class="team-delete"><p class="note">Borrar el equipo borra también su plantilla y todos sus partidos. Solo puede hacerlo quien lo creó.</p>
       ${armedButton('delete-team', 'Borrar equipo', 'data-delete-team')}</div>`;
     return `<div class="row-actions"><button class="btn press" type="button" data-home-view="team">‹ Equipo</button></div>
+      ${calendarRowHtml()}
       <div class="team-layout"><section class="sheet-card"><h3>Equipo</h3>${teamFormHtml(team, false)}${remove}</section><section class="sheet-card">${teamRosterHtml()}</section></div>`;
   }
+  function calendarRowHtml() {
+    const latest = home.fixtures && home.fixtures.length ? home.fixtures[home.fixtures.length - 1].season : null;
+    const count = latest ? home.fixtures.filter((f) => f.season === latest).length : 0;
+    return `<section class="sheet-card"><h3>Calendario</h3>
+      <div class="row-actions"><b>${latest ? `${plural(count, 'jornada', 'jornadas')} · ${esc(latest)}` : 'Sin calendario'}</b>
+        <button class="btn press" type="button" data-calendar-import>Importar calendario</button></div>
+      <p class="note">Archivo del calendario de la federación (hbstats-calendario). Al importarlo de nuevo se conservan la hora y el lugar ya anotados.</p></section>`;
+  }
   const squadReady = () => home.squad.size > 0 && home.squad.size <= MAX_ROSTER && home.roster.some((p) => home.squad.has(p.id) && p.pos === 'POR');
+  function squadFixtureNote() {
+    const f = (home.fixtures || []).find((x) => x.id === home.squadFixture);
+    return f ? `<p class="note squad-fixture">Jornada ${f.round} · contra ${esc(f.opponent)} · ${esc(fixtureWhenText(f))}</p>` : '';
+  }
   function squadHtml() {
     const chip = (p) => `<button class="pick press" type="button" data-squad="${p.id}" aria-pressed="${home.squad.has(p.id)}">${discHtml(p)}<span>${esc(p.name)}</span></button>`;
     const problem = !home.roster.length ? 'La plantilla está vacía: añade jugadores en «Editar equipo».'
@@ -4452,6 +4533,7 @@ a:focus-visible, input:focus-visible, select:focus-visible, summary:focus-visibl
     return `<div class="sheet-head"><h2>Convocatoria</h2><div class="head-actions">
         <button class="btn press" type="button" data-home-view="matches">Cancelar</button>
         <button class="btn go play press" type="button" data-squad-next ${squadReady() ? '' : 'disabled'}>Siguiente ›</button></div></div>
+      ${squadFixtureNote()}
       <p class="note">Toca a los jugadores que van al partido (hasta ${MAX_ROSTER}, con al menos un portero). Luego pondrás el rival y el lugar.</p>
       <div class="row-actions"><b>${home.squad.size}/${MAX_ROSTER}</b><button class="btn press" type="button" data-squad-all>Todos</button><button class="btn press" type="button" data-squad-none>Ninguno</button>
         ${problem ? `<span class="note">${problem}</span>` : ''}</div>
@@ -4557,8 +4639,13 @@ a:focus-visible, input:focus-visible, select:focus-visible, summary:focus-visibl
     applyTeam(t);
     home.crestDraft = undefined;
     home.season = null;
+    home.fixtures = null;
+    home.fixtureEdit = null;
+    home.teamMatches = [];
     try { home.roster = (await cachedRead(`players:${t.id}`, () => backend.listPlayers(t.id))).value; }
     catch (err) { home.roster = []; console.warn(`Roster not available: ${cloudErrorText(err)}`); }
+    try { await loadFixtures(); }
+    catch (err) { home.fixtures = []; console.warn(`Calendar not available: ${cloudErrorText(err)}`); }
     // A reload in the middle of a match goes straight back to it.
     const resume = readJson(CURRENT_MATCH_KEY);
     const saved = resume && localMatch(resume);
@@ -4592,9 +4679,183 @@ a:focus-visible, input:focus-visible, select:focus-visible, summary:focus-visibl
       list = localMatches().filter((m) => m.teamId === teamId && m.state).map(withState);
       console.warn(`Season from the device copies: ${cloudErrorText(failure)}`);
     }
-    const matches = withLocalChanges(list, (m) => ({ state: m.state })).filter((m) => m.state && SEASON_STATUSES.includes(m.status) && !m.state.sample);
+    const all = withLocalChanges(list, (m) => ({ state: m.state })).filter((m) => m.state && !m.state.sample);
+    const matches = all.filter((m) => SEASON_STATUSES.includes(m.status));
     home.season = matches;
+    home.teamMatches = all.map(({ state, ...summary }) => summary);
+    persistLinks();
     return { matches, offline };
+  }
+
+  // ---- Calendar: the federation's fixtures, and the matches played against them ----
+  const CALENDAR_FORMAT = 'hbstats-calendario';
+  const CALENDAR_FILE_SIDE = 'calendar'; // which import the shared file picker serves
+  const MAX_FIXTURE_ROUND = 60, MAX_OPPONENT_LENGTH = 60, MAX_COMPETITION_LENGTH = 120;
+  const SEASON_LENGTH_RANGE = [4, 9];
+  const ISO_DATE = /^\d{4}-\d{2}-\d{2}$/;
+  const DAY_MS = 86400000, WEEK_LAST_DAY = 6;
+  // Words of a club name that say nothing about which club it is.
+  const OPPONENT_STOPWORDS = ['BM', 'CBM', 'CB', 'CD', 'CLUB', 'BALONMANO', 'EL', 'LA', 'LOS', 'DE'];
+  const MIN_SHARED_WORD = 4;
+  const isIsoDate = (s) => typeof s === 'string' && ISO_DATE.test(s) && new Date(`${s}T00:00:00Z`).toISOString().startsWith(s);
+  // Validates an imported calendar file; returns the season and its rounds or throws an Error explaining what is wrong.
+  function parseCalendar(text) {
+    let data;
+    try { data = JSON.parse(text); } catch (err) { throw new Error('el archivo no es JSON'); }
+    if (!data || data.format !== CALENDAR_FORMAT || !Array.isArray(data.fixtures)) throw new Error('el archivo no es un calendario de HBStats');
+    const season = typeof data.season === 'string' ? data.season.trim() : '';
+    if (season.length < SEASON_LENGTH_RANGE[0] || season.length > SEASON_LENGTH_RANGE[1]) throw new Error('falta la temporada (por ejemplo 2026/2027)');
+    const seen = new Set();
+    const fixtures = data.fixtures.map((x) => {
+      const round = Number(x && x.round);
+      if (!Number.isInteger(round) || round < 1 || round > MAX_FIXTURE_ROUND) throw new Error(`jornada no válida: ${x && x.round}`);
+      if (seen.has(round)) throw new Error(`jornada repetida: ${round}`);
+      seen.add(round);
+      if (!isIsoDate(x.weekend)) throw new Error(`fecha no válida en la jornada ${round}`);
+      const opponent = typeof x.opponent === 'string' ? x.opponent.trim().slice(0, MAX_OPPONENT_LENGTH) : '';
+      if (!opponent) throw new Error(`falta el rival en la jornada ${round}`);
+      return { round, weekend: x.weekend, home: x.home === true, opponent };
+    });
+    const competition = typeof data.competition === 'string' ? data.competition.trim().slice(0, MAX_COMPETITION_LENGTH) : '';
+    return { team: typeof data.team === 'string' ? data.team.trim() : '', season, competition, fixtures };
+  }
+  async function loadFixtures() {
+    const teamId = team.id;
+    const { value, offline } = await cachedRead(`fixtures:${teamId}`, () => backend.listFixtures(teamId));
+    if (team.id === teamId) home.fixtures = value;
+    return { offline };
+  }
+  async function importCalendar(file) {
+    let calendar;
+    try { calendar = parseCalendar(await file.text()); }
+    catch (err) { homeStatus(`No se pudo cargar: ${err.message}.`); return; }
+    const teamId = team.id;
+    try {
+      const saved = await backend.saveFixtures(teamId, calendar);
+      writeJson(CACHE_KEY_PREFIX + `fixtures:${teamId}`, saved);
+      if (team.id !== teamId) return;
+      home.fixtures = saved;
+      renderHome();
+      homeStatus(`Calendario importado: ${plural(calendar.fixtures.length, 'jornada', 'jornadas')}.`);
+    } catch (err) {
+      homeStatus(`No se pudo guardar el calendario: ${cloudErrorText(err)}.`);
+    }
+  }
+  // «BALONMANO GADES - ASISA» -> «BALONMANO GADES ASISA»: upper case, no accents, words made of A-Z and 0-9.
+  const normalName = (s) => String(s || '').normalize('NFD').replace(/[̀-ͯ]/g, '').toUpperCase().replace(/[^A-Z0-9]+/g, ' ').trim();
+  const clubWords = (name) => normalName(name).split(' ').filter((w) => w.length >= MIN_SHARED_WORD && /^[A-Z]+$/.test(w) && !OPPONENT_STOPWORDS.includes(w));
+  // The federation writes «BALONMANO GADES - ASISA» where the coach types «Gades»: one name holds the other, or they share a club word.
+  function sameOpponent(a, b) {
+    const [short, long] = [normalName(a).replace(/ /g, ''), normalName(b).replace(/ /g, '')].sort((x, y) => x.length - y.length);
+    if (short.length >= MIN_SHARED_WORD && long.includes(short)) return true;
+    const words = clubWords(b);
+    return clubWords(a).some((w) => words.includes(w));
+  }
+  const isoOfUtc = (ms) => new Date(ms).toISOString().slice(0, 10);
+  // The Monday and the Sunday of the week that holds `weekendIso`.
+  function weekOf(weekendIso) {
+    const day = new Date(`${weekendIso}T00:00:00Z`);
+    const monday = day.getTime() - ((day.getUTCDay() + WEEK_LAST_DAY) % (WEEK_LAST_DAY + 1)) * DAY_MS;
+    return [isoOfUtc(monday), isoOfUtc(monday + WEEK_LAST_DAY * DAY_MS)];
+  }
+  const pad2 = (n) => String(n).padStart(2, '0');
+  const localIso = (d) => `${d.getFullYear()}-${pad2(d.getMonth() + 1)}-${pad2(d.getDate())}`;
+  // The match a fixture was played as: its explicit link, else a free match of the same week (or the kickoff day) against the same rival.
+  function fixtureMatch(f, matches, taken = new Set()) {
+    const free = matches.filter((m) => !taken.has(m.id));
+    if (f.matchId) return free.find((m) => m.id === f.matchId) || null; // an explicit link never falls back to the auto link
+    const [monday, sunday] = weekOf(f.weekend);
+    const kickoffDay = f.kickoff ? localIso(new Date(f.kickoff)) : null;
+    return free.find((m) => m.date && ((m.date >= monday && m.date <= sunday) || m.date === kickoffDay) && sameOpponent(m.them, f.opponent)) || null;
+  }
+  // Explicit links first, so an auto link never takes a match that is linked by hand; a match serves one fixture only.
+  function linkFixtures(fixtures, matches) {
+    const links = new Map(), taken = new Set();
+    const link = (f, m) => { links.set(f.id, m); taken.add(m.id); };
+    fixtures.filter((f) => f.matchId).forEach((f) => {
+      const m = matches.find((x) => x.id === f.matchId && !taken.has(x.id));
+      if (m) link(f, m);
+    });
+    fixtures.filter((f) => !links.has(f.id)).forEach((f) => {
+      const m = fixtureMatch(f, matches, taken);
+      if (m) link(f, m);
+    });
+    return links;
+  }
+  // Writes the links found by date and rival back to the fixtures, so they hold when the names change. Online only (matches not
+  // uploaded yet cannot be referenced); a failure is only a warning, and the next load tries again.
+  async function persistLinks() {
+    if (!navigator.onLine || !home.fixtures) return;
+    const teamId = team.id;
+    const links = linkFixtures(home.fixtures, home.teamMatches.filter((m) => !m.pending));
+    try {
+      for (const f of home.fixtures.filter((x) => !x.matchId && links.has(x.id))) {
+        const saved = await backend.updateFixture(f.id, { matchId: links.get(f.id).id });
+        if (team.id !== teamId) return;
+        home.fixtures = home.fixtures.map((x) => (x.id === saved.id ? saved : x));
+      }
+      writeJson(CACHE_KEY_PREFIX + `fixtures:${teamId}`, home.fixtures);
+    } catch (err) {
+      console.warn(`Fixture links not saved yet: ${cloudErrorText(err)}`);
+    }
+  }
+  const WEEKDAY_NAMES = ['dom', 'lun', 'mar', 'mié', 'jue', 'vie', 'sáb'];
+  const MONTH_NAMES = ['ene', 'feb', 'mar', 'abr', 'may', 'jun', 'jul', 'ago', 'sep', 'oct', 'nov', 'dic'];
+  const TRAILING_SEPARATORS = /[\s,.\-–]+$/;
+  const timeText = (d) => `${pad2(d.getHours())}:${pad2(d.getMinutes())}`;
+  // «sáb 24 oct · 18:00» once the kickoff is set, else the weekend's Saturday and Sunday: «24–25 oct».
+  function fixtureDayText(f) {
+    if (f.kickoff) {
+      const d = new Date(f.kickoff);
+      return `${WEEKDAY_NAMES[d.getDay()]} ${d.getDate()} ${MONTH_NAMES[d.getMonth()]} · ${timeText(d)}`;
+    }
+    const sunday = new Date(`${f.weekend}T00:00:00Z`), saturday = new Date(sunday.getTime() - DAY_MS);
+    const day = (d) => `${d.getUTCDate()} ${MONTH_NAMES[d.getUTCMonth()]}`;
+    return saturday.getUTCMonth() === sunday.getUTCMonth() ? `${saturday.getUTCDate()}–${day(sunday)}` : `${day(saturday)}–${day(sunday)}`;
+  }
+  const fixtureWhenText = (f) => (f.kickoff ? fixtureDayText(f) : `fin de semana ${fixtureDayText(f)}`);
+  // The federation's name cut to what the scoreboard holds, at a word boundary.
+  function fixtureRivalName(opponent) {
+    if (opponent.length <= MAX_NAME_LENGTH) return opponent;
+    const head = opponent.slice(0, MAX_NAME_LENGTH);
+    const cut = opponent[MAX_NAME_LENGTH] === ' ' || !head.includes(' ') ? head : head.slice(0, head.lastIndexOf(' '));
+    return cut.replace(TRAILING_SEPARATORS, '');
+  }
+  // `links` is the Map from linkFixtures: the first round that is not over yet and whose match, if any, is not finished.
+  function nextFixture(fixtures, links, today = todayIso()) {
+    const open = fixtures.filter((f) => weekOf(f.weekend)[1] >= today && !(links.has(f.id) && links.get(f.id).status === 'finished'));
+    return open.sort((a, b) => a.weekend.localeCompare(b.weekend) || a.round - b.round)[0] || null;
+  }
+  // What a match created from the fixture starts with: the rival, the kickoff day (else the Sunday) and the venue.
+  const fixturePrefill = (f) => ({ them: fixtureRivalName(f.opponent), date: f.kickoff ? localIso(new Date(f.kickoff)) : f.weekend, venue: (f.venue || '').slice(0, MAX_VENUE_LENGTH) });
+  function storeFixture(saved) {
+    home.fixtures = home.fixtures.map((f) => (f.id === saved.id ? saved : f));
+    writeJson(CACHE_KEY_PREFIX + `fixtures:${team.id}`, home.fixtures);
+  }
+  async function saveFixtureEdit(id) {
+    const date = $('fx-date').value, time = $('fx-time').value, venue = $('fx-venue').value.trim();
+    if (date && !time) { homeStatus('Pon también la hora del partido.'); return; }
+    const teamId = team.id;
+    try {
+      const saved = await backend.updateFixture(id, { kickoff: date ? new Date(`${date}T${time}`).toISOString() : null, venue: venue || null });
+      if (team.id !== teamId) return;
+      storeFixture(saved);
+      home.fixtureEdit = null;
+      renderHome();
+    } catch (err) {
+      homeStatus(`No se pudo guardar la jornada: ${cloudErrorText(err)}.`);
+    }
+  }
+  // The new match must be uploaded before a fixture can point at it; if that fails, the auto link covers it later.
+  async function linkFixtureToMatch(fixture, matchId) {
+    const teamId = team.id;
+    try {
+      await syncMatches();
+      const saved = await backend.updateFixture(fixture.id, { matchId });
+      if (team.id === teamId) storeFixture(saved);
+    } catch (err) {
+      console.warn(`Fixture ${fixture.id} not linked to its match yet: ${cloudErrorText(err)}`);
+    }
   }
   function matchResult(m) {
     if (m.scoreUs === m.scoreThem) return RESULT_OF.draw;
@@ -4916,11 +5177,64 @@ a:focus-visible, input:focus-visible, select:focus-visible, summary:focus-visibl
     return `<section class="sheet-card squad"><h3>Plantilla · ${home.roster.length}</h3>${groups || '<p class="note">Todavía no hay jugadores.</p>'}
       <div class="row-actions"><button class="btn press" type="button" data-home-view="team-edit">Editar equipo</button></div></section>`;
   }
+  const homeAwayBadge = (f) => `<span class="venue-badge">${f.home ? 'Casa' : 'Fuera'}</span>`;
+  function fixtureEditorHtml(f) {
+    const kickoff = f.kickoff ? new Date(f.kickoff) : null;
+    return `<div class="fixture-edit">
+        <label class="field">Fecha<input class="in" type="date" id="fx-date" value="${kickoff ? localIso(kickoff) : ''}"></label>
+        <label class="field">Hora<input class="in" type="time" id="fx-time" value="${kickoff ? timeText(kickoff) : ''}"></label>
+        <label class="field fixture-venue">Lugar<input class="in" type="text" id="fx-venue" maxlength="${MAX_VENUE_LENGTH}" value="${esc(f.venue || '')}" placeholder="Pabellón, ciudad"></label>
+        <div class="row-actions"><button class="btn primary press" type="button" data-fixture-save="${f.id}">Guardar</button><button class="btn press" type="button" data-fixture-cancel>Cancelar</button></div>
+      </div>`;
+  }
+  const fixtureEditButton = (f) => `<button class="btn press" type="button" data-fixture-edit="${f.id}" aria-label="Fecha y lugar de la jornada ${f.round}">Fecha</button>`;
+  function nextFixtureCardHtml(fixtures, links) {
+    if (!fixtures || !fixtures.length) return '';
+    const f = nextFixture(fixtures, links);
+    if (!f) return '<section class="sheet-card next-card"><h3>Próximo partido</h3><p class="note">No quedan jornadas por jugar.</p></section>';
+    const match = links.get(f.id);
+    const play = match ? `<button class="btn go press" type="button" data-open-match="${match.id}">Seguir partido</button>` : `<button class="btn go press" type="button" data-fixture-new="${f.id}">+ Nuevo partido</button>`;
+    return `<section class="sheet-card next-card"><h3>Próximo partido</h3>
+      <div class="next-body">
+        <div class="next-what"><span class="next-round">Jornada ${f.round}</span><strong class="next-rival">${esc(f.opponent)}</strong>
+          <span class="next-when">${esc(fixtureWhenText(f))}${f.venue ? ` · ${esc(f.venue)}` : ''}</span></div>
+        ${homeAwayBadge(f)}
+        <div class="row-actions">${play}${fixtureEditButton(f)}</div>
+      </div>${home.fixtureEdit === f.id ? fixtureEditorHtml(f) : ''}</section>`;
+  }
+  // What the result column of a round says: the result and score of a played match, a way into one in progress, or that none was played.
+  function fixtureResultHtml(f, match, over) {
+    if (!match) return over ? '<span class="cal-none">Sin partido</span>' : '';
+    const label = `aria-label="Abrir el partido de la jornada ${f.round}"`;
+    if (match.status === 'finished') {
+      const r = matchResult(match);
+      return `<button class="cal-result press" type="button" data-open-match="${match.id}" ${label}><i class="form-chip res-${r}">${r}</i> <span class="cal-score">${match.scoreUs}–${match.scoreThem}</span></button>`;
+    }
+    return `<button class="cal-result press" type="button" data-open-match="${match.id}" ${label}>Seguir</button>`;
+  }
+  function calendarCardHtml(fixtures, links, nextId) {
+    if (!fixtures || !fixtures.length) return '<section class="sheet-card calendar-card"><h3>Calendario</h3><p class="note">Importa el calendario en «Editar equipo».</p></section>';
+    const today = todayIso();
+    const currentId = (fixtures.find((f) => { const [monday, sunday] = weekOf(f.weekend); return monday <= today && today <= sunday; }) || {}).id;
+    const rows = fixtures.map((f) => {
+      const now = f.id === currentId;
+      const where = [now ? 'Esta semana' : '', f.venue ? esc(f.venue) : ''].filter(Boolean).join(' · ');
+      return `<li class="cal-row"${now ? ' aria-current="date"' : ''}>
+        <span class="cal-round">J${f.round}</span><span class="cal-date">${esc(fixtureDayText(f))}</span>
+        <span class="cal-who"><span class="cal-rival">${esc(f.opponent)}</span>${where ? `<small>${where}</small>` : ''}</span>
+        ${homeAwayBadge(f)}<span class="cal-state">${fixtureResultHtml(f, links.get(f.id), weekOf(f.weekend)[1] < today)}</span>${fixtureEditButton(f)}
+        ${home.fixtureEdit === f.id && f.id !== nextId ? fixtureEditorHtml(f) : ''}</li>`;
+    }).join('');
+    return `<section class="sheet-card calendar-card"><h3>Calendario</h3><ol class="cal-list">${rows}</ol></section>`;
+  }
   const SEASON_OFFLINE_NOTE = '<p class="note">Sin conexión: solo cuentan los partidos abiertos en esta tablet.</p>';
   function teamPageHtml() {
     const note = home.seasonOffline ? SEASON_OFFLINE_NOTE : home.offline ? '<p class="note">Sin conexión: ves la copia guardada en esta tablet.</p>' : '';
+    const fixtures = home.fixtures || [];
+    const links = linkFixtures(fixtures, home.teamMatches);
+    const next = nextFixture(fixtures, links);
     return `${statusHtml()}${note}
-      <div class="team-page">${seasonCardHtml(home.season)}${leadersCardHtml(home.season)}${squadCardHtml()}</div>`;
+      <div class="team-page">${nextFixtureCardHtml(fixtures, links)}${seasonCardHtml(home.season)}${leadersCardHtml(home.season)}${squadCardHtml()}${calendarCardHtml(fixtures, links, next && next.id)}</div>`;
   }
   // The season stays loaded while the coach moves between the team pages; anything that changes it clears it.
   async function ensureSeason() {
@@ -5235,21 +5549,25 @@ a:focus-visible, input:focus-visible, select:focus-visible, summary:focus-visibl
   }
 
   // Convocatoria: the last squad of this team, or everybody when the roster fits the acta.
-  function openSquad() {
+  function openSquad({ fixtureId = null } = {}) {
+    home.squadFixture = fixtureId;
     const last = readJson(SQUAD_KEY_PREFIX + team.id);
     const ids = new Set(home.roster.map((p) => p.id));
     const kept = Array.isArray(last) ? last.filter((id) => ids.has(id)) : [];
     home.squad = new Set(kept.length ? kept : home.roster.length <= MAX_ROSTER ? [...ids] : []);
     showHomeView('squad');
   }
-  function createMatch() {
+  async function createMatch() {
     if (!squadReady()) return;
+    const fixture = (home.fixtures || []).find((f) => f.id === home.squadFixture);
     const players = home.roster.filter((p) => home.squad.has(p.id)).map(({ id, num, name, pos }) => ({ id, num, name, pos }));
     writeJson(SQUAD_KEY_PREFIX + team.id, players.map((p) => p.id));
     const prefs = state.sample ? {} : state;
     const base = { us: team.name, players, lineups: { ATK: {}, DEF: {} }, gkId: players.find((p) => p.pos === 'POR').id,
       autoPhase: prefs.autoPhase !== false, clockDown: Boolean(prefs.clockDown), reportEmail: prefs.reportEmail || '' };
-    enterMatch(newUuid(), freshMatch(base), true);
+    const id = newUuid();
+    enterMatch(id, freshMatch(base, fixture ? fixturePrefill(fixture) : {}), true);
+    if (fixture) await linkFixtureToMatch(fixture, id);
   }
 
   // ---- Team edits (need a connection when accounts are on) ----
@@ -5426,7 +5744,7 @@ a:focus-visible, input:focus-visible, select:focus-visible, summary:focus-visibl
     try { await backend.deleteTeam(gone.id); }
     catch (err) { homeStatus(`No se pudo borrar: ${cloudErrorText(err)}.`); return; }
     localMatches().filter((m) => m.teamId === gone.id).forEach((m) => removeKey(MATCH_KEY_PREFIX + m.id));
-    [`players:${gone.id}`, `matches:${gone.id}`].forEach((key) => removeKey(CACHE_KEY_PREFIX + key));
+    [`players:${gone.id}`, `matches:${gone.id}`, `fixtures:${gone.id}`].forEach((key) => removeKey(CACHE_KEY_PREFIX + key));
     removeKey(SQUAD_KEY_PREFIX + gone.id);
     home.teams = home.teams.filter((t) => t.id !== gone.id);
     writeJson(CACHE_KEY_PREFIX + `teams:${userKey()}`, home.teams);
@@ -5523,6 +5841,10 @@ a:focus-visible, input:focus-visible, select:focus-visible, summary:focus-visibl
     if (b.dataset.homeView === 'profile') { showProfile(); return; }
     if (b.dataset.homeView) { home.crestDraft = undefined; showHomeView(b.dataset.homeView); return; }
     if (b.hasAttribute('data-new-match')) { openSquad(); return; }
+    if (b.dataset.fixtureNew) { openSquad({ fixtureId: b.dataset.fixtureNew }); return; }
+    if (b.dataset.fixtureEdit) { home.fixtureEdit = b.dataset.fixtureEdit; renderHome(); return; }
+    if (b.dataset.fixtureSave) { saveFixtureEdit(b.dataset.fixtureSave); return; }
+    if (b.hasAttribute('data-fixture-cancel')) { home.fixtureEdit = null; renderHome(); return; }
     if (b.hasAttribute('data-new-team')) { openNewTeam(); return; }
     if (b.hasAttribute('data-cancel-team')) { showProfile(); return; }
     if (b.dataset.openTeam) { const t = home.teams.find((x) => x.id === b.dataset.openTeam); if (t) selectTeam(t); return; }
@@ -5547,7 +5869,8 @@ a:focus-visible, input:focus-visible, select:focus-visible, summary:focus-visibl
     if (b.hasAttribute('data-team-add')) { addTeamPlayer(); return; }
     if (b.dataset.teamPos) { const [id, pos] = b.dataset.teamPos.split(':'); saveTeamPlayer(rosterPlayer(id), { pos }); return; }
     if (b.hasAttribute('data-team-export')) { exportRoster(team.name, home.roster, 'home-status'); return; }
-    if (b.dataset.rosterImport) { ui.rosterSide = b.dataset.rosterImport; $('roster-file').click(); }
+    if (b.dataset.rosterImport) { ui.rosterSide = b.dataset.rosterImport; $('roster-file').click(); return; }
+    if (b.hasAttribute('data-calendar-import')) { ui.rosterSide = CALENDAR_FILE_SIDE; $('roster-file').click(); }
   });
   $('home').addEventListener('change', (ev) => {
     const el = ev.target;

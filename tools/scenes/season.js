@@ -44,6 +44,13 @@ const SEASON_MATCHES = [
     events: (list) => list.map((e) => (e.kind === 'SHOT' && SEASON_MISSED_RESULT[e.result] ? { ...e, result: SEASON_MISSED_RESULT[e.result] } : e)) }
 ];
 
+// The federation's 14 rounds. The first two were played: the two latest season matches (by index) are linked to them.
+const SEASON_CALENDAR_OPPONENTS = ['BM DOS HERMANAS', 'ATLETICO BORMUJOS', 'BALONMANO GADES - ASISA', 'CD NERVION', 'BM ALCALA', 'EL JAMON CBM LEPE', 'BM PROIN SAN JOSE RINCONADA', 'CBM ECIJA',
+  'BM MAIRENA', 'BM UTRERA', 'CD SAN FERNANDO', 'BM ARACENA', 'BM CAMAS', 'BM LA PALMA'];
+const SEASON_CALENDAR_PLAYED = [2, 3];
+const SEASON_CALENDAR_WEEKS_PLAYED = 2;
+const SEASON_WEEK_DAYS = 7;
+
 // The sample state with the squad's ids swapped for the saved players' ids, so every figure lands on a roster player.
 function seasonMatchState(spec, roster, sampleIds, mvp) {
   const base = sampleState();
@@ -61,6 +68,15 @@ function seasonMatchState(spec, roster, sampleIds, mvp) {
   };
 }
 
+// One round a week, the third one this week; the first two are linked to the played matches `SEASON_CALENDAR_PLAYED`.
+async function seedCalendar(teamId, matchIds) {
+  const thisSunday = Date.parse(`${weekOf(todayIso())[1]}T00:00:00Z`);
+  const fixtures = SEASON_CALENDAR_OPPONENTS.map((opponent, i) => ({
+    round: i + 1, weekend: isoOfUtc(thisSunday + (i - SEASON_CALENDAR_WEEKS_PLAYED) * SEASON_WEEK_DAYS * DAY_MS), home: i % 2 === 0, opponent }));
+  const saved = await backend.saveFixtures(teamId, { season: '2026/2027', competition: 'Primera Andaluza', fixtures });
+  for (const [i, matchIndex] of SEASON_CALENDAR_PLAYED.entries()) await backend.updateFixture(saved[i].id, { matchId: matchIds[matchIndex] });
+}
+
 async function seedSeason() {
   backend = localBackend();
   const created = await backend.createTeam({ ...DEFAULT_TEAM, ...SEASON_TEAM, id: undefined });
@@ -71,12 +87,15 @@ async function seedSeason() {
     const { num, name, pos } = sample.find((p) => p.id === sampleId);
     roster.push(await backend.savePlayer(created.id, { num, name, pos, photo: SEASON_PHOTOLESS_NUMS.includes(num) ? null : seasonFace(SEASON_FACES[roster.length % SEASON_FACES.length]) }));
   }
+  const matchIds = [];
   for (const [i, spec] of SEASON_MATCHES.entries()) {
     const id = newUuid();
+    matchIds.push(id);
     const matchState = seasonMatchState(spec, roster, SEASON_SQUAD_IDS, i === SEASON_MATCHES.length - 1);
     storeLocalMatch(id, matchState, false);
     await backend.saveMatch(created.id, id, matchState);
   }
+  await seedCalendar(created.id, matchIds);
   home.teams = await backend.listTeams();
   await selectTeam(created);
   return new Map(SEASON_SQUAD_IDS.map((sampleId, i) => [sampleId, roster[i].id]));
