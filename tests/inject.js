@@ -1154,6 +1154,69 @@
       const t = teamSeason([a, b]);
       if (t.turnovers !== 3 || t.recoveries !== 3 || t.saves !== 2 || t.onTarget !== 3) throw new Error(JSON.stringify(t));
     });
+    // A played match: the clock ran one half and `court` says who was on (see the rating tests for the numbers).
+    const HALF_CLOCK = { period: 1, elapsedMs: CONFIG.halfSeconds * 1000, runningSince: null };
+    const ratedPlayers = [...seasonPlayers, { id: 'sp3', num: 3, name: 'Back', pos: 'LAT' }];
+    const ratedRow = (id, over) => seasonRow(id, { players: ratedPlayers, clock: HALF_CLOCK, courtSets: [['sp2', 'sp1'], ['sp3', 'sp1']], court: [{ abs: 0, set: 0 }], ...over });
+    const goalsOf = (n) => Array.from({ length: n }, () => ({ ...seasonShot('sp2', 'GOL', '6M'), origin: m(0, 6), target: gf(0.5, 0.5) }));
+    const lossesOf = (n) => Array.from({ length: n }, seasonTurnovers);
+    T('season: rows carry the match rating, S/C under the minutes', () => {
+      const match = ratedRow('rr1', { events: goalsOf(3), court: [{ abs: 0, set: 0 }, { abs: 1500, set: 1 }] });
+      const want = matchRatings(match.state);
+      const [wing] = playerSeason([match], seasonPlayers[1]).rows, [back] = playerSeason([match], ratedPlayers[2]).rows;
+      if (wing.rating !== want.get('sp2').value || !(wing.rating > CONFIG.rating.base)) throw new Error('wing ' + wing.rating);
+      if (back.rating !== null || ratingText(back.rating) !== 'S/C') throw new Error('under the minimum minutes: ' + back.rating);
+      const old = seasonRow('rr0', { events: [] }), [oldRow] = playerSeason([old], seasonPlayers[1]).rows;
+      if (oldRow.seconds !== null || oldRow.rating !== CONFIG.rating.base) throw new Error('no court log rates with confidence 1: ' + oldRow.rating);
+    });
+    T('season: season rating is minutes-weighted', () => {
+      const long = ratedRow('rw1', { events: goalsOf(3) }), short = ratedRow('rw2', { events: lossesOf(3), court: [{ abs: 0, set: 0 }, { abs: 600, set: 1 }] });
+      const season = playerSeason([long, short], seasonPlayers[1]), [a, b] = season.rows;
+      const weighted = roundHalfUp((a.rating * a.seconds + b.rating * b.seconds) / (a.seconds + b.seconds), CONFIG.rating.decimals);
+      const plain = roundHalfUp((a.rating + b.rating) / 2, CONFIG.rating.decimals);
+      if (weighted === plain || season.rating !== weighted) throw new Error(`${season.rating} want ${weighted} (plain ${plain})`);
+      const unknown = seasonRow('rw3', { events: lossesOf(3) });
+      const mixed = playerSeason([long, unknown], seasonPlayers[1]);
+      if (mixed.rating !== roundHalfUp((mixed.rows[0].rating + mixed.rows[1].rating) / 2, CONFIG.rating.decimals)) throw new Error('unknown minutes: plain mean, got ' + mixed.rating);
+      const none = playerSeason([ratedRow('rw4', { court: [{ abs: 0, set: 1 }] })], seasonPlayers[1]);
+      if (none.rating !== null || playerSeason([], seasonPlayers[1]).rating !== null) throw new Error('no rated match is null');
+    });
+    T('team page: Nota leaders need the minimum rated matches', () => {
+      if (CONFIG.leaders.minRated !== 2) throw new Error('premise: minimum rated matches ' + CONFIG.leaders.minRated);
+      const strong = ratedRow('ln1', { events: goalsOf(3) }), weak = ratedRow('ln2', { events: lossesOf(3) });
+      const sc = ratedRow('ln3', { events: goalsOf(2), court: [{ abs: 0, set: 1 }] });
+      const [wingP, backP, keeperP] = [seasonPlayers[1], ratedPlayers[2], seasonPlayers[0]], roster = [wingP, backP, keeperP];
+      if (LEADER_METRICS.find((x) => x.key === 'rating').label !== 'Nota') throw new Error('chip');
+      const one = leaders([strong], roster, 'rating');
+      if (one.length) throw new Error('one rated match qualified: ' + JSON.stringify(one.map((r) => r.value)));
+      const two = leaders([strong, weak, sc], [wingP, backP], 'rating'), wing = two[0];
+      if (two.length !== 1 || wing.value !== playerSeason([strong, weak, sc], wingP).rating || wing.detail !== '#2 · 2 partidos con nota') throw new Error(JSON.stringify(two.map((r) => [r.player.id, r.value, r.detail])));
+      const keeper = leaders([strong, weak], [keeperP], 'rating');
+      if (keeper.length !== 1 || keeper[0].detail !== '#1 · 2 partidos con nota') throw new Error('keeper ' + JSON.stringify(keeper));
+      const keep = { season: home.season, roster: home.roster, view: home.view, leaderMetric: home.leaderMetric };
+      try {
+        home.season = [strong, weak]; home.roster = [wingP, keeperP]; home.leaderMetric = 'rating'; showHomeView('team');
+        const first = document.querySelector('.leaders .leader .value .rating-chip');
+        if (!first || first.textContent !== ratingText(leaders(home.season, home.roster, 'rating')[0].value) || document.querySelector('[data-leader="rating"]').getAttribute('aria-pressed') !== 'true' || /NaN|undefined/.test($('home').textContent)) throw new Error('leaders view');
+      } finally { Object.assign(home, keep); }
+    });
+    T('player card: rating chips in the table and on the poster', () => {
+      const strong = ratedRow('pc1', { events: goalsOf(3) }), unrated = ratedRow('pc2', { events: goalsOf(1), court: [{ abs: 0, set: 1 }] });
+      const keep = { season: home.season, roster: home.roster, view: home.view, playerId: home.playerId, playerMatchId: home.playerMatchId };
+      try {
+        home.season = [strong, unrated]; home.roster = [seasonPlayers[0], seasonPlayers[1]]; home.playerId = 'sp2'; home.playerEdit = false; showHomeView('player');
+        const heads = [...document.querySelectorAll('.match-table th')].map((th) => th.textContent);
+        const chips = [...document.querySelectorAll('.match-table td .rating-chip')];
+        const season = playerSeason(home.season, seasonPlayers[1]);
+        if (!heads.includes('Nota') || chips.map((c) => c.textContent).join() !== [ratingText(season.rows[0].rating), 'S/C'].join()) throw new Error(heads.join() + ' / ' + chips.map((c) => c.textContent));
+        if (chips[1].className.includes('rt-bad') || !chips[1].classList.contains('rt-none')) throw new Error('S/C is neutral');
+        const poster = document.querySelector('.poster .rating-chip');
+        if (!poster || poster.textContent !== ratingText(season.rating) || !poster.classList.contains(ratingBand(season.rating))) throw new Error('poster chip');
+        if (document.querySelector('.evolution .rating-chip') || /NaN|undefined/.test($('home').textContent)) throw new Error('evolution keeps its bars');
+        showPlayerMatch(strong.id);
+        if (!document.querySelector('.match-head .rating-chip') || document.querySelector('.match-head .rating-chip').textContent !== ratingText(season.rows[0].rating)) throw new Error('per-match chip');
+      } finally { Object.assign(home, keep); }
+    });
     T('zones: lane and ring from the origin, 7 m and counters apart', () => {
       const shot = (over) => ({ kind: 'SHOT', from: '9M', zone: '9M', origin: m(0, 10), ...over });
       const zones = [shotZone(shot({ origin: m(-8, 2) })), shotZone(shot()), shotZone(shot({ from: '7M', zone: '7M' })), shotZone(shot({ zone: 'CONTRA' }))];
@@ -1475,13 +1538,13 @@
         openCard('ca', [logged, cardMatch({ id: 'cm9' })]);
         const cells = [...document.querySelectorAll('.match-table tbody tr')].map((tr) => [...tr.children].map((c) => c.textContent));
         const heads = [...document.querySelectorAll('.match-table th')].map((c) => c.textContent);
-        if (heads.join() !== 'Fecha,Rival,Res.,Min,Gol,%,Pas,Pér,+/−') throw new Error(heads.join());
-        const logRow = cells.find((r) => r[3] === '47'), oldRow = cells.find((r) => r[3] === '–');
+        if (heads.join() !== 'Fecha,Rival,Res.,Nota,Min,Gol,%,Pas,Pér,+/−') throw new Error(heads.join());
+        const logRow = cells.find((r) => r[4] === '47'), oldRow = cells.find((r) => r[4] === '–');
         if (!logRow || logRow.at(-1) !== plusMinusText(balance) || !oldRow || oldRow.at(-1) !== '–') throw new Error(JSON.stringify(cells));
         const wrap = document.querySelector('.match-table').parentElement;
         if (wrap.scrollWidth > wrap.clientWidth) throw new Error(`field table scrolls sideways by ${wrap.scrollWidth - wrap.clientWidth}px`);
         openCard('cg', [logged]);
-        if ([...document.querySelectorAll('.match-table th')].map((c) => c.textContent).join() !== 'Fecha,Rival,Res.,Min,Par,%,7 m,Gol' || !document.querySelector('.match-table tbody td:nth-child(4)').textContent.includes('47')) throw new Error('keeper table');
+        if ([...document.querySelectorAll('.match-table th')].map((c) => c.textContent).join() !== 'Fecha,Rival,Res.,Nota,Min,Par,%,7 m,Gol' || !document.querySelector('.match-table tbody td:nth-child(5)').textContent.includes('47')) throw new Error('keeper table');
         if (/NaN|undefined/.test($('home').textContent)) throw new Error('NaN or undefined');
         const old = playerMatchRow(seasonRow('old', { events: [seasonShot('sp2', 'GOL')] }), seasonPlayers[1]);
         if (old.seconds !== null || old.plusMinus !== null || playerSeason([seasonRow('old')], seasonPlayers[1]).totals.seconds !== 0) throw new Error('a match without a log must stay unknown');
