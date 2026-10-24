@@ -1445,7 +1445,7 @@ span.att-foot { visibility: hidden; }
   let state = sampleState();
   const ui = {
     source: 'GK', sourcePhase: null, show: new Set(), popView: null, hintTimer: null, drag: null,
-    lastPenTs: 0, shooter: null, rivalNewPos: null, sheetTab: 'summary', sheetMode: 'sheet', sheetGk: null, sheetGoal: 'GK', sheetShooter: null, sheetPlayer: null, sheetReturn: null, rosterSide: 'team', templatePick: false,
+    lastPenTs: 0, shooter: null, rivalNewPos: null, sheetTab: 'summary', sheetMode: 'sheet', sheetGk: null, sheetGoal: 'GK', sheetShooter: null, sheetPlayer: null, sheetReturn: null, backGuard: false, rosterSide: 'team', templatePick: false,
     // The final screen lists every rating, not just the top rows.
     ratingsAll: false,
     // The MVP card shown on the final screen: its PNG and object URL (revoked when the screen re-renders or closes), the
@@ -3959,6 +3959,7 @@ span.att-foot { visibility: hidden; }
     ui.sheetMode = 'setup';
     renderSheet();
     $('sheet').hidden = false;
+    armBackGuard();
   }
   function startMatch() {
     if (!goalkeepers().length) { sheetStatus('setup-status', 'Falta un portero en nuestra plantilla.'); return; }
@@ -4897,6 +4898,7 @@ span.att-foot { visibility: hidden; }
       </div>
     </div>`;
     $('final').hidden = false;
+    armBackGuard();
   }
   // Picking is the coach's tap alone: the crown and the provisional label are on the first row of the ratings.
   function mvpPickHtml() {
@@ -4940,6 +4942,7 @@ span.att-foot { visibility: hidden; }
       </div>
     </div>`;
     $('final').hidden = false;
+    armBackGuard();
     ui.mvpCardReady = renderMvpPreview();
     ui.ratingsCardReady = renderRatingsCard();
   }
@@ -5060,7 +5063,7 @@ span.att-foot { visibility: hidden; }
     if (b.dataset.mvp) { setMvp(b.dataset.mvp); return; }
     if (b.hasAttribute('data-ratings-all')) { ui.ratingsAll = !ui.ratingsAll; openFinal($('final-email').value); return; }
     if (b.hasAttribute('data-final-close')) { hideFinal(); return; }
-    if (b.hasAttribute('data-final-sheet')) { hideFinal(); ui.sheetReturn = { summary: state.finished ? 'final' : 'halftime' }; ui.sheetMode = 'sheet'; ui.sheetTab = 'summary'; renderSheet(); $('sheet').hidden = false; return; }
+    if (b.hasAttribute('data-final-sheet')) { hideFinal(); ui.sheetReturn = { summary: state.finished ? 'final' : 'halftime' }; ui.sheetMode = 'sheet'; ui.sheetTab = 'summary'; renderSheet(); $('sheet').hidden = false; armBackGuard(); return; }
     if (b.hasAttribute('data-second-half')) { startSecondHalf(); return; }
     if (b.hasAttribute('data-final-mail')) { sendReportsByMail(); return; }
     if (b.hasAttribute('data-final-share')) shareReports();
@@ -5075,7 +5078,7 @@ span.att-foot { visibility: hidden; }
   });
   // Enter saves the note (Shift+Enter for a new line), so the stylus keyboard needs no extra tap.
   $('note-text').addEventListener('keydown', (ev) => { if (ev.key === 'Enter' && !ev.shiftKey) { ev.preventDefault(); $('note-form').requestSubmit(); } });
-  $('btn-sheet').addEventListener('click', () => { if (ui.sheetReturn?.summary) ui.sheetReturn = null; ui.sheetMode = 'sheet'; renderSheet(); $('sheet').hidden = false; });
+  $('btn-sheet').addEventListener('click', () => { if (ui.sheetReturn?.summary) ui.sheetReturn = null; ui.sheetMode = 'sheet'; renderSheet(); $('sheet').hidden = false; armBackGuard(); });
   $('sheet').addEventListener('click', (ev) => {
     const b = ev.target.closest('button');
     if (!b) return;
@@ -5923,6 +5926,8 @@ span.att-foot { visibility: hidden; }
     home.view = view;
     home.armed = null;
     renderHome();
+    // Only a screen with a way out has a back to map: the profile, the sign-in and the loading screens leave it to the browser.
+    if ($('home').querySelector('[data-nav-leading]')) armBackGuard();
   }
 
   // ---- Home flows ----
@@ -7259,6 +7264,7 @@ span.att-foot { visibility: hidden; }
     ['home', 'sheet'].forEach((el) => { $(el).hidden = true; });
     hideFinal();
     renderAll();
+    armBackGuard();
     if (!state.setupDone) openSetup();
     else if (sheetPlayer) openSheetPlayer(sheetPlayer);
     else if (state.finished) openFinal();
@@ -7268,6 +7274,7 @@ span.att-foot { visibility: hidden; }
     Object.assign(ui, { sheetPlayer: playerId, sheetTab: 'player', sheetReturn: { playerId, matchId: currentMatchId } });
     renderSheet();
     $('sheet').hidden = false;
+    armBackGuard();
   }
   // The latest copy of a match: this device's when not uploaded yet, else the backend's (the device copy without coverage).
   async function loadLatestMatch(id) {
@@ -7305,6 +7312,33 @@ span.att-foot { visibility: hidden; }
     await showMatches();
     homeStatus('Partido reiniciado: empieza de nuevo desde 0:00.');
   }
+  // ---- Back gesture ----
+  // The system back (Android gesture, browser button) runs the leading control of the screen. There is no history stack
+  // mirroring the views: one guard entry sits above the page, each back consumes it, and the handler pushes it again
+  // while the screen still has an exit. At the root (no leading control) nothing is pushed and the browser leaves.
+  const BACK_GUARD_STATE = { hbstatsGuard: true };
+  const LIVE_BACK_HINT = 'Para salir del partido, pulsa ‹ Partidos';
+  function armBackGuard() {
+    if (ui.backGuard || DEMO) return;
+    history.pushState(BACK_GUARD_STATE, '');
+    ui.backGuard = true;
+  }
+  const visibleLeading = (id) => (!$(id).hidden && $(id).querySelector('[data-nav-leading]')) || null;
+  const atRootScreen = () => !$('home').hidden && !visibleLeading('home');
+  window.addEventListener('popstate', () => {
+    ui.backGuard = false;
+    if (!$('pop').hidden) { closePop(); armBackGuard(); return; }
+    const leading = visibleLeading('final') || visibleLeading('sheet') || visibleLeading('home');
+    if (leading) {
+      leading.click();
+      // An armed «Cancelar» only arms on the first back, and a click may not leave the screen.
+      if (!atRootScreen()) armBackGuard();
+    } else if ($('home').hidden) {
+      // Mid-match the exit is the strip's «‹ Partidos»: the back only explains it.
+      armBackGuard();
+      hint(LIVE_BACK_HINT);
+    }
+  });
   function leaveMatch(after = showMatches) {
     if (isRunning()) pauseClock();
     save();
@@ -7345,6 +7379,7 @@ span.att-foot { visibility: hidden; }
     ['home', 'sheet'].forEach((el) => { $(el).hidden = true; });
     hideFinal();
     renderAll();
+    armBackGuard();
     hint('Partido de ejemplo · «‹ Partidos» para volver a tus partidos');
   }
   // The public demo: a match in progress to play with; «Entrar» leads to the real app.

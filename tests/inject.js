@@ -3262,6 +3262,70 @@
       const stray = [...document.querySelectorAll('[data-nav-leading], .page-bar')].filter((el) => !el.closest('#home, #sheet, #final'));
       if (stray.length) throw new Error('page bar on the live screen');
     });
+    // The system back: history.back() fires popstate; the helper fails with the screen that did not answer.
+    const BACK_TIMEOUT_MS = 2000;
+    const systemBack = (where) => new Promise((resolve, reject) => {
+      if (!ui.backGuard) { reject(new Error(`${where}: no guard entry to go back to`)); return; }
+      const timer = setTimeout(() => reject(new Error(`${where}: popstate never fired`)), BACK_TIMEOUT_MS);
+      window.addEventListener('popstate', () => { clearTimeout(timer); resolve(); }, { once: true });
+      history.back();
+    });
+    const settle = async () => { for (let i = 0; i < 5; i++) await tick0(); };
+    await TA('nav: system back runs the leading control', async () => {
+      const length = history.length;
+      await withNavHome(async () => {
+        showPlayer('ca');
+        await systemBack('player');
+        await settle();
+        if (home.view !== 'team') throw new Error('player: back landed on ' + home.view);
+      });
+      const snap = snapshot(), keepId = currentMatchId;
+      try {
+        $('home').hidden = true;
+        $('btn-sheet').click();
+        await systemBack('Hoja');
+        if (!$('sheet').hidden || currentMatchId !== keepId || !ui.backGuard) throw new Error('Hoja: sheet ' + $('sheet').hidden + ', guard ' + ui.backGuard);
+        state.finished = true; openFinal();
+        await systemBack('final');
+        if (!$('final').hidden || !ui.backGuard) throw new Error('final: still showing, or guard not armed again');
+        openHalftime(); $('final').querySelector('[data-final-sheet]').click();
+        await systemBack('Hoja from half-time');
+        if (!$('sheet').hidden || $('final').hidden) throw new Error('Hoja from half-time: did not return to the summary');
+        await ui.mvpCardReady;
+      } finally { restore(snap); }
+      if (history.length - length > 1) throw new Error(`history grew from ${length} to ${history.length}: guards pile up`);
+    });
+    await TA('nav: system back on the live screen keeps the match', async () => {
+      const keepId = currentMatchId, length = history.length;
+      $('home').hidden = true; $('sheet').hidden = true; $('final').hidden = true;
+      armBackGuard();
+      await systemBack('live screen');
+      if (currentMatchId !== keepId || !$('home').hidden || $('hint').hidden || $('hint').textContent !== LIVE_BACK_HINT || !ui.backGuard) throw new Error(`live: id ${currentMatchId}, hint «${$('hint').textContent}», guard ${ui.backGuard}`);
+      await systemBack('live screen, second back');
+      if (currentMatchId !== keepId || history.length > length + 1) throw new Error('the hint is not repeatable, or history grows');
+      $('hint').hidden = true;
+    });
+    await TA('nav: system back closes a popup first', async () => {
+      $('home').hidden = true; $('sheet').hidden = true; $('final').hidden = true;
+      armBackGuard();
+      openClockPop({ x: 640, y: 100 });
+      await systemBack('popup');
+      if (!$('pop').hidden || !ui.backGuard || !$('hint').hidden) throw new Error('popup: closed ' + $('pop').hidden + ', guard ' + ui.backGuard);
+    });
+    await TA('nav: system back at the profile is left to the browser', async () => withNavHome(async () => {
+      const keep = { guard: ui.backGuard, error: home.error }, length = history.length;
+      try {
+        ui.backGuard = false; home.error = 'sin conexión';
+        for (const view of ['profile', 'login', 'loading', 'error']) {
+          showHomeView(view);
+          if (ui.backGuard || history.length !== length) throw new Error(`${view}: a guard was pushed`);
+        }
+        showHomeView('team');
+        if (!ui.backGuard || history.length !== length + 1) throw new Error('a screen with an exit arms the guard once');
+        showHomeView('matches');
+        if (history.length !== length + 1) throw new Error('a second guard was pushed');
+      } finally { Object.assign(home, { error: keep.error }); ui.backGuard = keep.guard; }
+    }));
     await TA('player card: field radar names the assists axis «Pases de gol» and the leaders chip says MVPs', async () => {
       if (FIELD_AXES.find((a) => a.key === 'assists').label !== 'Pases de gol' || LEADER_METRICS.find((x) => x.key === 'mvps').label !== 'MVPs') throw new Error('wording');
     });
