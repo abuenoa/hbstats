@@ -114,12 +114,16 @@ MATRIX_SCENES = {
     "team-edit": "await seedSeason(); showHomeView('team-edit');",
     "tuning": "await seedSeason(); await showRatingTune(); Object.assign(home.weightsDraft, { turnover: -0.7, shot: 1.1 }); renderHome();",
     "profile": "await seedSeason(); await showProfile();",
+    "squad": "await seedSeason(); openSquad();",
+    "template": "await seedSeason(); await showProfile(); editTemplate(null);",
     "attendance": "await seedSeason(); await showAttendance();",
     "attendance-match": "await seedSeason(); await showAttendance(); openAttendanceDay('2026-10-17');",
     "sheet-summary": SHEET_SUMMARY,
     "sheet-summary-court": SHEET_SUMMARY_COURT,
     "sheet-stats": SHEET_STATS,
     "sheet-player": f"{SHEET_PLAYER} ui.sheetPlayer = '{TOP_SCORER_SAMPLE_ID}'; renderSheet();",
+    "setup": SCENES["setup"],
+    "sheet-from-player": f"{SHEET_PLAYER} ui.sheetPlayer = '{TOP_SCORER_SAMPLE_ID}'; ui.sheetReturn = {{ playerId: '{TOP_SCORER_SAMPLE_ID}', matchId: null }}; renderSheet();",
     "sheet-keeper": f"{SHEET_PLAYER} ui.sheetPlayer = '{SAMPLE_KEEPER_ID}'; renderSheet();",
     "halftime": SCENES["halftime"],
     "final": SCENES["final"],
@@ -135,7 +139,7 @@ REDUCED_MOTION_FLAG = "--force-prefers-reduced-motion"
 # Written into the page once the scene is drawn; the tool reads it back from the dumped DOM. It runs in the app's scope
 # (for contrastRatio) with `limits` in reach. contrast and targets list only what fails. motion counts what moves and is 0
 # unless reduced motion is active. unmeasured lists text the probe cannot judge: over a gradient or image background, or
-# with an SVG fill that is not a plain colour. data-contrast-skip works from an ancestor, data-target-exempt on the element only.
+# with an SVG fill that is not a plain colour. data-contrast-skip works from an ancestor (disabled controls are skipped like it: WCAG 1.4.3 exempts inactive components), data-target-exempt on the element only.
 PROBE = """
     const badText = [];
     const walker = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT);
@@ -202,7 +206,7 @@ PROBE = """
     const contrast = [], unmeasured = [];
     scoped('*').forEach((el) => {
       const own = [...el.childNodes].filter((n) => n.nodeType === Node.TEXT_NODE).map((n) => n.nodeValue.trim()).join(' ').trim();
-      if (!own || el.closest('[data-contrast-skip], script, style') || !visible(el)) return;
+      if (!own || el.closest('[data-contrast-skip], script, style, :disabled') || !visible(el)) return;
       const style = getComputedStyle(el);
       const size = parseFloat(style.fontSize);
       const large = size >= limits.largeTextPx || (size >= limits.largeBoldTextPx && Number(style.fontWeight) >= limits.boldWeight);
