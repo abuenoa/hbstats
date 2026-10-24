@@ -114,6 +114,8 @@ MATRIX_SCENES = {
     "team-edit": "await seedSeason(); showHomeView('team-edit');",
     "tuning": "await seedSeason(); await showRatingTune(); Object.assign(home.weightsDraft, { turnover: -0.7, shot: 1.1 }); renderHome();",
     "profile": "await seedSeason(); await showProfile();",
+    "squad": "await seedSeason(); openSquad();",
+    "template": "await seedSeason(); await showProfile(); editTemplate(null);",
     "attendance": "await seedSeason(); await showAttendance();",
     "attendance-match": "await seedSeason(); await showAttendance(); openAttendanceDay('2026-10-17');",
     "sheet-summary": SHEET_SUMMARY,

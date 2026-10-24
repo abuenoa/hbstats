@@ -2549,7 +2549,7 @@
         const lead = document.querySelector('.tile.lead-field');
         if (!lead || !lead.textContent.includes('el mejor del equipo') || !lead.textContent.includes('75%')) throw new Error('lead tile');
         if (document.querySelectorAll('.match-table tbody tr').length !== 1 || /NaN|undefined/.test(text)) throw new Error('rows or NaN');
-        if (!document.querySelector('.player-bar [data-home-view="team"]').textContent.includes(`‹ ${team.name}`)) throw new Error('back button');
+        if (!document.querySelector('.page-bar [data-nav-leading]').textContent.includes('‹ Equipo')) throw new Error('back button');
       } finally { Object.assign(home, keep); }
     });
     await TA('player card: goalkeeper card uses keeper sentences and radar', async () => {
@@ -2693,7 +2693,7 @@
         showHomeView('team-edit');
         document.querySelector('[data-home-view="team"]').click(); await tick0();
         showPlayer('ca');
-        document.querySelector('.player-bar [data-home-view="team"]').click(); await tick0();
+        document.querySelector('.page-bar [data-nav-leading]').click(); await tick0();
         if (downloads !== 1 || home.view !== 'team' || !document.querySelector('.team-page')) throw new Error(`downloads ${downloads} view ${home.view}`);
         await deleteMatch('gone');
         document.querySelector('[data-home-view="team"]').click(); await tick0();
@@ -2826,7 +2826,7 @@
         const fills = new Set([...svg.querySelectorAll('g circle')].map((c) => c.getAttribute('fill')).filter((f) => f !== SHOT_END_FILL));
         if (![...fills].every((f) => ['var(--gol)', 'var(--parada)', 'var(--fallo)'].includes(f)) || !fills.has('var(--gol)') || !fills.has('var(--parada)')) throw new Error([...fills].join());
         const text = $('home').textContent;
-        ['Dónde marca', 'Dónde se lo paran', 'Abrir el partido', '‹ Ficha', 'Rival'].forEach((t) => { if (!text.includes(t)) throw new Error('missing «' + t + '»'); });
+        ['Dónde marca', 'Dónde se lo paran', 'Abrir el partido', `‹ ${cardField.name}`, 'Rival'].forEach((t) => { if (!text.includes(t)) throw new Error('missing «' + t + '»'); });
         const [scored, saved] = gridCards();
         if (gridSum(scored) !== 3 || gridSum(saved) !== 1) throw new Error(gridSum(scored) + '/' + gridSum(saved));
         const figure = (label) => { const sum = [...document.querySelectorAll('.player-page .sum')].find((x) => x.querySelector('span').textContent === label); return sum && sum.querySelector('strong').textContent; };
@@ -2889,6 +2889,92 @@
         if (home.view !== 'player-match' || !$('home').textContent.includes('Cargando…')) throw new Error('cleared season: ' + home.view);
       } finally { Object.assign(home, keep); }
     });
+    // ---- Navigation: the top bar of the management views (back on the left, the primary on the right) ----
+    const NAV_TOP_BAR_MAX_PX = 128, NAV_BAR_TOLERANCE_PX = 1, ESCAPE_KEY = 'Escape';
+    const NAV_VIEW_OPENERS = {
+      team: () => showHomeView('team'),
+      matches: () => showHomeView('matches'),
+      stats: () => showHomeView('stats'),
+      player: () => showPlayer('ca'),
+      'player-match': () => { showPlayer('ca'); showPlayerMatch('cm1'); },
+      'team-edit': () => showHomeView('team-edit'),
+      attendance: () => showHomeView('attendance'),
+    };
+    // Each view's leading label and the view it lands on; the player's match goes back to the player's card.
+    const NAV_BACK = { team: ['‹ Mis equipos', 'profile'], matches: ['‹ Mis equipos', 'profile'], stats: ['‹ Mis equipos', 'profile'], player: ['‹ Equipo', 'team'], 'player-match': [`‹ ${cardField.name}`, 'player'], 'team-edit': ['‹ Equipo', 'team'], attendance: ['‹ Equipo', 'team'] };
+    const NAV_TITLED = { player: cardField.name, 'player-match': `${cardField.name} · ${cardMatch().state.them}`, 'team-edit': 'Editar equipo', attendance: 'Asistencia' };
+    // Runs fn over a seeded team page and puts the home state back afterwards.
+    const withNavHome = async (fn, matches = [cardMatch()]) => {
+      const keep = { roster: home.roster, season: home.season, view: home.view, sessions: home.sessions, armed: home.armed, playerId: home.playerId, playerEdit: home.playerEdit, playerMatchId: home.playerMatchId }, wasHidden = $('home').hidden;
+      home.roster = [cardField, cardKeeper]; home.season = matches; home.sessions = withLocalSessions([]);
+      try { await fn(); } finally { Object.assign(home, keep); $('home').hidden = wasHidden; if (!wasHidden) renderHome(); }
+    };
+    const pageBarOf = () => document.querySelector('#home .page-bar');
+    const leadingOf = () => document.querySelectorAll('#home [data-nav-leading]');
+    const pressEscape = () => document.dispatchEvent(new KeyboardEvent('keydown', { key: ESCAPE_KEY, bubbles: true }));
+    await TA('nav: every management view has one leading control', async () => withNavHome(async () => {
+      for (const [view, open] of Object.entries(NAV_VIEW_OPENERS)) {
+        open();
+        const leading = leadingOf(), bar = pageBarOf();
+        if (leading.length !== 1 || !bar) throw new Error(`${view}: ${leading.length} leading controls`);
+        if (bar.querySelector('button, a[href], input, select, [tabindex]') !== leading[0]) throw new Error(`${view}: the leading control is not the first focusable one`);
+        if (Math.abs(leading[0].getBoundingClientRect().left - bar.getBoundingClientRect().left) > NAV_BAR_TOLERANCE_PX) throw new Error(`${view}: the leading control is not at the left edge of the bar`);
+        const chevrons = [...$('home').querySelectorAll('*')].filter((el) => !el.children.length && el !== leading[0] && el.textContent.trim().startsWith('‹'));
+        if (chevrons.length) throw new Error(`${view}: a second «‹»: ${chevrons[0].textContent}`);
+      }
+    }));
+    await TA('nav: profile has no leading control', async () => withNavHome(async () => {
+      showHomeView('profile');
+      if (leadingOf().length || document.querySelector('#home .page-bar')) throw new Error('the profile is the root: nothing to go back to');
+    }));
+    await TA('nav: back labels name the parent', async () => withNavHome(async () => {
+      for (const [view, [label, parent]] of Object.entries(NAV_BACK)) {
+        NAV_VIEW_OPENERS[view]();
+        const [leading] = leadingOf();
+        if (leading.textContent !== label) throw new Error(`${view}: «${leading.textContent}» instead of «${label}»`);
+        leading.click();
+        for (let i = 0; i < 5; i++) await tick0();
+        if (home.view !== parent) throw new Error(`${view}: back landed on ${home.view}, not ${parent}`);
+      }
+    }));
+    await TA('nav: one primary per page bar and none in the app bar', async () => withNavHome(async () => {
+      const primaries = { team: 1, matches: 1, stats: 0, player: 0, 'player-match': 1, 'team-edit': 0, attendance: 0 };
+      for (const [view, open] of Object.entries(NAV_VIEW_OPENERS)) {
+        open();
+        const found = pageBarOf().querySelectorAll('.btn.primary, .btn.go');
+        if (found.length !== primaries[view]) throw new Error(`${view}: ${found.length} primary buttons in the page bar`);
+        if (found.length && pageBarOf().querySelector('.page-actions').lastElementChild !== found[0]) throw new Error(`${view}: the primary is not last`);
+        if (document.querySelector('#home .app-bar .btn.primary, #home .app-bar .btn.go')) throw new Error(`${view}: a primary in the app bar`);
+      }
+    }));
+    await TA('nav: sub-views have a title', async () => withNavHome(async () => {
+      for (const [view, title] of Object.entries(NAV_TITLED)) {
+        NAV_VIEW_OPENERS[view]();
+        const h2 = pageBarOf().querySelector('h2.page-title');
+        if (!h2 || h2.textContent !== title) throw new Error(`${view}: title «${h2 && h2.textContent}» instead of «${title}»`);
+      }
+    }));
+    await TA('nav: a missing player or a loading season leaves the leading control alone', async () => withNavHome(async () => {
+      home.playerId = 'gone'; showHomeView('player');
+      if (leadingOf().length !== 1 || pageBarOf().querySelector('.page-title, .page-actions > *')) throw new Error('player gone');
+      showPlayer('ca'); home.season = null; renderHome();
+      if (leadingOf().length !== 1 || pageBarOf().querySelector('.page-actions > *')) throw new Error('season loading');
+    }));
+    await TA('nav: page bar stays in view on a long page', async () => withNavHome(async () => {
+      showPlayer('ca');
+      const scroller = $('home');
+      scroller.scrollTop = scroller.scrollHeight;
+      if (scroller.scrollTop === 0) throw new Error('premise: the player page does not scroll');
+      const bar = document.querySelector('#home .top-bar').getBoundingClientRect(), leading = leadingOf()[0].getBoundingClientRect();
+      if (bar.height > NAV_TOP_BAR_MAX_PX || leading.top < 0 || leading.bottom > innerHeight) throw new Error(`top bar ${bar.height}px, leading at ${leading.top}..${leading.bottom}`);
+      scroller.scrollTop = 0;
+    }, Array.from({ length: 6 }, (_, i) => ({ ...cardMatch(), id: `cm${i + 1}` }))));
+    await TA('nav: Escape on attendance goes back to Equipo', async () => withNavHome(async () => {
+      showHomeView('attendance');
+      pressEscape();
+      for (let i = 0; i < 5; i++) await tick0();
+      if (home.view !== 'team') throw new Error(home.view);
+    }));
     await TA('player match: rival and player names are escaped', async () => withTeams(async () => {
       const evil = '<img src=x onerror=alert(1) data-evil>';
       const hostile = { id: 'ce', num: 7, name: evil, pos: 'EXT', fullName: evil };
@@ -3483,7 +3569,7 @@
         home.roster = [await backend.savePlayer('cal-team', { num: 1, name: 'Portero', pos: 'POR', photo: null })];
         const open = [fx('r1', 1, '2099-10-25', 'Gades')];
         showCalendarPage(open, []);
-        if (document.querySelectorAll('.team-page .btn.go, .home-head .btn.go').length !== 1) throw new Error('more than one green new-match button');
+        if (document.querySelectorAll('.team-page .btn.go, .top-bar .btn.go').length !== 1) throw new Error('more than one green new-match button');
         document.querySelector('[data-new-match]').click();
         if (home.squadFixture !== 'r1') throw new Error('header button ignores the next round');
         showCalendarPage(open, [{ id: 'm1', date: '2099-10-24', them: 'Gades', venue: '', status: 'live', scoreUs: 0, scoreThem: 0 }]);

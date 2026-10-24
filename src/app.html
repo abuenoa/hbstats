@@ -783,7 +783,7 @@ td.zero { color: var(--color-text-tertiary); }
 a:focus-visible, input:focus-visible, select:focus-visible, summary:focus-visible, [tabindex]:focus-visible,
 .home .chip:focus-visible, #sheet .chip:focus-visible, #final .chip:focus-visible { outline: var(--focus-ring); outline-offset: 2px; }
 /* ---------- Home: sign-in, team and matches (outside a match) ---------- */
-.home { position: fixed; inset: 0; z-index: 40; overflow: auto; background: var(--bg); padding-block: 16px; padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); }
+.home { --home-gutter: 16px; position: fixed; inset: 0; z-index: 40; overflow: auto; background: var(--bg); padding-block: var(--home-gutter); padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); }
 .home-wrap { max-width: 1120px; margin: 0 auto; display: grid; gap: var(--space-4); }
 .home-wrap.centred { min-height: calc(100% - 4px); place-items: center; }
 .auth-card { width: min(420px, 100%); box-sizing: border-box; display: grid; gap: var(--space-3); padding: var(--space-6); border-radius: var(--radius-xl); }
@@ -795,12 +795,20 @@ a:focus-visible, input:focus-visible, select:focus-visible, summary:focus-visibl
 .link { justify-self: start; display: inline-flex; align-items: center; min-height: var(--target); border: 0; background: none; padding: 0; color: var(--fg); text-decoration: underline; font: var(--type-body); cursor: pointer; }
 .home-status:empty { display: none; }
 .home-status { font: var(--type-body); color: var(--fg); }
-.home-head { display: flex; align-items: center; gap: var(--space-4); flex-wrap: wrap; padding: var(--space-3) var(--space-4); border-radius: var(--radius-lg); }
+.home-head { display: flex; align-items: center; gap: var(--space-4); flex-wrap: wrap; }
+.glass.home-head { padding: var(--space-3) var(--space-4); border-radius: var(--radius-lg); }
+/* Sticks flush with the top of the screen: the offset cancels the gutter of .home, so nothing scrolls past above the bar. */
+.top-bar { padding: var(--space-2) var(--space-4); border-radius: var(--radius-lg); position: sticky; top: calc(var(--home-gutter) * -1); z-index: 2; display: grid; gap: var(--space-2); }
+.top-bar .home-crest { width: var(--target); height: var(--target); }
+.page-bar { display: flex; align-items: center; gap: var(--space-3); min-height: var(--target); }
+.page-title { flex: 1 1 auto; min-width: 0; margin: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font: var(--type-title); }
+.page-actions { margin-left: auto; display: flex; gap: var(--space-2); flex-wrap: nowrap; }
+.page-bar [data-player-edit][aria-pressed="true"] { background: var(--gold); border-color: var(--gold); color: #151515; }
+.btn.back-nav { flex: none; background: var(--surface); border-color: var(--line); color: var(--fg); }
 .home-crest { width: 52px; height: 52px; }
 .home-title { min-width: 0; }
 .home-title h1 { margin: 0; font: var(--type-title); text-transform: uppercase; letter-spacing: .02em; }
 .home-title small { color: var(--muted); }
-.home-head .head-actions { margin-left: auto; display: flex; gap: var(--space-2); align-items: center; flex-wrap: wrap; }
 .card-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: var(--space-3); }
 .grid-title, .span-all { grid-column: 1 / -1; }
 .grid-title { margin: var(--space-2) 0 calc(var(--space-1) * -1); font: var(--type-caption); font-weight: 700; letter-spacing: .1em; text-transform: uppercase; color: var(--muted); }
@@ -935,8 +943,6 @@ span.att-foot { visibility: hidden; }
 .fixture-error:empty { display: none; }
 /* Player card: poster, sentences, charts, per-match table, edit panel */
 .player-page { display: grid; gap: var(--space-4); }
-.player-bar { display: flex; justify-content: space-between; gap: var(--space-3); }
-.player-bar [data-player-edit][aria-pressed="true"] { background: var(--gold); border-color: var(--gold); color: #151515; }
 .player-grid { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.7fr) minmax(0, 1fr); gap: var(--space-4); align-items: start; }
 .player-col { display: grid; gap: var(--space-4); min-width: 0; }
 .poster { position: relative; overflow: hidden; display: grid; gap: var(--space-2); background: linear-gradient(160deg, color-mix(in srgb, var(--pos) var(--poster-tint), var(--surface)), var(--surface) 60%); }
@@ -3130,6 +3136,7 @@ span.att-foot { visibility: hidden; }
     if (ev.key !== 'Escape') return;
     if (!$('pop').hidden) closePop();
     else if (!$('sheet').hidden) closeSheet();
+    else if (!$('home').hidden) document.querySelector('#home [data-nav-leading]')?.click();
     else { disarm(); disarmAction(); }
   });
 
@@ -5644,6 +5651,12 @@ span.att-foot { visibility: hidden; }
     renderHome();
     return false;
   }
+  const NAV_LABELS = { teams: 'Mis equipos', team: 'Equipo', matches: 'Partidos', liveMatch: 'Volver al partido', halftime: 'Descanso', final: 'Final', cancel: 'Cancelar' };
+  const backButtonHtml = (label, attrs) => `<button class="btn back-nav press" type="button" data-nav-leading ${attrs}>‹ ${esc(label)}</button>`;
+  const cancelButtonHtml = (attrs, armId) => (armId ? armedButton(armId, NAV_LABELS.cancel, `data-nav-leading ${attrs}`)
+    : `<button class="btn press" type="button" data-nav-leading ${attrs}>${NAV_LABELS.cancel}</button>`);
+  // Leading: the one way out. Trailing: the page's actions, the primary last.
+  const pageBarHtml = ({ leading = '', title = '', actions = '' } = {}) => `<div class="page-bar">${leading}${title ? `<h2 class="page-title">${esc(title)}</h2>` : ''}<div class="page-actions">${actions}</div></div>`;
   const dateText = (iso) => (iso ? new Date(`${iso}T12:00:00`).toLocaleDateString('es-ES') : '');
   const shortDateText = (iso) => (iso ? new Date(`${iso}T12:00:00`).toLocaleDateString('es-ES', { day: 'numeric', month: 'numeric' }) : '');
 
@@ -5685,15 +5698,13 @@ span.att-foot { visibility: hidden; }
       ${statusHtml()}
     </form>`;
   }
-  function homeHeadHtml() {
+  function appBarHtml() {
     const tab = (view, label) => `<button class="press" type="button" data-home-view="${view}" aria-pressed="${home.view === view || (view === 'matches' && home.view === 'squad') || (view === 'team' && ['team-edit', 'player', 'player-match', 'attendance', 'rating-tune'].includes(home.view))}">${label}</button>`;
-    return `<header class="home-head glass">
-      <button class="btn press" type="button" data-home-view="profile">‹ Perfil</button>
+    return `<div class="home-head app-bar">
       <img class="crest home-crest" src="${esc(crestSrc(team))}" alt="">
       <div class="home-title"><h1>${esc(team.name)}</h1><small>${esc(team.club)}</small></div>
       <div class="tabs" role="group" aria-label="Secciones">${tab('team', 'Equipo')}${tab('matches', 'Partidos')}${tab('stats', 'Estadísticas')}</div>
-      ${home.view === 'team' ? '<button class="btn go press" type="button" data-new-match>+ Nuevo partido</button>' : ''}
-    </header>`;
+    </div>`;
   }
   // A match left on this tablet by the per-club release (same site), if any.
   function legacyMatch() {
@@ -5737,8 +5748,7 @@ span.att-foot { visibility: hidden; }
   }
   function matchesHtml() {
     const rounds = matchRounds();
-    return `<div class="row-actions"><button class="btn go press" type="button" data-new-match>+ Nuevo partido</button><button class="btn press" type="button" data-sample>Ver partido de ejemplo</button></div>
-      ${legacyHtml()}
+    return `${legacyHtml()}
       ${home.offline ? '<p class="note">Sin conexión: ves la copia guardada en esta tablet. Los partidos se subirán al volver la conexión.</p>' : ''}
       ${statusHtml()}
       ${home.matches.length ? `<div class="card-grid">${home.matches.map((m) => matchCardHtml(m, rounds)).join('')}</div>`
@@ -5761,8 +5771,7 @@ span.att-foot { visibility: hidden; }
   function teamEditHtml() {
     const remove = `<div class="team-delete"><p class="note">Borrar el equipo borra también su plantilla y todos sus partidos. Solo puede hacerlo quien lo creó.</p>
       ${armedButton('delete-team', 'Borrar equipo', 'data-delete-team')}</div>`;
-    return `<div class="row-actions"><button class="btn press" type="button" data-home-view="team">‹ Equipo</button></div>
-      ${calendarRowHtml()}
+    return `${calendarRowHtml()}
       <div class="team-layout"><section class="sheet-card"><h3>Equipo</h3>${teamFormHtml(team, false)}${remove}</section><section class="sheet-card">${teamRosterHtml()}</section></div>`;
   }
   function calendarRowHtml() {
@@ -5792,6 +5801,31 @@ span.att-foot { visibility: hidden; }
         ${problem ? `<span class="note">${problem}</span>` : ''}</div>
       <div class="squad-grid">${home.roster.slice().sort(byPosition).map(chip).join('')}</div>`;
   }
+  const NEW_MATCH_BUTTON = '<button class="btn go press" type="button" data-new-match>+ Nuevo partido</button>';
+  const backToTeam = () => backButtonHtml(NAV_LABELS.team, 'data-home-view="team"');
+  const backToTeams = () => backButtonHtml(NAV_LABELS.teams, 'data-home-view="profile"');
+  // The page bar of each team view: where it leads, what it is called and what it can do. A player or match that is gone, or
+  // a season still loading, leaves the leading control alone: the view itself shows the note or moves on.
+  const HOME_BARS = {
+    team: () => ({ leading: backToTeams(), actions: NEW_MATCH_BUTTON }),
+    matches: () => ({ leading: backToTeams(), actions: `<button class="btn press" type="button" data-sample>Ver partido de ejemplo</button>${NEW_MATCH_BUTTON}` }),
+    stats: () => ({ leading: backToTeams() }),
+    player: () => {
+      const player = rosterPlayer(home.playerId);
+      if (!player || home.season === null) return { leading: backToTeam() };
+      return { leading: backToTeam(), title: player.name, actions: `<button class="btn press" type="button" data-player-edit aria-pressed="${home.playerEdit}">Editar ficha</button>` };
+    },
+    'player-match': () => {
+      const player = rosterPlayer(home.playerId);
+      if (!player) return { leading: backToTeam() };
+      const leading = backButtonHtml(player.name, 'data-player-back');
+      const match = (home.season || []).find((m) => m.id === home.playerMatchId);
+      if (!match) return { leading };
+      return { leading, title: `${player.name} · ${match.them}`, actions: `<button class="btn primary press" type="button" data-player-match-open="${match.id}">Abrir el partido</button>` };
+    },
+    'team-edit': () => ({ leading: backToTeam(), title: 'Editar equipo' }),
+    attendance: () => ({ leading: backToTeam(), title: 'Asistencia' }),
+  };
   const HOME_VIEWS = { team: teamPageHtml, player: playerPageHtml, 'player-match': playerMatchHtml, 'team-edit': teamEditHtml, matches: matchesHtml, stats: teamStatsHtml, squad: squadHtml, attendance: attendanceHtml, 'rating-tune': ratingTuneHtml };
 
   // ---- Profile: the first screen after signing in (teams, rival templates, account) ----
@@ -5847,7 +5881,7 @@ span.att-foot { visibility: hidden; }
       body = `<div class="auth-card wide glass"><div class="sheet-head"><h1>${home.teams.length ? 'Nuevo equipo' : 'Crea tu equipo'}</h1>${cancel}</div><p class="note">Nombre, colores y escudo. Después añadirás la plantilla.</p>${teamFormHtml(home.draft, true)}</div>`;
     }
     else if (PROFILE_VIEWS[v]) body = `${profileHeadHtml()}<main class="home-body">${PROFILE_VIEWS[v]()}</main>`;
-    else body = `${homeHeadHtml()}<main class="home-body">${HOME_VIEWS[v]()}</main>`;
+    else body = `<header class="top-bar glass">${appBarHtml()}${HOME_BARS[v] ? pageBarHtml(HOME_BARS[v]()) : ''}</header><main class="home-body">${HOME_VIEWS[v]()}</main>`;
     $('home').innerHTML = `<div class="home-wrap${AUTH_VIEWS.includes(v) ? ' centred' : ''}">${body}</div>`;
     $('home').hidden = false;
   }
@@ -7101,8 +7135,7 @@ span.att-foot { visibility: hidden; }
     if (home.season === null) return '<p class="note">Cargando…</p>';
     const season = playerSeason(home.season, player);
     const body = season.rows.length ? playerSeasonHtml(player, season) : `<div class="player-grid"><div class="player-col">${posterHtml(player, 0)}</div></div><p class="note">Sin partidos todavía</p>`;
-    return `${statusHtml()}<div class="player-page"><div class="player-bar"><button class="btn press" type="button" data-home-view="team">‹ ${esc(team.name)}</button>
-      <button class="btn press" type="button" data-player-edit aria-pressed="${home.playerEdit}">Editar ficha</button></div>${home.playerEdit ? playerEditHtml(player) : ''}${body}</div>`;
+    return `${statusHtml()}<div class="player-page">${home.playerEdit ? playerEditHtml(player) : ''}${body}</div>`;
   }
   function showPlayer(id) {
     if (!rosterPlayer(id)) { showTeamPage(); return; }
@@ -7127,8 +7160,7 @@ span.att-foot { visibility: hidden; }
       : `<div class="match-grid">${mapCard('Tiros', row.shotsList, CARD_ZONE_COLOURS.field)}
           <div class="player-col">${goalGridHtml(row.shotsList, 'GOL', 'Dónde marca', gridView, CARD_ZONE_COLOURS.field)}${goalGridHtml(row.shotsList, 'PARADA', 'Dónde se lo paran', gridView, CARD_ZONE_COLOURS.field)}</div></div>`;
     const crown = row.mvp ? crownSvg('crown-face') : '';
-    return `${statusHtml()}<div class="player-page"><div class="player-bar"><button class="btn press" type="button" data-player-back>‹ Ficha</button>
-        <button class="btn primary press" type="button" data-player-match-open="${match.id}">Abrir el partido</button></div>
+    return `${statusHtml()}<div class="player-page">
       <section class="sheet-card match-head"><div class="last-match"><span class="mvp-face-static">${discHtml(player)}${crown}</span>
         <span class="last-who"><b>${esc(player.name)} · ${esc(match.them)}</b><small>${esc(dateText(match.date))}${match.venue ? ` · ${esc(match.venue)}` : ''}</small></span>
         <span class="res-chip ${resultClass(row)}">${RESULT_LABEL[matchResult(row)]}</span>${ratingChipHtml(row.rating)}
