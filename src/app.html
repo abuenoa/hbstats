@@ -796,11 +796,12 @@ a:focus-visible, input:focus-visible, select:focus-visible, summary:focus-visibl
 .home-status:empty { display: none; }
 .home-status { font: var(--type-body); color: var(--fg); }
 .home-head { display: flex; align-items: center; gap: var(--space-4); flex-wrap: wrap; }
-.glass.home-head { padding: var(--space-3) var(--space-4); border-radius: var(--radius-lg); }
 /* Sticks flush with the top of the screen: the offset cancels the gutter of .home, so nothing scrolls past above the bar. */
 .top-bar { padding: var(--space-2) var(--space-4); border-radius: var(--radius-lg); position: sticky; top: calc(var(--home-gutter) * -1); z-index: 2; display: grid; gap: var(--space-2); }
-.top-bar .home-crest { width: var(--target); height: var(--target); }
-.page-bar { display: flex; align-items: center; gap: var(--space-3); min-height: var(--target); }
+.top-bar .home-crest, .top-bar .app-mark { width: var(--target); height: var(--target); }
+.top-bar .app-mark { font-size: 20px; }
+.page-bar { display: flex; align-items: center; gap: var(--space-3); min-width: 0; min-height: var(--target); }
+.page-bar .btn { flex: none; }
 .page-title { flex: 1 1 auto; min-width: 0; margin: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font: var(--type-title); }
 .page-actions { margin-left: auto; display: flex; gap: var(--space-2); flex-wrap: nowrap; }
 .page-bar [data-player-edit][aria-pressed="true"] { background: var(--gold); border-color: var(--gold); color: #151515; }
@@ -5672,19 +5673,26 @@ span.att-foot { visibility: hidden; }
     </form>`;
   }
   function passwordHtml() {
-    return `<form class="auth-card glass" data-form="password">
-      <h1>Elige tu contraseña</h1>
+    const change = home.passwordChange;
+    const head = change ? pageBarHtml({
+      leading: cancelButtonHtml('data-home-view="profile"'),
+      title: 'Elige tu contraseña',
+      actions: `<button class="btn primary press" type="submit" form="${PASSWORD_FORM_ID}">Guardar</button>`,
+    }) : '<h1>Elige tu contraseña</h1>';
+    return `<form class="auth-card${change ? ' wide' : ''} glass" data-form="password" id="${PASSWORD_FORM_ID}">
+      ${head}
       <p class="note">Al menos ${MIN_PASSWORD_LENGTH} caracteres. Con ella y tu email entrarás desde cualquier tablet.</p>
       <label class="field">Contraseña nueva<input class="in" type="password" name="password" id="new-password" autocomplete="new-password" minlength="${MIN_PASSWORD_LENGTH}" required></label>
       <label class="field">Repítela<input class="in" type="password" name="repeat" id="new-password-repeat" autocomplete="new-password" minlength="${MIN_PASSWORD_LENGTH}" required></label>
-      <div class="row-actions"><button class="btn primary press" type="submit">Guardar contraseña</button>${home.passwordChange ? '<button class="btn press" type="button" data-home-view="profile">Cancelar</button>' : ''}</div>
+      ${change ? '' : '<div class="row-actions"><button class="btn primary press" type="submit">Guardar contraseña</button></div>'}
       ${statusHtml()}
     </form>`;
   }
+  const TEAM_NEW_FORM_ID = 'team-new-form', PASSWORD_FORM_ID = 'password-form';
   function teamFormHtml(t, creating) {
     const crest = home.crestDraft === undefined ? t.crest : home.crestDraft;
     const colour = (label, key) => `<label>${label}<input class="in colour" type="color" name="${key}" id="team-${key}" value="${t[key]}"></label>`;
-    return `<form class="team-form" data-form="${creating ? 'team-new' : 'team'}">
+    return `<form class="team-form" data-form="${creating ? 'team-new' : 'team'}"${creating ? ` id="${TEAM_NEW_FORM_ID}"` : ''}>
       <div class="crest-pick"><img class="crest-preview" id="crest-preview" src="${esc(crestSrc({ ...t, crest }))}" alt="Escudo">
         <div class="row-actions"><button class="btn press" type="button" data-crest-pick>Subir escudo</button>${crest ? '<button class="btn press" type="button" data-crest-clear>Quitar</button>' : ''}</div>
         <p class="note">PNG, JPG o WebP; mejor cuadrado. Se guarda pequeño.</p></div>
@@ -5694,7 +5702,7 @@ span.att-foot { visibility: hidden; }
         ${colour('Color principal', 'brand')}
         ${colour('Color secundario', 'brand2')}
       </div>
-      <div class="row-actions"><button class="btn primary press" type="submit">${creating ? 'Crear equipo' : 'Guardar cambios'}</button></div>
+      ${creating ? '' : '<div class="row-actions"><button class="btn primary press" type="submit">Guardar cambios</button></div>'}
       ${statusHtml()}
     </form>`;
   }
@@ -5792,10 +5800,7 @@ span.att-foot { visibility: hidden; }
     const problem = !home.roster.length ? 'La plantilla está vacía: añade jugadores en «Editar equipo».'
       : home.squad.size > MAX_ROSTER ? `Máximo ${MAX_ROSTER} en el acta.`
         : !squadReady() ? 'Hace falta al menos un portero.' : '';
-    return `<div class="sheet-head"><h2>Convocatoria</h2><div class="head-actions">
-        <button class="btn press" type="button" data-home-view="matches">Cancelar</button>
-        <button class="btn go play press" type="button" data-squad-next ${squadReady() ? '' : 'disabled'}>Siguiente ›</button></div></div>
-      ${squadFixtureNote()}
+    return `${squadFixtureNote()}
       <p class="note">Toca a los jugadores que van al partido (hasta ${MAX_ROSTER}, con al menos un portero). Luego pondrás el rival y el lugar.</p>
       <div class="row-actions"><b>${home.squad.size}/${MAX_ROSTER}</b><button class="btn press" type="button" data-squad-all>Todos</button><button class="btn press" type="button" data-squad-none>Ninguno</button>
         ${problem ? `<span class="note">${problem}</span>` : ''}</div>
@@ -5825,12 +5830,18 @@ span.att-foot { visibility: hidden; }
     },
     'team-edit': () => ({ leading: backToTeam(), title: 'Editar equipo' }),
     attendance: () => ({ leading: backToTeam(), title: 'Asistencia' }),
+    squad: () => ({ leading: cancelButtonHtml(`data-home-view="matches"`), title: 'Convocatoria', actions: `<button class="btn go play press" type="button" data-squad-next ${squadReady() ? '' : 'disabled'}>Siguiente ›</button>` }),
+    'rating-tune': () => ({
+      leading: cancelButtonHtml('data-home-view="team"', TUNE_LEAVE_ARM),
+      title: 'Ajustar puntuación',
+      actions: `<button class="btn press" type="button" data-tune="reset">Restablecer</button><button class="btn primary press" type="button" id="tune-save" data-tune="save"${tuneDirty() ? '' : ' disabled'}>Guardar</button>`,
+    }),
   };
   const HOME_VIEWS = { team: teamPageHtml, player: playerPageHtml, 'player-match': playerMatchHtml, 'team-edit': teamEditHtml, matches: matchesHtml, stats: teamStatsHtml, squad: squadHtml, attendance: attendanceHtml, 'rating-tune': ratingTuneHtml };
 
   // ---- Profile: the first screen after signing in (teams, rival templates, account) ----
-  const profileHeadHtml = () => `<header class="home-head glass"><span class="app-mark" aria-hidden="true">HB</span>
-      <div class="home-title"><h1>HBStats</h1><small>${home.user ? esc(home.user.email) : 'En este dispositivo'}</small></div></header>`;
+  const profileHeadHtml = (pageBar = '') => `<header class="top-bar glass"><div class="home-head app-bar"><span class="app-mark" aria-hidden="true">HB</span>
+      <div class="home-title"><h1>HBStats</h1><small>${home.user ? esc(home.user.email) : 'En este dispositivo'}</small></div></div>${pageBar}</header>`;
   // A team's colours as custom properties of its card; a value that is not a hex colour falls back to the app's own.
   const teamColoursStyle = (t) => [['--team-brand', t.brand, 'var(--brand)'], ['--team-brand2', t.brand2, 'var(--gold)']]
     .map(([name, value, fallback]) => `${name}:${HEX_COLOUR.test(value) ? value : fallback}`).join(';');
@@ -5858,9 +5869,6 @@ span.att-foot { visibility: hidden; }
   function templateHtml() {
     const t = home.template;
     return `<section class="sheet-card template-edit">
-      <div class="sheet-head"><h2>${t.id ? 'Editar plantilla' : 'Nueva plantilla'}</h2><div class="head-actions">
-        <button class="btn press" type="button" data-home-view="profile">Cancelar</button>
-        <button class="btn primary press" type="button" data-template-store>Guardar</button></div></div>
       <div class="acta-teams"><label>Rival<input class="in" type="text" id="tpl-name" maxlength="${MAX_NAME_LENGTH}" value="${esc(t.name)}" placeholder="Nombre del equipo rival"></label></div>
       <div class="row-actions"><b>${t.players.length}/${MAX_RIVAL_ROSTER}</b></div>
       ${rivalAddHtml('tpl')}
@@ -5869,6 +5877,13 @@ span.att-foot { visibility: hidden; }
     </section>`;
   }
   const PROFILE_VIEWS = { profile: profileHtml, template: templateHtml };
+  const PROFILE_BARS = {
+    template: () => ({
+      leading: cancelButtonHtml('data-home-view="profile"'),
+      title: home.template.id ? 'Editar plantilla' : 'Nueva plantilla',
+      actions: '<button class="btn primary press" type="button" data-template-store>Guardar</button>',
+    }),
+  };
   function renderHome() {
     const v = home.view;
     let body;
@@ -5877,11 +5892,19 @@ span.att-foot { visibility: hidden; }
     else if (v === 'login') body = loginHtml();
     else if (v === 'password') body = passwordHtml();
     else if (v === 'team-new') {
-      const cancel = home.teams.length ? '<button class="btn press" type="button" data-cancel-team>Cancelar</button>' : '';
-      body = `<div class="auth-card wide glass"><div class="sheet-head"><h1>${home.teams.length ? 'Nuevo equipo' : 'Crea tu equipo'}</h1>${cancel}</div><p class="note">Nombre, colores y escudo. Después añadirás la plantilla.</p>${teamFormHtml(home.draft, true)}</div>`;
+      const bar = pageBarHtml({
+        leading: home.teams.length ? cancelButtonHtml('data-cancel-team') : '',
+        title: home.teams.length ? 'Nuevo equipo' : 'Crea tu equipo',
+        actions: `<button class="btn primary press" type="submit" form="${TEAM_NEW_FORM_ID}">Crear equipo</button>`,
+      });
+      body = `<div class="auth-card wide glass">${bar}<p class="note">Nombre, colores y escudo. Después añadirás la plantilla.</p>${teamFormHtml(home.draft, true)}</div>`;
     }
-    else if (PROFILE_VIEWS[v]) body = `${profileHeadHtml()}<main class="home-body">${PROFILE_VIEWS[v]()}</main>`;
-    else body = `<header class="top-bar glass">${appBarHtml()}${HOME_BARS[v] ? pageBarHtml(HOME_BARS[v]()) : ''}</header><main class="home-body">${HOME_VIEWS[v]()}</main>`;
+    else if (PROFILE_VIEWS[v]) body = `${profileHeadHtml(PROFILE_BARS[v] ? pageBarHtml(PROFILE_BARS[v]()) : '')}<main class="home-body">${PROFILE_VIEWS[v]()}</main>`;
+    else {
+      // The page first: a bar may read state its view sets up (the tuning draft).
+      const page = HOME_VIEWS[v]();
+      body = `<header class="top-bar glass">${appBarHtml()}${pageBarHtml(HOME_BARS[v]())}</header><main class="home-body">${page}</main>`;
+    }
     $('home').innerHTML = `<div class="home-wrap${AUTH_VIEWS.includes(v) ? ' centred' : ''}">${body}</div>`;
     $('home').hidden = false;
   }
@@ -6877,8 +6900,6 @@ span.att-foot { visibility: hidden; }
     return `${statusHtml()}${home.seasonOffline ? SEASON_OFFLINE_NOTE : ''}<div class="tune-page">
       <section class="sheet-card"><h3>Pesos de la nota</h3><p class="note">Mueve un control y mira cómo cambia la nota de la plantilla. Nada cambia hasta que pulses «Guardar».</p>${tuneGroupsHtml()}</section>
       <section class="sheet-card tune-preview"><h3>Nota de la plantilla</h3>
-        <div class="row-actions"><button class="btn primary press" type="button" id="tune-save" data-tune="save"${tuneDirty() ? '' : ' disabled'}>Guardar</button>
-          <button class="btn press" type="button" data-tune="reset">Restablecer</button>${armedButton(TUNE_LEAVE_ARM, 'Cancelar', 'data-home-view="team"')}</div>
         ${warn}<p class="note" id="tune-state">${tuneStateText()}</p>${preview}</section></div>`;
   }
   // The inputs keep their focus: only the preview rows, the state line and the sibling control change.

@@ -2975,6 +2975,56 @@
       for (let i = 0; i < 5; i++) await tick0();
       if (home.view !== 'team') throw new Error(home.view);
     }));
+    // The bar of an edit task: «Cancelar» first, the one primary last.
+    const checkEditBar = (view) => {
+      const leading = leadingOf(), bar = pageBarOf();
+      if (leading.length !== 1 || !bar || bar.firstElementChild !== leading[0]) throw new Error(`${view}: the bar does not start with the one leading control`);
+      if (!/^Cancelar|^⚠/.test(leading[0].textContent)) throw new Error(`${view}: leading is «${leading[0].textContent}»`);
+      const primaries = bar.querySelectorAll('.btn.primary, .btn.go');
+      if (primaries.length !== 1 || bar.querySelector('.page-actions').lastElementChild !== primaries[0]) throw new Error(`${view}: ${primaries.length} primaries, or not last`);
+      if (!bar.querySelector('h2.page-title').textContent) throw new Error(`${view}: no title`);
+    };
+    await TA('nav: edit tasks lead with Cancelar and end with the primary', async () => {
+      await withNavHome(async () => {
+        const keepTeams = home.teams, keepSquad = home.squad, keepTemplate = home.template;
+        try {
+          openSquad(); checkEditBar('squad');
+          editTemplate(null); checkEditBar('template');
+          if (!pageBarOf().querySelector('.page-title').textContent.includes('Nueva plantilla')) throw new Error('template title');
+          home.teams = [team]; openNewTeam(); checkEditBar('team-new');
+          if ($('home').querySelector('.team-form [type="submit"]')) throw new Error('team-new keeps a second submit at the bottom of the form');
+          home.teams = []; renderHome();
+          if (leadingOf().length || !pageBarOf().querySelector('[type="submit"][form="team-new-form"]')) throw new Error('first team: no leading control, submit in the bar');
+          home.passwordChange = true; showHomeView('password'); checkEditBar('password');
+          if ($('home').querySelector('.row-actions')) throw new Error('password: the bottom row is still there');
+          home.passwordChange = false; renderHome();
+          if (leadingOf().length || !$('home').querySelector('.row-actions [type="submit"]')) throw new Error('first-time password screen changed');
+        } finally { Object.assign(home, { teams: keepTeams, squad: keepSquad, template: keepTemplate, passwordChange: false }); }
+      });
+      await withTuneTeam(async () => { await showRatingTune(); checkEditBar('rating-tune'); });
+    });
+    await TA('nav: tuning Cancelar arms when dirty, also from Escape', async () => withTuneTeam(async () => {
+      await showRatingTune();
+      pressEscape();
+      for (let i = 0; i < 5; i++) await tick0();
+      if (home.view !== 'team') throw new Error('nothing changed: Escape leaves at once, got ' + home.view);
+      await showRatingTune();
+      tuneInput(document.querySelector('input.tune-num[data-knob="turnover"]'), -0.9);
+      pressEscape();
+      if (home.view !== 'rating-tune' || home.armed !== TUNE_LEAVE_ARM || leadingOf()[0].textContent !== '⚠ ¿Seguro?' || !document.querySelector('.tune-warn')) throw new Error('first Escape only arms: ' + home.view + ' ' + home.armed);
+      if (home.weightsDraft.turnover !== -0.9 || document.querySelector('#tune-save').disabled) throw new Error('the draft and Guardar survive the arming');
+      leadingOf()[0].click();
+      for (let i = 0; i < 5; i++) await tick0();
+      if (home.view !== 'team' || home.armed !== null || team.ratingWeights) throw new Error('second tap leaves without saving: ' + home.view);
+    }));
+    await TA('nav: new team submits from the bar', async () => withTuneTeam(async (created) => {
+      openNewTeam();
+      $('team-club').value = 'CB Barra'; $('team-name').value = 'Barra Fem';
+      document.querySelector('.page-bar [type="submit"]').click();
+      for (let i = 0; i < 8; i++) await tick0();
+      if (home.teams.length !== 2 || team.name !== 'Barra Fem' || team.id === created.id) throw new Error('not created: ' + home.teams.length + ' ' + team.name);
+      await backend.deleteTeam(team.id);
+    }));
     await TA('player match: rival and player names are escaped', async () => withTeams(async () => {
       const evil = '<img src=x onerror=alert(1) data-evil>';
       const hostile = { id: 'ce', num: 7, name: evil, pos: 'EXT', fullName: evil };
