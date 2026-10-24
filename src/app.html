@@ -3133,10 +3133,13 @@ span.att-foot { visibility: hidden; }
   });
   $('scrim').addEventListener('pointerdown', (ev) => { ev.preventDefault(); closePop(); });
   $('armed-bar').addEventListener('click', (ev) => { if (!ev.target.closest('[data-unarm]')) return; if (ui.penalty && !ui.shooter) cancelPenalty(); else disarm(); });
+  // Escape in a field only leaves the field: typed work is never dropped by a navigation.
+  const TEXT_ENTRY_SELECTOR = 'input, textarea, select';
   document.addEventListener('keydown', (ev) => {
-    if (ev.key !== 'Escape') return;
+    if (ev.key !== 'Escape' || ev.isComposing) return;
     if (!$('pop').hidden) closePop();
     else if (!$('sheet').hidden) closeSheet();
+    else if (!$('home').hidden && document.activeElement?.matches(TEXT_ENTRY_SELECTOR)) document.activeElement.blur();
     else if (!$('home').hidden) document.querySelector('#home [data-nav-leading]')?.click();
     else { disarm(); disarmAction(); }
   });
@@ -5657,7 +5660,7 @@ span.att-foot { visibility: hidden; }
   const cancelButtonHtml = (attrs, armId) => (armId ? armedButton(armId, NAV_LABELS.cancel, `data-nav-leading ${attrs}`)
     : `<button class="btn press" type="button" data-nav-leading ${attrs}>${NAV_LABELS.cancel}</button>`);
   // Leading: the one way out. Trailing: the page's actions, the primary last.
-  const pageBarHtml = ({ leading = '', title = '', actions = '' } = {}) => `<div class="page-bar">${leading}${title ? `<h2 class="page-title">${esc(title)}</h2>` : ''}<div class="page-actions">${actions}</div></div>`;
+  const pageBarHtml = ({ leading = '', title = '', actions = '', heading = 'h2' } = {}) => `<div class="page-bar">${leading}${title ? `<${heading} class="page-title">${esc(title)}</${heading}>` : ''}<div class="page-actions">${actions}</div></div>`;
   const dateText = (iso) => (iso ? new Date(`${iso}T12:00:00`).toLocaleDateString('es-ES') : '');
   const shortDateText = (iso) => (iso ? new Date(`${iso}T12:00:00`).toLocaleDateString('es-ES', { day: 'numeric', month: 'numeric' }) : '');
 
@@ -5677,6 +5680,7 @@ span.att-foot { visibility: hidden; }
     const head = change ? pageBarHtml({
       leading: cancelButtonHtml('data-home-view="profile"'),
       title: 'Elige tu contraseña',
+      heading: 'h1',
       actions: `<button class="btn primary press" type="submit" form="${PASSWORD_FORM_ID}">Guardar</button>`,
     }) : '<h1>Elige tu contraseña</h1>';
     return `<form class="auth-card${change ? ' wide' : ''} glass" data-form="password" id="${PASSWORD_FORM_ID}">
@@ -5895,6 +5899,7 @@ span.att-foot { visibility: hidden; }
       const bar = pageBarHtml({
         leading: home.teams.length ? cancelButtonHtml('data-cancel-team') : '',
         title: home.teams.length ? 'Nuevo equipo' : 'Crea tu equipo',
+        heading: 'h1',
         actions: `<button class="btn primary press" type="submit" form="${TEAM_NEW_FORM_ID}">Crear equipo</button>`,
       });
       body = `<div class="auth-card wide glass">${bar}<p class="note">Nombre, colores y escudo. Después añadirás la plantilla.</p>${teamFormHtml(home.draft, true)}</div>`;
@@ -6984,7 +6989,7 @@ span.att-foot { visibility: hidden; }
     const counted = attendanceCountText(home.roster.map((p) => sessionStatus(session, p.id, match)));
     const remove = storedSession() ? `<div class="row-actions">${armedButton('att-delete', 'Borrar sesión', 'data-att-delete')}</div>` : '';
     return `${home.offline ? '<p class="note">Sin conexión: ves la copia guardada en esta tablet.</p>' : ''}
-      <section class="sheet-card squad att"><h3>Asistencia</h3>
+      <section class="sheet-card squad att">
         <div class="att-bar"><label class="field">Fecha<input class="in" type="date" id="att-date" value="${esc(home.attendanceDate)}"></label>
           <div class="chips" role="group" aria-label="Tipo de sesión">${chips}</div>
           <div class="att-sum"><p class="att-count">${counted}</p>${statusHtml(attendanceStatusText())}</div></div>
@@ -7183,7 +7188,7 @@ span.att-foot { visibility: hidden; }
     const crown = row.mvp ? crownSvg('crown-face') : '';
     return `${statusHtml()}<div class="player-page">
       <section class="sheet-card match-head"><div class="last-match"><span class="mvp-face-static">${discHtml(player)}${crown}</span>
-        <span class="last-who"><b>${esc(player.name)} · ${esc(match.them)}</b><small>${esc(dateText(match.date))}${match.venue ? ` · ${esc(match.venue)}` : ''}</small></span>
+        <span class="last-who"><b>${esc(dateText(match.date))}</b>${match.venue ? `<small>${esc(match.venue)}</small>` : ''}</span>
         <span class="res-chip ${resultClass(row)}">${RESULT_LABEL[matchResult(row)]}</span>${ratingChipHtml(row.rating)}
         <strong class="last-score ${resultClass(row)}">${row.scoreUs}–${row.scoreThem}</strong></div></section>
       ${figuresHtml(keeper ? gkFigures(row.facedList) : [...courtFigures(row), ...playerFigures(player, s)])}

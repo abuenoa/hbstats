@@ -2982,7 +2982,7 @@
       if (!/^Cancelar|^⚠/.test(leading[0].textContent)) throw new Error(`${view}: leading is «${leading[0].textContent}»`);
       const primaries = bar.querySelectorAll('.btn.primary, .btn.go');
       if (primaries.length !== 1 || bar.querySelector('.page-actions').lastElementChild !== primaries[0]) throw new Error(`${view}: ${primaries.length} primaries, or not last`);
-      if (!bar.querySelector('h2.page-title').textContent) throw new Error(`${view}: no title`);
+      if (!bar.querySelector('.page-title').textContent) throw new Error(`${view}: no title`);
     };
     await TA('nav: edit tasks lead with Cancelar and end with the primary', async () => {
       await withNavHome(async () => {
@@ -3024,6 +3024,38 @@
       for (let i = 0; i < 8; i++) await tick0();
       if (home.teams.length !== 2 || team.name !== 'Barra Fem' || team.id === created.id) throw new Error('not created: ' + home.teams.length + ' ' + team.name);
       await backend.deleteTeam(team.id);
+    }));
+    await TA('nav: Escape in a field only leaves the field', async () => withNavHome(async () => {
+      const keepTemplate = home.template;
+      try {
+        editTemplate(null);
+        const field = $('tpl-name');
+        field.focus(); field.value = 'BM Sur';
+        const escape = (extra) => document.dispatchEvent(new KeyboardEvent('keydown', { key: ESCAPE_KEY, bubbles: true, ...extra }));
+        escape({ isComposing: true });
+        escape();
+        if (home.view !== 'template' || document.activeElement === field || $('tpl-name').value !== 'BM Sur') throw new Error('Escape in a field navigated or lost the text: ' + home.view);
+        escape();
+        for (let i = 0; i < 5; i++) await tick0();
+        if (home.view !== 'profile') throw new Error('Escape outside a field leaves: ' + home.view);
+      } finally { home.template = keepTemplate; }
+    }));
+    await TA('nav: each edit task Cancelar lands on its parent; one h1 on the auth-style screens', async () => withNavHome(async () => {
+      const keep = { teams: home.teams, template: home.template };
+      try {
+        openSquad(); leadingOf()[0].click(); await tick0();
+        if (home.view !== 'matches') throw new Error('squad: ' + home.view);
+        editTemplate(null); leadingOf()[0].click(); await tick0();
+        if (home.view !== 'profile') throw new Error('template: ' + home.view);
+        home.teams = [team]; openNewTeam();
+        if ($('home').querySelectorAll('h1').length !== 1) throw new Error('team-new h1s');
+        leadingOf()[0].click(); await tick0();
+        if (home.view !== 'profile') throw new Error('team-new: ' + home.view);
+        home.passwordChange = true; showHomeView('password');
+        if ($('home').querySelectorAll('h1').length !== 1) throw new Error('password h1s');
+        leadingOf()[0].click(); await tick0();
+        if (home.view !== 'profile' ) throw new Error('password: ' + home.view);
+      } finally { Object.assign(home, keep, { passwordChange: false }); }
     }));
     await TA('player match: rival and player names are escaped', async () => withTeams(async () => {
       const evil = '<img src=x onerror=alert(1) data-evil>';
