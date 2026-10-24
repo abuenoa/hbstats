@@ -522,6 +522,9 @@ button.rex-chip { border: 0; cursor: pointer; position: relative; }
 .chip[aria-pressed="true"] { background: var(--fg); color: var(--bg); border-color: var(--fg); }
 .pop.wide { width: 560px; }
 .rival-picks { display: grid; grid-template-columns: repeat(auto-fill, minmax(52px, 1fr)); gap: 6px; }
+/* A rival season squad (up to 30) may not fit: the dorsals scroll inside the popup, which never leaves the screen. */
+.pop { max-height: calc(100dvh - 2 * var(--space-4)); }
+.pop .rival-picks { flex: 0 1 auto; min-height: 0; overflow-y: auto; overscroll-behavior: contain; }
 .rival-picks.named { grid-template-columns: repeat(auto-fill, minmax(118px, 1fr)); }
 .rpick { display: flex; align-items: center; justify-content: center; gap: 6px; min-height: 48px; min-width: 0; padding: 0 6px; border-radius: 12px; border: 1px solid var(--line); background: var(--surface); color: var(--fg); }
 .rival-picks.named .rpick { justify-content: flex-start; }
@@ -3409,6 +3412,8 @@ span.att-foot { visibility: hidden; }
   // ===================== Match sheet: statistics, goalkeeper, roster, PDF reports =====================
   const SHEET_TABS = { summary: 'Resumen', stats: 'Tablas', player: 'Jugador', analysis: 'Análisis', gk: 'Portero', acta: 'Acta y plantilla', reports: 'Informes PDF' };
   const MAX_ROSTER = 16;
+  // A rival's season squad: more than the 16 on a match sheet, so its names and dorsals are entered once.
+  const MAX_RIVAL_ROSTER = 30;
   const MAX_NAME_LENGTH = 24;
   // The name on the official card and the face photo (a small data URL, see supabase/schema.sql for the same limits).
   const MAX_FULL_NAME_LENGTH = 80;
@@ -3804,7 +3809,7 @@ span.att-foot { visibility: hidden; }
         <section>
           <h3 class="acta-h">Plantilla · ${esc(state.them)}</h3>
           <div class="row-actions">
-            <b>${state.rivals.length}/${MAX_ROSTER}</b>
+            <b>${state.rivals.length}/${MAX_RIVAL_ROSTER}</b>
             <button class="btn press" type="button" data-template-save>Guardar plantilla</button>
             <button class="btn press" type="button" data-template-pick aria-pressed="${ui.templatePick}">Cargar plantilla</button>
           </div>
@@ -4002,7 +4007,7 @@ span.att-foot { visibility: hidden; }
     if ((name || pos) && nums.length > 1) return { error: 'Con nombre o puesto, añade los dorsales de uno en uno.' };
     const skipped = [];
     nums.forEach((num) => {
-      const problem = list.length >= MAX_ROSTER ? `máximo ${MAX_ROSTER}` : dorsalProblem(list, num, null);
+      const problem = list.length >= MAX_RIVAL_ROSTER ? `máximo ${MAX_RIVAL_ROSTER}` : dorsalProblem(list, num, null);
       if (problem) skipped.push(`${num}: ${problem}`);
       else list.push({ id: newId('r'), num, name, pos });
     });
@@ -5833,7 +5838,7 @@ span.att-foot { visibility: hidden; }
         <button class="btn press" type="button" data-home-view="profile">Cancelar</button>
         <button class="btn primary press" type="button" data-template-store>Guardar</button></div></div>
       <div class="acta-teams"><label>Rival<input class="in" type="text" id="tpl-name" maxlength="${MAX_NAME_LENGTH}" value="${esc(t.name)}" placeholder="Nombre del equipo rival"></label></div>
-      <div class="row-actions"><b>${t.players.length}/${MAX_ROSTER}</b></div>
+      <div class="row-actions"><b>${t.players.length}/${MAX_RIVAL_ROSTER}</b></div>
       ${rivalAddHtml('tpl')}
       ${statusHtml()}
       ${t.players.length ? rivalTableHtml(t.players, 'tpl', () => false) : '<p class="note">Añade los dorsales del rival; nombre y puesto son opcionales.</p>'}
@@ -7489,7 +7494,7 @@ span.att-foot { visibility: hidden; }
   // A roster file opens in the editor to be checked; with the name of a saved template, saving replaces that one.
   async function importTemplateFile(file) {
     let parsed;
-    try { parsed = parseRoster(await file.text(), 'them'); }
+    try { parsed = parseRoster(await file.text(), 'them', MAX_RIVAL_ROSTER); }
     catch (err) { homeStatus(`No se pudo cargar: ${err.message}.`); return; }
     const same = templateByName(parsed.team);
     home.template = { id: same ? same.id : null, name: same ? same.name : parsed.team, players: parsed.players };
