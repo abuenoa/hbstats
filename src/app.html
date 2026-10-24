@@ -634,11 +634,11 @@ button.rex-chip { border: 0; cursor: pointer; position: relative; }
 .sheet-card .keypoints { gap: var(--space-2); }
 .stat-tile:last-child:nth-child(4n+3) { grid-column: span 2; }
 .final-mail { display: grid; gap: var(--space-1); font: var(--type-caption); font-weight: 700; color: var(--muted); text-transform: uppercase; letter-spacing: .06em; }
-.sheet-head { display: flex; align-items: center; gap: var(--space-3); flex-wrap: wrap; margin-bottom: var(--space-3); }
-.sheet-head h2 { margin: 0; font: var(--type-title); text-wrap: balance; }
-.sheet-head .btn { margin-left: auto; }
-.sheet-head .head-actions { margin-left: auto; display: flex; gap: var(--space-2); flex-wrap: wrap; }
-.sheet-head .head-actions .btn { margin-left: 0; }
+#sheet .page-bar { margin-bottom: var(--space-3); }
+/* One line at 1024 px: the row scrolls sideways before it wraps */
+.sheet-tabs { flex-wrap: nowrap; overflow-x: auto; margin-bottom: var(--space-3); }
+.sheet-tabs button { flex: none; }
+.final-actions .spacer { flex: 1 1 auto; }
 .table-wrap { overflow-x: auto; background: var(--surface); border: 1px solid var(--line); border-radius: var(--inner-radius, var(--radius)); }
 table { border-collapse: collapse; width: 100%; font: var(--type-caption); font-variant-numeric: tabular-nums; }
 th, td { padding: var(--space-2); border-bottom: 1px solid var(--line); text-align: center; white-space: nowrap; }
@@ -3138,6 +3138,7 @@ span.att-foot { visibility: hidden; }
   document.addEventListener('keydown', (ev) => {
     if (ev.key !== 'Escape' || ev.isComposing) return;
     if (!$('pop').hidden) closePop();
+    else if (!$('final').hidden) hideFinal();
     else if (!$('sheet').hidden) closeSheet();
     else if (!$('home').hidden && document.activeElement?.matches(TEXT_ENTRY_SELECTOR)) document.activeElement.blur();
     else if (!$('home').hidden) document.querySelector('#home [data-nav-leading]')?.click();
@@ -3934,19 +3935,23 @@ span.att-foot { visibility: hidden; }
     row?.focus({ preventScroll: true });
   }
   const SHEET_RENDERERS = { summary: sheetSummaryHtml, stats: sheetStatsHtml, player: sheetPlayerHtml, analysis: sheetAnalysisHtml, gk: sheetGkHtml, acta: sheetActaHtml, reports: sheetReportsHtml };
+  // The Hoja's way out names where it leads: the player's match view, the summary it came from, or the live screen.
+  function sheetBackLabel() {
+    const back = ui.sheetReturn;
+    if (back?.playerId) return `${(playerById(back.playerId) || rosterPlayer(back.playerId))?.name} · ${state.them}`;
+    if (back?.summary) return NAV_LABELS[back.summary];
+    return NAV_LABELS.liveMatch;
+  }
   function renderSheet() {
     if (ui.sheetMode === 'setup') {
-      $('sheet').innerHTML = `<div class="sheet-head"><h2>Preparar partido</h2>
-          <div class="head-actions"><button class="btn press" type="button" data-go-home>‹ Partidos</button>
-          <button class="btn go play press" type="button" data-start-match>Empezar partido ▶</button></div></div>
+      $('sheet').innerHTML = `${pageBarHtml({ leading: backButtonHtml(NAV_LABELS.matches, 'data-go-home'), title: 'Preparar partido', actions: '<button class="btn go play press" type="button" data-start-match>Empezar partido ▶</button>' })}
         <p class="note" id="setup-status" aria-live="polite">Pon los equipos, el lugar y las dos plantillas. El reloj no arranca hasta que tú lo inicies.</p>
         <div class="sheet-body">${sheetActaHtml()}${sourceNoteHtml()}</div>`;
       return;
     }
     const s = score();
-    $('sheet').innerHTML = `<div class="sheet-head"><h2>${esc(state.us)} ${s.us}–${s.them} ${esc(state.them)}</h2>
-        <div class="tabs" role="group" aria-label="Secciones">${Object.entries(SHEET_TABS).map(([k, label]) => `<button class="press" type="button" data-tab="${k}" aria-pressed="${k === ui.sheetTab}">${label}</button>`).join('')}</div>
-        <button class="btn primary press" type="button" data-close-sheet>${ui.sheetReturn ? '‹ Ficha' : 'Volver'}</button></div>
+    $('sheet').innerHTML = `${pageBarHtml({ leading: backButtonHtml(sheetBackLabel(), 'data-close-sheet'), title: `${state.us} ${s.us}–${s.them} ${state.them}` })}
+      <div class="tabs sheet-tabs" role="group" aria-label="Secciones">${Object.entries(SHEET_TABS).map(([k, label]) => `<button class="press" type="button" data-tab="${k}" aria-pressed="${k === ui.sheetTab}">${label}</button>`).join('')}</div>
       <div class="sheet-body">${SHEET_RENDERERS[ui.sheetTab]()}</div>`;
   }
   const sheetStatus = (id, text) => { const el = $(id); if (el) el.textContent = text; };
@@ -4875,6 +4880,7 @@ span.att-foot { visibility: hidden; }
       <section class="sheet-card failed-shots"><h3>Tiros fallados</h3><div class="stat-tiles">${failedShotTileHtml('Fallos 6 m', f.miss6)}${failedShotTileHtml('Fallos 9 m', f.miss9)}</div></section>
       <section class="sheet-card top-turnovers"><h3>Más pérdidas</h3>${rows ? `<ul>${rows}</ul>` : '<p class="note">Sin pérdidas.</p>'}</section></div>`;
   }
+  const finalLeadingHtml = () => backButtonHtml(NAV_LABELS.liveMatch, 'data-final-close');
   function openHalftime() {
     releaseMvpCard();
     const k = keyPoints();
@@ -4885,9 +4891,9 @@ span.att-foot { visibility: hidden; }
       <div class="halftime-points">${block('Defensa: corregir y vigilar', k.defence)}${block('Ataque: corregir y aprovechar', k.attack)}</div>
       ${summaryDetailHtml()}
       <div class="row-actions final-actions">
-        ${state.clock.period === 1 ? '<button class="btn go press" type="button" data-second-half>▶ 2ª parte</button>' : ''}
+        ${finalLeadingHtml()}<span class="spacer"></span>
         <button class="btn press" type="button" data-final-sheet>Ver Hoja</button>
-        <button class="btn press" type="button" data-final-close>Cerrar</button>
+        ${state.clock.period === 1 ? '<button class="btn go press" type="button" data-second-half>▶ 2ª parte</button>' : ''}
       </div>
     </div>`;
     $('final').hidden = false;
@@ -4929,8 +4935,8 @@ span.att-foot { visibility: hidden; }
         <p class="note" id="final-status" aria-live="polite">Correo: descarga los PDF y abre el correo con el resumen; adjúntalos desde Descargas. Compartir: envía los PDF ya adjuntos (Gmail, WhatsApp, Drive…).</p>
       </section>
       <div class="row-actions final-actions">
+        ${finalLeadingHtml()}<span class="spacer"></span>
         <button class="btn press" type="button" data-final-sheet>Ver Hoja</button>
-        <button class="btn press" type="button" data-final-close>Cerrar</button>
       </div>
     </div>`;
     $('final').hidden = false;
@@ -5054,7 +5060,7 @@ span.att-foot { visibility: hidden; }
     if (b.dataset.mvp) { setMvp(b.dataset.mvp); return; }
     if (b.hasAttribute('data-ratings-all')) { ui.ratingsAll = !ui.ratingsAll; openFinal($('final-email').value); return; }
     if (b.hasAttribute('data-final-close')) { hideFinal(); return; }
-    if (b.hasAttribute('data-final-sheet')) { hideFinal(); ui.sheetMode = 'sheet'; ui.sheetTab = 'summary'; renderSheet(); $('sheet').hidden = false; return; }
+    if (b.hasAttribute('data-final-sheet')) { hideFinal(); ui.sheetReturn = { summary: state.finished ? 'final' : 'halftime' }; ui.sheetMode = 'sheet'; ui.sheetTab = 'summary'; renderSheet(); $('sheet').hidden = false; return; }
     if (b.hasAttribute('data-second-half')) { startSecondHalf(); return; }
     if (b.hasAttribute('data-final-mail')) { sendReportsByMail(); return; }
     if (b.hasAttribute('data-final-share')) shareReports();
@@ -5069,7 +5075,7 @@ span.att-foot { visibility: hidden; }
   });
   // Enter saves the note (Shift+Enter for a new line), so the stylus keyboard needs no extra tap.
   $('note-text').addEventListener('keydown', (ev) => { if (ev.key === 'Enter' && !ev.shiftKey) { ev.preventDefault(); $('note-form').requestSubmit(); } });
-  $('btn-sheet').addEventListener('click', () => { ui.sheetMode = 'sheet'; renderSheet(); $('sheet').hidden = false; });
+  $('btn-sheet').addEventListener('click', () => { if (ui.sheetReturn?.summary) ui.sheetReturn = null; ui.sheetMode = 'sheet'; renderSheet(); $('sheet').hidden = false; });
   $('sheet').addEventListener('click', (ev) => {
     const b = ev.target.closest('button');
     if (!b) return;
@@ -7314,9 +7320,14 @@ span.att-foot { visibility: hidden; }
     after();
   }
   // The season was cleared on entering the match: the card's match view shows «Cargando…» until it is read again.
-  // «‹ Ficha» and Escape: back to the player's card when the Hoja was opened from it, else back to the match.
+  // The leading control and Escape: back to the player's match view when the Hoja was opened from it, to the summary it came from, else to the match.
   function closeSheet() {
-    if (ui.sheetReturn) backToPlayerMatch(ui.sheetReturn);
+    const back = ui.sheetReturn;
+    if (back?.summary) {
+      ui.sheetReturn = null;
+      $('sheet').hidden = true;
+      (back.summary === 'final' ? openFinal : openHalftime)();
+    } else if (back) backToPlayerMatch(back);
     else $('sheet').hidden = true;
   }
   function backToPlayerMatch({ playerId, matchId }) {

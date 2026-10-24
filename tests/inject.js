@@ -1200,7 +1200,7 @@
     if ([...$('final').querySelectorAll('button.primary')].map((b) => b.textContent).join() !== 'Compartir MVP') throw new Error('one primary');
     if (!$('final').querySelector('.final-actions [data-final-sheet]') || !$('final').querySelector('.final-actions [data-final-close]')) throw new Error('sticky footer');
     const close = $('final').querySelector('[data-final-close]').getBoundingClientRect();
-    if (close.bottom > window.innerHeight) throw new Error('Cerrar below the fold: ' + close.bottom);
+    if (close.bottom > window.innerHeight) throw new Error('the leading control is below the fold: ' + close.bottom);
   }));
   T('halftime: «2ª parte» is inside the viewport', () => {
     const snap = snapshot();
@@ -2549,7 +2549,7 @@
         const lead = document.querySelector('.tile.lead-field');
         if (!lead || !lead.textContent.includes('el mejor del equipo') || !lead.textContent.includes('75%')) throw new Error('lead tile');
         if (document.querySelectorAll('.match-table tbody tr').length !== 1 || /NaN|undefined/.test(text)) throw new Error('rows or NaN');
-        if (!document.querySelector('.page-bar [data-nav-leading]').textContent.includes('‹ Equipo')) throw new Error('back button');
+        if (!document.querySelector('#home .page-bar [data-nav-leading]').textContent.includes('‹ Equipo')) throw new Error('back button');
       } finally { Object.assign(home, keep); }
     });
     await TA('player card: goalkeeper card uses keeper sentences and radar', async () => {
@@ -2693,7 +2693,7 @@
         showHomeView('team-edit');
         document.querySelector('[data-home-view="team"]').click(); await tick0();
         showPlayer('ca');
-        document.querySelector('.page-bar [data-nav-leading]').click(); await tick0();
+        document.querySelector('#home .page-bar [data-nav-leading]').click(); await tick0();
         if (downloads !== 1 || home.view !== 'team' || !document.querySelector('.team-page')) throw new Error(`downloads ${downloads} view ${home.view}`);
         await deleteMatch('gone');
         document.querySelector('[data-home-view="team"]').click(); await tick0();
@@ -3020,7 +3020,7 @@
     await TA('nav: new team submits from the bar', async () => withTuneTeam(async (created) => {
       openNewTeam();
       $('team-club').value = 'CB Barra'; $('team-name').value = 'Barra Fem';
-      document.querySelector('.page-bar [type="submit"]').click();
+      document.querySelector('#home .page-bar [type="submit"]').click();
       for (let i = 0; i < 8; i++) await tick0();
       if (home.teams.length !== 2 || team.name !== 'Barra Fem' || team.id === created.id) throw new Error('not created: ' + home.teams.length + ' ' + team.name);
       await backend.deleteTeam(team.id);
@@ -3122,7 +3122,7 @@
       await openFromCard(SAMPLE_WING_ID, sampleMatch(), async () => {
         if (currentMatchId !== 'om1' || !$('final').hidden || $('sheet').hidden || ui.sheetTab !== 'player' || ui.sheetPlayer !== SAMPLE_WING_ID) throw new Error(`final ${$('final').hidden} sheet ${$('sheet').hidden} ${ui.sheetTab} ${ui.sheetPlayer}`);
         if ($('sheet').querySelector(`[data-sheet-player="${SAMPLE_WING_ID}"]`).getAttribute('aria-pressed') !== 'true') throw new Error('chip not pressed');
-        if (!$('home').hidden || $('sheet').querySelector('[data-close-sheet]').textContent !== '‹ Ficha') throw new Error('home or button label');
+        if (!$('home').hidden || $('sheet').querySelector('[data-close-sheet]').textContent !== `‹ ${playerById(SAMPLE_WING_ID).name} · ${state.them}`) throw new Error('home or button label');
       });
     });
     await TA('open match for player: a goalkeeper lands on his saves', async () => {
@@ -3156,14 +3156,111 @@
       const snap = snapshot();
       try { ui.sheetReturn = null; ui.sheetMode = 'sheet'; renderSheet(); $('sheet').hidden = false; escape(); if (!$('sheet').hidden) throw new Error('a plain Hoja ignores Escape'); } finally { restore(snap); }
     });
-    await TA('open match for player: a normal match keeps Volver and lands on the final', async () => {
+    await TA('open match for player: a normal match keeps «‹ Volver al partido» and lands on the final', async () => {
       const keepState = state, keepId = currentMatchId;
       try {
         enterMatch('plain-final', sampleMatch().state, false);
         if (ui.sheetReturn || ui.sheetPlayer || $('final').hidden || !$('sheet').hidden) throw new Error('final not shown');
         renderSheet();
-        if ($('sheet').querySelector('[data-close-sheet]').textContent !== 'Volver') throw new Error('label');
+        if ($('sheet').querySelector('[data-close-sheet]').textContent !== `‹ ${NAV_LABELS.liveMatch}`) throw new Error('label');
       } finally { state = keepState; currentMatchId = keepId; removeKey(MATCH_KEY_PREFIX + 'plain-final'); removeKey(CURRENT_MATCH_KEY); $('final').hidden = true; renderAll(); }
+    });
+    // The match pages and cards: one exit at the leading edge, the primary (if any) at the trailing edge.
+    const visibleButtons = (root) => [...root.querySelectorAll('button')].filter((b) => !b.closest('[hidden]'));
+    const sheetLeading = () => $('sheet').querySelectorAll('[data-nav-leading]');
+    const checkSheetBar = (what, label) => {
+      const leading = sheetLeading(), bar = $('sheet').querySelector('.page-bar');
+      if (leading.length !== 1 || !bar || bar.querySelector('button') !== leading[0] || bar.firstElementChild !== leading[0]) throw new Error(`${what}: not exactly one leading control, first in the bar`);
+      if (leading[0].textContent !== label) throw new Error(`${what}: leading is «${leading[0].textContent}»`);
+      if (leading[0].getBoundingClientRect().left - bar.getBoundingClientRect().left > NAV_BAR_TOLERANCE_PX) throw new Error(`${what}: leading is not at the left edge`);
+      return bar;
+    };
+    const checkFooter = (what, lastSelector) => {
+      const buttons = [...$('final').querySelectorAll('.final-actions button')];
+      if (buttons[0] !== $('final').querySelector('[data-nav-leading]') || $('final').querySelectorAll('[data-nav-leading]').length !== 1) throw new Error(`${what}: the footer does not start with the one leading control`);
+      if (buttons[0].textContent !== `‹ ${NAV_LABELS.liveMatch}`) throw new Error(`${what}: leading is «${buttons[0].textContent}»`);
+      if (!buttons[buttons.length - 1].matches(lastSelector) || $('final').querySelectorAll('.final-actions .btn.primary, .final-actions .btn.go').length !== (lastSelector === '[data-second-half]' ? 1 : 0)) throw new Error(`${what}: last button`);
+    };
+    await TA('nav: match pages and cards lead with the exit', async () => {
+      const snap = snapshot();
+      try {
+        state.setupDone = false; openSetup();
+        const setupBar = checkSheetBar('setup', `‹ ${NAV_LABELS.matches}`);
+        if (setupBar.querySelector('.page-actions').lastElementChild !== setupBar.querySelector('.btn.go[data-start-match]') || !$('setup-status')) throw new Error('setup: primary or status');
+        state.setupDone = true; ui.sheetReturn = null; ui.sheetMode = 'sheet'; renderSheet();
+        const hojaBar = checkSheetBar('hoja', `‹ ${NAV_LABELS.liveMatch}`);
+        if (hojaBar.querySelector('.btn.primary, .btn.go, .page-actions > *') || !hojaBar.querySelector('.page-title').textContent.includes('–')) throw new Error('hoja: no trailing action, score title');
+        if ($('sheet').querySelector('.sheet-head') || $('sheet').querySelector('.btn.primary')) throw new Error('hoja: the old header or red Volver is still there');
+        const tabs = [...$('sheet').querySelectorAll('.sheet-tabs button')];
+        if (tabs.length !== Object.keys(SHEET_TABS).length || new Set(tabs.map((t) => t.offsetTop)).size !== 1) throw new Error(`tabs wrap at ${innerWidth}px: ` + tabs.map((t) => t.offsetTop));
+        if (hojaBar.nextElementSibling !== $('sheet').querySelector('.sheet-tabs')) throw new Error('tabs are not under the bar');
+        state.clock = { ...state.clock, period: 1 };
+        openHalftime(); checkFooter('half-time', '[data-second-half]');
+        state.clock = { ...state.clock, period: 2 };
+        openHalftime(); checkFooter('half-time, second period', '[data-final-sheet]');
+        openFinal(); checkFooter('final', '[data-final-sheet]');
+        await ui.mvpCardReady;
+      } finally { restore(snap); }
+    });
+    await TA('nav: hoja back names its destination', async () => {
+      const snap = snapshot(), keepId = currentMatchId;
+      try {
+        ui.sheetReturn = null; $('btn-sheet').click();
+        checkSheetBar('live', `‹ ${NAV_LABELS.liveMatch}`);
+        sheetLeading()[0].click();
+        if (!$('sheet').hidden || !$('home').hidden || currentMatchId !== keepId) throw new Error('live: did not return to the live screen');
+        for (const [summary, open, finished] of [['halftime', openHalftime, false], ['final', openFinal, true]]) {
+          state.finished = finished;
+          open();
+          $('final').querySelector('[data-final-sheet]').click();
+          checkSheetBar(summary, `‹ ${NAV_LABELS[summary]}`);
+          sheetLeading()[0].click();
+          await ui.mvpCardReady;
+          if (!$('sheet').hidden || $('final').hidden || ui.sheetReturn || !$('final').textContent.includes(NAV_LABELS[summary]) || !$('final').querySelector('[data-final-close]')) throw new Error(`${summary}: did not return to its summary`);
+          const wasHalftime = summary === 'halftime';
+          if (wasHalftime !== !!$('final').querySelector('[data-second-half]') && !finished) throw new Error('half-time card not restored');
+          hideFinal();
+        }
+        $('btn-sheet').click();
+        if (ui.sheetReturn) throw new Error('a plain Hoja carries a stale return');
+      } finally { restore(snap); }
+      await openFromCard(SAMPLE_WING_ID, sampleMatch(), async () => {
+        const label = `‹ ${playerById(SAMPLE_WING_ID).name} · ${state.them}`;
+        checkSheetBar('from a player', label);
+        if (label === `‹ ${playerById(SAMPLE_WING_ID).name}`) throw new Error('the label repeats the card back');
+        sheetLeading()[0].click();
+        for (let i = 0; i < 5; i++) await tick0();
+        if (home.view !== 'player-match' || currentMatchId !== null) throw new Error('from a player: ' + home.view);
+      });
+    });
+    await TA('nav: no bare Volver or Cerrar', async () => {
+      const BARE = /^(Volver|Cerrar)$/, snap = snapshot();
+      const bare = (where) => { const found = ['home', 'sheet', 'final'].flatMap((id) => visibleButtons($(id))).find((b) => BARE.test(b.textContent.trim())); if (found) throw new Error(`${where}: bare «${found.textContent}»`); };
+      try {
+        state.setupDone = false; openSetup(); bare('setup'); $('sheet').hidden = true; state.setupDone = true;
+        ui.sheetMode = 'sheet';
+        for (const tab of Object.keys(SHEET_TABS)) { ui.sheetTab = tab; renderSheet(); $('sheet').hidden = false; bare(`hoja ${tab}`); }
+        $('sheet').hidden = true;
+        openHalftime(); bare('half-time'); state.finished = true; openFinal(); bare('final'); await ui.mvpCardReady;
+      } finally { restore(snap); }
+      await withNavHome(async () => { for (const view of ['team', 'matches', 'stats', 'team-edit']) { showHomeView(view); bare(view); } });
+    });
+    await TA('nav: Escape closes the final card', async () => {
+      const snap = snapshot();
+      try {
+        openHalftime(); pressEscape();
+        if (!$('final').hidden) throw new Error('half-time stays after Escape');
+        state.finished = true; openFinal(); pressEscape();
+        if (!$('final').hidden) throw new Error('final stays after Escape');
+        await ui.mvpCardReady;
+        if (ui.mvpCardUrl) throw new Error('the preview URL leaks');
+      } finally { restore(snap); }
+    });
+    await TA('live strip unchanged', async () => {
+      const home$ = $('btn-home');
+      if (home$.textContent !== '‹ Partidos' || !home$.classList.contains('back') || home$.classList.contains('back-nav') || home$.hasAttribute('data-nav-leading')) throw new Error('«‹ Partidos» changed');
+      const stray = [...document.querySelectorAll('[data-nav-leading], .page-bar')].filter((el) => !el.closest('#home, #sheet, #final'));
+      if (stray.length) throw new Error('page bar on the live screen');
     });
     await TA('player card: field radar names the assists axis «Pases de gol» and the leaders chip says MVPs', async () => {
       if (FIELD_AXES.find((a) => a.key === 'assists').label !== 'Pases de gol' || LEADER_METRICS.find((x) => x.key === 'mvps').label !== 'MVPs') throw new Error('wording');
