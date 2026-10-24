@@ -1455,7 +1455,7 @@ span.att-foot { visibility: hidden; }
   let state = sampleState();
   const ui = {
     source: 'GK', sourcePhase: null, show: new Set(), popView: null, hintTimer: null, drag: null,
-    lastPenTs: 0, shooter: null, rivalNewPos: null, sheetTab: 'summary', sheetMode: 'sheet', sheetGk: null, sheetGoal: 'GK', sheetShooter: null, sheetPlayer: null, sheetReturn: null, backGuard: false, rosterSide: 'team', templatePick: false,
+    lastPenTs: 0, shooter: null, rivalNewPos: null, sheetTab: 'summary', sheetMode: 'sheet', sheetGk: null, sheetGoal: 'GK', sheetShooter: null, sheetPlayer: null, sheetReturn: null, backGuard: history.state?.hbstatsGuard === true, rosterSide: 'team', templatePick: false,
     // The final screen lists every rating, not just the top rows.
     ratingsAll: false,
     // The MVP card shown on the final screen: its PNG and object URL (revoked when the screen re-renders or closes), the
@@ -3143,15 +3143,16 @@ span.att-foot { visibility: hidden; }
   });
   $('scrim').addEventListener('pointerdown', (ev) => { ev.preventDefault(); closePop(); });
   $('armed-bar').addEventListener('click', (ev) => { if (!ev.target.closest('[data-unarm]')) return; if (ui.penalty && !ui.shooter) cancelPenalty(); else disarm(); });
-  // Escape in a field only leaves the field: typed work is never dropped by a navigation.
+  // Escape does what the system back does: a field only loses focus (typed work is never dropped by a navigation),
+  // else the visible leading control runs, else the live screen disarms.
   const TEXT_ENTRY_SELECTOR = 'input, textarea, select';
   document.addEventListener('keydown', (ev) => {
     if (ev.key !== 'Escape' || ev.isComposing) return;
-    if (!$('pop').hidden) closePop();
-    else if (!$('final').hidden) hideFinal();
-    else if (!$('sheet').hidden) closeSheet();
-    else if (!$('home').hidden && document.activeElement?.matches(TEXT_ENTRY_SELECTOR)) document.activeElement.blur();
-    else if (!$('home').hidden) document.querySelector('#home [data-nav-leading]')?.click();
+    if (!$('pop').hidden) { closePop(); return; }
+    const field = document.activeElement;
+    if (field?.matches(TEXT_ENTRY_SELECTOR) && field.closest('#home, #sheet, #final')) { field.blur(); return; }
+    const leading = visibleLeading('final') || visibleLeading('sheet') || visibleLeading('home');
+    if (leading) leading.click();
     else { disarm(); disarmAction(); }
   });
 

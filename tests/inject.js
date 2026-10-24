@@ -3256,6 +3256,29 @@
         if (ui.mvpCardUrl) throw new Error('the preview URL leaks');
       } finally { restore(snap); }
     });
+    await TA('nav: Escape on the setup sheet goes where the system back goes', async () => {
+      const snap = snapshot(), real = leaveMatch;
+      let left = 0;
+      try {
+        leaveMatch = () => { left++; };
+        state.setupDone = false; openSetup();
+        pressEscape();
+        if (left !== 1 || ui.sheetMode !== 'setup') throw new Error('Escape must run «‹ Partidos», left ' + left);
+      } finally { leaveMatch = real; restore(snap); }
+    });
+    await TA('nav: Escape while typing in the final card keeps the card and the address', async () => {
+      const snap = snapshot();
+      try {
+        state.finished = true; openFinal('');
+        const field = $('final-email');
+        field.focus(); field.value = 'coach@club.es';
+        pressEscape();
+        if ($('final').hidden || $('final-email').value !== 'coach@club.es' || document.activeElement === field) throw new Error('the card closed, the address was lost, or the field kept focus');
+        pressEscape();
+        if (!$('final').hidden) throw new Error('a second Escape leaves the card');
+        await ui.mvpCardReady;
+      } finally { restore(snap); }
+    });
     await TA('live strip unchanged', async () => {
       const home$ = $('btn-home');
       if (home$.textContent !== '‹ Partidos' || !home$.classList.contains('back') || home$.classList.contains('back-nav') || home$.hasAttribute('data-nav-leading')) throw new Error('«‹ Partidos» changed');
