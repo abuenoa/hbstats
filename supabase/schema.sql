@@ -66,10 +66,14 @@ create table if not exists public.rival_templates (
   id uuid primary key default gen_random_uuid(),
   user_id uuid not null default auth.uid() references auth.users (id) on delete cascade,
   name text not null check (char_length(name) between 1 and 24),
-  -- [{num, name, pos}]: the app validates each dorsal; the database only bounds the size (an acta holds 16).
-  players jsonb not null check (jsonb_typeof(players) = 'array' and jsonb_array_length(players) between 1 and 16)
+  -- [{num, name, pos}]: the app validates each dorsal; the database only bounds the size (a rival's season squad, up to 30).
+  players jsonb not null check (jsonb_typeof(players) = 'array' and jsonb_array_length(players) between 1 and 30)
 );
 create unique index if not exists rival_templates_user_name on public.rival_templates (user_id, lower(name));
+-- Databases created when the bound was 16 get the season-squad bound too.
+alter table public.rival_templates drop constraint if exists rival_templates_players_check;
+alter table public.rival_templates add constraint rival_templates_players_check
+  check (jsonb_typeof(players) = 'array' and jsonb_array_length(players) between 1 and 30);
 
 create or replace function public.touch_updated_at() returns trigger
 language plpgsql set search_path = public as $$
