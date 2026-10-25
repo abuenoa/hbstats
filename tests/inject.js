@@ -4278,13 +4278,48 @@
       const done = withFinal(playedFew()), shared = [];
       const unstub = sheetStubs((data) => data.files.every((f) => f.type === 'application/pdf'), async (data) => { shared.push(data); });
       try {
+        await ui.reportFilesReady;
         $('final').querySelector('[data-final-share]').click();
-        for (let i = 0; i < 50 && !shared.length; i++) await tick0();
+        for (let i = 0; i < 50 && $('final-status').textContent !== 'Compartido.'; i++) await tick0();
         if (shared.length !== 1 || shared[0].files.length !== 2 || !/^informe-.+\.pdf$/.test(shared[0].files[0].name) || !shared[0].title.startsWith('Informe')) throw new Error(JSON.stringify(shared.map((d) => d.files.map((f) => f.name))));
         if ($('final-status').textContent !== 'Compartido.') throw new Error($('final-status').textContent);
       } finally { unstub(); done(); }
     });
-  }).catch((e) => __results.push('FAIL libs ' + e.message)).finally(() => {
+  }).then(() => TA('final: e-mail attaches both PDFs through the share sheet, addresses first', async () => {
+    const done = withFinal(playedFew()), shared = [];
+    const unstub = sheetStubs((data) => data.files.every((f) => f.type === 'application/pdf'), async (data) => { shared.push(data); });
+    try {
+      await ui.reportFilesReady;
+      $('final-email').value = 'a@x.es, b@y.com';
+      $('final').querySelector('[data-final-mail]').click();
+      for (let i = 0; i < 50 && $('final-status').textContent !== 'Compartido.'; i++) await tick0();
+      if (shared.length !== 1 || shared[0].files.length !== 2 || shared[0].files.map((f) => f.name.split('-')[0]).join() !== 'informe,jugadores' || !shared[0].files.every((f) => f.type === 'application/pdf')) throw new Error(JSON.stringify(shared.map((d) => d.files.map((f) => f.name))));
+      if (!shared[0].text.startsWith('Para: a@x.es, b@y.com\n') || !shared[0].text.includes(finalTitle())) throw new Error(shared[0].text);
+      if (state.reportEmail !== 'a@x.es, b@y.com') throw new Error(state.reportEmail);
+      if ($('final-status').textContent !== 'Compartido.') throw new Error($('final-status').textContent);
+    } finally { unstub(); done(); }
+  })).then(() => TA('final: e-mail tapped before the PDFs are ready asks to tap again', async () => {
+    const done = withFinal(playedFew()), shared = [];
+    const unstub = sheetStubs(() => true, async (data) => { shared.push(data); });
+    try {
+      $('final-email').value = 'a@x.es';
+      $('final').querySelector('[data-final-mail]').click();
+      await tick0();
+      if (shared.length || !$('final-status').textContent.includes('vuelve a tocar')) throw new Error($('final-status').textContent);
+      await ui.reportFilesReady;
+    } finally { unstub(); done(); }
+  })).then(() => TA('final: e-mail share cancelled says where the addresses are', async () => {
+    const done = withFinal(playedFew());
+    const unstub = sheetStubs(() => true, async () => { const e = new Error('closed'); e.name = 'AbortError'; throw e; });
+    try {
+      await ui.reportFilesReady;
+      $('final-email').value = 'a@x.es';
+      $('final').querySelector('[data-final-mail]').click();
+      for (let i = 0; i < 50 && !$('final-status').textContent.startsWith('Compartir cancelado.'); i++) await tick0();
+      const text = $('final-status').textContent;
+      if (!text.startsWith('Compartir cancelado.') || !text.includes('«Para»')) throw new Error(text);
+    } finally { unstub(); done(); }
+  })).catch((e) => __results.push('FAIL libs ' + e.message)).finally(() => {
     const pre = document.createElement('pre'); pre.id = 'res'; pre.textContent = __results.join('\n'); document.body.appendChild(pre);
     ['__pdfMatch', '__pdfPlayers'].forEach((k) => { if (window[k]) { const t = document.createElement('textarea'); t.id = k; t.textContent = window[k]; document.body.appendChild(t); } });
   });

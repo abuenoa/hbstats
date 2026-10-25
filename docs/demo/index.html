@@ -1461,6 +1461,8 @@ span.att-foot { visibility: hidden; }
     // The MVP card shown on the final screen: its PNG and object URL (revoked when the screen re-renders or closes), the
     // promise of the render in flight and a ticket that retires a render the screen has left behind.
     mvpCardBlob: null, mvpCardUrl: null, mvpCardReady: null, ratingsCardBlob: null, ratingsCardReady: null, mvpCardTicket: 0,
+    // The two report PDFs as share-ready files, built with the cards: null while in flight, false when the build failed.
+    reportFiles: null, reportFilesReady: null,
     finishArmedTimer: null,
     // Team photos by player id (see setTeamPhotos).
     photos: new Map(),
@@ -4945,7 +4947,7 @@ span.att-foot { visibility: hidden; }
           <button class="btn press" type="button" data-final-mail>Enviar por correo</button>
           <button class="btn press" type="button" data-final-share>Compartir PDF</button>
         </div>
-        <p class="note" id="final-status" aria-live="polite">Correo: descarga los PDF y abre el correo con el resumen; adjúntalos desde Descargas. Compartir: envía los PDF ya adjuntos (Gmail, WhatsApp, Drive…).</p>
+        <p class="note" id="final-status" aria-live="polite">${esc(MAIL_TEXT.intro)}</p>
       </section>
       <div class="row-actions final-actions">
         ${finalLeadingHtml()}<span class="spacer"></span>
@@ -4956,6 +4958,7 @@ span.att-foot { visibility: hidden; }
     armBackGuard();
     ui.mvpCardReady = renderMvpPreview();
     ui.ratingsCardReady = renderRatingsCard();
+    ui.reportFilesReady = renderReportFiles();
   }
   const finalStatus = (text) => sheetStatus('final-status', text);
   function hideFinal() {
@@ -4966,7 +4969,7 @@ span.att-foot { visibility: hidden; }
   function releaseMvpCard() {
     ui.mvpCardTicket++;
     if (ui.mvpCardUrl) URL.revokeObjectURL(ui.mvpCardUrl);
-    ui.mvpCardUrl = ui.mvpCardBlob = ui.ratingsCardBlob = null;
+    ui.mvpCardUrl = ui.mvpCardBlob = ui.ratingsCardBlob = ui.reportFiles = null;
   }
   const MVP_PREVIEW_TEXT = { none: 'Elige el MVP para generar la imagen.', busy: 'Generando la imagen…', failed: 'No se pudo generar la imagen del MVP.' };
   // The MVP card of the match (the coach's pick, else the provisional MVP), drawn on every final screen so it is always ready to share.
@@ -5041,11 +5044,55 @@ span.att-foot { visibility: hidden; }
     await loadPdfLibs();
     return ['match', 'players'].map((kind) => { const { doc, filename } = buildPdf(kind); return { filename, blob: doc.output('blob') }; });
   }
-  async function sendReportsByMail() {
+  const pdfFiles = (files) => files.map((f) => new File([f.blob], f.filename, { type: 'application/pdf' }));
+  // The report PDFs, built as soon as the final screen opens so a share tap needs no wait (the share sheet needs the
+  // tap's user activation, which a PDF build can outlast). A failed build leaves `false` and the taps build on demand.
+  async function renderReportFiles() {
+    const ticket = ui.mvpCardTicket;
+    try {
+      const files = pdfFiles(await reportFiles());
+      if (ticket === ui.mvpCardTicket) ui.reportFiles = files;
+    } catch (err) {
+      console.error('Report PDFs failed', err);
+      if (ticket === ui.mvpCardTicket) ui.reportFiles = false;
+    }
+  }
+  const MAIL_TEXT = {
+    intro: 'Enviar por correo: abre el menú de compartir con los PDF adjuntos; elige Gmail y pega las direcciones en «Para» (quedan copiadas). Compartir PDF: los mismos adjuntos a WhatsApp, Drive…',
+    preparing: 'Los PDF se están preparando, vuelve a tocar en un momento.',
+    copied: 'Elige Gmail y pega las direcciones en «Para»: ya están copiadas.',
+    notCopied: 'Elige Gmail y escribe las direcciones en «Para»: están al principio del mensaje.'
+  };
+  const mailShareText = (emails) => `Para: ${emails.join(', ')}\n\n${finalText()}`;
+  // Copies the addresses for the coach to paste; resolves whether they were copied, never rejects.
+  function copyEmails(emails) {
+    if (!navigator.clipboard || typeof navigator.clipboard.writeText !== 'function') return Promise.resolve(false);
+    return navigator.clipboard.writeText(emails.join(', ')).then(() => true, (err) => { console.warn('E-mail addresses not copied', err); return false; });
+  }
+  // The PDFs attached through the share sheet (Gmail on the tablet), called straight from the tap: nothing is awaited
+  // before `share()`. A device that cannot share files downloads them and opens the mail app with the summary instead.
+  function sendReportsByMail() {
     const emails = parseEmails($('final-email').value);
     if (!emails) { finalStatus('Escribe una o varias direcciones de correo válidas, separadas por comas.'); return; }
     state.reportEmail = emails.join(', ');
     save();
+    if (navigator.canShare && ui.reportFiles !== false) {
+      if (!ui.reportFiles) { finalStatus(MAIL_TEXT.preparing); return; }
+      if (navigator.canShare({ files: ui.reportFiles })) { mailThroughShareSheet(emails, ui.reportFiles); return; }
+    }
+    mailWithDownloads(emails);
+  }
+  async function mailThroughShareSheet(emails, files) {
+    const copied = copyEmails(emails);
+    try {
+      const result = await shareFiles(files, `Informe ${finalTitle()}`, mailShareText(emails));
+      finalStatus(result === 'shared' ? SHARE_STATUS.shared : `${SHARE_STATUS[result]} ${(await copied) ? MAIL_TEXT.copied : MAIL_TEXT.notCopied}`);
+    } catch (err) {
+      console.error('Report e-mail share failed', err);
+      finalStatus(err && err.name === 'NotAllowedError' ? 'El menú de compartir no se abrió: vuelve a tocar el botón.' : `No se pudo compartir: ${(err && err.message) || 'error desconocido'}.`);
+    }
+  }
+  async function mailWithDownloads(emails) {
     finalStatus('Preparando los PDF…');
     try {
       const files = await reportFiles();
@@ -5058,9 +5105,9 @@ span.att-foot { visibility: hidden; }
     }
   }
   async function shareReports() {
-    finalStatus('Preparando los PDF…');
+    if (ui.reportFiles === null && navigator.canShare) { finalStatus(MAIL_TEXT.preparing); return; }
     try {
-      const files = (await reportFiles()).map((f) => new File([f.blob], f.filename, { type: 'application/pdf' }));
+      const files = ui.reportFiles || pdfFiles(await reportFiles());
       const result = await shareFiles(files, `Informe ${finalTitle()}`, finalText());
       finalStatus(result === 'unsupported' ? 'Este dispositivo no permite compartir archivos: usa «Enviar por correo».' : SHARE_STATUS[result]);
     } catch (err) {
