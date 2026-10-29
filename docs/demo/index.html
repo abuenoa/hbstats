@@ -710,7 +710,7 @@ td.zero { color: var(--color-text-tertiary); }
 .in { font: inherit; min-height: 44px; box-sizing: border-box; border-radius: 10px; border: 1px solid var(--line); background: var(--surface); color: var(--fg); padding: 0 10px; width: 100%; min-width: 0; }
 .in.num { width: 72px; text-align: center; font-variant-numeric: tabular-nums; }
 .acta-teams { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: var(--space-3); }
-.acta-teams label { display: grid; gap: var(--space-1); font: var(--type-caption); font-weight: 700; color: var(--muted); text-transform: uppercase; letter-spacing: .06em; }
+.acta-teams label, .acta-choice { display: grid; gap: var(--space-1); font: var(--type-caption); font-weight: 700; color: var(--muted); text-transform: uppercase; letter-spacing: .06em; }
 .row-actions { display: flex; gap: var(--space-2); flex-wrap: wrap; align-items: center; }
 .acta-h { margin: var(--space-6) 0 var(--space-2); font: var(--type-caption); font-weight: 700; letter-spacing: .1em; text-transform: uppercase; color: var(--muted); }
 .acta-h:first-child { margin-top: 4px; }
@@ -1439,13 +1439,14 @@ span.att-foot { visibility: hidden; }
 
   // ===================== State =====================
   // A match ready to prepare: our roster and preferences carried over; opponent, venue, clock and log reset.
-  // `prefill` ({ them, date, venue }, from a fixture) replaces the defaults it names.
+  // `prefill` ({ them, date, venue, home }, from a fixture) replaces the defaults it names. `home` is true at home, false
+  // away and null while nobody has said.
   function freshMatch(from, prefill = {}) {
     return {
       sample: false, setupDone: false, finished: false,
       us: from.us, players: from.players, lineups: from.lineups, gkId: from.gkId,
       autoPhase: from.autoPhase, clockDown: Boolean(from.clockDown), reportEmail: from.reportEmail || '', mvpId: null,
-      them: prefill.them || 'Rival', rivals: [], venue: prefill.venue || '', date: prefill.date || todayIso(), phase: DEFAULT_PHASE,
+      them: prefill.them || 'Rival', rivals: [], venue: prefill.venue || '', home: prefill.home ?? null, date: prefill.date || todayIso(), phase: DEFAULT_PHASE,
       clock: { period: 1, elapsedMs: 0, runningSince: null }, timeoutsUsed: 0, timeoutsUsedThem: 0, timeout: null,
       events: [], fired: [], alerts: [], history: [], future: [], court: [], courtSets: []
     };
@@ -1544,7 +1545,7 @@ span.att-foot { visibility: hidden; }
   // A saved match (from this device or the cloud) ready to play on; throws when it is not a match.
   function restoreState(saved) {
     if (!saved || !Array.isArray(saved.players) || !Array.isArray(saved.events) || !Array.isArray(saved.history)) throw new Error('el partido guardado está dañado');
-    const s = Object.assign({ rivals: [], venue: '', date: todayIso(), setupDone: true, finished: false, reportEmail: '', mvpId: null }, JSON.parse(JSON.stringify(saved)));
+    const s = Object.assign({ rivals: [], venue: '', home: null, date: todayIso(), setupDone: true, finished: false, reportEmail: '', mvpId: null }, JSON.parse(JSON.stringify(saved)));
     s.clock.runningSince = null; // never resume the clock on its own after a reload
     return s;
   }
@@ -3929,6 +3930,7 @@ span.att-foot { visibility: hidden; }
         ${field('Nuestro equipo', `type="text" maxlength="${MAX_NAME_LENGTH}" value="${esc(state.us)}" data-team="us"`)}
         ${field('Rival', `type="text" maxlength="${MAX_NAME_LENGTH}" value="${esc(state.them)}" data-team="them"`)}
         ${field('Lugar', `type="text" maxlength="${MAX_VENUE_LENGTH}" value="${esc(state.venue)}" placeholder="Pabellón, ciudad" data-match="venue"`)}
+        <div class="acta-choice">Jugamos<div class="row-actions" role="group" aria-label="Jugamos en casa o fuera">${HOME_AWAY.map((isHome) => `<button class="chip press" type="button" data-match-home="${isHome}" aria-pressed="${state.home === isHome}">${homeAwayText(isHome)}</button>`).join('')}</div></div>
         ${field('Fecha', `type="date" value="${esc(state.date)}" data-match="date"`)}
       </div>
       <div class="acta-rosters">
@@ -4084,7 +4086,7 @@ span.att-foot { visibility: hidden; }
       return;
     }
     const s = score();
-    $('sheet').innerHTML = `${pageBarHtml({ leading: backButtonHtml(sheetBackLabel(), 'data-close-sheet'), title: `${state.us} ${s.us}–${s.them} ${state.them}` })}
+    $('sheet').innerHTML = `${pageBarHtml({ leading: backButtonHtml(sheetBackLabel(), 'data-close-sheet'), title: scoreLine(state, s) })}
       <div class="tabs sheet-tabs" role="group" aria-label="Secciones">${Object.entries(SHEET_TABS).map(([k, label]) => `<button class="press" type="button" data-tab="${k}" aria-pressed="${k === ui.sheetTab}">${label}</button>`).join('')}</div>
       <div class="sheet-body">${SHEET_RENDERERS[ui.sheetTab]()}</div>`;
   }
@@ -4214,6 +4216,11 @@ span.att-foot { visibility: hidden; }
     state[key] = key === 'venue' ? raw.trim().slice(0, MAX_VENUE_LENGTH) : raw;
     commit();
   }
+  function setHomeAway(isHome) {
+    state.home = isHome;
+    commit();
+    renderSheet();
+  }
   function setName(p, raw) {
     const name = raw.trim().slice(0, MAX_NAME_LENGTH);
     if (!name) { rosterError('El nombre no puede quedar vacío.'); return; }
@@ -4255,6 +4262,16 @@ span.att-foot { visibility: hidden; }
     commit();
     renderSheet();
   }
+  const HOME_AWAY = [true, false];
+  const homeAwayText = (isHome) => (isHome ? 'Casa' : 'Fuera');
+  // «Pabellón Vivero · Casa»: the venue and, once known, whether we play at home.
+  const matchPlaceText = (s = state) => [s.venue, s.home == null ? '' : homeAwayText(s.home)].filter(Boolean).join(' · ');
+  // The two sides as a scoreline reads them: the home team first, ours while nobody has said where we play.
+  function sidesInOrder(s, sc) {
+    const ours = { side: 'us', name: s.us, goals: sc.us }, theirs = { side: 'them', name: s.them, goals: sc.them };
+    return s.home === false ? [theirs, ours] : [ours, theirs];
+  }
+  const scoreLine = (s, sc, dash = '–') => { const [a, b] = sidesInOrder(s, sc); return `${a.name} ${a.goals}${dash}${b.goals} ${b.name}`; };
   const matchDateText = () => (state.date ? new Date(`${state.date}T12:00:00`).toLocaleDateString('es-ES') : '');
   const slug = (s) => s.normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '') || 'equipo';
   async function exportRoster(teamName, list, statusId) {
@@ -4376,11 +4393,11 @@ span.att-foot { visibility: hidden; }
     doc.setFontSize(14);
     doc.text(pdfText(title), PDF_PAGE.margin, 10);
     doc.setFontSize(12);
-    doc.text(pdfText(`${state.us} ${s.us} – ${s.them} ${state.them}`), PDF_PAGE.w - PDF_PAGE.margin, 10, { align: 'right' });
+    doc.text(pdfText(scoreLine(state, s, ' – ')), PDF_PAGE.w - PDF_PAGE.margin, 10, { align: 'right' });
     doc.setTextColor(...PDF_RGB.muted);
     doc.setFont('helvetica', 'normal');
     doc.setFontSize(9);
-    doc.text(pdfText([subtitle, state.venue, matchDateText()].filter(Boolean).join(' · ')), PDF_PAGE.margin, 22);
+    doc.text(pdfText([subtitle, matchPlaceText(), matchDateText()].filter(Boolean).join(' · ')), PDF_PAGE.margin, 22);
   }
   function pdfTable(doc, { title, head, body, startY, left = PDF_PAGE.margin, width, columnStyles = {} }) {
     let y = startY;
@@ -4824,9 +4841,10 @@ span.att-foot { visibility: hidden; }
     // ---- Pages ----
     const best = mvp.id ? playerById(mvp.id, s) : null, scorer = total.top, k = keyPoints();
     const pointList = (list) => list.slice(0, REPORT_KEY_POINTS_SHOWN).map((i) => `<li class="kp-${i.tone}"><span>${i.tone === 'good' ? '✓' : '!'}</span>${esc(i.text)}</li>`).join('') || '<li>Sin puntos destacados.</li>';
-    const header = (title) => `<header><div><div class="ttl">${title}</div><div class="meta">${esc([matchDateText(), s.venue].filter(Boolean).join(' · '))}</div></div>
-      <div class="score"><span class="tm">${esc(s.us)}</span><span class="big" style="color:${C.us}">${sc.us}</span><span class="dash">–</span><span class="big" style="color:${C.them}">${sc.them}</span><span class="tm">${esc(s.them)}</span><span class="htx">Descanso ${ht.us}–${ht.them}</span></div></header>`;
-    const page = (n, title, body) => `<div class="page">${header(title)}<main>${body}</main><footer><span>HBStats · ${esc(s.us)} – ${esc(s.them)}</span><span>${n} / ${REPORT_PAGES}</span></footer></div>`;
+    const [first, second] = sidesInOrder(s, sc), [htFirst, htSecond] = sidesInOrder(s, ht);
+    const header = (title) => `<header><div><div class="ttl">${title}</div><div class="meta">${esc([matchDateText(), matchPlaceText(s)].filter(Boolean).join(' · '))}</div></div>
+      <div class="score"><span class="tm">${esc(first.name)}</span><span class="big" style="color:${C[first.side]}">${first.goals}</span><span class="dash">–</span><span class="big" style="color:${C[second.side]}">${second.goals}</span><span class="tm">${esc(second.name)}</span><span class="htx">Descanso ${htFirst.goals}–${htSecond.goals}</span></div></header>`;
+    const page = (n, title, body) => `<div class="page">${header(title)}<main>${body}</main><footer><span>HBStats · ${esc(first.name)} – ${esc(second.name)}</span><span>${n} / ${REPORT_PAGES}</span></footer></div>`;
     const pages = [
       page(1, 'Informe del partido', `<div class="kpis">${kpis}</div>
         <div class="row"><div class="col grow">
@@ -5047,10 +5065,15 @@ table { border-collapse: collapse; width: 100%; }
     const mvp = matchMvp(s, ratings, seconds), sc = score(s.events);
     return {
       name: player.name, num: player.num, pos: player.pos, photo: facePhoto(player), rating: ratingText(value), band: ratingBand(value), kpis,
-      us: s.us, title: s.them, score: `${sc.us}–${sc.them}`, date: dateText(s.date), venue: s.venue,
+      ...cardTeams(s, sc), date: dateText(s.date), venue: matchPlaceText(s),
       crest: crestSrc(t), brand: t.brand, brand2: t.brand2, brandInk: t.brandInk,
       provisional: mvp.id === playerId && mvp.source === MVP_SOURCE.rating
     };
+  }
+  // What the cards print of the match, the home team first: «6–5», «Triana vs BM Sur» and «Triana 6–5 BM Sur».
+  function cardTeams(s, sc) {
+    const [a, b] = sidesInOrder(s, sc);
+    return { score: `${a.goals}–${b.goals}`, teams: `${a.name} vs ${b.name}`, match: scoreLine(s, sc) };
   }
   const IMAGE_ERROR_SRC_CHARS = 40;
   // Rejects with a clear error when the image cannot be decoded (a corrupt photo, a blocked URL).
@@ -5195,7 +5218,7 @@ table { border-collapse: collapse; width: 100%; }
     if (images.crest) inCircle(ctx, M.pad + footer.crestSize / 2, footer.crestY + footer.crestSize / 2, footer.crestSize / 2,
       () => ctx.drawImage(images.crest, M.pad, footer.crestY, footer.crestSize, footer.crestSize));
     text(data.score, textX, footer.scoreY, 'left', accent, display, footer.scoreSize, textW);
-    text(`${data.us} vs ${data.title}`, textX, footer.vsY, 'left', P.ink, body(semi), footer.vsSize, textW, footer.vsMinSize);
+    text(data.teams, textX, footer.vsY, 'left', P.ink, body(semi), footer.vsSize, textW, footer.vsMinSize);
     text([data.date, data.venue].filter(Boolean).join(' · '), textX, footer.metaY, 'left', P.inkSoft, body(regular), footer.metaSize, textW);
   }
   // A face that nothing on screen has used is not loaded yet, and the canvas would bake in the fallback.
@@ -5247,7 +5270,7 @@ table { border-collapse: collapse; width: 100%; }
       return { num: player.num, name: player.name, pos: player.pos, photo: facePhoto(player), rating: ratingText(value), band: ratingBand(value), line, mvp: player.id === mvp.id };
     });
     return {
-      title: s.them, us: s.us, score: `${sc.us}–${sc.them}`, date: dateText(s.date), venue: s.venue, rows,
+      ...cardTeams(s, sc), date: dateText(s.date), venue: matchPlaceText(s), rows,
       crest: crestSrc(t), brand: t.brand, brand2: t.brand2, brandInk: t.brandInk
     };
   }
@@ -5260,7 +5283,7 @@ table { border-collapse: collapse; width: 100%; }
     const accent = cardAccent(data, R.minAccentContrast), { crest } = R, headW = R.w - 2 * (crest.x + crest.size + R.gap);
     if (images.crest) inCircle(ctx, crest.x + crest.size / 2, crest.y + crest.size / 2, crest.size / 2, () => ctx.drawImage(images.crest, crest.x, crest.y, crest.size, crest.size));
     text(RATINGS_TITLE.toUpperCase(), cx, R.titleY, 'center', data.brandInk, cardDisplay, R.titleSize, headW);
-    text(`${data.us} ${data.score} ${data.title}`, cx, R.matchY, 'center', accent, cardDisplay, R.matchSize, headW, R.matchMinSize);
+    text(data.match, cx, R.matchY, 'center', accent, cardDisplay, R.matchSize, headW, R.matchMinSize);
     text([data.date, data.venue].filter(Boolean).join(' · '), cx, R.metaY, 'center', P.inkSoft, cardBody(regular), R.metaSize, headW);
     data.rows.forEach((row, i) => {
       const top = R.head + i * R.row, mid = top + R.row / 2, faceX = R.pad + R.numW + R.gap + R.faceR;
@@ -5314,9 +5337,9 @@ table { border-collapse: collapse; width: 100%; }
       ['Máximo goleador', scorer('us'), scorer('them')]
     ];
   }
-  const finalTitle = () => { const s = score(); return `${state.us} ${s.us}–${s.them} ${state.them}`; };
+  const finalTitle = () => scoreLine(state, score());
   function finalText() {
-    const head = [finalTitle(), [state.venue, matchDateText()].filter(Boolean).join(' · ')].filter(Boolean);
+    const head = [finalTitle(), [matchPlaceText(), matchDateText()].filter(Boolean).join(' · ')].filter(Boolean);
     return [...head, '', ...finalRows().map(([label, a, b]) => `${label}: ${state.us} ${a} · ${state.them} ${b}`)].join('\n');
   }
   const mailtoUrl = (emails, attached) => `mailto:${emails.join(',')}?subject=${encodeURIComponent(`Informe ${finalTitle()}`)}&body=${encodeURIComponent(`${finalText()}\n\nAdjunta los PDF descargados en la tablet: ${attached.join(', ')}.`)}`;
@@ -5629,6 +5652,7 @@ table { border-collapse: collapse; width: 100%; }
     if (b.dataset.rosterPos) { const [id, pos] = b.dataset.rosterPos.split(':'); setPosition(playerById(id), pos); return; }
     if (b.dataset.rosterDel) { removePlayer(playerById(b.dataset.rosterDel)); return; }
     if (b.hasAttribute('data-roster-add')) { addPlayer(); return; }
+    if (b.dataset.matchHome) { setHomeAway(b.dataset.matchHome === 'true'); return; }
     if (b.hasAttribute('data-template-save')) { saveRivalTemplate(); return; }
     if (b.hasAttribute('data-template-pick')) { toggleTemplatePick(); return; }
     if (b.dataset.templateLoad) { const t = home.templates.find((x) => x.id === b.dataset.templateLoad); if (t) applyRivalTemplate(t); return; }
@@ -6698,8 +6722,14 @@ table { border-collapse: collapse; width: 100%; }
     const open = fixtures.filter((f) => weekOf(f.weekend)[1] >= today && !(links.has(f.id) && links.get(f.id).status === 'finished'));
     return open.sort((a, b) => a.weekend.localeCompare(b.weekend) || a.round - b.round)[0] || null;
   }
-  // What a match created from the fixture starts with: the rival, the kickoff day (else the Sunday) and the venue.
-  const fixturePrefill = (f) => ({ them: fixtureRivalName(f.opponent), date: f.kickoff ? localIso(new Date(f.kickoff)) : f.weekend, venue: (f.venue || '').slice(0, MAX_VENUE_LENGTH) });
+  // What a match created from the fixture starts with: the rival, the kickoff day (else the Sunday), the venue and home or away.
+  const fixturePrefill = (f) => ({ them: fixtureRivalName(f.opponent), date: f.kickoff ? localIso(new Date(f.kickoff)) : f.weekend, venue: (f.venue || '').slice(0, MAX_VENUE_LENGTH), home: f.home });
+  // Home or away from the calendar round the match is linked to (by hand, or by week and rival); null when no round is.
+  function calendarHome(matchId) {
+    const fixtures = home.fixtures || [], links = linkFixtures(fixtures, home.teamMatches || []);
+    const round = fixtures.find((f) => links.get(f.id)?.id === matchId);
+    return round ? round.home : null;
+  }
   function storeFixture(saved) {
     home.fixtures = home.fixtures.map((f) => (f.id === saved.id ? saved : f));
     writeJson(CACHE_KEY_PREFIX + `fixtures:${team.id}`, home.fixtures);
@@ -7135,7 +7165,7 @@ table { border-collapse: collapse; width: 100%; }
       <div class="record"><b>${attendanceText(rate)}${lowAttendance(rate) ? ` ${lowAttendanceMark}` : ''}</b><small>${plural(countOf(SESSION_KINDS.TRAINING), 'entreno', 'entrenos')} · ${plural(countOf(SESSION_KINDS.MATCH), 'partido', 'partidos')}</small></div>
       <h4 class="att-sub">Más faltas</h4>${list ? `<ol class="leader-list">${list}</ol>` : '<p class="note">Nadie ha faltado.</p>'}</section>`;
   }
-  const homeAwayBadge = (f) => `<span class="venue-badge">${f.home ? 'Casa' : 'Fuera'}</span>`;
+  const homeAwayBadge = (f) => `<span class="venue-badge">${homeAwayText(f.home)}</span>`;
   function fixtureEditorHtml(f) {
     const kickoff = f.kickoff ? new Date(f.kickoff) : null;
     return `<div class="fixture-edit">
@@ -7783,6 +7813,7 @@ table { border-collapse: collapse; width: 100%; }
     home.season = null;
     writeJson(CURRENT_MATCH_KEY, id);
     state = restoreState(saved);
+    if (state.home == null) state.home = calendarHome(id);
     setTeamPhotos(home.roster.length ? home.roster : readJson(CACHE_KEY_PREFIX + `players:${team.id}`) || []);
     storeLocalMatch(id, state, dirty);
     if (dirty) scheduleSync();
