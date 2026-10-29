@@ -3,13 +3,13 @@
  * - The app page itself: network first, so a new version arrives as soon as there is coverage; cached copy otherwise.
  *   Other pages under the same folder (the demo) are left to the network so they never replace the app's copy.
  * - Icons and manifest: cache first.
- * - Third-party files (Google Fonts, PDF and Supabase libraries): cache first; the libraries are fetched at install
+ * - Third-party files (Google Fonts, PDF, html2canvas and Supabase libraries): cache first; the libraries are fetched at install
  *   time so reports and sign-in work offline from the first visit.
  * - Supabase itself (accounts, teams, matches) is never cached here: the app keeps its own device copies.
  * tools/build_site.py stamps BUILD (a hash of the page, so every release replaces the old shell cache) and
  * SUPABASE_JS (the library URL the page loads).
  */
-const BUILD = '40a7a47a065d';
+const BUILD = '3d5f2d46fbdd';
 const SHELL_PREFIX = 'hbstats-app-shell-';
 const SHELL_CACHE = `${SHELL_PREFIX}${BUILD}`;
 const RUNTIME_CACHE = 'hbstats-app-cdn-v1';
@@ -29,6 +29,7 @@ const SHELL_ASSETS = [
 const PRECACHED_THIRD_PARTY = [
   'https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js',
   'https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.5.31/jspdf.plugin.autotable.min.js',
+  'https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js',
   'https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@600;700;800&display=swap',
   'https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.js'
 ];

@@ -1243,21 +1243,28 @@ span.att-foot { visibility: hidden; }
     // Attendance: a rate under warnPct warns; the excluded codes count neither for nor against; a player's note is
     // cut at noteMax characters; changes reach the cloud after syncDelayMs without further taps.
     attendance: { warnPct: 75, excludeFromRate: ['L'], noteMax: 60, syncDelayMs: 2000 },
-    // Rating: base 6.5 for a player who does nothing of note, clamped to min–max and rounded to `decimals` (half up).
-    // Under minMinutes on court a player is «S/C»; confidence = min(1, (minutes / fullMatchMinutes) ** minutesExponent)
-    // scales the weighted features, so a short spell stays near the base (fullMatchMinutes is set from halfSeconds below).
-    // The weights are per unit of each feature; oneOnOne counts as +provoked 7 m, −beaten 1x1, −7 m committed.
+    // Rating v5 «goles aportados» (see the rating section): values in goals, shown as points (pointsPerGoal).
+    // pOn: league share of on-target shots that go in, by zone (a keeper saving 40% from 6 m is average); onTargetRate:
+    // share of shots that reach the goal. possession: goals of an average possession; shortHanded / superiority: the
+    // same for each side (att = ours, def = the rival's) while a team is a player short. The weights are the coach's
+    // knobs (tuning view): keeperWeight scales the keeper's save and goal values; oneOnOne is 7 m provoked (+), 1x1
+    // beaten and 7 m committed (−); closeFactor / lateFactor multiply what happens late and close (context).
+    // Bands: lower bound in points, label and chip class (the --rating-<band> tokens), best first.
     rating: {
-      base: 6.5, min: 3, max: 10, decimals: 1, minMinutes: 10, minutesExponent: 0.5,
+      pointsPerGoal: 3, decimals: 1, minPossessions: 5, shrinkPossessions: 15,
+      pOn: { '6M': 0.60, '9M': 0.50, '11M': 0.40, CONTRA: 0.75, '7M': 0.75 },
+      onTargetRate: { '6M': 0.80, '9M': 0.70, '11M': 0.60, CONTRA: 0.95, '7M': 0.95 },
+      possession: 0.43, shortHanded: { att: 0.32, def: 0.58 }, superiority: { att: 0.58, def: 0.32 },
+      shooterCreationShare: 0.5, exclusionSeconds: 120, lastSecondsWindow: 30, sameMomentSeconds: 2, playerLossPerMatch: 0.5,
+      windows: { provoked7: 90, fastBreakStart: 10, assist: 15, counterAfterTurnover: 15 },
+      context: { closeFrom: 3000, closeMargin: 2, lateFrom: 3300, lateMargin: 1, blowoutMargin: 6, blowoutFactor: 0.75 },
       weights: {
-        shot: 0.8, save: 0.35, turnover: -0.40, forcedTurnover: -0.30, ruleTurnover: -0.15, ruleFault: -0.15,
-        oneOnOne: 0.30, tactical: -0.15, assist: 0.25, recovery: 0.30, block: 0.20, teamFaultField: -0.10,
-        teamFaultKeeper: -0.05, yellow: -0.10, twoMin: -0.30, red: -1.00, blue: -0.50
+        keeperWeight: 0.65, assist: 0.15, starter: 0.14, oneOnOne: 0.20, ruleFaultDiscount: 0.10, blocRetained: 0.12,
+        minorFault: -0.07, teamFaultField: -0.05, teamFaultKeeper: -0.02, result: 0.25, yellow: -0.10,
+        conductDirect: -0.50, conductLastSeconds: -0.30, blue: -0.25, closeFactor: 1.5, lateFactor: 2.0
       },
-      // The share of on-target rival shots an average goalkeeper saves, by zone.
-      expectedSave: { '6M': 0.25, '9M': 0.40, '11M': 0.45, CONTRA: 0.20, '7M': 0.25 },
-      // Lower bound of each band, best first: the chip class that reads the --rating-<band> tokens.
-      bands: [[8, 'rt-top'], [7, 'rt-good'], [6.5, 'rt-mid'], [6, 'rt-low'], [-Infinity, 'rt-bad']]
+      bands: [[6, 'Élite', 'rt-top'], [3.5, 'Gran partido', 'rt-good'], [1.5, 'Sólido', 'rt-good'], [0.5, 'Discreto', 'rt-mid'],
+        [-0.5, 'Sin impacto', 'rt-mid'], [-2, 'Flojo', 'rt-low'], [-4.5, 'Mal partido', 'rt-bad'], [-Infinity, 'Muy mal partido', 'rt-bad']]
     }
   };
   /* CLOUD — tools/build_site.py sets this from config/cloud.json ({ url, anonKey } of the Supabase project).
@@ -2035,65 +2042,55 @@ span.att-foot { visibility: hidden; }
     return { seconds: minutes ? minutes.get(id) || 0 : null, plusMinus: balance ? balance.get(id) || 0 : null };
   }
 
-  // ===================== Rating (derived from the events and the minutes, never stored) =====================
-  // A pure function of a match state: `ratingFeatures` counts what a player did and reads only `s.events`; the weights
-  // in `CONFIG.rating` turn the counts into a rating, scaled by the minutes on court (see the design's Rating formula).
+  // ===================== Rating v5, «goles aportados» (derived from the events and the court log, never stored) =====================
+  // Every possession is a ledger worth its outcome minus an average possession (`b` goals). Its value is split once:
+  // owned events first (the shot, the turnover, the steal, the 7 m), then the rest shared by the unit on court. The
+  // keeper is valued on goals saved above expected. Values are in goals and shown as points (POINTS_PER_GOAL).
+  // Design and the expert debate: design/2026-10-29-rating-v5-report-design.md.
   CONFIG.rating.fullMatchMinutes = (2 * CONFIG.halfSeconds) / SECONDS_PER_MINUTE;
   const RATING_ROUNDING_EPSILON = 1e-9;
-  const RATING_TURNOVER_FEATURES = { Balón: 'turnovers', Regla: 'ruleTurnovers', Rival: 'forcedTurnovers' };
-  const RATING_RULE_FAULTS = ['FALTA', 'GOLPE'];
-  const RATING_TACTICAL_FAULTS = TACTICAL_FAULTS.filter((action) => action !== 'BEATEN');
-  const RATING_ACTION_FEATURES = { PROV7: 'prov7', BEATEN: 'beaten', PEN7C: 'pen7c', ASIST: 'assists', RECUP: 'recoveries', BLOC: 'blocks' };
-  const RATING_CARD_FEATURES = { A: 'yellow', '2M': 'twoMin', D: 'red', AZ: 'blue' };
-  // The terms of the rating, in the order the match breakdown lists them: the weight of each feature (before the minutes
-  // scaling) and its label. A term that `counts` reads «×n»; shot and save values are fractions of a goal and do not.
-  const RATING_TERMS = [
-    { key: 'shotValue', label: 'Acierto en tiro', counts: false, weight: (w) => w.shot },
-    { key: 'saveValue', label: 'Paradas sobre lo esperado', counts: false, weight: (w) => w.save },
-    { key: 'turnovers', label: 'Pérdidas', weight: (w) => w.turnover },
-    { key: 'forcedTurnovers', label: 'Pérdidas forzadas', weight: (w) => w.forcedTurnover },
-    { key: 'ruleTurnovers', label: 'Pérdidas de regla', weight: (w) => w.ruleTurnover },
-    { key: 'ruleFaults', label: 'Faltas', weight: (w) => w.ruleFault },
-    { key: 'prov7', label: '7 m provocados', weight: (w) => w.oneOnOne },
-    { key: 'beaten', label: 'Superado 1x1', weight: (w) => -w.oneOnOne },
-    { key: 'pen7c', label: '7 m cometidos', weight: (w) => -w.oneOnOne },
-    { key: 'tactical', label: 'Fallos tácticos', weight: (w) => w.tactical },
-    { key: 'assists', label: 'Asistencias', weight: (w) => w.assist },
-    { key: 'recoveries', label: 'Recuperaciones', weight: (w) => w.recovery },
-    { key: 'blocks', label: 'Bloqueos', weight: (w) => w.block },
-    { key: 'teamFaults', label: 'Falta de contundencia', weight: (w, keeper) => (keeper ? w.teamFaultKeeper : w.teamFaultField) },
-    { key: 'yellow', label: 'Amarilla', weight: (w) => w.yellow },
-    { key: 'twoMin', label: '2 minutos', weight: (w) => w.twoMin },
-    { key: 'red', label: 'Roja', weight: (w) => w.red },
-    { key: 'blue', label: 'Azul', weight: (w) => w.blue }
+  const roundHalfUp = (v, decimals) => Math.round(v * 10 ** decimals + RATING_ROUNDING_EPSILON) / 10 ** decimals;
+  const POINTS_PER_GOAL = CONFIG.rating.pointsPerGoal;
+  const RULE_TURNOVERS = CONFIG.turnoverGroups.find((g) => g.label === 'Regla').types.filter((t) => t !== 'Pasivo');
+  const PASSIVE_TURNOVER = 'Pasivo';
+  const MINOR_DEFENSIVE_FAULTS = ['HELP', 'LATE', 'BADEXIT', 'GOLPE', 'FALTA'];
+  const FIELD_PLAYERS_ON_COURT = 6;
+  // The lines of the breakdown, in the order the screens and the report list them.
+  const RATING_LINES = [
+    { key: 'tiro', label: 'Tiro' }, { key: 'creacion', label: 'Creación' }, { key: 'balon', label: 'Balón' },
+    { key: 'defInd', label: 'Def. individual' }, { key: 'defUnit', label: 'Def. en pista' }, { key: 'atkUnit', label: 'Atq. en pista' },
+    { key: 'porteria', label: 'Portería' }, { key: 'disciplina', label: 'Disciplina' }, { key: 'clutch', label: 'Momento decisivo' },
+    { key: 'resultado', label: 'Resultado' }
   ];
-  // What the coach can tune, in the order of the tuning view. Keys are `CONFIG.rating.weights` names, with two knobs that
-  // keep his fixed relations: `oneOnOne` alone moves PROV7, BEATEN and PEN7C (+, −, −), and `teamFaultKeeperShare` is a share (0–1)
-  // of `teamFaultField`, so the goalkeeper's team fault can never weigh more than the field player's.
+  // What the coach can tune, in the order of the tuning view, in the units he reads: points (`pts`), a factor or a share.
+  // `oneOnOne` alone moves 7 m provoked, 1x1 beaten and 7 m committed (+, −, −); `teamFaultKeeperShare` is the keeper's
+  // part of the field player's team fault, so it can never weigh more.
   const RATING_KNOB_STEP = 0.05;
   const RATING_KNOB_DECIMALS = 2;
   const RATING_KNOBS = [
-    { key: 'shot', label: 'Acierto en tiro', group: 'Tiro y portería', min: 0, max: 2, step: RATING_KNOB_STEP },
-    { key: 'save', label: 'Paradas sobre lo esperado', group: 'Tiro y portería', min: 0, max: 1.5, step: RATING_KNOB_STEP },
-    { key: 'turnover', label: 'Pérdida de balón', group: 'Pérdidas', min: -1.5, max: 0, step: RATING_KNOB_STEP },
-    { key: 'forcedTurnover', label: 'Pérdida forzada por el rival', group: 'Pérdidas', min: -1.5, max: 0, step: RATING_KNOB_STEP },
-    { key: 'ruleTurnover', label: 'Pérdida de regla (pasos, dobles)', group: 'Pérdidas', min: -1.5, max: 0, step: RATING_KNOB_STEP },
-    { key: 'ruleFault', label: 'Falta personal', group: 'Faltas', min: -1, max: 0, step: RATING_KNOB_STEP },
-    { key: 'tactical', label: 'Fallo táctico', group: 'Faltas', min: -1, max: 0, step: RATING_KNOB_STEP },
-    { key: 'oneOnOne', label: '1x1: 7 m provocado, superado o cometido', group: '1x1 y 7 m', min: 0, max: 1, step: RATING_KNOB_STEP },
-    { key: 'assist', label: 'Asistencia', group: 'Acciones', min: 0, max: 1, step: RATING_KNOB_STEP },
-    { key: 'recovery', label: 'Recuperación', group: 'Acciones', min: 0, max: 1, step: RATING_KNOB_STEP },
-    { key: 'block', label: 'Bloqueo', group: 'Acciones', min: 0, max: 1, step: RATING_KNOB_STEP },
-    { key: 'teamFaultField', label: 'Falta de contundencia: jugador de campo', group: 'Equipo', min: -0.5, max: 0, step: RATING_KNOB_STEP },
-    { key: 'teamFaultKeeperShare', label: 'Falta de contundencia: portero (parte de la de campo)', group: 'Equipo', min: 0, max: 1, step: RATING_KNOB_STEP },
-    { key: 'yellow', label: 'Amarilla', group: 'Sanciones', min: -1, max: 0, step: RATING_KNOB_STEP },
-    { key: 'twoMin', label: '2 minutos', group: 'Sanciones', min: -1.5, max: 0, step: RATING_KNOB_STEP },
-    { key: 'red', label: 'Roja', group: 'Sanciones', min: -3, max: 0, step: RATING_KNOB_STEP },
-    { key: 'blue', label: 'Azul', group: 'Sanciones', min: -2, max: 0, step: RATING_KNOB_STEP }
+    { key: 'keeperWeight', label: 'Peso de las paradas y goles encajados', group: 'Portería', unit: 'share', min: 0, max: 1, step: RATING_KNOB_STEP },
+    { key: 'assist', label: 'Asistencia', group: 'Creación', unit: 'pts', min: 0, max: 1.5, step: RATING_KNOB_STEP },
+    { key: 'starter', label: 'Iniciar un contraataque', group: 'Creación', unit: 'pts', min: 0, max: 1.5, step: RATING_KNOB_STEP },
+    { key: 'oneOnOne', label: '1x1: 7 m provocado, superado o cometido', group: '1x1 y 7 m', unit: 'pts', min: 0, max: 1.5, step: RATING_KNOB_STEP },
+    { key: 'ruleFaultDiscount', label: 'Rebaja de una pérdida de regla (pasos, dobles, área)', group: 'Pérdidas', unit: 'pts', min: 0, max: 1, step: RATING_KNOB_STEP },
+    { key: 'blocRetained', label: 'Blocaje', group: 'Defensa', unit: 'pts', min: 0, max: 1.5, step: RATING_KNOB_STEP },
+    { key: 'minorFault', label: 'Fallo defensivo (ayuda, llega tarde, salida, golpe)', group: 'Defensa', unit: 'pts', min: -1, max: 0, step: RATING_KNOB_STEP },
+    { key: 'teamFaultField', label: 'Falta de contundencia: jugador de campo', group: 'Equipo', unit: 'pts', min: -0.5, max: 0, step: RATING_KNOB_STEP },
+    { key: 'teamFaultKeeperShare', label: 'Falta de contundencia: portero (parte de la de campo)', group: 'Equipo', unit: 'share', min: 0, max: 1, step: RATING_KNOB_STEP },
+    { key: 'result', label: 'Victoria o derrota (partido entero)', group: 'Equipo', unit: 'pts', min: 0, max: 1.5, step: RATING_KNOB_STEP },
+    { key: 'yellow', label: 'Amarilla', group: 'Sanciones', unit: 'pts', min: -1, max: 0, step: RATING_KNOB_STEP },
+    { key: 'conductDirect', label: 'Roja directa: conducta', group: 'Sanciones', unit: 'pts', min: -3, max: 0, step: RATING_KNOB_STEP },
+    { key: 'conductLastSeconds', label: 'Roja de los últimos 30 s (con 7 m): conducta', group: 'Sanciones', unit: 'pts', min: -3, max: 0, step: RATING_KNOB_STEP },
+    { key: 'blue', label: 'Azul (además de la roja)', group: 'Sanciones', unit: 'pts', min: -2, max: 0, step: RATING_KNOB_STEP },
+    { key: 'closeFactor', label: 'Desde el 50\' con ±2 goles (multiplica)', group: 'Momento decisivo', unit: 'factor', min: 1, max: 2.5, step: RATING_KNOB_STEP },
+    { key: 'lateFactor', label: 'Desde el 55\' con ±1 gol (multiplica)', group: 'Momento decisivo', unit: 'factor', min: 1, max: 3, step: RATING_KNOB_STEP }
   ];
-  const { teamFaultKeeper: DEFAULT_KEEPER_FAULT, ...DEFAULT_FIELD_WEIGHTS } = CONFIG.rating.weights;
-  const RATING_KNOB_DEFAULTS = { ...DEFAULT_FIELD_WEIGHTS, teamFaultKeeperShare: DEFAULT_KEEPER_FAULT / CONFIG.rating.weights.teamFaultField };
   const knobOf = (key) => RATING_KNOBS.find((k) => k.key === key);
+  const knobToWeight = (knob, v) => (knob.unit === 'pts' ? v / POINTS_PER_GOAL : v);
+  const weightToKnob = (knob, v) => (knob.unit === 'pts' ? roundHalfUp(v * POINTS_PER_GOAL, RATING_KNOB_DECIMALS) : v);
+  const { teamFaultKeeper: DEFAULT_KEEPER_FAULT, ...DEFAULT_KNOB_WEIGHTS } = CONFIG.rating.weights;
+  const RATING_KNOB_DEFAULTS = Object.fromEntries(RATING_KNOBS.map((k) => [k.key, k.key === 'teamFaultKeeperShare'
+    ? roundHalfUp(DEFAULT_KEEPER_FAULT / CONFIG.rating.weights.teamFaultField, RATING_KNOB_DECIMALS) : weightToKnob(k, DEFAULT_KNOB_WEIGHTS[k.key])]));
   const roundToKnobStep = (knob, v) => clamp(roundHalfUp(roundHalfUp(v / knob.step, 0) * knob.step, RATING_KNOB_DECIMALS), knob.min, knob.max);
   // The knob values of a team: the defaults with its saved ones laid over them. A saved value that is unknown, not a
   // number or out of range is dropped or clamped, with a warning, so a bad row can never skew a rating.
@@ -2110,71 +2107,205 @@ span.att-foot { visibility: hidden; }
     });
     return values;
   }
-  // The knobs as `CONFIG.rating.weights`: the keeper's team fault is its share of the field player's.
-  const weightsFromKnobs = (knobs) => Object.fromEntries(Object.keys(CONFIG.rating.weights).map((key) => [key,
-    key === 'teamFaultKeeper' ? knobs.teamFaultKeeperShare * knobs.teamFaultField : knobs[key]]));
+  // The knobs as `CONFIG.rating.weights` (in goals): the keeper's team fault is its share of the field player's.
+  function weightsFromKnobs(knobs) {
+    const w = Object.fromEntries(RATING_KNOBS.filter((k) => k.key in CONFIG.rating.weights).map((k) => [k.key, knobToWeight(k, knobs[k.key])]));
+    return { ...w, teamFaultKeeper: knobs.teamFaultKeeperShare * w.teamFaultField };
+  }
   const ratingWeights = (t = team) => weightsFromKnobs(ratingKnobValues(t));
-  // The share of shots from a zone that go in, from the middle of the zone's reference range.
-  const expectedGoal = (zone) => {
-    const [good, poor] = CONFIG.targets[zone] || CONFIG.targets.shooting;
-    return (good + poor) / 2 / PERCENT;
-  };
-  const turnoverFeature = (e) => {
-    const group = CONFIG.turnoverGroups.find((g) => g.types.includes(e.subtype));
-    return RATING_TURNOVER_FEATURES[group && group.label] || 'turnovers';
-  };
-  // A team fault (no player) is on everyone in its court stamp; a legacy one named a player and counts for him only.
-  const isTeamFaultOf = (e, player, s) => e.kind === 'ACTION' && TEAM_FAULTS.includes(e.action)
-    && (e.playerId == null ? courtSetOf(e.on, s).includes(player.id) : e.playerId === player.id);
-  // What one player did in the match, from its events alone: shot and save values are goals above what the zone expects.
-  function ratingFeatures(s, player) {
-    const f = Object.fromEntries(RATING_TERMS.map((term) => [term.key, 0]));
-    s.events.forEach((e) => {
-      if (isTeamFaultOf(e, player, s)) { f.teamFaults++; return; }
-      if (e.kind === 'RIVAL_SHOT') {
-        const expected = CONFIG.rating.expectedSave[e.contra ? 'CONTRA' : e.zone];
-        if (e.gkId === player.id && onTarget(e) && expected != null) f.saveValue += (groupOf(e.result) === 'PARADA' ? 1 : 0) - expected;
+
+  // ---- Shared reading of a match ----
+  const preShotGoal = (zone) => CONFIG.rating.pOn[zone] * CONFIG.rating.onTargetRate[zone];
+  const isKeeperOf = (s, id) => (playerById(id, s) || {}).pos === 'POR';
+  const fieldOnCourt = (s, set) => courtSetOf(set, s).filter((id) => !isKeeperOf(s, id));
+  // The lineup just before a moment: a recovery or a turnover ends the phase the lineup change follows.
+  function courtSetBefore(s, t) {
+    let set = null;
+    (s.court || []).forEach((c) => { if (c.abs < t) set = c.set; });
+    return set;
+  }
+  const shotCourtSet = (s, e) => e.on ?? courtSetBefore(s, e.abs);
+  const isAction = (e, action) => e.kind === 'ACTION' && e.action === action;
+  // Numerical state from the lineup itself (an exclusion that was not logged still shows as 5 field players) and the
+  // rival's 2' windows.
+  function stateBaselines(s, set, t) {
+    const r = CONFIG.rating, logged = (s.court || []).length > 0;
+    const short = logged && set != null && fieldOnCourt(s, set).length < FIELD_PLAYERS_ON_COURT;
+    const plus = s.events.some((e) => e.kind === 'RIVAL_SANCTION' && e.card === '2M' && t >= e.abs && t < e.abs + r.exclusionSeconds);
+    if (short && !plus) return r.shortHanded;
+    if (plus && !short) return r.superiority;
+    return { att: r.possession, def: r.possession };
+  }
+  // The context of a moment: late and close weighs more, a second-half blowout less.
+  function leverageOf(s, e, weights, order) {
+    const before = score(s.events.filter((x) => x.abs < e.abs || (x.abs === e.abs && order.get(x) < order.get(e))));
+    const margin = Math.abs(before.us - before.them), c = CONFIG.rating.context;
+    if (e.abs >= c.lateFrom && margin <= c.lateMargin) return { factor: weights.lateFactor, score: before };
+    if (e.abs >= c.closeFrom && margin <= c.closeMargin) return { factor: weights.closeFactor, score: before };
+    if (e.abs >= CONFIG.halfSeconds && margin >= c.blowoutMargin) return { factor: c.blowoutFactor, score: before };
+    return { factor: 1, score: before };
+  }
+
+  // Every player's rating by id for one match: { value (points, null = «S/C»), rated, lines (points by line), events
+  // (the owned moments with their leverage), possessions }.
+  function matchRatings(s, players = s.players, weights = ratingWeights()) {
+    const r = CONFIG.rating, events = s.events, order = new Map(events.map((e, i) => [e, i]));
+    const ledger = new Map();
+    const line = (id) => {
+      if (!ledger.has(id)) ledger.set(id, { ...Object.fromEntries(RATING_LINES.map((l) => [l.key, 0])), atkPoss: 0, defPoss: 0, defUnitHalves: [0, 0], moments: [] });
+      return ledger.get(id);
+    };
+    // An owned value: its base goes to its line and the leverage extra to «Momento decisivo». A keeper's shot values
+    // weigh `keeperWeight`, with the full leverage.
+    const own = (id, key, value, e, label) => {
+      if (!id) return;
+      const lev = e ? leverageOf(s, e, weights, order) : { factor: 1, score: null }, l = line(id);
+      const v = key === 'porteria' ? value * weights.keeperWeight : value;
+      l[key] += v; l.clutch += (lev.factor - 1) * v;
+      if (e) l.moments.push({ id, abs: e.abs, label, value: v * lev.factor, factor: lev.factor, score: lev.score });
+    };
+    const next = (from, pred, within) => events.filter((x) => x.abs >= from.abs && x !== from && x.abs - from.abs <= within && pred(x)).sort((a, b) => a.abs - b.abs)[0] || null;
+    const previous = (to, pred, within) => events.filter((x) => x.abs <= to.abs && x !== to && to.abs - x.abs <= within && pred(x)).sort((a, b) => b.abs - a.abs)[0] || null;
+
+    // Our possessions: shots and turnovers.
+    const attackPool = [], ownedCounter = new Set();
+    ourShots(events).forEach((e) => {
+      const z = e.zone, set = shotCourtSet(s, e), base = stateBaselines(s, set, e.abs).att, goal = e.result === 'GOL' ? 1 : 0;
+      if (!(z in r.pOn)) return;
+      let creation = preShotGoal(z) - base;
+      own(e.playerId, 'tiro', goal - preShotGoal(z), e, `Tiro ${ZONES[z]} ${goal ? 'gol' : 'fallado'}`);
+      if (z === '7M') {
+        const won = previous(e, (x) => isAction(x, 'PROV7'), r.windows.provoked7);
+        if (won) { own(won.playerId, 'creacion', weights.oneOnOne, won, '7 m provocado'); creation -= weights.oneOnOne; }
+      } else {
+        if (z === ZONE_CONTRA) {
+          const start = previous(e, (x) => isAction(x, 'RECUP') || isAction(x, 'BLOC') || (x.kind === 'RIVAL_SHOT' && x.result === 'PARADA' && x.gkId), r.windows.fastBreakStart);
+          if (start) { own(start.playerId || start.gkId, 'creacion', weights.starter, start, 'Inicia contraataque'); creation -= weights.starter; }
+        }
+        own(e.playerId, 'tiro', creation * r.shooterCreationShare, null, 'Creación propia');
+        creation *= 1 - r.shooterCreationShare;
+      }
+      if (goal) {
+        const assist = previous(e, (x) => isAction(x, 'ASIST'), r.windows.assist) || next(e, (x) => isAction(x, 'ASIST'), r.windows.assist);
+        if (assist) { own(assist.playerId, 'creacion', weights.assist, assist, 'Asistencia'); creation -= weights.assist; }
+      }
+      attackPool.push({ set, value: creation, abs: e.abs });
+    });
+    events.filter((e) => e.kind === 'TURNOVER').forEach((e) => {
+      const set = courtSetBefore(s, e.abs), base = stateBaselines(s, set, e.abs).att;
+      if (e.subtype === PASSIVE_TURNOVER) {
+        const on = fieldOnCourt(s, set);
+        if (on.length) on.forEach((id) => own(id, 'balon', -base / on.length, e, 'Pasivo (compartido)'));
+        else own(e.playerId, 'balon', -base, e, 'Pasivo');
         return;
       }
-      if (e.playerId !== player.id) return;
-      if (e.kind === 'SHOT') f.shotValue += (e.result === 'GOL' ? 1 : 0) - expectedGoal(e.zone);
-      else if (e.kind === 'TURNOVER') f[turnoverFeature(e)]++;
-      else if (e.kind === 'SANCTION' && RATING_CARD_FEATURES[e.card]) f[RATING_CARD_FEATURES[e.card]]++;
-      else if (e.kind === 'ACTION') {
-        if (RATING_ACTION_FEATURES[e.action]) f[RATING_ACTION_FEATURES[e.action]]++;
-        else if (RATING_RULE_FAULTS.includes(e.action)) f.ruleFaults++;
-        else if (RATING_TACTICAL_FAULTS.includes(e.action)) f.tactical++;
+      if (isBlockedTurnover(e)) { own(e.playerId, 'tiro', -preShotGoal('9M'), e, 'Tiro bloqueado'); attackPool.push({ set, value: preShotGoal('9M') - base, abs: e.abs }); return; }
+      const rule = RULE_TURNOVERS.includes(e.subtype);
+      own(e.playerId, 'balon', -(base - (rule ? weights.ruleFaultDiscount : 0)), e, `Pérdida (${e.subtype})`);
+      if (rule) attackPool.push({ set, value: -weights.ruleFaultDiscount, abs: e.abs });
+      const counter = next(e, (x) => x.kind === 'RIVAL_SHOT' && x.contra, r.windows.counterAfterTurnover);
+      if (counter) {
+        own(e.playerId, 'balon', -(preShotGoal(ZONE_CONTRA) - stateBaselines(s, shotCourtSet(s, counter), counter.abs).def), e, 'Pérdida que acaba en contraataque');
+        ownedCounter.add(counter);
       }
     });
-    return f;
+
+    // Rival possessions: shots (field and keeper), our recoveries and rival goals entered only as a score fix.
+    const defencePool = [];
+    const ownedInPossession = (e) => {
+      const end = events.filter((x) => (x.kind === 'RIVAL_SHOT' || isAction(x, 'RECUP')) && x.abs < e.abs).sort((a, b) => b.abs - a.abs)[0];
+      const from = end ? end.abs : -1;
+      return events.filter((x) => x.kind === 'ACTION' && x.abs > from && x.abs <= e.abs);
+    };
+    rivalShots(events).forEach((e) => {
+      const z = e.contra ? ZONE_CONTRA : e.zone, set = shotCourtSet(s, e), base = stateBaselines(s, set, e.abs).def;
+      if (!(z in r.pOn)) return;
+      if (e.gkId && onTarget(e)) own(e.gkId, 'porteria', r.pOn[z] - (e.result === 'GOL' ? 1 : 0), e, `${e.result === 'GOL' ? 'Gol encajado' : 'Parada'} ${ZONES[z]}`);
+      if (ownedCounter.has(e)) return;
+      // The field answers for the shot reaching the keeper; a 7 m is judged before the shot (its accuracy is luck).
+      let value = z === '7M' ? base - preShotGoal('7M') : base - (onTarget(e) ? r.pOn[z] : 0);
+      ownedInPossession(e).forEach((x) => {
+        if (x.action === 'PEN7C') { own(x.playerId, 'defInd', -weights.oneOnOne, x, '7 m cometido'); value += weights.oneOnOne; }
+        else if (x.action === 'BEATEN') { own(x.playerId, 'defInd', -weights.oneOnOne, x, 'Superado 1x1'); value += weights.oneOnOne; }
+        else if (x.action === 'BLOC') { own(x.playerId, 'defInd', weights.blocRetained, x, 'Blocaje'); value -= weights.blocRetained; }
+        else if (MINOR_DEFENSIVE_FAULTS.includes(x.action)) { own(x.playerId, 'defInd', weights.minorFault, x, ACTIONS[x.action].label); value -= weights.minorFault; }
+      });
+      defencePool.push({ set, value, abs: e.abs });
+    });
+    events.filter((e) => isAction(e, 'RECUP')).forEach((e) => own(e.playerId, 'defInd', stateBaselines(s, courtSetBefore(s, e.abs), e.abs).def, e, 'Recuperación'));
+    events.filter((e) => e.kind === 'SCORE_FIX' && e.team === 'them' && e.delta > 0)
+      .forEach((e) => defencePool.push({ set: courtSetBefore(s, e.abs), value: r.possession - r.pOn['6M'], abs: e.abs }));
+    events.filter((e) => e.kind === 'ACTION' && TEAM_FAULTS.includes(e.action)).forEach((e) => {
+      const on = e.playerId == null ? courtSetOf(e.on ?? courtSetBefore(s, e.abs), s) : [e.playerId];
+      on.forEach((id) => own(id, 'defInd', isKeeperOf(s, id) ? weights.teamFaultKeeper : weights.teamFaultField, e, ACTIONS[e.action].label));
+    });
+
+    // Unit lines: shared per possession, shrunk toward the team's mean, renormalised to the team total.
+    const share = (pool, key, possKey, halvesKey) => {
+      const raw = new Map(), count = new Map(), halves = new Map();
+      pool.forEach((p) => {
+        const on = fieldOnCourt(s, p.set);
+        on.forEach((id) => {
+          raw.set(id, (raw.get(id) || 0) + p.value / on.length);
+          count.set(id, (count.get(id) || 0) + 1);
+          const h = halves.get(id) || [0, 0];
+          h[p.abs < CONFIG.halfSeconds ? 0 : 1] += p.value / on.length;
+          halves.set(id, h);
+        });
+      });
+      const total = sumOf([...raw.values()], (v) => v), n = sumOf([...count.values()], (v) => v), mean = n ? total / n : 0;
+      const shrunk = new Map([...raw].map(([id, v]) => { const k = count.get(id); return [id, ((v + r.shrinkPossessions * mean) / (k + r.shrinkPossessions)) * k]; }));
+      const sum = sumOf([...shrunk.values()], (v) => v), scale = Math.abs(sum) > RATING_ROUNDING_EPSILON ? total / sum : 1;
+      shrunk.forEach((v, id) => {
+        const l = line(id), scaled = v * scale, rawV = raw.get(id);
+        l[key] += scaled; l[possKey] = count.get(id);
+        if (halvesKey) l[halvesKey] = halves.get(id).map((x) => (Math.abs(rawV) > RATING_ROUNDING_EPSILON ? x * (scaled / rawV) : 0));
+      });
+    };
+    share(attackPool, 'atkUnit', 'atkPoss');
+    share(defencePool, 'defUnit', 'defPoss', 'defUnitHalves');
+
+    // Discipline: the baseline shift over the possessions actually played short, plus the conduct of a send-off.
+    // A match saved without a clock (old saves, test fixtures) ends at its last event.
+    const end = (s.clock && matchEndAbs(s)) || Math.max(0, ...events.map((e) => e.abs));
+    const shortCost = (e) => {
+      const until = Math.min(e.abs + r.exclusionSeconds, end), inWindow = (p) => p.abs >= e.abs && p.abs < until;
+      return attackPool.filter(inWindow).length * (r.possession - r.shortHanded.att) + defencePool.filter(inWindow).length * (r.shortHanded.def - r.possession);
+    };
+    events.filter((e) => e.kind === 'SANCTION').forEach((e) => {
+      if (e.card === 'A') own(e.playerId, 'disciplina', weights.yellow, e, 'Amarilla');
+      else if (e.card === '2M') own(e.playerId, 'disciplina', -shortCost(e), e, "Exclusión 2'");
+      else if (e.card === 'D' || e.card === 'AZ') {
+        const lastSeconds = e.abs >= end - r.lastSecondsWindow && events.some((x) => isAction(x, 'PEN7C') && x.playerId === e.playerId && Math.abs(x.abs - e.abs) <= r.sameMomentSeconds);
+        const thirdTwo = events.filter((x) => x.kind === 'SANCTION' && x.card === '2M' && x.playerId === e.playerId).length >= 2;
+        const conduct = lastSeconds ? weights.conductLastSeconds : thirdTwo ? 0 : weights.conductDirect;
+        const remainingMinutes = Math.max(0, end - e.abs) / SECONDS_PER_MINUTE;
+        const loss = (r.playerLossPerMatch * remainingMinutes) / CONFIG.rating.fullMatchMinutes;
+        own(e.playerId, 'disciplina', -shortCost(e) + conduct - loss + (e.card === 'AZ' ? weights.blue : 0), e, lastSeconds ? 'Roja (últimos 30 s, con 7 m)' : e.card === 'AZ' ? 'Azul' : 'Roja');
+      }
+    });
+
+    // Result: a small line by the share of the match's possessions each player took part in.
+    const final = score(events), possessions = attackPool.length + defencePool.length;
+    if (final.us !== final.them && possessions) ledger.forEach((l) => { l.resultado += Math.sign(final.us - final.them) * weights.result * ((l.atkPoss + l.defPoss) / possessions); });
+
+    return new Map(players.map((p) => {
+      const l = ledger.get(p.id) || line(p.id), lines = Object.fromEntries(RATING_LINES.map((x) => [x.key, l[x.key] * POINTS_PER_GOAL]));
+      const rated = l.atkPoss + l.defPoss >= r.minPossessions || l.moments.length > 0;
+      const value = rated ? roundHalfUp(sumOf(RATING_LINES, (x) => lines[x.key]), r.decimals) : null;
+      return [p.id, { value, rated, lines, moments: l.moments, possessions: { attack: l.atkPoss, defence: l.defPoss },
+        defenceHalves: l.defUnitHalves.map((v) => v * POINTS_PER_GOAL) }];
+    }));
   }
-  const roundHalfUp = (v, decimals) => Math.round(v * 10 ** decimals + RATING_ROUNDING_EPSILON) / 10 ** decimals;
-  // The weighted features around the base. `raw` is before the clamp and the rounding.
-  function ratingFromFeatures(f, { keeper, weights = CONFIG.rating.weights, confidence = 1 }) {
-    const r = CONFIG.rating, sum = sumOf(RATING_TERMS, (term) => term.weight(weights, keeper) * f[term.key]);
-    const raw = r.base + confidence * sum;
-    return { value: roundHalfUp(clamp(raw, r.min, r.max), r.decimals), raw };
-  }
-  // How far the minutes on court can be trusted: 1 from a full match, and when the minutes are unknown (null).
-  const ratingConfidence = (seconds) => (seconds == null ? 1
-    : Math.min(1, (seconds / SECONDS_PER_MINUTE / CONFIG.rating.fullMatchMinutes) ** CONFIG.rating.minutesExponent));
-  // The rating from counted features: `value` is null («S/C») when the minutes are known and under the minimum.
-  function ratingFromCounts(features, { seconds = null, keeper, weights }) {
-    const confidence = ratingConfidence(seconds);
-    if (seconds != null && seconds / SECONDS_PER_MINUTE < CONFIG.rating.minMinutes) return { value: null, raw: null, features, confidence, rated: false };
-    return { ...ratingFromFeatures(features, { keeper, weights, confidence }), features, confidence, rated: true };
-  }
-  const playerRating = (s, player, { seconds = null, weights = ratingWeights() } = {}) => ratingFromCounts(ratingFeatures(s, player), { seconds, keeper: player.pos === 'POR', weights });
-  // Every player's rating by id, with the team's weights; minutes unknown (no court log) rates with confidence 1.
-  function matchRatings(s, players = s.players) {
-    const minutes = minutesOnCourt(s), weights = ratingWeights();
-    return new Map(players.map((p) => [p.id, playerRating(s, p, { seconds: minutes ? minutes.get(p.id) || 0 : null, weights })]));
-  }
+  const playerRating = (s, player, { weights = ratingWeights() } = {}) => matchRatings(s, [player], weights).get(player.id);
   // «S/C» (no rating) reads in the neutral `rt-none` chip, never in a band.
   const RATING_NONE_BAND = 'rt-none';
-  const ratingText = (value) => (value == null ? 'S/C' : decimalText(value));
-  const ratingBand = (value) => (value == null ? RATING_NONE_BAND : CONFIG.rating.bands.find(([from]) => value >= from)[1]);
-  const ratingChipHtml = (value) => `<span class="rating-chip ${ratingBand(value)}">${ratingText(value)}</span>`;
+  const signedText = (v) => (v < 0 ? `−${decimalText(-v)}` : `+${decimalText(v)}`);
+  const ratingText = (value) => (value == null ? 'S/C' : signedText(value));
+  const ratingBandOf = (value) => (value == null ? null : CONFIG.rating.bands.find(([from]) => value >= from));
+  const ratingBand = (value) => (value == null ? RATING_NONE_BAND : ratingBandOf(value)[2]);
+  const ratingBandLabel = (value) => (value == null ? 'Sin calificar' : ratingBandOf(value)[1]);
+  const ratingChipHtml = (value) => `<span class="rating-chip ${ratingBand(value)}" title="${esc(ratingBandLabel(value))}">${ratingText(value)}</span>`;
 
   // ---- Match MVP and the end-of-match ratings ----
   const ratingValue = (ratings, player) => ratings.get(player.id)?.value ?? null;
@@ -2204,16 +2335,13 @@ span.att-foot { visibility: hidden; }
     const [top] = rankedByRating(s, ratings, seconds);
     return top && ratingValue(ratings, top) != null ? { id: top.id, source: MVP_SOURCE.rating } : { id: null, source: null };
   }
-  const signedText = (v) => (v < 0 ? `−${decimalText(-v)}` : `+${decimalText(v)}`);
-  // What moved the rating: each non-zero feature with its share of the points (scaled by the minutes, like the rating).
-  function ratingItemsHtml(rating, keeper) {
+  // What made the rating: its band and every line that moved it, in points (each rounded on its own).
+  const RATING_LINE_MIN_POINTS = 0.05;
+  function ratingItemsHtml(rating) {
     if (!rating.rated) return '';
-    const weights = ratingWeights();
-    return RATING_TERMS.filter((t) => Math.abs(rating.features[t.key]) > RATING_ROUNDING_EPSILON).map((t) => {
-      const count = rating.features[t.key];
-      const points = roundHalfUp(t.weight(weights, keeper) * count * rating.confidence, CONFIG.rating.decimals);
-      return `<li>${t.label}${t.counts === false ? '' : ` ×${count}`} <b>${signedText(points)}</b></li>`;
-    }).join('');
+    const lines = RATING_LINES.filter((l) => Math.abs(rating.lines[l.key]) >= RATING_LINE_MIN_POINTS)
+      .map((l) => `<li>${l.label} <b>${signedText(roundHalfUp(rating.lines[l.key], CONFIG.rating.decimals))}</b></li>`).join('');
+    return `<li class="rating-band-line">${esc(ratingBandLabel(rating.value))}</li>${lines}`;
   }
   function ratingRowHtml(s, player, rating, seconds, mvp) {
     const { made, tried } = outcomeOf(s, player), keeper = player.pos === 'POR';
@@ -2222,7 +2350,7 @@ span.att-foot { visibility: hidden; }
     const face = `<span class="mvp-face-static">${discHtml(player)}${isMvp ? crownSvg('crown-face') : ''}</span>`;
     const line = `${face}<span class="rating-who"><b>${esc(player.name)}</b>${provisional ? '<small class="mvp-tag">MVP provisional</small>' : ''}</span>
       ${kpi(minutesText(seconds ? seconds.get(player.id) || 0 : null), 'Min')}${kpi(`${made}/${tried}`, keeper ? 'Paradas' : 'Goles')}${kpi(pctText(pct(made, tried)), '%')}${ratingChipHtml(rating.value)}`;
-    const items = ratingItemsHtml(rating, keeper);
+    const items = ratingItemsHtml(rating);
     return `<li class="rating-row" data-rating-player="${esc(player.id)}">${items ? `<details class="rating-more"><summary class="rating-line">${line}</summary><ul>${items}</ul></details>` : `<div class="rating-line">${line}</div>`}</li>`;
   }
   // The MVP leads the list; the others follow by rating. Only the top rows show until the coach asks for all.
@@ -3426,7 +3554,7 @@ span.att-foot { visibility: hidden; }
   const DORSAL_RANGE = [1, 99];
   const ROSTER_FORMAT = 'hbstats-plantilla';
   const MAX_VENUE_LENGTH = 40;
-  const PLAYER_HEAD = ['Nº', 'Jugador', 'Min', '+/−', 'Nota', '6 m', '9 m', '+11 m', 'Contra', '7 m', 'T. bloq.', 'Bloc.', 'Recup.', 'Pase gol', 'Pérdida', 'Prov. 7 m', 'Falta', '7 m com.', 'F. táctico', 'A', "2'", 'D', 'Az'];
+  const PLAYER_HEAD = ['Nº', 'Jugador', 'Min', '+/−', '6 m', '9 m', '+11 m', 'Contra', '7 m', 'T. bloq.', 'Bloc.', 'Recup.', 'Pase gol', 'Pérdida', 'Prov. 7 m', 'Falta', '7 m com.', 'F. táctico', 'A', "2'", 'D', 'Az'];
   const SHOT_ZONE_HEAD = ['Zona', 'Lanz.', 'Goles', 'Parados', 'Fallados', '% gol'];
   const GK_ZONE_HEAD = ['Zona', 'Recibidos', 'A puerta', 'Detenidos', 'Encajados', '% paradas'];
   const fieldPlayers = () => state.players.filter((p) => p.pos !== 'POR').sort((a, b) => a.num - b.num);
@@ -3441,15 +3569,12 @@ span.att-foot { visibility: hidden; }
   const turnoverCounts = (events) => countBy(events.filter((e) => e.kind === 'TURNOVER'), (e) => e.subtype);
   const defFaultCounts = (events) => countBy(events.filter((e) => e.kind === 'ACTION' && DEFENSIVE_FAULTS.includes(e.action)), (e) => ACTIONS[e.action].label);
   const eventsOf = (id, events = state.events) => events.filter((e) => e.playerId === id);
-  // The sheet's own table keeps its width: the rating is only in the PDF.
-  const SCREEN_PLAYER_HEAD = PLAYER_HEAD.filter((h) => h !== 'Nota');
-  const screenPlayerCells = (row) => row.filter((_, i) => PLAYER_HEAD[i] !== 'Nota');
-  // One row of the player table, as PLAYER_HEAD; Min and +/− read «–» when the match logged no court, Nota «S/C» under the minimum minutes.
-  function playerRow(p, s = state, ratings = matchRatings(s)) {
+  // One row of the player table, as PLAYER_HEAD; Min and +/− read «–» when the match logged no court.
+  function playerRow(p, s = state) {
     const stats = playerStats(p.id, s.events), court = courtFiguresOf(s, p.id);
     // Team faults count too: matches logged before they became team faults have them per player.
     const tactical = [...TACTICAL_FAULTS, ...TEAM_FAULTS].reduce((n, k) => n + stats[k], 0);
-    return [p.num, p.name, minutesText(court.seconds), plusMinusText(court.plusMinus), ratingText(ratingValue(ratings, p)), ...SHEET_ZONES.map((z) => `${stats.goals[z]}/${stats.shots[z]}`), stats.blocked, stats.BLOC, stats.RECUP, stats.ASIST, stats.TURNOVER, stats.PROV7, stats.FALTA + stats.GOLPE, stats.PEN7C, tactical, stats.A, stats['2M'], stats.D, stats.AZ];
+    return [p.num, p.name, minutesText(court.seconds), plusMinusText(court.plusMinus), ...SHEET_ZONES.map((z) => `${stats.goals[z]}/${stats.shots[z]}`), stats.blocked, stats.BLOC, stats.RECUP, stats.ASIST, stats.TURNOVER, stats.PROV7, stats.FALTA + stats.GOLPE, stats.PEN7C, tactical, stats.A, stats['2M'], stats.D, stats.AZ];
   }
   function shotZoneRows(shots) {
     const row = (label, list) => { const c = countGroups(list); return [label, list.length, c.GOL, c.PARADA, c.FALLO, pctText(pct(c.GOL, list.length))]; };
@@ -3460,7 +3585,6 @@ span.att-foot { visibility: hidden; }
     const row = (label, list) => { const c = countGroups(list); const on = c.GOL + c.PARADA; return [label, list.length, on, c.PARADA, c.GOL, pctText(pct(c.PARADA, on))]; };
     return [...SHEET_ZONES.map((z) => row(ZONES[z], shots.filter((e) => gkZoneOf(e) === z))), row('Total', shots)];
   }
-  const ATTACK_TYPE_HEAD = ['Tipo', 'Nuestro ataque', '% gol', 'Ataque rival', '% gol'];
   // Goals/shots of each attack type for both teams, and the total, which equals the shots of each team.
   function attackTypeTableRows(events = state.events) {
     const us = attackTypeRows(events, 'us'), them = attackTypeRows(events, 'them');
@@ -3506,7 +3630,6 @@ span.att-foot { visibility: hidden; }
   const LANE_HEAD = ['Carril', '6 m', '9 m o más', 'Total', '% gol'];
   // Lanes split penetration (6 m) from shots taken from distance (9 m and +11 m).
   const FAR_ZONES = ['9M', '11M'];
-  const SHOOTER_HEAD = ['Jugador', 'Tiros', 'Goles', '% gol'];
   const plural = (n, one, many) => `${n} ${n === 1 ? one : many}`;
   const goalsIn = (list) => list.filter((e) => e.result === 'GOL').length;
   const gt = (list) => `${goalsIn(list)}/${list.length}`;
@@ -3537,7 +3660,6 @@ span.att-foot { visibility: hidden; }
     };
   }
   const laneRows = (a) => a.lanes.map((l) => [l.label, gt(l.near), gt(l.far), gt(l.list), pctText(pct(goalsIn(l.list), l.list.length))]);
-  const shooterRows = (a) => a.shooters.map((x) => [x.label, x.shots, x.goals, pctText(pct(x.goals, x.shots))]);
   const bestLane = (a, minGoals) => a.lanes.filter((l) => goalsIn(l.list) >= minGoals).sort((x, y) => goalsIn(y.list) - goalsIn(x.list) || x.list.length - y.list.length)[0] || null;
   // Key points as { tone: 'bad' | 'good', text }: what the rival does to us, and how our attack goes.
   function keyPoints() {
@@ -3646,14 +3768,13 @@ span.att-foot { visibility: hidden; }
   const card = (title, inner) => `<div class="sheet-card"><h3>${title}</h3>${inner}</div>`;
 
   function sheetStatsHtml() {
-    const ratings = matchRatings(state);
     const rows = fieldPlayers().map((p) => {
-      const [num, name, ...rest] = screenPlayerCells(playerRow(p, state, ratings));
+      const [num, name, ...rest] = playerRow(p, state);
       return `<tr><td>${num}</td><td class="name"><span style="background:${posOf(p).color}"></span>${esc(name)}</td>${rest.map(td).join('')}</tr>`;
     }).join('');
     const checks = scoreCheckRows();
     return `${figuresHtml(teamFigures())}
-      <div class="table-wrap"><table class="stats-table"><thead><tr>${SCREEN_PLAYER_HEAD.map((h, i) => `<th${i === 1 ? ' style="text-align:left"' : ''}>${esc(h)}</th>`).join('')}</tr></thead><tbody>${rows}</tbody></table></div>
+      <div class="table-wrap"><table class="stats-table"><thead><tr>${PLAYER_HEAD.map((h, i) => `<th${i === 1 ? ' style="text-align:left"' : ''}>${esc(h)}</th>`).join('')}</tr></thead><tbody>${rows}</tbody></table></div>
       <div class="sheet-grid">
         ${card("Marcador cada 5'", `<ul>${checks.length ? checks.map(([m, r]) => `<li><span>${m}</span><b>${r}</b></li>`).join('') : '<li>Sin apuntes.</li>'}</ul>`)}
         ${card('Pérdidas por tipo', `<ul>${countListHtml(turnoverCounts(state.events), 'Sin pérdidas.')}</ul>`)}
@@ -4189,10 +4310,11 @@ span.att-foot { visibility: hidden; }
     return `No se pudo guardar el archivo (${(err && (err.message || err.code)) || 'error desconocido'}).`;
   }
 
-  // ---- PDF reports (jsPDF + AutoTable, loaded only when a report is requested) ----
+  // ---- PDF reports (jsPDF + AutoTable, and html2canvas for the match report; loaded only when a report is requested) ----
   const PDF_LIBS = [
     'https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js',
-    'https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.5.31/jspdf.plugin.autotable.min.js'
+    'https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.5.31/jspdf.plugin.autotable.min.js',
+    'https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js'
   ];
   // PDFs are always printed light, so they use fixed colours rather than the screen theme tokens.
   const hexToRgb = (hex) => [1, 3, 5].map((i) => parseInt(hex.slice(i, i + 2), 16));
@@ -4211,10 +4333,6 @@ span.att-foot { visibility: hidden; }
   // What a titled table needs below its title to start on the same page: the gap, the head row and the first row.
   const PDF_ROW_MM = 5.6, PDF_TITLE_GAP_MM = 2;
   const PDF_TITLE_KEEP_MM = PDF_TITLE_GAP_MM + 2 * PDF_ROW_MM;
-  // The width of an average character of a table cell, to leave the name column room for a full name.
-  const PDF_NAME_CHAR_MM = 1.5;
-  // Fixed widths (mm) of the columns of PLAYER_HEAD; the name column takes the rest of the page.
-  const PLAYER_PDF_WIDTHS = [7, null, 9, 9, 10, 10, 10, 11, 11, 10, 14, 10, 12, 14, 13, 16, 10, 14, 15, 7, 7, 7, 8];
   let pdfLibsPromise = null;
   function loadScript(src) {
     return new Promise((resolve, reject) => {
@@ -4226,7 +4344,7 @@ span.att-foot { visibility: hidden; }
     });
   }
   function loadPdfLibs() {
-    if (window.jspdf && window.jspdf.jsPDF && window.jspdf.jsPDF.API.autoTable) return Promise.resolve();
+    if (window.jspdf && window.jspdf.jsPDF && window.jspdf.jsPDF.API.autoTable && window.html2canvas) return Promise.resolve();
     if (!pdfLibsPromise) {
       pdfLibsPromise = PDF_LIBS.reduce((chain, src) => chain.then(() => loadScript(src)), Promise.resolve())
         .catch((err) => { pdfLibsPromise = null; throw err; });
@@ -4274,26 +4392,6 @@ span.att-foot { visibility: hidden; }
     return doc.lastAutoTable.finalY + 6;
   }
   const figuresTable = (doc, figures, startY, left, width) => pdfTable(doc, { head: ['Dato', 'Valor', ''], body: figures, startY, left, width });
-  // A titled list of key points with a coloured mark per tone; returns the y below it.
-  function pdfKeyPoints(doc, title, points, x, y, w) {
-    doc.setTextColor(...PDF_RGB.ink);
-    doc.setFont('helvetica', 'bold');
-    doc.setFontSize(10);
-    doc.text(pdfText(title), x, y);
-    y += 5;
-    doc.setFont('helvetica', 'normal');
-    doc.setFontSize(8.5);
-    const items = points.length ? points : [{ tone: 'none', text: 'Sin puntos destacados con los datos actuales.' }];
-    items.forEach((p) => {
-      const lines = doc.splitTextToSize(pdfText(p.text), w - 5);
-      doc.setFillColor(...(p.tone === 'bad' ? PDF_RGB.red : p.tone === 'good' ? PDF_RGB.gol : PDF_RGB.fallo));
-      doc.rect(x, y - 2.6, 1.6, lines.length * 3.8, 'F');
-      doc.setTextColor(...PDF_RGB.ink);
-      doc.text(lines, x + 4, y);
-      y += lines.length * 3.8 + 2;
-    });
-    return y + 4;
-  }
   const countRows = (counts) => (Object.keys(counts).length ? Object.entries(counts) : [['Ninguno', 0]]);
   // Points at a fixed distance from the goal segment (the 6 m and 9 m lines), in court units.
   function areaLine(metres) {
@@ -4386,11 +4484,6 @@ span.att-foot { visibility: hidden; }
     });
     return ly + 6;
   }
-  // The shooters on one goal, most damaging first, under its shot chart.
-  function pdfGoalShooters(doc, title, shots, viewKey, startY) {
-    const rows = goalShooterRows(shots, viewKey);
-    return pdfTable(doc, { title, head: GOAL_SHOOTER_HEAD, body: rows.length ? rows : [[PDF_EMPTY, 'Sin lanzamientos', 0, 0, 0, 0, PDF_EMPTY]], startY, left: PDF_PAGE.margin, width: PDF_PAGE.chartW });
-  }
   const gridRows = (grid) => grid.map((r, i) => [['Arriba', 'Medio', 'Abajo'][i], ...r]);
   const GRID_HEAD = ['', 'Izq.', 'Centro', 'Der.'];
   function pdfGkBlock(doc, shots, startY) {
@@ -4400,54 +4493,6 @@ span.att-foot { visibility: hidden; }
     const yB = pdfTable(doc, { title: 'Encajados (vista del lanzador)', head: GRID_HEAD, body: gridRows(goalGrid(shots, 'GOL')), startY: y, left: PDF_PAGE.rightX + half + 6, width: half });
     y = Math.max(yA, yB);
     return y;
-  }
-  function pdfMatch(doc) {
-    pdfHeader(doc, 'Informe del partido', `${state.clock.period === 1 ? '1ª' : '2ª'} parte · ${absToClock(absSeconds())}`);
-    const figures = teamFigures();
-    let y = pdfTable(doc, { title: 'Resumen del equipo', head: figures.map((f) => f[0]), body: [figures.map((f) => f[1]), figures.map((f) => f[2])], startY: PDF_PAGE.top + 4 });
-    const ratings = matchRatings(state);
-    const widths = Object.fromEntries(PLAYER_PDF_WIDTHS.map((cellWidth, i) => [i, cellWidth ? { cellWidth } : { halign: 'left' }]));
-    y = pdfTable(doc, { title: 'Jugadores (goles/tiros por zona)', head: PLAYER_HEAD, body: fieldPlayers().map((p) => playerRow(p, state, ratings)), startY: y, width: PDF_PAGE.w - 2 * PDF_PAGE.margin, columnStyles: widths });
-    if (noteRows().length) pdfTable(doc, { title: 'Notas', head: ['Min', 'Nota'], body: noteRows(), startY: y, columnStyles: { 0: { cellWidth: 14 }, 1: { halign: 'left' } } });
-
-    doc.addPage();
-    pdfHeader(doc, 'Puntos clave', 'Por dónde nos atacan y cómo atacamos');
-    const k = keyPoints();
-    const colW = (PDF_PAGE.w - 2 * PDF_PAGE.margin - 10) / 2;
-    [[attackAnalysis('them'), `Ataque de ${state.them} · nuestra defensa`, k.defence], [attackAnalysis('us'), `Ataque de ${state.us}`, k.attack]].forEach(([a, title, points], i) => {
-      const x = PDF_PAGE.margin + i * (colW + 10);
-      let yy = pdfKeyPoints(doc, title, points, x, PDF_PAGE.top + 4, colW);
-      yy = pdfTable(doc, { title: 'Por carril (goles/tiros)', head: LANE_HEAD, body: laneRows(a), startY: yy, left: x, width: colW });
-      pdfTable(doc, { title: 'Lanzadores', head: SHOOTER_HEAD, body: a.shooters.length ? shooterRows(a) : [['Sin identificar', PDF_EMPTY, PDF_EMPTY, PDF_EMPTY]], startY: yy, left: x, width: colW });
-    });
-
-    doc.addPage();
-    pdfHeader(doc, 'Portería', 'Tiros del rival a nuestros porteros');
-    pdfGoalShooters(doc, `Lanzadores de ${state.them} (más goles primero)`, rivalShots(), 'GK', pdfShotChart(doc, PDF_PAGE.margin, PDF_PAGE.top, PDF_PAGE.chartW, rivalShots(), 'GK', true));
-    y = figuresTable(doc, gkFigures(rivalShots()), PDF_PAGE.top + 4, PDF_PAGE.rightX, 70);
-    const perGk = goalkeepers().map((g) => { const k = gkCounts(gkShots(g.id)); return [`#${g.num} ${g.name}`, pctText(pct(k.saved, k.onTarget)), `${k.saved}/${k.onTarget}`, k.conceded, `${k.pensSaved}/${k.pensOnTarget}`]; });
-    pdfTable(doc, { title: 'Por portero', head: ['Portero', '% paradas', 'Paradas/a puerta', 'Encajados', '7 m parados'], body: perGk, startY: PDF_PAGE.top + 4, left: PDF_PAGE.rightX + 76 });
-    pdfGkBlock(doc, rivalShots(), y);
-
-
-    doc.addPage();
-    pdfHeader(doc, 'Ataque', 'Nuestros lanzamientos');
-    pdfGoalShooters(doc, `Lanzadores de ${state.us} (más goles primero)`, ourShots(), 'US', pdfShotChart(doc, PDF_PAGE.margin, PDF_PAGE.top, PDF_PAGE.chartW, ourShots(), 'US', true));
-    let right = pdfTable(doc, { title: 'Por zona', head: SHOT_ZONE_HEAD, body: shotZoneRows(ourShots()), startY: PDF_PAGE.top + 4, left: PDF_PAGE.rightX });
-    const third = (PDF_PAGE.w - PDF_PAGE.rightX - PDF_PAGE.margin - 12) / 3;
-    const cols = [
-      { title: "Marcador cada 5'", head: ['Min', 'Res.'], body: scoreCheckRows().length ? scoreCheckRows() : [[PDF_EMPTY, PDF_EMPTY]] },
-      { title: 'Pérdidas por tipo', head: ['Tipo', 'N'], body: countRows(turnoverCounts(state.events)) },
-      { title: 'Fallos defensivos', head: ['Tipo', 'N'], body: countRows(defFaultCounts(state.events)) }
-    ];
-    right = Math.max(...cols.map((c, i) => pdfTable(doc, { ...c, startY: right, left: PDF_PAGE.rightX + i * (third + 6), width: third })));
-    const sanctions = sanctionRows();
-    pdfTable(doc, { title: 'Sanciones', head: ['Min', 'Quién', 'Sanción'], body: sanctions.length ? sanctions : [[PDF_EMPTY, PDF_EMPTY, 'Sin sanciones']], startY: right, left: PDF_PAGE.rightX });
-
-    doc.addPage();
-    pdfHeader(doc, 'Ataque y pérdidas', 'Tipos de ataque y quién pierde el balón');
-    pdfTable(doc, { title: 'Tipos de ataque (goles/tiros)', head: ATTACK_TYPE_HEAD, body: attackTypeTableRows(), startY: PDF_PAGE.top + 4, left: PDF_PAGE.margin, width: colW });
-    pdfTable(doc, { title: 'Pérdidas por jugador', head: TURNOVER_PLAYER_HEAD, body: turnoverPlayerRows(), startY: PDF_PAGE.top + 4, left: PDF_PAGE.margin + colW + 10, width: colW });
   }
   // Everything one player's page shows, from the events of any saved match. A goalkeeper has only the shots he faced.
   // The turnover, fault and timeline rows of a goalkeeper are not drawn by the PDF.
@@ -4485,10 +4530,440 @@ span.att-foot { visibility: hidden; }
     y = Math.max(yT, yD);
     pdfTable(doc, { title: 'Cronología', head: ['Min', 'Acción'], body: report.timeline.length ? report.timeline : [[PDF_EMPTY, 'Sin acciones']], startY: y, left: PDF_PAGE.rightX });
   }
-  function buildPdf(kind) {
-    const doc = pdfNewDoc();
+  // ---- Match report: a 5-page A4 dashboard in HTML, drawn in an isolated frame and rasterised page by page ----
+  // The report always prints light: the map tokens and the rating bands are read from the light theme. Our colour is the
+  // team's brand; the rival's is a fixed blue checked against the brand red for colour-blind separation.
+  const REPORT_COLOURS = {
+    them: '#2f5d9e', ink: '#151515', muted: '#5f5b57', faint: '#8a8580', grid: '#e4e1dd', soft: '#f4f2ef', zebra: '#faf9f7',
+    axis: '#bdb8b2', zero: '#c9c4be', good: '#0ca30c', goodInk: '#087a08', warn: '#fab219', warnInk: '#9a6400', bad: '#d03b3b',
+    goal: '#1f9d55', save: '#2563eb', bandGood: '#dff3df', bandWarn: '#fdf1d6', bandBad: '#f9e0e0'
+  };
+  const REPORT_PAGES = 5;
+  // Pixels per CSS pixel when a page is rasterised, and the JPEG quality of each page image: sharp text at ~0.5 MB a page.
+  const REPORT_RENDER_SCALE = 2, REPORT_JPEG_QUALITY = 0.9;
+  const REPORT_FONT_URL = 'https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@600;700;800&display=swap';
+  const REPORT_MAP_TOKENS = ['--court', '--area', '--court-line', '--goal-face', '--net', '--parada', '--fallo', '--gol', '--red', '--surface', '--dorsal-ink', '--font-display', '--font-body'];
+  const REPORT_KEY_MOMENT_MIN_POINTS = 0.9, REPORT_KEY_MOMENTS_FIELD = 7, REPORT_KEY_POINTS_SHOWN = 4;
+  // The light-theme value of some CSS tokens, whatever theme the screen is in.
+  function lightTokens(names) {
+    const root = document.documentElement, theme = root.getAttribute('data-theme');
+    root.setAttribute('data-theme', 'light');
+    try {
+      const css = getComputedStyle(root);
+      return Object.fromEntries(names.map((n) => [n, css.getPropertyValue(n).trim()]));
+    } finally {
+      if (theme == null) root.removeAttribute('data-theme'); else root.setAttribute('data-theme', theme);
+    }
+  }
+  // A colour faded toward white, keeping `share` of itself, as rgb(): the rasteriser cannot read color-mix().
+  const mixWithWhite = (hex, share) => `rgb(${hexToRgb(hex).map((c) => Math.round(c * share + 255 * (1 - share))).join(',')})`;
+  const PCT_POINTS = ' pts';
+
+  // The whole report as one HTML document for the current match (`state`).
+  function matchReportDocument() {
+    const C = { ...REPORT_COLOURS, us: team.brand }, s = state, half = CONFIG.halfSeconds, block = CONFIG.scoreIntervalSeconds;
+    const tokens = lightTokens([...REPORT_MAP_TOKENS, ...CONFIG.rating.bands.map(([, , cls]) => `--${cls.replace('rt-', 'rating-')}`)]);
+    const bandColour = (value) => (value == null ? C.faint : tokens[`--${ratingBand(value).replace('rt-', 'rating-')}`]);
+    // The same figures over a part of the match: liveStats reads `state`, so it runs on a copy with only those events.
+    const statsOf = (keep) => { const saved = state; state = { ...saved, events: saved.events.filter(keep) }; try { return liveStats(); } finally { state = saved; } };
+    const firstHalf = (e) => e.abs < half, secondHalf = (e) => e.abs >= half, wholeMatch = () => true;
+    const halves = [['1ª parte', firstHalf], ['2ª parte', secondHalf], ['Partido', wholeMatch]].map(([label, keep]) => ({ label, st: statsOf(keep), sc: score(s.events.filter(keep)) }));
+    const total = halves[2].st, sc = halves[2].sc, ht = halves[0].sc, { us, them } = total;
+    const status = (value, key) => ({ 'r-good': ['good', '▲', 'en objetivo'], 'r-warn': ['warn', '●', 'mejorable'], 'r-bad': ['bad', '▼', 'por debajo'], 'r-none': ['none', '', ''] })[rate(value, key)];
+    const statusChip = (value, key) => { const [cls, icon, text] = status(value, key); return cls === 'none' ? '' : `<span class="st st-${cls}">${icon} ${text}</span>`; };
+    const legend = `<span class="lg"><i style="background:${C.us}"></i>${esc(s.us)}</span><span class="lg"><i style="background:${C.them}"></i>${esc(s.them)}</span>`;
+    const points = (v) => signedText(roundHalfUp(v, CONFIG.rating.decimals));
+
+    // ---- KPI cards: the final value, the one at half-time, the target bullet and the rival ----
+    function bullet(value, key) {
+      if (value == null) return '';
+      const [good, poor, dir] = CONFIG.targets[key];
+      const max = dir === 'lower' ? Math.max(40, value) : PERCENT;
+      const x = (v) => `${(Math.min(v, max) / max) * PERCENT}%`;
+      const band = (from, to, colour) => `<i style="left:${from};${to ? `width:calc(${to} - ${from})` : 'right:0'};background:${colour}"></i>`;
+      const bands = dir === 'lower'
+        ? band('0%', x(good), C.bandGood) + band(x(good), x(poor), C.bandWarn) + band(x(poor), null, C.bandBad)
+        : band('0%', x(poor), C.bandBad) + band(x(poor), x(good), C.bandWarn) + band(x(good), null, C.bandGood);
+      return `<div class="bullet">${bands}<b style="width:${x(value)}"></b><em style="left:${x(good)}"></em></div>`;
+    }
+    function kpiCard({ label, value, unit = '', key = null, detail, rival = null, atHalf, lower = false }) {
+      const delta = typeof value === 'number' && typeof atHalf === 'number' ? value - atHalf : null;
+      const better = !delta ? null : (delta > 0) !== lower;
+      const split = atHalf == null ? '' : `<div class="kpi-ht"><span>Descanso <b>${esc(atHalf)}${unit}</b></span><i class="${better == null ? '' : better ? 'up' : 'down'}">${better == null ? '→' : better ? '▲' : '▼'}</i><span>Final <b>${value == null ? '–' : esc(value)}${unit}</b></span></div>`;
+      const numeric = typeof value === 'number' ? value : null;
+      return `<div class="kpi"><div class="kpi-label">${esc(label)}</div><div class="kpi-value">${value == null ? '–' : esc(value)}<small>${unit}</small></div>${split}
+        ${key ? bullet(numeric, key) : ''}<div class="kpi-detail">${esc(detail)}</div>
+        <div class="kpi-foot">${key ? statusChip(numeric, key) : ''}${rival ? `<span class="rv">Rival ${esc(rival)}</span>` : ''}</div></div>`;
+    }
+    const htSt = halves[0].st, inFirst = (list) => list.filter(firstHalf).length;
+    const kpis = [
+      { label: 'Acierto en el tiro', value: us.shooting, unit: '%', key: 'shooting', detail: `${us.goals} goles de ${us.shots} tiros`, rival: pctText(them.shooting), atHalf: htSt.us.shooting },
+      { label: 'Eficacia en ataque', value: us.attack, unit: '%', key: 'attack', detail: `${us.goals} goles en ${us.possessions} posesiones`, rival: pctText(them.attack), atHalf: htSt.us.attack },
+      { label: 'Paradas', value: them.savedPct, unit: '%', key: 'gk', detail: `${them.saved} de ${them.onTarget} a puerta`, rival: pctText(us.savedPct), atHalf: htSt.them.savedPct },
+      { label: 'Defensa', value: total.defense, unit: '%', key: 'defense', detail: 'ataques rivales sin gol', atHalf: htSt.defense },
+      { label: 'Pérdidas', value: us.turnoverPct, unit: '%', key: 'turnovers', detail: `${us.turnovers} en ${us.possessions} posesiones`, atHalf: htSt.us.turnoverPct, lower: true },
+      { label: "Exclusiones 2'", value: `${exclusionEvents().length}–${rivalExclusionEvents().length}`, detail: `${s.us} – ${s.them}`, atHalf: `${inFirst(exclusionEvents())}–${inFirst(rivalExclusionEvents())}` }
+    ].map(kpiCard).join('');
+
+    // ---- Score charts: each team's goals, the difference, the 5' partials ----
+    // Every goal, including the ones entered only as a score fix, as { abs, us, d }.
+    const goals = s.events.filter((e) => ((e.kind === 'SHOT' || e.kind === 'RIVAL_SHOT') && e.result === 'GOL') || e.kind === 'SCORE_FIX')
+      .map((e) => (e.kind === 'SCORE_FIX' ? { abs: e.abs, us: e.team === 'us', d: e.delta } : { abs: e.abs, us: e.kind === 'SHOT', d: 1 })).sort((a, b) => a.abs - b.abs);
+    const end = Math.max(2 * half, ...s.events.map((e) => e.abs));
+    const minuteTicks = (X, y) => Array.from({ length: Math.floor(end / SECONDS_PER_MINUTE / 5) + 1 }, (_, i) => `<text x="${X(i * 5 * SECONDS_PER_MINUTE)}" y="${y}" class="ax" text-anchor="middle">${i * 5}'</text>`).join('');
+    const breakLine = (X, top, bottom, label, labelY) => `<line x1="${X(half)}" x2="${X(half)}" y1="${top}" y2="${bottom}" stroke="${C.faint}" stroke-dasharray="4 4"/><text x="${X(half) + 6}" y="${labelY}" class="ax">${label}</text>`;
+    function runningSvg() {
+      const W = 1000, H = 250, left = 40, right = 70, top = 14, bottom = 26, most = Math.max(4, sc.us, sc.them);
+      const X = (t) => left + (t / end) * (W - left - right), Y = (g) => top + (1 - g / most) * (H - top - bottom);
+      const path = (ours) => {
+        let g = 0, d = `M${X(0)},${Y(0)}`;
+        goals.filter((x) => x.us === ours).forEach((x) => { d += `L${X(x.abs).toFixed(1)},${Y(g)}`; g += x.d; d += `L${X(x.abs).toFixed(1)},${Y(g).toFixed(1)}`; });
+        return `${d}L${X(end)},${Y(g)}`;
+      };
+      const grid = Array.from({ length: Math.floor(most / 5) + 1 }, (_, i) => i * 5).map((g) => `<line x1="${left}" x2="${W - right}" y1="${Y(g)}" y2="${Y(g)}" stroke="${C.grid}"/><text x="${left - 8}" y="${Y(g) + 4}" class="ax" text-anchor="end">${g}</text>`).join('');
+      const apart = sc.us === sc.them ? 9 : 0, endLabel = (g, colour, dy) => `<text x="${X(end) + 8}" y="${Y(g) + 5 + dy}" class="lead" fill="${colour}">${g}</text>`;
+      return `<svg viewBox="0 0 ${W} ${H}" class="chart">${grid}${breakLine(X, top, H - bottom, `Descanso ${ht.us}–${ht.them}`, top + 12)}
+        <path d="${path(false)}" fill="none" stroke="${C.them}" stroke-width="3" stroke-linejoin="round"/><path d="${path(true)}" fill="none" stroke="${C.us}" stroke-width="3" stroke-linejoin="round"/>
+        ${endLabel(sc.us, C.us, -apart)}${endLabel(sc.them, C.them, apart)}${minuteTicks(X, H - 6)}</svg>`;
+    }
+    function differenceSvg() {
+      const W = 1000, H = 210, left = 40, right = 16, top = 16, bottom = 28;
+      let diff = 0, widest = 1;
+      const pts = [[0, 0]];
+      goals.forEach((g) => { pts.push([g.abs, diff]); diff += g.us ? g.d : -g.d; pts.push([g.abs, diff]); widest = Math.max(widest, Math.abs(diff)); });
+      pts.push([end, diff]);
+      const lim = Math.max(3, widest + 1);
+      const X = (t) => left + (t / end) * (W - left - right), Y = (d) => top + ((lim - d) / (2 * lim)) * (H - top - bottom);
+      const line = pts.map(([t, d], i) => `${i ? 'L' : 'M'}${X(t).toFixed(1)},${Y(d).toFixed(1)}`).join('');
+      const area = (ahead) => `<clipPath id="rp-${ahead ? 'ahead' : 'behind'}"><rect x="0" y="${ahead ? 0 : Y(0)}" width="${W}" height="${ahead ? Y(0) : H}"/></clipPath>
+        <path d="${line}L${X(end)},${Y(0)}L${X(0)},${Y(0)}Z" fill="${ahead ? C.us : C.them}" opacity=".16" clip-path="url(#rp-${ahead ? 'ahead' : 'behind'})"/>`;
+      const grid = [];
+      for (let d = -lim + (lim % 2); d <= lim; d += 2) grid.push(`<line x1="${left}" x2="${W - right}" y1="${Y(d)}" y2="${Y(d)}" stroke="${d ? C.grid : C.axis}" stroke-width="${d ? 1 : 1.5}"/><text x="${left - 8}" y="${Y(d) + 4}" class="ax" text-anchor="end">${d > 0 ? '+' : ''}${d}</text>`);
+      const exclusions = [...exclusionEvents().map((e) => [e, C.us]), ...rivalExclusionEvents().map((e) => [e, C.them])]
+        .map(([e, colour]) => `<rect x="${X(e.abs) - 5}" y="${top - 2}" width="10" height="12" rx="2" fill="${colour}"/><text x="${X(e.abs)}" y="${top + 7}" class="exl">2'</text>`).join('');
+      return `<svg viewBox="0 0 ${W} ${H}" class="chart">${grid.join('')}${area(true)}${area(false)}${breakLine(X, top, H - bottom, `Descanso ${ht.us}–${ht.them}`, H - bottom - 6)}
+        <path d="${line}" fill="none" stroke="${C.ink}" stroke-width="2"/>${minuteTicks(X, H - 8)}${exclusions}
+        <text x="${left + 6}" y="${top + 26}" class="lead" fill="${C.us}">▲ Gana ${esc(s.us)}</text><text x="${left + 6}" y="${H - bottom - 8}" class="lead" fill="${C.them}">▼ Gana ${esc(s.them)}</text></svg>`;
+    }
+    const blocks = Array.from({ length: Math.ceil(end / block) }, (_, i) => {
+      const from = i * block, to = (i + 1) * block, last = to >= end, inside = (abs) => abs >= from && (abs < to || (last && abs <= to));
+      const mine = goals.filter((g) => inside(g.abs));
+      return { label: `${from / SECONDS_PER_MINUTE}-${to / SECONDS_PER_MINUTE}'`, us: sumOf(mine.filter((g) => g.us), (g) => g.d), them: sumOf(mine.filter((g) => !g.us), (g) => g.d),
+        run: score(s.events.filter((e) => e.abs < to || (last && e.abs <= to))) };
+    });
+    function partialsSvg() {
+      const W = 1000, H = 200, left = 56, top = 22, mid = 100, unit = 13, width = (W - left - 16) / blocks.length;
+      const cells = blocks.map((b, i) => {
+        const x = left + i * width, cx = x + width / 2, w = width * 0.34, diff = b.us - b.them;
+        const winner = diff > 0 ? C.us : diff < 0 ? C.them : C.faint;
+        return `${i === blocks.length / 2 ? `<line x1="${x}" x2="${x}" y1="${top - 14}" y2="${H - 6}" stroke="${C.faint}" stroke-dasharray="4 4"/>` : ''}
+          <rect x="${cx - w - 2}" y="${mid - b.us * unit}" width="${w}" height="${b.us * unit}" rx="3" fill="${C.us}"/><rect x="${cx + 2}" y="${mid - b.them * unit}" width="${w}" height="${b.them * unit}" rx="3" fill="${C.them}"/>
+          <text x="${cx - w / 2 - 2}" y="${mid - b.us * unit - 5}" class="val" text-anchor="middle">${b.us}</text><text x="${cx + w / 2 + 2}" y="${mid - b.them * unit - 5}" class="val" text-anchor="middle">${b.them}</text>
+          <text x="${cx}" y="${mid + 18}" class="ax" text-anchor="middle">${b.label}</text><rect x="${cx - 26}" y="${mid + 28}" width="52" height="22" rx="11" fill="${winner}" opacity=".14"/>
+          <text x="${cx}" y="${mid + 43}" class="part" text-anchor="middle" fill="${diff ? winner : C.muted}">${diff > 0 ? '+' : ''}${diff}</text><text x="${cx}" y="${mid + 70}" class="run" text-anchor="middle">${b.run.us}–${b.run.them}</text>`;
+      }).join('');
+      return `<svg viewBox="0 0 ${W} ${H}" class="chart"><line x1="${left}" x2="${W - 16}" y1="${mid}" y2="${mid}" stroke="${C.axis}"/><text x="0" y="${mid + 43}" class="ax">Parcial</text><text x="0" y="${mid + 70}" class="ax">Marcador</text>${cells}</svg>`;
+    }
+
+    // ---- Halves: the same indicators per half, the change and its direction ----
+    const zoneOf = (side, id) => side.zones.find((z) => z.id === id);
+    const zoneRow = (label, id) => [label, (h) => zoneOf(h.st.us, id).pct, id, (h) => `${zoneOf(h.st.us, id).GOL}/${zoneOf(h.st.us, id).att}`, 'sub'];
+    const halfRows = [
+      ['Goles', (h) => h.sc.us], ['Goles encajados', (h) => h.sc.them, null, null, 'count-lower'],
+      ['Acierto en el tiro', (h) => h.st.us.shooting, 'shooting', (h) => `${h.st.us.goals}/${h.st.us.shots}`],
+      zoneRow('desde 6 m', '6M'), zoneRow('desde 9 m', '9M'), zoneRow('penaltis (7 m)', '7M'),
+      ['Eficacia en ataque', (h) => h.st.us.attack, 'attack', (h) => `${h.st.us.goals}/${h.st.us.possessions}`],
+      ['Pérdidas', (h) => h.st.us.turnoverPct, 'turnovers', (h) => `${h.st.us.turnovers}/${h.st.us.possessions}`],
+      ['Paradas', (h) => h.st.them.savedPct, 'gk', (h) => `${h.st.them.saved}/${h.st.them.onTarget}`],
+      ['Defensa', (h) => h.st.defense, 'defense', (h) => `${h.st.them.possessions - h.st.them.goals}/${h.st.them.possessions}`],
+      ['Acierto del rival', (h) => h.st.them.shooting, null, (h) => `${h.st.them.goals}/${h.st.them.shots}`, 'pct-lower']
+    ];
+    const isPct = (key, kind) => Boolean(key) || kind === 'pct-lower';
+    function halvesTable() {
+      const cell = (h, [, get, key, detail, kind]) => {
+        const v = get(h), [cls] = key ? status(v, key) : ['none'];
+        return `<td class="hv"><span class="dot dot-${cls}"></span><b>${v == null ? '–' : v}${isPct(key, kind) && v != null ? '%' : ''}</b>${detail ? `<small>${detail(h)}</small>` : ''}</td>`;
+      };
+      const change = ([, get, key, , kind]) => {
+        const a = get(halves[0]), b = get(halves[1]);
+        if (a == null || b == null) return '<td></td>';
+        const d = b - a, lower = (key && CONFIG.targets[key][2] === 'lower') || (kind || '').endsWith('lower'), better = d === 0 ? null : (d > 0) !== lower;
+        return `<td class="dl ${better == null ? '' : better ? 'up' : 'down'}">${d > 0 ? '+' : ''}${d}${isPct(key, kind) ? PCT_POINTS : ''} ${better == null ? '=' : better ? '▲' : '▼'}</td>`;
+      };
+      return `<table class="halves"><thead><tr><th></th>${halves.map((h) => `<th>${h.label}</th>`).join('')}<th>2ª vs 1ª</th></tr></thead>
+        <tbody>${halfRows.map((r) => `<tr class="${r[4] === 'sub' ? 'sub' : ''}"><td class="rl">${r[4] === 'sub' ? '· ' : ''}${r[0]}</td>${halves.map((h) => cell(h, r)).join('')}${change(r)}</tr>`).join('')}</tbody></table>`;
+    }
+
+    // ---- Head to head and shooting by situation ----
+    const penaltiesOf = (list) => list.filter((e) => e.zone === '7M');
+    const fastBreakGoals = (ours) => goalsIn(ours ? ourShots().filter((e) => e.zone === ZONE_CONTRA) : rivalShots().filter((e) => e.contra));
+    function headToHead() {
+      const pens = [penaltiesOf(ourShots()), penaltiesOf(rivalShots())];
+      const rows = [['Lanzamientos', us.shots, them.shots], ['Goles', us.goals, them.goals], ['Paradas del portero', them.saved, us.saved],
+        ['Pérdidas', us.turnovers, them.turnovers], ['Goles de contraataque', fastBreakGoals(true), fastBreakGoals(false)],
+        ['Penaltis lanzados', pens[0].length, pens[1].length, gt(pens[0]), gt(pens[1])], ["Exclusiones 2'", exclusionEvents().length, rivalExclusionEvents().length]];
+      return `<div class="duel"><div class="duel-head"><span style="color:${C.us}">${esc(s.us)}</span><span></span><span style="color:${C.them}">${esc(s.them)}</span></div>
+        ${rows.map(([label, a, b, textA, textB]) => { const most = Math.max(a, b, 1); return `<div class="drow"><span class="dv">${textA || a}</span><div class="dbar l"><i style="width:${(a / most) * PERCENT}%;background:${C.us}"></i></div>
+          <span class="dlabel">${label}</span><div class="dbar r"><i style="width:${(b / most) * PERCENT}%;background:${C.them}"></i></div><span class="dv">${textB || b}</span></div>`; }).join('')}</div>`;
+    }
+    function shootingRadarSvg() {
+      const axes = [['Tiro total', (st) => st.shooting], ['Desde 6 m', (st) => zoneOf(st, '6M').pct], ['Desde 9 m', (st) => zoneOf(st, '9M').pct],
+        ['Penaltis', (st) => zoneOf(st, '7M').pct], ['Contraataque', (st) => zoneOf(st, ZONE_CONTRA).pct], ['Eficacia ataque', (st) => st.attack]];
+      const S = 340, c = S / 2, rad = 112;
+      const at = (i, f) => { const a = -Math.PI / 2 + (2 * Math.PI * i) / axes.length; return [c + Math.cos(a) * rad * f, c + Math.sin(a) * rad * f]; };
+      const rings = [0.25, 0.5, 0.75, 1].map((f) => `<polygon points="${axes.map((_, i) => at(i, f).join(',')).join(' ')}" fill="none" stroke="${C.grid}"/>`).join('');
+      const spokes = axes.map((_, i) => `<line x1="${c}" y1="${c}" x2="${at(i, 1)[0]}" y2="${at(i, 1)[1]}" stroke="${C.grid}"/>`).join('');
+      const shape = (st, colour) => `<polygon points="${axes.map(([, get], i) => at(i, (get(st) || 0) / PERCENT).join(',')).join(' ')}" fill="${colour}" fill-opacity=".14" stroke="${colour}" stroke-width="2" stroke-linejoin="round"/>
+        ${axes.map(([, get], i) => { const [x, y] = at(i, (get(st) || 0) / PERCENT); return `<circle cx="${x}" cy="${y}" r="4" fill="${colour}" stroke="#fff" stroke-width="2"/>`; }).join('')}`;
+      const labels = axes.map(([name, get], i) => { const [x, y] = at(i, 1.3); return `<text x="${x}" y="${y - 6}" class="rl2" text-anchor="middle">${name}</text>
+        <text x="${x}" y="${y + 9}" class="rv2" text-anchor="middle"><tspan fill="${C.us}">${pctText(get(us))}</tspan> · <tspan fill="${C.them}">${pctText(get(them))}</tspan></text>`; }).join('');
+      return `<svg viewBox="-40 -10 ${S + 80} ${S + 20}" class="radar">${rings}${spokes}${shape(them, C.them)}${shape(us, C.us)}${labels}<text x="${c + 4}" y="${c - rad / 2 - 2}" class="ax">50%</text><text x="${c + 4}" y="${c - rad - 2}" class="ax">100%</text></svg>`;
+    }
+
+    // ---- Shots: two goal drawings per team (in / not in), the zones and where the goals and saves went ----
+    function goalFaceGrid(shots, group, colour, title) {
+      const grid = goalGrid(shots, group), onFace = Array.from({ length: GOAL_GRID }, () => Array(GOAL_GRID).fill(0)), most = Math.max(1, ...grid.flat());
+      shots.filter((e) => groupOf(e.result) !== 'FALLO' && inGoalFace(e.target)).forEach((e) => { const [r, c] = goalCell(e.target); onFace[r][c]++; });
+      const cell = (n, r, c) => `<div style="background:${n ? mixWithWhite(colour, (20 + (n / most) * 70) / PERCENT) : C.soft};color:${n / most > 0.55 ? '#fff' : C.ink}"><b>${n}</b><small>${onFace[r][c] ? `de ${onFace[r][c]}` : ''}</small></div>`;
+      return `<div class="heat"><div class="heat-t">${title}</div><div class="heat-g">${grid.map((row, r) => row.map((n, c) => cell(n, r, c)).join('')).join('')}</div></div>`;
+    }
+    const zoneBars = (st, colour) => `<div class="zbars">${st.zones.filter((z) => z.att).map((z) => `<div class="zb"><span>${ZONES[z.id]}</span><div class="zt"><i style="width:${z.pct}%;background:${colour}"></i></div><span><b>${z.pct}%</b> ${z.GOL}/${z.att}</span></div>`).join('')}</div>`;
+    function shotPanel(title, shots, viewKey, st, colour, savedTitle) {
+      const c = countGroups(shots), mapColours = MAP_VIEWS[viewKey].colors, ours = viewKey === 'US';
+      const drawing = (list, caption, keys) => `<figure class="goalmap"><figcaption>${caption}</figcaption>${shotMapSvg(list, viewKey, null)}
+        <div class="mlg">${keys.map(([k, label]) => `<span><i style="background:${mapColours[k]}"></i>${label} <b>${c[k]}</b></span>`).join('')}</div></figure>`;
+      const scored = shots.filter((e) => groupOf(e.result) === 'GOL'), notIn = shots.filter((e) => groupOf(e.result) !== 'GOL');
+      return `<section class="shots"><h3 style="border-color:${colour}">${title}<span>${st.goals}/${st.shots} · ${pctText(st.shooting)}</span></h3>
+        <div class="maps2">${drawing(scored, `${ours ? 'Goles marcados' : 'Goles encajados'} · ${c.GOL}`, [['GOL', ours ? 'Gol' : 'Gol encajado']])}
+          ${drawing(notIn, `${ours ? 'Parados y fuera' : 'Paradas y fuera'} · ${c.PARADA + c.FALLO}`, [['PARADA', ours ? 'Parado' : 'Parada nuestra'], ['FALLO', ours ? 'Fuera / palo / bloqueado' : 'Fuera / palo']])}</div>
+        <div class="side3">${zoneBars(st, colour)}${goalFaceGrid(shots, 'GOL', ours ? C.goal : C.bad, ours ? 'Dónde marcamos' : 'Dónde nos marcan')}${goalFaceGrid(shots, 'PARADA', C.save, savedTitle)}</div></section>`;
+    }
+
+    // ---- Ratings: the v5 points, where they come from, the key moments and the keepers ----
+    const seconds = minutesOnCourt(s), ratings = matchRatings(s), weights = ratingWeights();
+    const played = (p) => (seconds && seconds.get(p.id)) || eventsOf(p.id).length;
+    const ranked = rankedByRating(s, ratings, seconds).filter(played), mvp = matchMvp(s, ratings, seconds);
+    const widest = Math.max(4, ...ranked.map((p) => Math.abs(ratingValue(ratings, p) ?? 0)));
+    const minutesOf = (p) => (seconds ? minutesText(seconds.get(p.id) || 0) : '–');
+    function keyMomentsList() {
+      const keepers = new Set(goalkeepers().map((g) => g.id)), all = ranked.flatMap((p) => ratings.get(p.id).moments).filter((x) => x.factor > 1);
+      const big = (x) => Math.abs(x.value * POINTS_PER_GOAL) >= REPORT_KEY_MOMENT_MIN_POINTS;
+      const field = all.filter((x) => !keepers.has(x.id) && big(x)).sort((a, b) => Math.abs(b.value) - Math.abs(a.value)).slice(0, REPORT_KEY_MOMENTS_FIELD);
+      const keeper = all.filter((x) => keepers.has(x.id) && x.label !== 'Inicia contraataque');
+      const moments = [...field, ...keeper].sort((a, b) => a.abs - b.abs);
+      if (!moments.length) return '<p class="none">Sin momentos decisivos: el partido no llegó ajustado al final.</p>';
+      return `<ul class="kms">${moments.map((x) => { const v = x.value * POINTS_PER_GOAL; return `<li><span class="kt">${Math.floor(x.abs / SECONDS_PER_MINUTE)}'</span><span class="ks">${x.score.us}–${x.score.them}</span><b>${esc(playerById(x.id, s).name)}</b><span class="kl">${esc(x.label)} ×${decimalText(x.factor)}</span><span class="${v > 0 ? 'pos-v' : 'neg-v'}">${points(v)}</span></li>`; }).join('')}</ul>`;
+    }
+    function ratingRows() {
+      return ranked.map((p) => {
+        const r = ratings.get(p.id), value = r.value, colour = bandColour(value), o = outcomeOf(s, p), keeper = p.pos === 'POR';
+        const w = value == null ? 0 : (Math.abs(value) / widest) * 50;
+        const part = (v) => `<td class="${Math.abs(v) < RATING_LINE_MIN_POINTS ? 'z' : v > 0 ? 'pos-v' : 'neg-v'}">${Math.abs(v) < RATING_LINE_MIN_POINTS ? '·' : points(v)}</td>`;
+        const defence = (v) => (Math.abs(v) < RATING_LINE_MIN_POINTS ? part(v) : `<td class="${v > 0 ? 'pos-v' : 'neg-v'}">${points(v)}<small class="hh">${r.defenceHalves.map(points).join(' / ')}</small></td>`);
+        return `<tr><td class="num"><span class="pos" style="background:${posOf(p).color}"></span>${p.num}</td><td class="nm">${esc(p.name)}${keeper ? ' <small>POR</small>' : ''}</td>
+          <td class="rt"><div class="rtw"><div class="dbar2"><i style="${(value ?? 0) >= 0 ? 'left' : 'right'}:50%;width:${w}%;background:${colour}"></i></div><b>${ratingText(value)}</b></div></td>
+          <td class="bd" style="color:${colour}">${esc(ratingBandLabel(value))}</td><td>${minutesOf(p)}'</td><td class="strong">${o.made}/${o.tried}<small>${o.tried ? ` ${pct(o.made, o.tried)}%` : ''}</small></td>
+          ${RATING_LINES.map((l) => (l.key === 'defUnit' && !keeper && r.possessions.defence ? defence(r.lines.defUnit) : part(r.lines[l.key]))).join('')}</tr>`;
+      }).join('');
+    }
+    function keeperCards() {
+      return goalkeepers().filter(played).map((g) => {
+        const shots = gkShots(g.id), k = gkCounts(shots), p = pct(k.saved, k.onTarget), ring = ({ 'r-good': C.good, 'r-warn': C.warn, 'r-bad': C.bad })[rate(p, 'gk')] || C.faint;
+        const R2 = 34, around = 2 * Math.PI * R2;
+        const zone = (id, label) => { const z = gkCounts(shots.filter((e) => gkZoneOf(e) === id)); return z.onTarget ? `<li><span>${label}</span><b>${z.saved}/${z.onTarget}</b></li>` : ''; };
+        return `<div class="gk"><div class="gk-top"><svg viewBox="0 0 84 84" class="ring"><circle cx="42" cy="42" r="${R2}" fill="none" stroke="${C.grid}" stroke-width="9"/><circle cx="42" cy="42" r="${R2}" fill="none" stroke="${ring}" stroke-width="9" stroke-linecap="round" stroke-dasharray="${((p || 0) / PERCENT) * around} ${around}" transform="rotate(-90 42 42)"/><text x="42" y="47" text-anchor="middle" class="ring-t">${pctText(p)}</text></svg>
+          <div><div class="gk-name">#${g.num} ${esc(g.name)}</div><div class="gk-sub">${minutesOf(g)}' en pista · ${k.saved} paradas · ${k.conceded} goles</div>${statusChip(p, 'gk')}</div></div>
+          <ul class="gk-z">${SHEET_ZONES.map((id) => zone(id, ZONES[id])).join('')}</ul></div>`;
+      }).join('');
+    }
+    // The scale, worked out from the current weights so the note never drifts from the numbers.
+    function modelNote() {
+      // Up to two decimals, the trailing zeros dropped (0,45 · 1,5 · 2).
+      const exact = (v) => String(roundHalfUp(v, 2)).replace('.', ',');
+      const r = CONFIG.rating, b = r.possession, pts = (v) => exact(Math.abs(v) * POINTS_PER_GOAL), sign = (v) => `${v < 0 ? '−' : '+'}${pts(v)}`;
+      const shot = (z) => { const p = preShotGoal(z), creation = z === '7M' ? 0 : r.shooterCreationShare * (p - b); return `${ZONES[z]}: gol ${sign(1 - p + creation)}, fallo ${sign(-p + creation)}`; };
+      const kw = weights.keeperWeight;
+      return `<div class="model"><b>Cómo se puntúa.</b> Cada posesión vale lo que acabó dando (gol o no) menos lo que da una posesión media (${exact(b)} goles). Ese valor se reparte una sola vez: primero a quien la decide y lo que sobra entre los que estaban en pista. 1 gol aportado = ${POINTS_PER_GOAL} puntos.
+        <b>Tiro:</b> ${['6M', '9M', '7M'].map(shot).join(' · ')} (con la mitad de la ocasión creada). <b>Creación:</b> 7 m provocado ${sign(weights.oneOnOne)}, asistencia ${sign(weights.assist)}, iniciar un contraataque ${sign(weights.starter)}.
+        <b>Balón:</b> pérdida ${sign(-b)} (de reglamento ${sign(-(b - weights.ruleFaultDiscount))}; más si acaba en contraataque rival). <b>Def. individual:</b> recuperación ${sign(b)}, blocaje ${sign(weights.blocRetained)}, 7 m cometido y 1x1 superado ${sign(-weights.oneOnOne)}.
+        <b>Def. en pista:</b> lo que el rival consigue tirar a puerta mientras defiendes (lo que pasa después es cosa del portero), repartido entre los que estáis en pista. <b>Atq. en pista:</b> igual con nuestras posesiones.
+        <b>Portería:</b> goles evitados frente a lo esperable, al ${Math.round(kw * PERCENT)}% (parar en 6 m ${sign(r.pOn['6M'] * kw)}, encajar ${sign(-(1 - r.pOn['6M']) * kw)}; parar un 7 m ${sign(r.pOn['7M'] * kw)}).
+        <b>Disciplina:</b> el 2' cuesta lo que se perdió con uno menos; roja: eso, la conducta y el resto del partido sin el jugador. <b>Momento decisivo:</b> desde el ${r.context.closeFrom / SECONDS_PER_MINUTE}' con ±${r.context.closeMargin} goles cada acción vale ×${exact(weights.closeFactor)}; desde el ${r.context.lateFrom / SECONDS_PER_MINUTE}' con ±${r.context.lateMargin} ×${exact(weights.lateFactor)}; para bien y para mal.
+        <b>Resultado:</b> ±${pts(weights.result)} según la parte del partido jugada.
+        <span class="bands"><b>Valoración:</b> ${CONFIG.rating.bands.map(([from, label]) => `<span><i style="background:${bandColour(from === -Infinity ? -100 : from)}"></i>${label}${from > -Infinity ? ` ≥ ${signedText(from)}` : ''}</span>`).join('')}</span></div>`;
+    }
+
+    // ---- The full tables at the end ----
+    function fullStatsTable() {
+      const rows = [...fieldPlayers(), ...goalkeepers()].filter(played).map((p) => playerRow(p, s));
+      const sumColumn = (i) => {
+        const cells = rows.map((r) => String(r[i]));
+        if (cells.every((c) => /^\d+\/\d+$/.test(c))) return cells.reduce(([g, t], c) => { const [x, y] = c.split('/').map(Number); return [g + x, t + y]; }, [0, 0]).join('/');
+        return cells.every((c) => /^\d+$/.test(c)) ? sumOf(cells, Number) : '';
+      };
+      const totals = PLAYER_HEAD.map((h, i) => (i === 1 ? 'Equipo' : i === 0 || ['Min', '+/−'].includes(h) ? '' : sumColumn(i)));
+      const cell = (v, i) => { const t = String(v); return `<td class="${i === 1 ? 'nm' : ''}${t === '0' || t === '0/0' ? ' z' : ''}">${esc(t)}</td>`; };
+      return `<table class="players full"><thead><tr>${PLAYER_HEAD.map((h, i) => `<th class="${i === 1 ? 'nm' : ''}">${esc(h)}</th>`).join('')}</tr></thead>
+        <tbody>${rows.map((r) => `<tr>${r.map(cell).join('')}</tr>`).join('')}</tbody><tfoot><tr>${totals.map(cell).join('')}</tr></tfoot></table>`;
+    }
+    const simpleTable = (head, rows) => `<table class="players full">${head ? `<thead><tr>${head.map((h, i) => `<th class="${i === 0 ? 'nm' : ''}">${esc(h)}</th>`).join('')}</tr></thead>` : ''}
+      <tbody>${rows.map((r) => `<tr>${r.map((v, i) => `<td class="${i === 0 ? 'nm' : ''}${String(v) === '0' ? ' z' : ''}">${esc(v)}</td>`).join('')}</tr>`).join('')}</tbody></table>`;
+    const titled = (title, html) => `<div><h4>${title}</h4>${html}</div>`;
+    const countRowsOrNone = (counts) => (Object.keys(counts).length ? Object.entries(counts) : [['Ninguno', '']]);
+
+    // ---- Pages ----
+    const best = mvp.id ? playerById(mvp.id, s) : null, scorer = total.top, k = keyPoints();
+    const pointList = (list) => list.slice(0, REPORT_KEY_POINTS_SHOWN).map((i) => `<li class="kp-${i.tone}"><span>${i.tone === 'good' ? '✓' : '!'}</span>${esc(i.text)}</li>`).join('') || '<li>Sin puntos destacados.</li>';
+    const header = (title) => `<header><div><div class="ttl">${title}</div><div class="meta">${esc([matchDateText(), s.venue].filter(Boolean).join(' · '))}</div></div>
+      <div class="score"><span class="tm">${esc(s.us)}</span><span class="big" style="color:${C.us}">${sc.us}</span><span class="dash">–</span><span class="big" style="color:${C.them}">${sc.them}</span><span class="tm">${esc(s.them)}</span><span class="htx">Descanso ${ht.us}–${ht.them}</span></div></header>`;
+    const page = (n, title, body) => `<div class="page">${header(title)}<main>${body}</main><footer><span>HBStats · ${esc(s.us)} – ${esc(s.them)}</span><span>${n} / ${REPORT_PAGES}</span></footer></div>`;
+    const pages = [
+      page(1, 'Informe del partido', `<div class="kpis">${kpis}</div>
+        <div class="row"><div class="col grow">
+          <section class="card"><h2>Goles de cada equipo <small>marcador acumulado minuto a minuto · ${legend}</small></h2>${runningSvg()}</section>
+          <section class="card"><h2>Diferencia en el marcador <small>quién va por delante · 2' = exclusión</small></h2>${differenceSvg()}</section></div>
+          <section class="card kp"><h2>Claves del partido</h2><h4>Defensa</h4><ul class="kps">${pointList(k.defence)}</ul><h4>Ataque</h4><ul class="kps">${pointList(k.attack)}</ul></section></div>`),
+      page(2, 'Primera parte frente a segunda', `<div class="row"><div class="col grow">
+          <section class="card"><h2>Indicadores por parte <small><span class="dot dot-good"></span>objetivo <span class="dot dot-warn"></span>mejorable <span class="dot dot-bad"></span>por debajo</small></h2>${halvesTable()}</section>
+          <section class="card"><h2>Goles cada 5 minutos <small>parcial de cada tramo y marcador al cerrarlo · ${legend}</small></h2>${partialsSvg()}</section></div>
+        <div class="col"><section class="card"><h2>Cara a cara</h2>${headToHead()}</section><section class="card"><h2>Acierto por situación <small>${legend}</small></h2>${shootingRadarSvg()}</section></div></div>`),
+      page(3, 'Lanzamientos y porteros', `<div class="row two">${shotPanel(`Nuestros lanzamientos · ${esc(s.us)}`, ourShots(), 'US', us, C.us, 'Dónde nos para')}
+          ${shotPanel(`Lanzamientos del rival · ${esc(s.them)}`, rivalShots(), 'GK', them, C.them, 'Dónde paramos')}</div>
+        <div class="row"><section class="card grow"><h2>Porteros</h2><div class="gks">${keeperCards()}</div></section>
+          <section class="card kmc"><h2>Momentos clave <small>acciones con más peso por el marcador y el minuto</small></h2>${keyMomentsList()}</section>
+          <section class="card"><h2>Destacados</h2><div class="stars">${best ? `<div><small>${mvp.source === MVP_SOURCE.coach ? 'MVP del entrenador' : 'MVP · más puntos'}</small><b>#${best.num} ${esc(best.name)}</b><span>${ratingText(ratingValue(ratings, best))} pts</span></div>` : ''}${scorer ? `<div><small>Máximo goleador</small><b>#${scorer.p.num} ${esc(scorer.p.name)}</b><span>${plural(scorer.n, 'gol', 'goles')}</span></div>` : ''}</div></section></div>`),
+      page(4, 'Puntuación de jugadores', `<section class="card"><h2>Puntuación · goles aportados <small>0 = lo que daría un jugador medio en las mismas posesiones · misma escala para porteros y jugadores de campo</small></h2>
+        <table class="players"><thead><tr><th rowspan="2">Nº</th><th rowspan="2" class="nm">Jugador</th><th rowspan="2">Puntos</th><th rowspan="2">Valoración</th><th rowspan="2">Min</th><th rowspan="2">Gol/Tiro</th><th colspan="${RATING_LINES.length}" class="grp">De dónde salen los puntos</th></tr>
+        <tr>${RATING_LINES.map((l) => `<th>${l.label}${l.key === 'defUnit' ? '<small>1ª / 2ª</small>' : ''}</th>`).join('')}</tr></thead><tbody>${ratingRows()}</tbody></table>${modelNote()}</section>`),
+      page(5, 'Estadísticas completas', `<section class="card"><h2>Todos los jugadores <small>goles/tiros por zona y todas las acciones registradas · fila final: total del equipo</small></h2>${fullStatsTable()}</section>
+        <div class="row"><section class="card" style="flex: 2.2"><h2>Porteros por zona</h2><div class="gkz">${goalkeepers().filter(played).map((g) => titled(`#${g.num} ${esc(g.name)}`, simpleTable(['Zona', 'Tiros', 'A puerta', 'Par.', 'Gol', '%'], gkZoneRows(gkShots(g.id))))).join('')}</div></section>
+          <div class="col" style="flex: 1.4"><section class="card"><h2>Tipos de ataque <small>goles/tiros</small></h2>${simpleTable(['Tipo', 'Nuestro', '%', 'Rival', '%'], attackTypeTableRows())}</section>
+            <section class="card"><h2>Fallos defensivos</h2>${simpleTable(null, countRowsOrNone(defFaultCounts(s.events)))}</section></div>
+          <section class="card grow"><h2>Pérdidas por jugador</h2>${simpleTable(TURNOVER_PLAYER_HEAD.slice(1), turnoverPlayerRows().map((r) => r.slice(1)))}</section></div>`)
+    ];
+    const vars = REPORT_MAP_TOKENS.map((n) => `${n}: ${tokens[n]};`).join(' ');
+    return `<!doctype html><html lang="es"><head><meta charset="utf-8"><link rel="stylesheet" href="${REPORT_FONT_URL}">
+      <style>:root { ${vars} } ${reportCss(C)}</style></head><body>${pages.join('')}</body></html>`;
+  }
+  // The report's own sheet (it lives in its own frame, so nothing from the app's CSS reaches it).
+  const reportCss = (C) => `
+* { box-sizing: border-box; }
+html, body { margin: 0; background: #fff; color: ${C.ink}; font-family: var(--font-body); }
+.page { width: 297mm; height: 210mm; padding: 9mm 11mm 7mm; display: flex; flex-direction: column; overflow: hidden; background: #fff; }
+header { display: flex; justify-content: space-between; align-items: center; border-bottom: 3px solid ${C.us}; padding-bottom: 3mm; margin-bottom: 4mm; }
+.ttl { font: 700 22px var(--font-display); letter-spacing: .3px; text-transform: uppercase; }
+.meta { color: ${C.muted}; font-size: 11px; margin-top: 2px; }
+.score { display: flex; align-items: baseline; gap: 8px; font-family: var(--font-display); }
+.score .tm { font-weight: 600; font-size: 16px; } .score .big { font-weight: 800; font-size: 34px; line-height: 1; } .score .dash { font-size: 26px; color: ${C.faint}; }
+.score .htx { font: 11px var(--font-body); color: ${C.muted}; margin-left: 10px; }
+main { flex: 1; display: flex; flex-direction: column; gap: 4mm; min-height: 0; }
+footer { display: flex; justify-content: space-between; font-size: 9px; color: ${C.faint}; padding-top: 2mm; }
+.row { display: flex; gap: 4mm; min-height: 0; } .row > * { min-width: 0; } .col { display: flex; flex-direction: column; gap: 4mm; min-width: 0; } .grow { flex: 1; } .row.two > * { flex: 1; }
+.card { background: #fff; border: 1px solid ${C.grid}; border-radius: 10px; padding: 3mm 4mm; }
+h2 { margin: 0 0 2mm; font: 700 14px var(--font-display); text-transform: uppercase; letter-spacing: .4px; display: flex; gap: 10px; align-items: baseline; flex-wrap: wrap; }
+h2 small { font: 400 10px var(--font-body); color: ${C.muted}; text-transform: none; letter-spacing: 0; display: inline-flex; gap: 10px; align-items: center; }
+h4 { margin: 2mm 0 1mm; font-size: 11px; color: ${C.muted}; text-transform: uppercase; letter-spacing: .5px; }
+.none { margin: 0; font-size: 11px; color: ${C.muted}; }
+.kpis { display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); gap: 3mm; }
+.kpi { border: 1px solid ${C.grid}; border-radius: 10px; padding: 3mm 3.5mm; display: flex; flex-direction: column; gap: 1.5mm; }
+.kpi-label { font-size: 10px; text-transform: uppercase; letter-spacing: .5px; color: ${C.muted}; font-weight: 600; }
+.kpi-value { white-space: nowrap; font: 800 34px/1 var(--font-display); } .kpi-value small { font-size: 18px; color: ${C.muted}; margin-left: 2px; }
+.kpi-ht { white-space: nowrap; display: flex; align-items: baseline; gap: 3px; font-size: 9px; color: ${C.muted}; } .kpi-ht b { color: ${C.ink}; font-size: 11px; }
+.kpi-ht i { font-style: normal; font-weight: 800; } .kpi-ht i.up { color: ${C.goodInk}; } .kpi-ht i.down { color: ${C.bad}; }
+.kpi-detail { font-size: 10px; color: ${C.muted}; } .kpi-foot { display: flex; justify-content: space-between; align-items: center; font-size: 10px; margin-top: auto; }
+.rv { color: ${C.them}; font-weight: 600; }
+.bullet { position: relative; height: 9px; border-radius: 5px; overflow: hidden; background: ${C.soft}; }
+.bullet i { position: absolute; top: 0; bottom: 0; } .bullet b { position: absolute; left: 0; top: 2.5px; height: 4px; background: ${C.ink}; border-radius: 2px; }
+.bullet em { position: absolute; top: 0; bottom: 0; width: 2px; background: ${C.ink}; opacity: .55; }
+.st { font-weight: 700; font-size: 9.5px; } .st-good { color: ${C.goodInk}; } .st-warn { color: ${C.warnInk}; } .st-bad { color: ${C.bad}; }
+.chart { width: 100%; height: auto; display: block; }
+.ax { font-size: 12px; fill: ${C.muted}; } .lead { font-size: 13px; font-weight: 700; } .exl { font-size: 8px; fill: #fff; text-anchor: middle; font-weight: 700; }
+.val { font-size: 13px; font-weight: 700; fill: ${C.ink}; } .part { font-size: 14px; font-weight: 800; } .run { font-size: 13px; fill: ${C.muted}; font-weight: 600; }
+.kp { width: 82mm; flex: none; } .kps { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 1.5mm; }
+.kps li { display: flex; gap: 6px; font-size: 11px; line-height: 1.3; } .kps li span { flex: none; width: 16px; height: 16px; border-radius: 50%; display: grid; place-items: center; font-weight: 800; font-size: 10px; color: #fff; }
+.kp-good span { background: ${C.good}; } .kp-bad span { background: ${C.bad}; }
+.lg { display: inline-flex; align-items: center; gap: 4px; font-weight: 600; color: ${C.ink}; } .lg i { width: 10px; height: 10px; border-radius: 3px; display: inline-block; }
+table { border-collapse: collapse; width: 100%; }
+.halves th { font-size: 11px; text-transform: uppercase; color: ${C.muted}; letter-spacing: .4px; padding: 2mm; border-bottom: 2px solid ${C.ink}; text-align: center; }
+.halves td { padding: 1.6mm 2mm; border-bottom: 1px solid ${C.grid}; text-align: center; font-size: 12px; }
+.halves td.rl { text-align: left; font-weight: 600; } .halves .hv b { font: 700 18px var(--font-display); margin: 0 4px; } .halves .hv small { color: ${C.muted}; font-size: 10px; }
+.halves tr.sub td { background: ${C.zebra}; } .halves tr.sub td.rl { padding-left: 6mm; font-weight: 500; color: ${C.muted}; } .halves tr td:nth-child(4) { background: ${C.soft}; }
+.dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; vertical-align: middle; } .dot-good { background: ${C.good}; } .dot-warn { background: ${C.warn}; } .dot-bad { background: ${C.bad}; }
+.dl { font-weight: 700; font-size: 12px; } .dl.up { color: ${C.goodInk}; } .dl.down { color: ${C.bad}; }
+.duel { display: flex; flex-direction: column; gap: 2mm; width: 96mm; }
+.duel-head { display: grid; grid-template-columns: 1fr auto 1fr; font: 700 13px var(--font-display); text-transform: uppercase; } .duel-head span:last-child { text-align: right; }
+.drow { display: grid; grid-template-columns: 30px 1fr 96px 1fr 30px; align-items: center; gap: 4px; }
+.dv { font: 700 15px var(--font-display); text-align: center; } .dlabel { font-size: 10px; text-align: center; color: ${C.muted}; }
+.dbar { height: 10px; background: ${C.soft}; border-radius: 3px; display: flex; } .dbar.l { justify-content: flex-end; } .dbar i { display: block; height: 100%; border-radius: 3px; }
+.radar { width: 96mm; display: block; } .rl2 { font-size: 11px; font-weight: 600; fill: ${C.ink}; } .rv2 { font-size: 11px; font-weight: 700; }
+.shots { border: 1px solid ${C.grid}; border-radius: 10px; padding: 3mm; display: flex; flex-direction: column; }
+.shots h3 { margin: 0 0 2mm; font: 700 15px var(--font-display); text-transform: uppercase; border-left: 5px solid; padding-left: 6px; display: flex; justify-content: space-between; } .shots h3 span { color: ${C.muted}; font-weight: 600; }
+.maps2 { display: flex; gap: 2mm; } .goalmap { flex: 1; margin: 0; min-width: 0; } .goalmap svg { width: 100%; display: block; border-radius: 6px; }
+.goalmap figcaption { font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: .3px; color: ${C.muted}; margin-bottom: 1mm; }
+.mlg { display: flex; flex-wrap: wrap; gap: 6px; font-size: 10px; margin-top: 1mm; } .mlg i { display: inline-block; width: 9px; height: 9px; border-radius: 50%; margin-right: 4px; vertical-align: middle; }
+.map-dorsal { font: 800 36px var(--font-display); fill: var(--dorsal-ink); text-anchor: middle; dominant-baseline: central; }
+.court-label { font: 700 21px var(--font-display); fill: var(--court-line); opacity: .4; }
+.side3 { display: grid; grid-template-columns: 1.2fr 1fr 1fr; gap: 3mm; margin-top: 2mm; align-items: start; }
+.zbars { display: flex; flex-direction: column; gap: 1.6mm; } .zb { display: grid; grid-template-columns: 38px 1fr 62px; align-items: center; gap: 5px; font-size: 10.5px; }
+.zt { height: 9px; background: ${C.soft}; border-radius: 3px; } .zt i { display: block; height: 100%; border-radius: 3px; } .zb b { font-size: 12px; }
+.heat-t { font-size: 10px; font-weight: 700; text-transform: uppercase; color: ${C.muted}; margin-bottom: 1mm; letter-spacing: .3px; }
+.heat-g { display: grid; grid-template-columns: repeat(3, 1fr); gap: 2px; border: 3px solid ${C.ink}; border-bottom: 0; padding: 2px; border-radius: 3px 3px 0 0; }
+.heat-g div { height: 8.2mm; display: flex; flex-direction: column; align-items: center; justify-content: center; border-radius: 2px; } .heat-g b { font: 800 16px/1 var(--font-display); } .heat-g small { font-size: 8.5px; opacity: .8; }
+.gks { display: flex; gap: 3mm; } .gk { flex: 1; border: 1px solid ${C.grid}; border-radius: 8px; padding: 2mm 3mm; }
+.gk-top { display: flex; gap: 8px; align-items: center; } .ring { width: 19mm; flex: none; } .ring-t { font: 800 18px var(--font-display); }
+.gk-name { font: 700 16px var(--font-display); } .gk-sub { font-size: 10px; color: ${C.muted}; margin: 1px 0 2px; }
+.gk-z { list-style: none; padding: 0; margin: 2mm 0 0; display: flex; gap: 6px; flex-wrap: wrap; } .gk-z li { background: ${C.soft}; border-radius: 6px; padding: 1mm 2mm; font-size: 10px; display: flex; gap: 5px; }
+.kmc { flex: 1.3; } .kms { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 0.6mm; font-size: 9.5px; }
+.kms li { display: grid; grid-template-columns: 22px 38px 58px 1fr 34px; gap: 4px; align-items: center; white-space: nowrap; }
+.kt { color: ${C.muted}; font-weight: 700; } .ks { font-weight: 700; background: ${C.soft}; border-radius: 4px; text-align: center; } .kl { color: ${C.muted}; overflow: hidden; text-overflow: ellipsis; } .kms .pos-v, .kms .neg-v { text-align: right; }
+.stars { display: flex; flex-direction: column; gap: 2mm; } .stars > div { background: ${C.soft}; border-radius: 8px; padding: 2mm 3mm; display: flex; flex-direction: column; }
+.stars small { font-size: 9px; text-transform: uppercase; color: ${C.muted}; letter-spacing: .4px; } .stars b { font: 700 15px var(--font-display); } .stars span { white-space: nowrap; font: 800 20px var(--font-display); color: ${C.us}; }
+.players th { font-size: 9.5px; text-transform: uppercase; color: ${C.muted}; letter-spacing: .3px; border-bottom: 2px solid ${C.ink}; padding: 1.2mm 1mm; text-align: center; }
+.players th small { display: block; text-transform: none; font-weight: 400; letter-spacing: 0; } .players th.grp { border-bottom: 1px solid ${C.grid}; }
+.players td { white-space: nowrap; font-size: 11.5px; padding: 0.8mm 1mm; text-align: center; border-bottom: 1px solid ${C.grid}; font-variant-numeric: tabular-nums; }
+.players tbody tr:nth-child(even) td { background: ${C.zebra}; }
+.players .nm { text-align: left; font-weight: 600; } .players .nm small { color: ${C.muted}; font-weight: 400; font-size: 9px; }
+.players .num { width: 9mm; text-align: left; } .pos { display: inline-block; width: 4px; height: 12px; border-radius: 2px; margin-right: 4px; vertical-align: middle; }
+.players .rt { width: 40mm; padding-right: 3mm; } .rtw { display: flex; align-items: center; gap: 6px; width: 100%; } .rt b { width: 34px; font: 700 13px var(--font-display); text-align: right; }
+.dbar2 { position: relative; flex: 1; height: 9px; background: ${C.soft}; border-radius: 3px; } .dbar2::after { content: ''; position: absolute; left: 50%; top: -2px; bottom: -2px; width: 1px; background: ${C.faint}; } .dbar2 i { position: absolute; top: 0; bottom: 0; border-radius: 3px; }
+.players .hh { display: block; font-size: 8.5px; color: ${C.muted}; font-weight: 400; } .players .bd { font-weight: 700; font-size: 10.5px; }
+.players .z { color: ${C.zero}; } .players .strong { font-weight: 700; } .players .strong small { color: ${C.muted}; font-weight: 400; }
+.players.full td, .players.full th { padding: 0.7mm 0.8mm; font-size: 10px; } .players.full tfoot td { border-top: 2px solid ${C.ink}; font-weight: 800; }
+.gkz { display: flex; gap: 3mm; } .gkz > div { flex: 1; min-width: 0; }
+.pos-v { color: ${C.goodInk}; font-weight: 700; } .neg-v { color: ${C.bad}; font-weight: 700; }
+.model { margin-top: 2.5mm; font-size: 9.5px; color: ${C.muted}; line-height: 1.4; } .model b { color: ${C.ink}; }
+.bands { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 1.5mm; } .bands i { display: inline-block; width: 8px; height: 8px; border-radius: 2px; margin-right: 3px; }
+`;
+  // The match report as a PDF: the document is laid out in a hidden frame of the page's own size, and every page is
+  // rasterised into one image of an A4 landscape page.
+  async function matchReportPdf() {
+    const frame = document.createElement('iframe');
+    frame.setAttribute('aria-hidden', 'true');
+    frame.tabIndex = -1;
+    frame.style.cssText = 'position:fixed;left:-10000px;top:0;width:297mm;height:210mm;border:0;';
+    const loaded = new Promise((resolve) => { frame.onload = resolve; });
+    frame.srcdoc = matchReportDocument();
+    document.body.appendChild(frame);
+    try {
+      await loaded;
+      const page = frame.contentDocument;
+      await page.fonts.ready;
+      const doc = pdfNewDoc();
+      const sheets = [...page.querySelectorAll('.page')];
+      for (const [i, sheet] of sheets.entries()) {
+        const canvas = await window.html2canvas(sheet, { scale: REPORT_RENDER_SCALE, backgroundColor: '#ffffff', logging: false });
+        if (i) doc.addPage();
+        doc.addImage(canvas.toDataURL('image/jpeg', REPORT_JPEG_QUALITY), 'JPEG', 0, 0, PDF_PAGE.w, PDF_PAGE.h);
+      }
+      return doc;
+    } finally {
+      frame.remove();
+    }
+  }
+  async function buildPdf(kind) {
     const match = `${slug(state.us)}-${slug(state.them)}`;
-    if (kind === 'match') { pdfMatch(doc); return { doc, filename: `informe-${match}.pdf` }; }
+    if (kind === 'match') return { doc: await matchReportPdf(), filename: `informe-${match}.pdf` };
+    const doc = pdfNewDoc();
     if (kind === 'players') {
       [...fieldPlayers(), ...goalkeepers()].forEach((p, i) => { if (i) doc.addPage(); pdfPlayer(doc, p); });
       return { doc, filename: `jugadores-${match}.pdf` };
@@ -4502,7 +4977,7 @@ span.att-foot { visibility: hidden; }
     sheetStatus('pdf-status', 'Preparando el PDF…');
     try {
       await loadPdfLibs();
-      const { doc, filename } = buildPdf(kind);
+      const { doc, filename } = await buildPdf(kind);
       await offerFile(filename, doc.output('blob'));
       sheetStatus('pdf-status', `Listo: ${filename}`);
     } catch (err) {
@@ -5032,7 +5507,9 @@ span.att-foot { visibility: hidden; }
   const shareRatingsCard = () => shareCard(ui.ratingsCardBlob, 'puntuaciones', `Puntuaciones ${finalTitle()}`);
   async function reportFiles() {
     await loadPdfLibs();
-    return ['match', 'players'].map((kind) => { const { doc, filename } = buildPdf(kind); return { filename, blob: doc.output('blob') }; });
+    const files = [];
+    for (const kind of ['match', 'players']) { const { doc, filename } = await buildPdf(kind); files.push({ filename, blob: doc.output('blob') }); }
+    return files;
   }
   const pdfFiles = (files) => files.map((f) => new File([f.blob], f.filename, { type: 'application/pdf' }));
   // The report PDFs, built as soon as the final screen opens so a share tap needs no wait (the share sheet needs the
@@ -5197,7 +5674,7 @@ span.att-foot { visibility: hidden; }
   let currentMatchId = null;
   let syncTimer = null;
   let attendanceSyncTimer = null;
-  const home = { view: 'loading', user: null, teams: [], roster: [], matches: [], season: null, templates: [], template: null, squad: new Set(), leaderMetric: 'goals', playerId: null, playerMatchId: null, playerEdit: false, playerDraft: null, offline: false, error: '', draft: null, crestDraft: undefined, armed: null, passwordChange: false, seasonOffline: false, sessions: null, fixtures: null, teamMatches: [], fixtureEdit: null, squadFixture: null, attendanceDate: null, attendanceKind: null, attendanceNoteFor: null, stateMatches: [], statsSort: null, weightsDraft: null, ratingFeatureCache: null };
+  const home = { view: 'loading', user: null, teams: [], roster: [], matches: [], season: null, templates: [], template: null, squad: new Set(), leaderMetric: 'goals', playerId: null, playerMatchId: null, playerEdit: false, playerDraft: null, offline: false, error: '', draft: null, crestDraft: undefined, armed: null, passwordChange: false, seasonOffline: false, sessions: null, fixtures: null, teamMatches: [], fixtureEdit: null, squadFixture: null, attendanceDate: null, attendanceKind: null, attendanceNoteFor: null, stateMatches: [], statsSort: null, weightsDraft: null, ratingCache: null };
 
   // ---- Device storage ----
   function readJson(key) {
@@ -6277,7 +6754,7 @@ span.att-foot { visibility: hidden; }
     if (!m.state.players.some((p) => p.id === player.id)) return null;
     const { events } = m.state;
     const s = playerStats(player.id, events), court = courtFiguresOf(m.state, player.id);
-    const row = { id: m.id, date: m.date, them: m.them, scoreUs: m.scoreUs, scoreThem: m.scoreThem, result: matchResult(m), mvp: m.state.mvpId === player.id, assists: s.ASIST, ...court, rating: playerRating(m.state, player, { seconds: court.seconds }).value };
+    const row = { id: m.id, date: m.date, them: m.them, scoreUs: m.scoreUs, scoreThem: m.scoreThem, result: matchResult(m), mvp: m.state.mvpId === player.id, assists: s.ASIST, ...court, rating: playerRating(m.state, player).value };
     if (player.pos === 'POR') {
       const facedList = events.filter((e) => e.kind === 'RIVAL_SHOT' && e.gkId === player.id);
       const c = countGroups(facedList);
@@ -6291,12 +6768,10 @@ span.att-foot { visibility: hidden; }
     };
   }
   const ratedRows = (rows) => rows.filter((r) => r.rating != null);
-  // The mean of the rated matches, weighted by the minutes on court, or the plain mean when any of them has unknown minutes.
+  // The mean of the rated matches: a match's points already carry the possessions the player took part in.
   function seasonRating(rows) {
     const rated = ratedRows(rows);
-    if (!rated.length) return null;
-    const weight = rated.every((r) => r.seconds != null) ? (r) => r.seconds : () => 1;
-    return roundHalfUp(sumOf(rated, (r) => r.rating * weight(r)) / sumOf(rated, weight), CONFIG.rating.decimals);
+    return rated.length ? roundHalfUp(sumOf(rated, (r) => r.rating) / rated.length, CONFIG.rating.decimals) : null;
   }
   function playerSeason(matches, player) {
     const rows = matches.map((m) => playerMatchRow(m, player)).filter(Boolean);
@@ -6889,34 +7364,29 @@ span.att-foot { visibility: hidden; }
   // ---- Rating tuning: the coach moves the weights and sees the squad's ratings change before saving ----
   const TUNE_LEAVE_ARM = 'tune-leave';
   const TUNE_GROUP_NOTES = {
+    Portería: 'Qué parte cuentan las paradas y los goles encajados frente a lo esperado (1 = todo). En los momentos decisivos el multiplicador se aplica entero.',
     '1x1 y 7 m': 'Un solo control: un 7 m provocado suma lo mismo que restan un 1x1 superado y un 7 m cometido.',
-    Equipo: 'El portero carga una parte de lo que carga un jugador de campo: 0 no le resta nada y 1 le resta lo mismo.'
+    Equipo: 'La falta de contundencia del portero es una parte de la del jugador de campo: 0 no le resta nada y 1 le resta lo mismo. El resultado se reparte según la parte del partido jugada.',
+    'Momento decisivo': 'Multiplican todo lo que pasa al final con el marcador ajustado, para bien y para mal.'
   };
   const tuneDirty = () => { const saved = ratingKnobValues(); return RATING_KNOBS.some((k) => home.weightsDraft[k.key] !== saved[k.key]); };
   // Only the knobs that differ from the defaults are saved; none changed means the team has no weights of its own.
   const tuneChangedKnobs = () => Object.fromEntries(RATING_KNOBS.filter((k) => home.weightsDraft[k.key] !== RATING_KNOB_DEFAULTS[k.key]).map((k) => [k.key, home.weightsDraft[k.key]]));
-  // Features and minutes are counted once per player and match; they live as long as the season array they came from.
-  function ratingFeatureCacheFor(matches) {
-    if (!home.ratingFeatureCache || home.ratingFeatureCache.season !== matches) home.ratingFeatureCache = { season: matches, byMatch: new Map() };
-    return home.ratingFeatureCache.byMatch;
-  }
-  function cachedRatingCounts(cache, match, player) {
-    if (!cache.has(match.id)) cache.set(match.id, { minutes: minutesOnCourt(match.state), byPlayer: new Map() });
-    const entry = cache.get(match.id);
-    if (!entry.byPlayer.has(player.id)) entry.byPlayer.set(player.id, ratingFeatures(match.state, player));
-    return { features: entry.byPlayer.get(player.id), seconds: entry.minutes ? entry.minutes.get(player.id) || 0 : null };
+  // Every match's ratings with the team's saved weights are worked out once and live as long as the season array.
+  function savedRatingsFor(matches) {
+    if (!home.ratingCache || home.ratingCache.season !== matches) home.ratingCache = { season: matches, byMatch: new Map() };
+    const cache = home.ratingCache.byMatch;
+    return (m) => { if (!cache.has(m.id)) cache.set(m.id, matchRatings(m.state)); return cache.get(m.id); };
   }
   // Each rostered player's season rating with the team's saved weights (`current`) and with `weights` (`next`), plus
-  // the rating of the latest match with `weights`. Moving a knob only recombines the cached features.
+  // the rating of the latest match with `weights`. A match is rated once per weights for the whole squad.
   function rosterRatingPreview(matches, roster, weights) {
-    const cache = ratingFeatureCacheFor(matches), saved = ratingWeights();
+    const savedOf = savedRatingsFor(matches), nextByMatch = new Map(matches.map((m) => [m.id, matchRatings(m.state, m.state.players, weights)]));
     return roster.map((player) => {
-      const keeper = player.pos === 'POR';
-      const played = matches.filter((m) => m.state.players.some((p) => p.id === player.id)).map((m) => {
-        const { features, seconds } = cachedRatingCounts(cache, m, player);
-        return { seconds, current: ratingFromCounts(features, { seconds, keeper, weights: saved }).value, next: ratingFromCounts(features, { seconds, keeper, weights }).value };
-      });
-      const seasonOf = (field) => seasonRating(played.map((r) => ({ rating: r[field], seconds: r.seconds })));
+      const played = matches.filter((m) => m.state.players.some((p) => p.id === player.id)).map((m) => ({
+        current: savedOf(m).get(player.id).value, next: nextByMatch.get(m.id).get(player.id).value
+      }));
+      const seasonOf = (field) => seasonRating(played.map((r) => ({ rating: r[field] })));
       const current = seasonOf('current'), next = seasonOf('next');
       return { player, current, next, delta: current == null || next == null ? null : roundHalfUp(next - current, CONFIG.rating.decimals), last: played.length ? played[0].next : null };
     });
@@ -6962,7 +7432,7 @@ span.att-foot { visibility: hidden; }
     else preview = `<div class="table-wrap"><table><thead><tr><th class="who">Jugador</th><th>Antes</th><th>Ahora</th><th>Cambio</th><th>Último</th></tr></thead><tbody id="tune-rows">${tuneRowsHtml()}</tbody></table></div>`;
     const warn = home.armed === TUNE_LEAVE_ARM ? '<p class="note tune-warn" role="alert">Hay cambios sin guardar. Vuelve a pulsar para salir sin guardarlos, o pulsa «Guardar».</p>' : '';
     return `${statusHtml()}${home.seasonOffline ? SEASON_OFFLINE_NOTE : ''}<div class="tune-page">
-      <section class="sheet-card"><h3>Pesos de la nota</h3><p class="note">Mueve un control y mira cómo cambia la nota de la plantilla. Nada cambia hasta que pulses «Guardar».</p>${tuneGroupsHtml()}</section>
+      <section class="sheet-card"><h3>Pesos de la nota</h3><p class="note">Los valores están en puntos (1 gol aportado = ${POINTS_PER_GOAL} puntos). Mueve un control y mira cómo cambia la nota de la plantilla. Nada cambia hasta que pulses «Guardar».</p>${tuneGroupsHtml()}</section>
       <section class="sheet-card tune-preview"><h3>Nota de la plantilla</h3>
         ${warn}<p class="note" id="tune-state">${tuneStateText()}</p>${preview}</section></div>`;
   }

@@ -112,7 +112,7 @@ MATRIX_SCENES = {
     "stats": "await seedSeason(); await showStats();",
     "stats-empty": "await seedSeason(); home.season = []; showHomeView('stats');",
     "team-edit": "await seedSeason(); showHomeView('team-edit');",
-    "tuning": "await seedSeason(); await showRatingTune(); Object.assign(home.weightsDraft, { turnover: -0.7, shot: 1.1 }); renderHome();",
+    "tuning": "await seedSeason(); await showRatingTune(); Object.assign(home.weightsDraft, { yellow: -0.6, assist: 0.9 }); renderHome();",
     "profile": "await seedSeason(); await showProfile();",
     "squad": "await seedSeason(); openSquad();",
     "template": "await seedSeason(); await showProfile(); editTemplate(null);",
