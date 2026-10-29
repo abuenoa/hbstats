@@ -21,6 +21,8 @@ STDERR_TAIL_LINES = 40
 # Virtual time Chrome gives the page before dumping it: the suite's timers (arming, the clock) and the PDF library
 # download must fit, or the dump has no results. Virtual time only advances while the page is idle.
 VIRTUAL_TIME_BUDGET_MS = 300000
+# Wall-clock limit for that Chrome run: the match report is rasterised every time the final screen opens.
+CHROME_TIMEOUT_S = 300
 
 
 def build_test_page() -> str:
@@ -37,7 +39,7 @@ def main() -> int:
     with tempfile.TemporaryDirectory() as tmp:
         page = pathlib.Path(tmp) / "test.html"
         page.write_text(build_test_page(), encoding="utf-8")
-        chrome = run_chrome(page, "--window-size=1280,800", f"--virtual-time-budget={VIRTUAL_TIME_BUDGET_MS}", "--dump-dom", "--enable-logging=stderr")
+        chrome = run_chrome(page, "--window-size=1280,800", f"--virtual-time-budget={VIRTUAL_TIME_BUDGET_MS}", "--dump-dom", "--enable-logging=stderr", timeout=CHROME_TIMEOUT_S)
     found = re.search(r'<pre id="res">(.*?)</pre>', chrome.stdout, re.S)
     if not found:
         print(f"No results: the suite did not finish (Chrome exit code {chrome.returncode}). Browser output:")

@@ -814,8 +814,8 @@
     if (plusMinus(served).has('c') || plusMinus(served).get('a') !== 1) throw new Error('the stamp, not the log, says who was on court');
   });
 
-  // ---- Rating (M2): a pure function of the events and the minutes ----
-  const rateMatch = (events, over) => ({ players: [], events, gkId: 'g', courtSets: [['a', 'b', 'g']], ...over });
+  // ---- Rating v5 «goles aportados»: a pure function of the events and the court log ----
+  const rateMatch = (events, over) => ({ players: [fieldA, fieldB, keeperG], events, gkId: 'g', courtSets: [['a', 'b', 'g']], ...over });
   const rShot = (playerId, zone, result, i) => ({ id: 's' + playerId + zone + result + i, abs: i, kind: 'SHOT', playerId, zone, result });
   const rShots = (playerId, zone, goals, misses) => [...Array(goals).keys()].map((i) => rShot(playerId, zone, 'GOL', i))
     .concat([...Array(misses).keys()].map((i) => rShot(playerId, zone, 'FUERA', 100 + i)));
@@ -827,124 +827,109 @@
   const fieldA = { id: 'a', pos: 'EXT' }, fieldB = { id: 'b', pos: 'LAT' }, keeperG = { id: 'g', pos: 'POR' };
   const ratingOf = (events, player = fieldA, opts) => playerRating(rateMatch(events), player, opts);
   const nearTo = (a, b, tol = 0.001) => Math.abs(a - b) <= tol;
-  T('rating: a player who does nothing gets the base', () => {
-    const r = ratingOf([]);
-    if (r.value !== CONFIG.rating.base || !r.rated || r.confidence !== 1) throw new Error(JSON.stringify(r));
+  const RW = CONFIG.rating, B = RW.possession, PPG = POINTS_PER_GOAL;
+  const pre = (z) => RW.pOn[z] * RW.onTargetRate[z];
+  const lineOf = (events, key, player = fieldA, opts) => ratingOf(events, player, opts).lines[key];
+  T('rating: nothing logged is S/C; one owned event rates the player', () => {
+    const none = ratingOf([]);
+    if (none.rated || none.value !== null || ratingText(none.value) !== 'S/C' || ratingBand(none.value) !== 'rt-none') throw new Error(JSON.stringify(none));
+    const steal = ratingOf([rAct('a', 'RECUP')]);
+    if (!steal.rated || !nearTo(steal.value, roundHalfUp(B * PPG, 1)) || !nearTo(steal.lines.defInd, B * PPG)) throw new Error(JSON.stringify(steal));
   });
-  T('rating: shot value follows the zone expectation', () => {
-    const six = ratingOf(rShots('a', '6M', 0, 1)).raw, nine = ratingOf(rShots('a', '9M', 0, 1)).raw;
-    if (!(six < nine && nine < CONFIG.rating.base)) throw new Error(`6 m ${six} 9 m ${nine}`);
-    if (!nearTo(expectedGoal('6M'), 0.625) || !nearTo(expectedGoal('9M'), 0.4) || !nearTo(expectedGoal('CONTRA'), 0.725) || !nearTo(expectedGoal('7M'), 0.675)) throw new Error('expectedGoal');
-    if (ratingOf([rShot('a', '6M', 'BLOCADO', 1)]).raw !== six) throw new Error('a blocked shot is a miss');
+  T('rating: a shot is the goal minus what its zone expects, plus half the chance it made', () => {
+    const half = (z) => RW.shooterCreationShare * (pre(z) - B);
+    const shot = (z, result) => lineOf([rShot('a', z, result, 1)], 'tiro');
+    if (!nearTo(shot('6M', 'GOL'), PPG * (1 - pre('6M') + half('6M'))) || !nearTo(shot('6M', 'FUERA'), PPG * (-pre('6M') + half('6M')))) throw new Error('6 m');
+    if (!(shot('9M', 'GOL') > shot('6M', 'GOL') && shot('6M', 'FUERA') < shot('9M', 'FUERA'))) throw new Error('a 9 m goal is worth more, a 6 m miss costs more');
+    if (!nearTo(shot('7M', 'GOL'), PPG * (1 - pre('7M'))) || !nearTo(shot('7M', 'PARADA'), -PPG * pre('7M'))) throw new Error('7 m: no creation for the shooter');
+    if (!nearTo(lineOf([rTurnover('a', 'Bloqueado', 1)], 'tiro'), -PPG * pre('9M'))) throw new Error('a blocked shot is a 9 m miss');
+    if (shot('6M', 'PALO') !== shot('6M', 'FUERA')) throw new Error('post = miss');
   });
-  T('rating: turnovers cost a lot, rule turnovers and faults a little', () => {
-    const raw = (events) => ratingOf(events).raw - CONFIG.rating.base;
-    const ball = raw([rTurnover('a', 'Pase')]), rule = raw([rTurnover('a', 'Pasos')]), forced = raw([rTurnover('a', 'Falta ataque')]);
-    const fault = raw([rAct('a', 'GOLPE')]), tactical = raw([rAct('a', 'LATE')]);
-    if (!nearTo(ball, -0.4) || !nearTo(forced, -0.3) || !nearTo(rule, -0.15) || !nearTo(fault, -0.15) || !nearTo(tactical, -0.15)) throw new Error([ball, forced, rule, fault, tactical].join());
-    if (!(ball < rule && Math.abs(ball) > 2 * Math.abs(fault))) throw new Error('turnover not much heavier');
-    const f = ratingFeatures(rateMatch([rTurnover('a', 'Pase'), rTurnover('a', 'Bote'), rTurnover('a', 'Pasos'), rTurnover('a', 'Bloqueado'), rTurnover('b', 'Pase')]), fieldA);
-    if (f.turnovers !== 2 || f.ruleTurnovers !== 1 || f.forcedTurnovers !== 1) throw new Error(JSON.stringify(f));
+  T('rating: a turnover costs an average possession, a rule turnover a little less', () => {
+    const ball = lineOf([rTurnover('a', 'Pase')], 'balon'), rule = lineOf([rTurnover('a', 'Pasos')], 'balon'), forced = lineOf([rTurnover('a', 'Falta ataque')], 'balon');
+    if (!nearTo(ball, -B * PPG) || !nearTo(forced, -B * PPG) || !nearTo(rule, -(B - RW.weights.ruleFaultDiscount) * PPG)) throw new Error([ball, rule, forced].join());
+    if (!(ball < rule && rule < 0)) throw new Error('rule turnover lighter');
+    const fed = rateMatch([rTurnover('a', 'Pase', 10), { id: 'rc', abs: 15, kind: 'RIVAL_SHOT', gkId: 'g', zone: '6M', contra: true, result: 'GOL' }]);
+    if (!(playerRating(fed, fieldA).lines.balon < ball)) throw new Error('a turnover that feeds a fast break costs more');
   });
-  T('rating: provoking a 7 m adds what being beaten subtracts, and 7 m committed subtracts the same', () => {
-    const w = CONFIG.rating.weights, delta = (action) => ratingOf([rAct('a', action)]).raw - CONFIG.rating.base;
-    if (!nearTo(delta('PROV7'), w.oneOnOne) || !nearTo(delta('BEATEN'), -w.oneOnOne) || !nearTo(delta('PEN7C'), -w.oneOnOne)) throw new Error([delta('PROV7'), delta('BEATEN'), delta('PEN7C')].join());
-    const odd = { ...w, oneOnOne: 0.5 };
-    if (!nearTo(ratingOf([rAct('a', 'PROV7')], fieldA, { weights: odd }).raw, CONFIG.rating.base + 0.5)) throw new Error('relation not tied to one weight');
-    const f = ratingFeatures(rateMatch([rAct('a', 'BEATEN'), rAct('a', 'BADEXIT')]), fieldA);
-    if (f.beaten !== 1 || f.tactical !== 1) throw new Error('BEATEN is not a tactical fault: ' + JSON.stringify(f));
+  T('rating: one knob ties 7 m provoked, 1x1 beaten and 7 m committed', () => {
+    const won = [rAct('a', 'PROV7', 10), rShot('b', '7M', 'GOL', 20)];
+    const lost = (action) => [rAct('a', action, 10), { id: 'r7', abs: 20, kind: 'RIVAL_SHOT', gkId: 'g', zone: '7M', result: 'GOL' }];
+    const w = RW.weights.oneOnOne * PPG;
+    if (!nearTo(lineOf(won, 'creacion'), w) || !nearTo(lineOf(lost('PEN7C'), 'defInd'), -w) || !nearTo(lineOf(lost('BEATEN'), 'defInd'), -w)) throw new Error('not tied');
+    const odd = { ...ratingWeights({}), oneOnOne: 0.3 };
+    if (!nearTo(lineOf(won, 'creacion', fieldA, { weights: odd }), 0.3 * PPG) || !nearTo(lineOf(lost('PEN7C'), 'defInd', fieldA, { weights: odd }), -0.3 * PPG)) throw new Error('relation not tied to one weight');
   });
   T('rating: a team fault costs everyone on court, the goalkeeper less', () => {
     const fault = { id: 'noatk', abs: 5, kind: 'ACTION', playerId: null, action: 'NOATK', on: 0 };
-    const s = rateMatch([fault], { courtSets: [['a', 'g']] });
-    const field = playerRating(s, fieldA), keeper = playerRating(s, keeperG), bench = playerRating(s, fieldB);
-    if (!nearTo(field.raw, 6.4) || !nearTo(keeper.raw, 6.45) || bench.raw !== CONFIG.rating.base) throw new Error([field.raw, keeper.raw, bench.raw].join());
-    if (!(CONFIG.rating.weights.teamFaultKeeper > CONFIG.rating.weights.teamFaultField)) throw new Error('keeper not lighter');
+    const ratings = matchRatings(rateMatch([fault], { courtSets: [['a', 'g']] }));
+    const field = ratings.get('a').lines.defInd, keeper = ratings.get('g').lines.defInd;
+    if (!nearTo(field, RW.weights.teamFaultField * PPG) || !nearTo(keeper, RW.weights.teamFaultKeeper * PPG) || ratings.get('b').rated) throw new Error([field, keeper].join());
+    if (!(keeper > field && keeper < 0)) throw new Error('keeper lighter');
+    const legacy = matchRatings(rateMatch([{ id: 'old', abs: 5, kind: 'ACTION', playerId: 'a', action: 'NOATK' }]));
+    if (!legacy.get('a').rated || legacy.get('b').rated || legacy.get('g').rated) throw new Error('a legacy NOATK with a player counts for that player only');
   });
-  T('rating: a legacy NOATK with a player counts for that player only', () => {
-    const s = rateMatch([{ id: 'old', abs: 5, kind: 'ACTION', playerId: 'a', action: 'NOATK' }, { id: 'none', abs: 6, kind: 'ACTION', playerId: null, action: 'NOATK' }]);
-    if (ratingFeatures(s, fieldA).teamFaults !== 1 || ratingFeatures(s, fieldB).teamFaults !== 0 || ratingFeatures(s, keeperG).teamFaults !== 0) throw new Error('legacy');
+  T('rating: the keeper earns goals saved above expected, at the keeper weight', () => {
+    const kw = RW.weights.keeperWeight;
+    const events = [...rGkShots('6M', 3, 2), { id: 'off', abs: 9, kind: 'RIVAL_SHOT', gkId: 'g', zone: '6M', result: 'FUERA' }, { id: 'other', abs: 9, kind: 'RIVAL_SHOT', gkId: 'x', zone: '9M', result: 'PARADA' }];
+    const six = playerRating(rateMatch(events), keeperG).lines.porteria;
+    if (!nearTo(six, kw * PPG * (3 * RW.pOn['6M'] - 2 * (1 - RW.pOn['6M'])))) throw new Error('6 m ' + six);
+    const pen = playerRating(rateMatch([{ id: 'p7', abs: 1, kind: 'RIVAL_SHOT', gkId: 'g', zone: '7M', result: 'PARADA' }]), keeperG).lines.porteria;
+    const contra = playerRating(rateMatch([{ id: 'c', abs: 1, kind: 'RIVAL_SHOT', gkId: 'g', zone: '9M', contra: true, result: 'PARADA' }]), keeperG).lines.porteria;
+    if (!nearTo(pen, kw * PPG * RW.pOn['7M']) || !nearTo(contra, kw * PPG * RW.pOn.CONTRA)) throw new Error([pen, contra].join());
+    if (playerRating(rateMatch([{ id: 'nz', abs: 1, kind: 'RIVAL_SHOT', gkId: 'g', result: 'PARADA' }]), keeperG).rated) throw new Error('a shot with no zone is not rated');
   });
-  T('rating: goalkeeper save value', () => {
-    const events = [...rGkShots('9M', 4, 6), { id: 'off', abs: 9, kind: 'RIVAL_SHOT', gkId: 'g', zone: '9M', result: 'FUERA' }, { id: 'other', abs: 9, kind: 'RIVAL_SHOT', gkId: 'x', zone: '9M', result: 'PARADA' }];
-    const f = ratingFeatures(rateMatch(events), keeperG);
-    if (!nearTo(f.saveValue, 4 - 10 * 0.4)) throw new Error('save value ' + f.saveValue);
-    const pen = ratingFeatures(rateMatch([{ id: 'p7', abs: 1, kind: 'RIVAL_SHOT', gkId: 'g', zone: '7M', result: 'PARADA' }]), keeperG);
-    if (!nearTo(pen.saveValue, 1 - CONFIG.rating.expectedSave['7M'])) throw new Error('7 m ' + pen.saveValue);
-    const noZone = ratingFeatures(rateMatch([{ id: 'nz', abs: 1, kind: 'RIVAL_SHOT', gkId: 'g', result: 'PARADA' }]), keeperG);
-    if (noZone.saveValue !== 0) throw new Error('unknown zone ' + noZone.saveValue);
-    const contra = ratingFeatures(rateMatch([{ id: 'c', abs: 1, kind: 'RIVAL_SHOT', gkId: 'g', zone: '9M', contra: true, result: 'PARADA' }]), keeperG);
-    if (!nearTo(contra.saveValue, 1 - CONFIG.rating.expectedSave.CONTRA)) throw new Error('contra ' + contra.saveValue);
+  T('rating: a red card and 0/3 is clearly negative (the case that started v5)', () => {
+    const clock = { period: 2, elapsedMs: CONFIG.halfSeconds * 1000, runningSince: null };
+    const red = { id: 'red', abs: 1916, kind: 'SANCTION', playerId: 'a', card: 'D' }, two = { ...red, id: 'two', card: '2M' };
+    const r = playerRating(rateMatch([...rShots('a', '6M', 0, 3), red], { clock }), fieldA);
+    if (!(r.value <= -4.5) || ratingBandLabel(r.value) !== 'Muy mal partido') throw new Error(`${r.value} ${ratingBandLabel(r.value)}`);
+    const twoMin = playerRating(rateMatch([two], { clock }), fieldA).lines.disciplina, sentOff = playerRating(rateMatch([red], { clock }), fieldA).lines.disciplina;
+    if (!(sentOff < twoMin && twoMin <= 0)) throw new Error(`red ${sentOff} 2' ${twoMin}`);
+    const late = playerRating(rateMatch([{ ...red, abs: 3599 }, rAct('a', 'PEN7C', 3599), { id: 'r7', abs: 3600, kind: 'RIVAL_SHOT', gkId: 'g', zone: '7M', result: 'GOL' }], { clock }), fieldA);
+    if (!(late.lines.disciplina > sentOff) || !late.moments.some((m) => m.label.includes('30 s'))) throw new Error('a last-30-seconds red costs less conduct: ' + late.lines.disciplina);
   });
-  T('rating: under the minimum minutes is S/C; a short spell is pulled to the base', () => {
-    const events = rShots('a', '6M', 3, 0);
-    const few = ratingOf(events, fieldA, { seconds: 9 * 60 }), edge = ratingOf(events, fieldA, { seconds: 10 * 60 });
-    if (few.rated || few.value !== null || ratingText(few.value) !== 'S/C' || !edge.rated) throw new Error(JSON.stringify([few, edge]));
-    const full = ratingOf(events, fieldA, { seconds: 60 * 60 }).raw, short = edge.raw;
-    if (!(CONFIG.rating.base < short && short < full)) throw new Error(`short ${short} full ${full}`);
+  T('rating: late and close multiplies both ways and shows as «Momento decisivo»', () => {
+    const clock = { period: 2, elapsedMs: CONFIG.halfSeconds * 1000, runningSince: null };
+    const at = (abs, result) => playerRating(rateMatch([rShot('a', '6M', result, abs)], { clock }), fieldA);
+    const early = at(100, 'GOL'), late = at(3400, 'GOL'), lateMiss = at(3400, 'FUERA'), close = at(3100, 'GOL');
+    if (!nearTo(late.lines.clutch, (RW.weights.lateFactor - 1) * early.moments[0].value * PPG) || early.lines.clutch !== 0) throw new Error('late goal ×' + RW.weights.lateFactor);
+    if (!nearTo(close.lines.clutch, (RW.weights.closeFactor - 1) * early.moments[0].value * PPG)) throw new Error('close ×' + RW.weights.closeFactor);
+    if (!(lateMiss.lines.clutch < 0)) throw new Error('a late miss costs more');
+    const ahead = [...rMany(7, (i) => rShot('b', '6M', 'GOL', 1900 + i)), rShot('a', '6M', 'GOL', 2500)];
+    const blowout = playerRating(rateMatch(ahead, { clock }), fieldA);
+    if (!nearTo(blowout.lines.clutch, (RW.context.blowoutFactor - 1) * early.moments[0].value * PPG)) throw new Error('blowout ×' + RW.context.blowoutFactor);
   });
-  T('rating: confidence follows the square root of the match share', () => {
-    const at = (min) => ratingConfidence(min * 60);
-    if (at(60) !== 1 || !nearTo(at(30), 0.707) || !nearTo(at(20), 0.577) || at(75) !== 1 || ratingConfidence(null) !== 1) throw new Error([at(60), at(30), at(20), at(75), ratingConfidence(null)].join());
+  T('rating: the unit on court shares what each possession left, and adds up to it', () => {
+    const six = ['a', 'b', 'c', 'd', 'e', 'f'], players = [...six.map((id) => ({ id, pos: 'LAT' })), keeperG];
+    const goals = rMany(4, (i) => ({ id: 'rg' + i, abs: 10 + i, kind: 'RIVAL_SHOT', gkId: 'g', zone: '6M', result: 'GOL', on: 0 }));
+    const ratings = matchRatings(rateMatch(goals, { players, court: [{ abs: 0, set: 0 }], courtSets: [[...six, 'g']] }));
+    const shares = six.map((id) => ratings.get(id).lines.defUnit), want = 4 * (B - RW.pOn['6M']) * PPG;
+    if (shares.some((v) => !nearTo(v, shares[0])) || !nearTo(sumOf(shares, (v) => v), want) || ratings.get('g').lines.defUnit !== 0) throw new Error(`${shares} want ${want}`);
+    if (ratings.get('a').possessions.defence !== 4) throw new Error('possessions counted');
   });
-  T('rating: clamped to 3–10 and rounded to one decimal', () => {
-    const none = { keeper: false };
-    const huge = ratingFromFeatures({ ...ratingFeatures(rateMatch([]), fieldA), shotValue: 100 }, none), awful = ratingFromFeatures({ ...ratingFeatures(rateMatch([]), fieldA), turnovers: 100 }, none);
-    if (huge.value !== 10 || awful.value !== 3 || huge.raw <= 10 || awful.raw >= 3) throw new Error(JSON.stringify([huge, awful]));
-    const half = ratingFromFeatures({ ...ratingFeatures(rateMatch([]), fieldA), assists: 1 }, { ...none, weights: { ...CONFIG.rating.weights, assist: 0.25 } });
-    if (half.value !== 6.8) throw new Error('6.75 rounds half up to 6.8, got ' + half.value);
-    const tenth = ratingOf([rAct('a', 'ASIST'), rTurnover('a', 'Pase')], fieldA, { weights: { ...CONFIG.rating.weights, assist: 0.13 } }).value;
-    if (tenth !== 6.2) throw new Error('one decimal, got ' + tenth);
-  });
-  T("rating: the design's three sanity examples", () => {
-    const wing = ratingOf([...rShots('a', '6M', 6, 1), rAct('a', 'ASIST'), rTurnover('a', 'Pase')]).value;
-    const back = ratingOf([...rShots('a', '9M', 2, 7), rTurnover('a', 'Pase', 1), rTurnover('a', 'Pase', 2)]).value;
-    if (wing !== 7.7 || back !== 4.4) throw new Error(`wing ${wing} back ${back}`);
-    // 34 on target (20 from 6 m, 12 from 9 m, 2 counter-attacks), 14 saved: expected 5 + 4.8 + 0.4 = 10.2
-    const faced = [...rGkShots('6M', 8, 12), ...rGkShots('9M', 5, 7), ...rGkShots('CONTRA', 1, 1)].map((e, i) => ({ ...e, id: 'k' + i }));
-    const keeper = playerRating(rateMatch(faced), keeperG);
-    if (!nearTo(keeper.features.saveValue, 3.8) || keeper.value !== 7.8) throw new Error(`keeper ${keeper.features.saveValue} ${keeper.value}`);
-  });
-  T("rating: the design's minutes examples", () => {
-    const back = [...rShots('a', '9M', 5, 4), rAct('a', 'ASIST', 1), rAct('a', 'ASIST', 2), rTurnover('a', 'Pase')];
-    const wing = [...rShots('b', '6M', 7, 1), rAct('b', 'RECUP')];
-    const fullBack = ratingOf(back, fieldA, { seconds: 3600 }).value, halfWing = ratingOf(wing, fieldB, { seconds: 1800 }).value;
-    if (fullBack !== 7.7 || halfWing !== 7.8 || !(halfWing > fullBack)) throw new Error(`back ${fullBack} wing ${halfWing}`);
-    const over = [60, 30, 20].map((min) => ratingOf(wing, fieldB, { seconds: min * 60 }).value);
-    if (over.join() !== '8.4,7.8,7.6') throw new Error(over.join());
-  });
-  T('rating: blocks and every card weigh what the weights say', () => {
-    const w = CONFIG.rating.weights, card = (c) => ({ id: 'c' + c, abs: 1, kind: 'SANCTION', playerId: 'a', card: c });
-    const delta = (events) => ratingOf(events).raw - CONFIG.rating.base;
-    const want = [[rAct('a', 'BLOC'), w.block], [card('A'), w.yellow], [card('2M'), w.twoMin], [card('D'), w.red], [card('AZ'), w.blue]];
-    want.forEach(([event, weight]) => { if (!nearTo(delta([event]), weight)) throw new Error(`${event.action || event.card} ${delta([event])} vs ${weight}`); });
-    if (!(w.block > 0 && w.yellow < 0 && w.yellow > w.twoMin && w.twoMin > w.blue && w.blue > w.red)) throw new Error('weights out of order');
-    const f = ratingFeatures(rateMatch(['A', '2M', 'D', 'AZ', 'unknown'].map(card).concat(rAct('a', 'BLOC'))), fieldA);
-    if (f.yellow !== 1 || f.twoMin !== 1 || f.red !== 1 || f.blue !== 1 || f.blocks !== 1 || Object.values(f).some(Number.isNaN)) throw new Error(JSON.stringify(f));
-  });
-  T('rating: a convocado who never entered is S/C and minutes feed the confidence', () => {
-    const s = rateMatch(rShots('a', '6M', 3, 0), { clock: { period: 1, elapsedMs: CONFIG.halfSeconds * 1000, runningSince: null }, court: [{ abs: 0, set: 0 }], courtSets: [['a', 'g']] });
-    const ratings = matchRatings(s, [fieldA, fieldB, keeperG]);
-    const never = ratings.get('b'), played = ratings.get('a');
-    if (never.rated || ratingText(never.value) !== 'S/C' || !played.rated || !nearTo(played.confidence, 0.707) || !ratings.get('g').rated) throw new Error(JSON.stringify([...ratings]));
+  T('rating: the result adds a small share by the possessions played', () => {
+    const won = matchRatings(rateMatch([rShot('a', '6M', 'GOL', 1)], { court: [{ abs: 0, set: 0 }], courtSets: [['a', 'b']] }));
+    if (!nearTo(won.get('a').lines.resultado, RW.weights.result * PPG * 1) || !nearTo(won.get('b').lines.resultado, RW.weights.result * PPG * 1)) throw new Error(JSON.stringify(won.get('a').lines));
+    if (matchRatings(rateMatch([])).get('a').lines.resultado !== 0) throw new Error('a draw adds nothing');
   });
   T('rating: rating a match changes no statistic', () => {
     const snap = snapshot(), before = JSON.stringify([liveStats(), score(), state.history]);
     const ratings = matchRatings(state);
     if (JSON.stringify([liveStats(), score(), state.history]) !== before) throw new Error('state changed');
-    if (ratings.size !== state.players.length || [...ratings.values()].some((r) => !r.rated || r.confidence !== 1)) throw new Error('sample match without a court log is rated with confidence 1');
+    if (ratings.size !== state.players.length || [...ratings.values()].some((r) => (r.rated ? !Number.isFinite(r.value) : r.value !== null))) throw new Error('every player has a number or S/C');
     restore(snap);
   });
-  T('rating: every chip shows its number and meets contrast in both themes', () => {
-    const samples = [8.4, 7.4, 6.5, 6.2, 4.1, null], bands = samples.map(ratingBand);
-    if (bands.join() !== 'rt-top,rt-good,rt-mid,rt-low,rt-bad,rt-none' || ratingBand(undefined) !== 'rt-none' || ratingBand(8) !== 'rt-top' || ratingBand(6.4) !== 'rt-low' || ratingBand(5.9) !== 'rt-bad') throw new Error(bands.join());
-    if (ratingText(7.4) !== '7,4' || ratingText(null) !== 'S/C' || ratingText(undefined) !== 'S/C') throw new Error('text');
+  T('rating: points read signed, bands map to the chip classes and meet contrast in both themes', () => {
+    const samples = [7, 4, 2, 1, 0, -1, -3, -5, null], bands = samples.map(ratingBand);
+    if (bands.join() !== 'rt-top,rt-good,rt-good,rt-mid,rt-mid,rt-low,rt-bad,rt-bad,rt-none' || ratingBand(undefined) !== 'rt-none') throw new Error(bands.join());
+    if (samples.map(ratingBandLabel).join() !== 'Élite,Gran partido,Sólido,Discreto,Sin impacto,Flojo,Mal partido,Muy mal partido,Sin calificar') throw new Error('labels');
+    if (ratingText(7.4) !== '+7,4' || ratingText(-2.4) !== '−2,4' || ratingText(0) !== '+0,0' || ratingText(null) !== 'S/C' || ratingText(undefined) !== 'S/C') throw new Error('text');
     const chip = document.createElement('span'); document.body.appendChild(chip);
     try {
       ['light', 'dark'].forEach((theme) => inTheme(theme, () => samples.forEach((value, i) => {
         chip.className = `rating-chip ${bands[i]}`; chip.textContent = ratingText(value);
         const css = getComputedStyle(chip);
-        if (!chip.textContent) throw new Error('empty chip');
         const ratio = contrastRatio(hexOfRgb(rgbOf(css.color)), hexOfRgb(rgbOf(css.backgroundColor)));
         if (ratio < 4.5 || css.whiteSpace !== 'nowrap' || !css.fontVariantNumeric.includes('tabular-nums')) throw new Error(`${theme} ${bands[i]} ${ratio.toFixed(2)} ${css.whiteSpace}`);
       })));
@@ -983,12 +968,13 @@
   });
   T('final: ratings list sorted with S/C last and no NaN', onFinal(playedFew(), () => {
     const ids = rowIds(), chips = ratingRows().map((r) => r.querySelector('.rating-chip').textContent);
-    if (ids.length !== state.players.length || ids.slice(0, 3).join() !== 'p22,p1,p8') throw new Error(ids.join());
-    if (chips.slice(0, 3).some((c) => c === 'S/C') || chips.slice(3).some((c) => c !== 'S/C')) throw new Error(chips.join());
+    // The keeper on court did nothing of his own (no shot faced, no event), so he is «S/C» like the bench.
+    if (ids.length !== state.players.length || ids.slice(0, 2).join() !== 'p22,p8') throw new Error(ids.join());
+    if (chips.slice(0, 2).some((c) => c === 'S/C') || chips.slice(2).some((c) => c !== 'S/C')) throw new Error(chips.join());
     if (/NaN|undefined/.test($('final').textContent) || !$('final').textContent.includes('Puntuaciones')) throw new Error('text');
     const first = ratingRows()[0];
     if (!first.textContent.includes('3/3') || !first.querySelector('.disc') || !first.textContent.includes('Diego')) throw new Error('row: ' + first.textContent);
-    const keeper = ratingRows()[1];
+    const keeper = ratingRows().find((r) => r.dataset.ratingPlayer === 'p1');
     if (!keeper.textContent.includes('0/0')) throw new Error('keeper row: ' + keeper.textContent);
   }));
   T('final: the provisional MVP is the top rating', onFinal(playedFew(), () => {
@@ -1021,7 +1007,7 @@
   });
   T('final: a second-half player with the top rating is the provisional MVP', onFinal(secondHalfStar(), () => {
     const ratings = matchRatings(state), star = ratings.get('p22'), full = ratings.get('p8');
-    if (!(star.confidence < 1) || star.value !== 7.8 || full.value !== 7.7) throw new Error([star.confidence, star.value, full.value].join());
+    if (!(star.value > full.value && full.value > 0)) throw new Error([star.value, full.value].join());
     if (matchMvp(state, ratings).id !== 'p22' || rowIds()[0] !== 'p22' || crownedIds().join() !== 'p22') throw new Error('second-half player not MVP: ' + rowIds().slice(0, 2));
   }));
   T('final: the coach\'s pick overrides and clears', onFinal(playedFew(), () => {
@@ -1035,12 +1021,12 @@
     matchMvp(state, matchRatings(state)); openFinal();
     if (JSON.stringify([liveStats(), score(), state.history]) !== before || state.mvpId !== null) throw new Error('the provisional MVP must write nothing');
   }));
-  T('final: the breakdown lists only non-zero features', onFinal({ events: [rTurnover('p22', 'Pase', 1), rTurnover('p22', 'Bote', 2), rAct('p22', 'ASIST', 3)] }, () => {
+  // An assist with no goal of ours next to it is not credited, so only the turnovers move p22.
+  T('final: the breakdown shows the band and only the lines that moved the rating', onFinal({ events: [rTurnover('p22', 'Pase', 1), rTurnover('p22', 'Bote', 2), rAct('p22', 'ASIST', 3)] }, () => {
     const row = ratingRows().find((r) => r.dataset.ratingPlayer === 'p22'), items = [...row.querySelectorAll('details li')].map((li) => li.textContent);
-    if (items.join('|') !== 'Pérdidas ×2 −0,8|Asistencias ×1 +0,3') throw new Error(items.join('|'));
+    if (items.join('|') !== 'Mal partido|Balón −2,6') throw new Error(items.join('|'));
     const idle = ratingRows().find((r) => r.dataset.ratingPlayer === 'p5');
     if (idle.querySelector('details') || /NaN|undefined/.test($('final').textContent)) throw new Error('a player without events has no breakdown');
-    if (matchRatings(state).get('p22').confidence !== 1) throw new Error('premise: no court log rates with confidence 1');
   }));
   T('final: the MVP leads the list and the rest folds behind «Ver todos»', onFinal({ collapsed: true, ...playedFew(), mvpId: 'p8' }, () => {
     if (rowIds()[0] !== 'p8' || ratingRows().length !== RATINGS_COLLAPSED_ROWS || crownedIds().join() !== 'p8') throw new Error('collapsed: ' + rowIds());
@@ -1051,10 +1037,11 @@
     state.mvpId = null; openFinal();
     if (rowIds()[0] !== 'p22' || !provisionalLabel() || ratingRows()[0].querySelector('.mvp-tag') === null) throw new Error('provisional MVP first with its tag');
   }));
-  T('final: the breakdown scales by the minutes and escapes names', onFinal({ clock: { period: 1, elapsedMs: CONFIG.halfSeconds * 1000, runningSince: null }, courtSets: [['p22', 'p1']], court: [{ abs: 0, set: 0 }],
+  // A lineup with fewer than 6 field players is a team short: a lost possession is then worth less.
+  T('final: the breakdown follows the numerical state and escapes names', onFinal({ clock: { period: 1, elapsedMs: CONFIG.halfSeconds * 1000, runningSince: null }, courtSets: [['p22', 'p1']], court: [{ abs: 0, set: 0 }],
     events: [rTurnover('p22', 'Pase', 1), rTurnover('p22', 'Bote', 2)] }, () => {
     const items = [...ratingRows().find((r) => r.dataset.ratingPlayer === 'p22').querySelectorAll('details li')].map((li) => li.textContent);
-    if (items.join('|') !== 'Pérdidas ×2 −0,6') throw new Error('30 min: ' + items.join('|'));
+    if (items.join('|') !== 'Flojo|Balón −1,9') throw new Error('short-handed: ' + items.join('|'));
     state.players.find((p) => p.id === 'p22').name = '<i id="injected">x</i>'; openFinal();
     if (document.getElementById('injected') || !ratingRows().find((r) => r.dataset.ratingPlayer === 'p22').textContent.includes('<i id="injected">')) throw new Error('name not escaped');
 
@@ -1220,16 +1207,16 @@
   // ---- Drill-down: the per-match drawing helpers work over any saved state (M0c) ----
   // Runs buildPdf(kind) with the drawing primitives replaced by recorders, so the pages can be compared as data.
   const recordPdfCalls = (kind, makeState = sampleState) => {
-    const saved = { pdfNewDoc, pdfHeader, pdfTable, pdfShotChart, pdfKeyPoints };
+    const saved = { pdfNewDoc, pdfHeader, pdfTable, pdfShotChart };
     const calls = [];
     const ids = (shots) => shots.map((e) => `${e.abs}:${e.zone}:${e.result}`);
     pdfNewDoc = () => ({ addPage: () => calls.push(['page']) });
     pdfHeader = (doc, title, subtitle) => calls.push(['header', title, subtitle]);
     pdfTable = (doc, opts) => { calls.push(['table', opts]); return opts.startY + 10; };
     pdfShotChart = (doc, x, y, w, shots, viewKey, dorsals = false) => { calls.push(['chart', x, y, w, ids(shots), viewKey, dorsals]); return y + 50; };
-    pdfKeyPoints = (doc, title, points, x, y) => { calls.push(['points', title, points.map((p) => p.text)]); return y + 20; };
     const snap = snapshot();
-    try { state = makeState(); buildPdf(kind); } finally { ({ pdfNewDoc, pdfHeader, pdfTable, pdfShotChart, pdfKeyPoints } = saved); restore(snap); }
+    // The player reports draw synchronously: buildPdf has no await before them.
+    try { state = makeState(); buildPdf(kind); } finally { ({ pdfNewDoc, pdfHeader, pdfTable, pdfShotChart } = saved); restore(snap); }
     return calls;
   };
   const recordPlayerPages = () => JSON.stringify(recordPdfCalls('players'));
@@ -1305,12 +1292,11 @@
     const snap = snapshot();
     try {
       state = sampleState();
-      if (PLAYER_HEAD.slice(2, 5).join() !== 'Min,+/−,Nota') throw new Error('head ' + PLAYER_HEAD.join());
+      if (PLAYER_HEAD.slice(2, 5).join() !== 'Min,+/−,6 m') throw new Error('head ' + PLAYER_HEAD.join());
       fieldPlayers().forEach((p) => {
         const row = playerRow(p);
         if (row.length !== PLAYER_HEAD.length) throw new Error(`#${p.num}: ${row.length} cells for ${PLAYER_HEAD.length} columns`);
         if (row[2] !== '–' || row[3] !== '–') throw new Error('the sample logs no court, Min and +/− read –: ' + row.slice(2, 4));
-        if (row[4] !== ratingText(ratingValue(matchRatings(state), p))) throw new Error('rating cell ' + row[4]);
       });
     } finally { restore(snap); }
   });
@@ -1358,12 +1344,54 @@
       if (turnoverPlayerRows(state).length !== 1 || turnoverPlayerRows(state)[0][1] !== 'Sin pérdidas') throw new Error('empty state ' + JSON.stringify(turnoverPlayerRows(state)));
     } finally { restore(snap); }
   });
-  T('pdf: the match report prints the attack types and the turnovers by player', () => {
-    const titles = tablesOf(recordPdfCalls('match')).map((t) => t.title);
-    ['Jugadores (goles/tiros por zona)', 'Tipos de ataque (goles/tiros)', 'Pérdidas por jugador'].forEach((title) => { if (!titles.includes(title)) throw new Error(`no table «${title}» in ${titles}`); });
+  // ---- Match report (v5): the HTML document the PDF is drawn from ----
+  const reportOf = (makeState = sampleState) => {
+    const snap = snapshot();
+    try { state = makeState(); return new DOMParser().parseFromString(matchReportDocument(), 'text/html'); } finally { restore(snap); }
+  };
+  T('report: five pages with every section the coach asked for, and no NaN', () => {
+    ['sample', 'other'].forEach((name) => {
+      const doc = reportOf(name === 'sample' ? sampleState : otherMatch), titles = [...doc.querySelectorAll('h2')].map((h) => h.firstChild.textContent.trim());
+      if (doc.querySelectorAll('.page').length !== REPORT_PAGES) throw new Error(`${name}: ${doc.querySelectorAll('.page').length} pages`);
+      ['Goles de cada equipo', 'Diferencia en el marcador', 'Claves del partido', 'Indicadores por parte', 'Goles cada 5 minutos', 'Cara a cara', 'Acierto por situación', 'Porteros',
+        'Momentos clave', 'Destacados', 'Puntuación · goles aportados', 'Todos los jugadores', 'Porteros por zona', 'Tipos de ataque', 'Fallos defensivos', 'Pérdidas por jugador']
+        .forEach((title) => { if (!titles.includes(title)) throw new Error(`${name}: no «${title}» in ${titles}`); });
+      if (/NaN|undefined|null/.test(doc.body.textContent)) throw new Error(`${name}: bad text`);
+      const kpis = [...doc.querySelectorAll('.kpi')];
+      if (kpis.length !== 6 || kpis.some((k) => !/Descanso.*Final/.test(k.querySelector('.kpi-ht').textContent))) throw new Error(`${name}: every KPI shows half-time and full time`);
+    });
   });
-  T('pdf: every table of both reports is rectangular and prints no NaN or undefined', () => {
-    ['sample', 'other'].forEach((name) => ['match', 'players'].forEach((kind) => {
+  T('report: two goal drawings per team split its shots into goals and the rest', () => {
+    const snap = snapshot();
+    try {
+      state = sampleState();
+      const doc = reportOf(() => state), figures = [...doc.querySelectorAll('figure.goalmap')], count = (f) => Number(f.querySelector('figcaption').textContent.split('·')[1]);
+      if (figures.length !== 4) throw new Error(figures.length + ' drawings');
+      const ours = countGroups(ourShots()), theirs = countGroups(rivalShots());
+      if (count(figures[0]) !== ours.GOL || count(figures[1]) !== ours.PARADA + ours.FALLO || count(figures[2]) !== theirs.GOL || count(figures[3]) !== theirs.PARADA + theirs.FALLO) throw new Error(figures.map(count).join());
+      if (figures[0].querySelectorAll('.map-dorsal').length !== ours.GOL) throw new Error('one dorsal per goal in the goals drawing');
+    } finally { restore(snap); }
+  });
+  T('report: the 5\' partials and the running score end on the final score, score fixes and a last-second goal included', () => {
+    const late = () => { const s = sampleState(); s.clock = { period: 2, elapsedMs: CONFIG.halfSeconds * 1000, runningSince: null };
+      s.events.push({ id: 'fix', abs: 800, kind: 'SCORE_FIX', team: 'them', delta: 1 }, { ...s.events.find((e) => e.kind === 'SHOT'), id: 'buzzer', abs: 2 * CONFIG.halfSeconds, result: 'GOL' }); return s; };
+    const snap = snapshot();
+    try {
+      state = late();
+      const final = score(), doc = reportOf(() => state), runs = [...doc.querySelectorAll('text.run')].map((t) => t.textContent);
+      if (runs.at(-1) !== `${final.us}–${final.them}`) throw new Error(`last partial ${runs.at(-1)} vs ${final.us}–${final.them}`);
+      const ends = [...doc.querySelectorAll('text.lead')].map((t) => t.textContent).filter((t) => /^\d+$/.test(t));
+      if (ends.join() !== [final.us, final.them].join()) throw new Error('running score ends at ' + ends);
+    } finally { restore(snap); }
+  });
+  T('report: names are escaped and the rival colour stays apart from ours', () => {
+    // p8 (Alex) shoots in the sample, so his name is in every table.
+    const doc = reportOf(() => { const s = sampleState(); s.players.find((p) => p.id === 'p8').name = '<i id="inj">x</i>'; s.them = '<b id="riv">R</b>'; return s; });
+    if (doc.getElementById('inj') || doc.getElementById('riv') || !doc.body.textContent.includes('<i id="inj">x</i>')) throw new Error('not escaped');
+    if (REPORT_COLOURS.them.toLowerCase() === team.brand.toLowerCase()) throw new Error('same colour for both teams');
+  });
+  T('pdf: every table of the player reports is rectangular and prints no NaN or undefined', () => {
+    ['sample', 'other'].forEach((name) => ['players', 'p8'].forEach((kind) => {
       const tables = tablesOf(recordPdfCalls(kind, name === 'sample' ? sampleState : otherMatch));
       if (tables.length < 5) throw new Error(`${name} ${kind}: only ${tables.length} tables`);
       tables.forEach((t) => {
@@ -1377,27 +1405,11 @@
     }));
   });
   T('pdf: no empty cell uses a hyphen where the screen uses the dash', () => {
-    ['sample', 'other'].forEach((name) => ['match', 'players'].forEach((kind) => {
+    ['sample', 'other'].forEach((name) => ['players', 'p8'].forEach((kind) => {
       tablesOf(recordPdfCalls(kind, name === 'sample' ? sampleState : otherMatch)).forEach((t) => t.body.forEach((row) => {
         if (row.some((c) => c === '-')) throw new Error(`${name} ${kind} «${t.title || ''}»: ${JSON.stringify(row)}`);
       }));
     }));
-  });
-  T('pdf: the player table has explicit widths that fit the page', () => {
-    const table = tablesOf(recordPdfCalls('match')).find((t) => t.head === PLAYER_HEAD);
-    const widths = PLAYER_HEAD.map((h, i) => (table.columnStyles[i] || {}).cellWidth);
-    const fixed = widths.filter((w) => typeof w === 'number');
-    if (fixed.length !== widths.length - 1 || widths[1] !== undefined) throw new Error('only the name column is flexible: ' + JSON.stringify(widths));
-    const room = PDF_PAGE.w - 2 * PDF_PAGE.margin - fixed.reduce((a, b) => a + b, 0);
-    if (room < MAX_NAME_LENGTH * PDF_NAME_CHAR_MM) throw new Error(`the name column keeps ${room} mm`);
-    if (table.width !== PDF_PAGE.w - 2 * PDF_PAGE.margin) throw new Error('width ' + table.width);
-  });
-  T('pdf: the goalkeeper table heads say what each cell holds', () => {
-    const table = tablesOf(recordPdfCalls('match')).find((t) => t.title === 'Por portero');
-    if (table.head.join() !== 'Portero,% paradas,Paradas/a puerta,Encajados,7 m parados') throw new Error(table.head.join());
-    table.body.forEach(([who, saved, onTarget, conceded, penalties]) => {
-      if (!/^(\d+%|–)$/.test(saved) || !/^\d+\/\d+$/.test(onTarget) || !/^\d+$/.test(String(conceded)) || !/^\d+\/\d+$/.test(penalties)) throw new Error(who + ': ' + JSON.stringify([saved, onTarget, conceded, penalties]));
-    });
   });
   // A stand-in for jsPDF that records what pdfTable asks of it.
   const fakePdfDoc = () => {
@@ -1584,10 +1596,11 @@
       } finally { done(); }
       if (data.rows.length !== expected) throw new Error(`${data.rows.length} rows for ${expected} convocados`);
       const chips = data.rows.map((r) => r.rating);
-      if (chips.slice(0, 3).some((c) => c === 'S/C') || chips.slice(3).some((c) => c !== 'S/C')) throw new Error(chips.join());
-      if (data.rows.slice(3).some((r) => r.band !== RATING_NONE_BAND)) throw new Error('S/C is not neutral');
+      if (chips.slice(0, 2).some((c) => c === 'S/C') || chips.slice(2).some((c) => c !== 'S/C')) throw new Error(chips.join());
+      if (data.rows.slice(2).some((r) => r.band !== RATING_NONE_BAND)) throw new Error('S/C is not neutral');
       if (data.rows[0].name !== 'Diego' || !data.rows[0].line.includes('3/3') || /NaN|undefined/.test(JSON.stringify(data))) throw new Error(JSON.stringify(data.rows[0]));
-      if (!data.rows[1].line.includes('Paradas')) throw new Error('keeper line: ' + data.rows[1].line);
+      const keeperRow = data.rows.find((r) => r.pos === 'POR');
+      if (!keeperRow.line.includes('Paradas')) throw new Error('keeper line: ' + keeperRow.line);
       if (data.rows.filter((r) => r.mvp).map((r) => r.name).join() !== 'Diego') throw new Error('mvp marker: ' + data.rows.filter((r) => r.mvp).map((r) => r.name));
       // Every name is drawn at 36 px or more, whole when it fits and cut with an ellipsis only beyond the floor; nothing leaves the card.
       const long = 'Maximiliano Fernández Lo', huge = 'Maximiliano '.repeat(12).trim();
@@ -1598,7 +1611,7 @@
         if (!drawn) throw new Error('name not drawn: ' + r.name);
         if (fontPx(drawn.font) < RATINGS_CARD.nameFloor) throw new Error(`name at ${fontPx(drawn.font)} px`);
       });
-      if (texts.filter((t) => t.text === 'S/C').length !== rows.length - 3) throw new Error('S/C chips');
+      if (texts.filter((t) => t.text === 'S/C').length !== rows.filter((r) => r.rating === 'S/C').length) throw new Error('S/C chips');
       rows.forEach((r) => texts.filter((t) => t.text.startsWith(r.name.slice(0, 6))).forEach((t) => { ctx.font = t.font; if (ctx.measureText(t.text).width > ratingsTextColumn().w + 0.5) throw new Error('overflow: ' + t.text); }));
       texts.forEach((t) => { ctx.font = t.font; if (ctx.measureText(t.text).width > RATINGS_CARD.w) throw new Error('overflow: ' + t.text); });
     });
@@ -1877,31 +1890,27 @@
     const ratedRow = (id, over) => seasonRow(id, { players: ratedPlayers, clock: HALF_CLOCK, courtSets: [['sp2', 'sp1'], ['sp3', 'sp1']], court: [{ abs: 0, set: 0 }], ...over });
     const goalsOf = (n) => Array.from({ length: n }, () => ({ ...seasonShot('sp2', 'GOL', '6M'), origin: m(0, 6), target: gf(0.5, 0.5) }));
     const lossesOf = (n) => Array.from({ length: n }, seasonTurnovers);
-    T('season: rows carry the match rating, S/C under the minutes', () => {
+    T('season: rows carry the match rating, S/C when the player did nothing', () => {
       const match = ratedRow('rr1', { events: goalsOf(3), court: [{ abs: 0, set: 0 }, { abs: 1500, set: 1 }] });
       const want = matchRatings(match.state);
       const [wing] = playerSeason([match], seasonPlayers[1]).rows, [back] = playerSeason([match], ratedPlayers[2]).rows;
-      if (wing.rating !== want.get('sp2').value || !(wing.rating > CONFIG.rating.base)) throw new Error('wing ' + wing.rating);
-      if (back.rating !== null || ratingText(back.rating) !== 'S/C') throw new Error('under the minimum minutes: ' + back.rating);
+      if (wing.rating !== want.get('sp2').value || !(wing.rating > 0)) throw new Error('wing ' + wing.rating);
+      if (back.rating !== null || ratingText(back.rating) !== 'S/C') throw new Error('on court with no possession and no event: ' + back.rating);
       const old = seasonRow('rr0', { events: [] }), [oldRow] = playerSeason([old], seasonPlayers[1]).rows;
-      if (oldRow.seconds !== null || oldRow.rating !== CONFIG.rating.base) throw new Error('no court log rates with confidence 1: ' + oldRow.rating);
+      if (oldRow.seconds !== null || oldRow.rating !== null) throw new Error('no court log and no event is S/C: ' + oldRow.rating);
     });
-    T('season: season rating is minutes-weighted', () => {
+    T('season: season rating is the plain mean of the rated matches', () => {
       const long = ratedRow('rw1', { events: goalsOf(3) }), short = ratedRow('rw2', { events: lossesOf(3), court: [{ abs: 0, set: 0 }, { abs: 600, set: 1 }] });
       const season = playerSeason([long, short], seasonPlayers[1]), [a, b] = season.rows;
-      const weighted = roundHalfUp((a.rating * a.seconds + b.rating * b.seconds) / (a.seconds + b.seconds), CONFIG.rating.decimals);
-      const plain = roundHalfUp((a.rating + b.rating) / 2, CONFIG.rating.decimals);
-      if (weighted === plain || season.rating !== weighted) throw new Error(`${season.rating} want ${weighted} (plain ${plain})`);
-      const unknown = seasonRow('rw3', { events: lossesOf(3) });
-      const mixed = playerSeason([long, unknown], seasonPlayers[1]);
-      if (mixed.rating !== roundHalfUp((mixed.rows[0].rating + mixed.rows[1].rating) / 2, CONFIG.rating.decimals)) throw new Error('unknown minutes: plain mean, got ' + mixed.rating);
+      if (season.rating !== roundHalfUp((a.rating + b.rating) / 2, CONFIG.rating.decimals) || !(a.rating > 0 && b.rating < 0)) throw new Error(`${season.rating} from ${a.rating} and ${b.rating}`);
       const none = playerSeason([ratedRow('rw4', { court: [{ abs: 0, set: 1 }] })], seasonPlayers[1]);
       if (none.rating !== null || playerSeason([], seasonPlayers[1]).rating !== null) throw new Error('no rated match is null');
     });
     T('team page: Nota leaders need the minimum rated matches', () => {
       if (CONFIG.leaders.minRated !== 2) throw new Error('premise: minimum rated matches ' + CONFIG.leaders.minRated);
-      const strong = ratedRow('ln1', { events: goalsOf(3) }), weak = ratedRow('ln2', { events: lossesOf(3) });
-      const sc = ratedRow('ln3', { events: goalsOf(2), court: [{ abs: 0, set: 1 }] });
+      // The keeper faces a saved shot in both rated matches, so he is rated too; the third match rates nobody.
+      const strong = ratedRow('ln1', { events: [...goalsOf(3), seasonRivalShot('sp1', 'PARADA')] }), weak = ratedRow('ln2', { events: [...lossesOf(3), seasonRivalShot('sp1', 'PARADA')] });
+      const sc = ratedRow('ln3', { events: [], court: [{ abs: 0, set: 1 }] });
       const [wingP, backP, keeperP] = [seasonPlayers[1], ratedPlayers[2], seasonPlayers[0]], roster = [wingP, backP, keeperP];
       if (LEADER_METRICS.find((x) => x.key === 'rating').label !== 'Nota') throw new Error('chip');
       const one = leaders([strong], roster, 'rating');
@@ -1918,7 +1927,7 @@
       } finally { Object.assign(home, keep); }
     });
     T('player card: rating chips in the table and on the poster', () => {
-      const strong = ratedRow('pc1', { events: goalsOf(3) }), unrated = ratedRow('pc2', { events: goalsOf(1), court: [{ abs: 0, set: 1 }] });
+      const strong = ratedRow('pc1', { events: goalsOf(3) }), unrated = ratedRow('pc2', { events: [], court: [{ abs: 0, set: 1 }] });
       const keep = { season: home.season, roster: home.roster, view: home.view, playerId: home.playerId, playerMatchId: home.playerMatchId };
       try {
         home.season = [strong, unrated]; home.roster = [seasonPlayers[0], seasonPlayers[1]]; home.playerId = 'sp2'; home.playerEdit = false; showHomeView('player');
@@ -1938,63 +1947,67 @@
     const withTeamWeights = (ratingWeights, fn) => { const previous = team; team = { ...previous, ratingWeights }; try { return fn(); } finally { team = previous; } };
     const warned = (fn) => { const real = console.warn, seen = []; console.warn = (...a) => seen.push(a.join(' ')); try { fn(); } finally { console.warn = real; } return seen; };
     const knobOf = (key) => RATING_KNOBS.find((k) => k.key === key);
-    T('weights: defaults when the team has none', () => {
+    const nearWeights = (w, want) => Object.keys(want).length === Object.keys(w).length && Object.keys(want).every((k) => nearTo(w[k], want[k], 1e-9));
+    T('weights: defaults when the team has none, in the coach\'s units', () => {
       const before = JSON.stringify(CONFIG.rating.weights);
       for (const t of [{}, { ratingWeights: null }, { ratingWeights: {} }, undefined]) {
         const w = t === undefined ? ratingWeights() : ratingWeights(t);
-        if (JSON.stringify(w) !== before) throw new Error('not the defaults for ' + JSON.stringify(t) + ': ' + JSON.stringify(w));
+        if (!nearWeights(w, CONFIG.rating.weights)) throw new Error('not the defaults for ' + JSON.stringify(t) + ': ' + JSON.stringify(w));
       }
       if (ratingWeights({}) === CONFIG.rating.weights || JSON.stringify(CONFIG.rating.weights) !== before) throw new Error('the defaults must be copied, never edited');
       const keys = new Set(RATING_KNOBS.map((k) => k.key));
       if (!keys.has('oneOnOne') || !keys.has('teamFaultKeeperShare') || keys.size !== Object.keys(CONFIG.rating.weights).length) throw new Error('one knob per weight: ' + [...keys]);
-      if (!RATING_KNOBS.every((k) => k.label && k.group && k.min < k.max && k.step > 0)) throw new Error('knob fields');
-      if (ratingOf([rTurnover('a', 'Pase')]).raw !== withTeamWeights(undefined, () => ratingOf([rTurnover('a', 'Pase')]).raw)) throw new Error('team without weights rates as before');
+      if (!RATING_KNOBS.every((k) => k.label && k.group && k.min < k.max && k.step > 0 && ['pts', 'share', 'factor'].includes(k.unit))) throw new Error('knob fields');
+      if (!nearTo(RATING_KNOB_DEFAULTS.assist, CONFIG.rating.weights.assist * POINTS_PER_GOAL) || RATING_KNOB_DEFAULTS.lateFactor !== CONFIG.rating.weights.lateFactor) throw new Error('points knobs read in points, factors as they are');
+      if (!RATING_KNOBS.every((k) => RATING_KNOB_DEFAULTS[k.key] >= k.min && RATING_KNOB_DEFAULTS[k.key] <= k.max)) throw new Error('a default outside its knob');
     });
     T('weights: unknown keys dropped, values clamped', () => {
       const messages = warned(() => {
-        const w = ratingWeights({ ratingWeights: { bogus: 1, shot: 99, turnover: -99, assist: 'x', recovery: NaN, block: 0.05 } });
-        if ('bogus' in w || Object.keys(w).join() !== Object.keys(CONFIG.rating.weights).join()) throw new Error('unknown key kept: ' + Object.keys(w));
-        if (w.shot !== knobOf('shot').max || w.turnover !== knobOf('turnover').min) throw new Error('not clamped: ' + w.shot + ' ' + w.turnover);
-        if (w.assist !== CONFIG.rating.weights.assist || w.recovery !== CONFIG.rating.weights.recovery || w.block !== 0.05) throw new Error('bad values fall back, good ones stay');
+        const w = ratingWeights({ ratingWeights: { bogus: 1, assist: 99, yellow: -99, starter: 'x', result: NaN, blocRetained: 0.6 } });
+        if ('bogus' in w || Object.keys(w).sort().join() !== Object.keys(CONFIG.rating.weights).sort().join()) throw new Error('unknown key kept: ' + Object.keys(w));
+        if (!nearTo(w.assist, knobOf('assist').max / POINTS_PER_GOAL) || !nearTo(w.yellow, knobOf('yellow').min / POINTS_PER_GOAL)) throw new Error('not clamped: ' + w.assist + ' ' + w.yellow);
+        if (!nearTo(w.starter, CONFIG.rating.weights.starter) || !nearTo(w.result, CONFIG.rating.weights.result) || !nearTo(w.blocRetained, 0.2)) throw new Error('bad values fall back, good ones stay');
       });
       if (messages.length !== 5) throw new Error('one warning per fix: ' + messages.join(' | '));
-      if (warned(() => ratingWeights({ ratingWeights: { shot: 0.9 } })).length) throw new Error('a valid value must not warn');
-      const garbage = warned(() => { if (JSON.stringify(ratingWeights({ ratingWeights: 'oops' })) !== JSON.stringify(CONFIG.rating.weights)) throw new Error('garbage object'); });
+      if (warned(() => ratingWeights({ ratingWeights: { assist: 0.9 } })).length) throw new Error('a valid value must not warn');
+      const garbage = warned(() => { if (!nearWeights(ratingWeights({ ratingWeights: 'oops' }), CONFIG.rating.weights)) throw new Error('garbage object'); });
       if (garbage.length !== 1) throw new Error('a non-object warns once: ' + garbage.length);
     });
-    T('weights: keeper team fault stays below the field one', () => {
+    T('weights: keeper team fault stays below the field one, and one knob moves the 1x1 relation', () => {
       const keeperShare = knobOf('teamFaultKeeperShare');
       if (keeperShare.min !== 0 || keeperShare.max !== 1) throw new Error('a share between 0 and 1');
       warned(() => {
-        const hard = ratingWeights({ ratingWeights: { teamFaultField: -0.2, teamFaultKeeperShare: 5 } });
-        if (hard.teamFaultKeeper !== -0.2 || Math.abs(hard.teamFaultKeeper) > Math.abs(hard.teamFaultField)) throw new Error('share capped at 1: ' + hard.teamFaultKeeper);
-        const none = ratingWeights({ ratingWeights: { teamFaultField: -0.2, teamFaultKeeperShare: -3 } });
+        const hard = ratingWeights({ ratingWeights: { teamFaultField: -0.3, teamFaultKeeperShare: 5 } });
+        if (!nearTo(hard.teamFaultKeeper, -0.1) || Math.abs(hard.teamFaultKeeper) > Math.abs(hard.teamFaultField) + 1e-9) throw new Error('share capped at 1: ' + hard.teamFaultKeeper);
+        const none = ratingWeights({ ratingWeights: { teamFaultField: -0.3, teamFaultKeeperShare: -3 } });
         if (none.teamFaultKeeper !== 0) throw new Error('share floored at 0: ' + none.teamFaultKeeper);
       });
-      const half = ratingWeights({ ratingWeights: { teamFaultField: -0.4 } });
-      if (!nearTo(half.teamFaultKeeper, -0.4 * CONFIG.rating.weights.teamFaultKeeper / CONFIG.rating.weights.teamFaultField)) throw new Error('default share kept: ' + half.teamFaultKeeper);
-      // The 1x1 knob moves the three terms together.
-      const delta = (action) => withTeamWeights({ oneOnOne: 0.5 }, () => ratingOf([rAct('a', action)]).raw - CONFIG.rating.base);
-      if (!nearTo(delta('PROV7'), 0.5) || !nearTo(delta('BEATEN'), -0.5) || !nearTo(delta('PEN7C'), -0.5)) throw new Error([delta('PROV7'), delta('BEATEN'), delta('PEN7C')].join());
+      const half = ratingWeights({ ratingWeights: { teamFaultField: -0.3 } });
+      if (!nearTo(half.teamFaultKeeper, -0.1 * RATING_KNOB_DEFAULTS.teamFaultKeeperShare)) throw new Error('default share kept: ' + half.teamFaultKeeper);
+      const won = [rAct('a', 'PROV7', 10), rShot('b', '7M', 'GOL', 20)], lost = (action) => [rAct('a', action, 10), { id: 'r7', abs: 20, kind: 'RIVAL_SHOT', gkId: 'g', zone: '7M', result: 'GOL' }];
+      const line = (events, key) => withTeamWeights({ oneOnOne: 1.5 }, () => ratingOf(events).lines[key]);
+      if (!nearTo(line(won, 'creacion'), 1.5) || !nearTo(line(lost('BEATEN'), 'defInd'), -1.5) || !nearTo(line(lost('PEN7C'), 'defInd'), -1.5)) throw new Error('the three terms move together');
     });
     await TA('weights: saved weights reload through the local backend', async () => {
       const local = localBackend(), created = await local.createTeam({ club: 'W', name: 'W', brand: '#1a4a8a', brand2: '#ffffff', brandInk: '#ffffff', crest: null });
       try {
-        await local.updateTeam(created.id, { ratingWeights: { turnover: -0.6, oneOnOne: 0.4 } });
+        await local.updateTeam(created.id, { ratingWeights: { assist: 0.6, oneOnOne: 0.9 } });
         const [again] = (await local.listTeams()).filter((t) => t.id === created.id);
-        if (again.club !== 'W' || JSON.stringify(again.ratingWeights) !== JSON.stringify({ turnover: -0.6, oneOnOne: 0.4 })) throw new Error(JSON.stringify(again));
+        if (again.club !== 'W' || JSON.stringify(again.ratingWeights) !== JSON.stringify({ assist: 0.6, oneOnOne: 0.9 })) throw new Error(JSON.stringify(again));
         const w = ratingWeights(again);
-        if (w.turnover !== -0.6 || w.oneOnOne !== 0.4 || w.shot !== CONFIG.rating.weights.shot) throw new Error(JSON.stringify(w));
+        if (!nearTo(w.assist, 0.2) || !nearTo(w.oneOnOne, 0.3) || !nearTo(w.starter, CONFIG.rating.weights.starter)) throw new Error(JSON.stringify(w));
         await local.updateTeam(created.id, { club: 'W2' });
         if (JSON.stringify((await local.listTeams()).find((t) => t.id === created.id).ratingWeights) !== JSON.stringify(again.ratingWeights)) throw new Error('a team edit without weights must keep them');
-        const withTeam = withTeamWeights(again.ratingWeights, () => ratingOf([rTurnover('a', 'Pase')]).raw);
-        if (!nearTo(withTeam, CONFIG.rating.base - 0.6)) throw new Error('rated with the team weights: ' + withTeam);
-        if (!nearTo(ratingOf([rTurnover('a', 'Pase')]).raw, CONFIG.rating.base - 0.4)) throw new Error('premise: default weights');
+        const assisted = [rShot('b', '6M', 'GOL', 20), rAct('a', 'ASIST', 21)];
+        if (!nearTo(withTeamWeights(again.ratingWeights, () => ratingOf(assisted).lines.creacion), 0.6)) throw new Error('rated with the team weights');
+        if (!nearTo(ratingOf(assisted).lines.creacion, RATING_KNOB_DEFAULTS.assist)) throw new Error('premise: default weights');
       } finally { await local.deleteTeam(created.id); }
     });
     // ---- Rating tuning view (M7): the coach moves the weights and the squad's ratings follow before he saves ----
     const tuneWing = seasonPlayers[1], tuneKeeper = seasonPlayers[0];
-    const tuneMatches = () => [seasonRow('tn1', { events: lossesOf(3) })];
+    // Three yellow cards: the yellow knob moves the wing by three times its value.
+    const tuneYellows = () => Array.from({ length: 3 }, (_, i) => ({ id: newId('e'), abs: 30 + i, kind: 'SANCTION', playerId: 'sp2', card: 'A' }));
+    const tuneMatches = () => [seasonRow('tn1', { events: tuneYellows() })];
     const tuneInput = (el, value) => { el.value = String(value); el.dispatchEvent(new Event('input', { bubbles: true })); };
     const tuneRow = (id) => [...document.querySelectorAll('#tune-rows tr')].find((tr) => tr.dataset.tunePlayer === id);
     // A team on the local backend, opened on the tuning view over the given matches; everything is put back afterwards.
@@ -2003,96 +2016,95 @@
       const keep = { season: home.season, roster: home.roster, teams: home.teams, view: home.view, weightsDraft: home.weightsDraft, armed: home.armed };
       backend = localBackend();
       const created = await backend.createTeam({ club: 'Tune', name: 'Tune', brand: '#1a4a8a', brand2: '#ffffff', brandInk: '#ffffff', crest: null });
-      applyTeam(created); home.teams = [created]; home.season = matches; home.roster = roster; home.ratingFeatureCache = null;
+      applyTeam(created); home.teams = [created]; home.season = matches; home.roster = roster; home.ratingCache = null;
       try { await fn(created); } finally {
-        await backend.deleteTeam(created.id); backend = real; applyTeam(previous); Object.assign(home, keep, { ratingFeatureCache: null });
+        await backend.deleteTeam(created.id); backend = real; applyTeam(previous); Object.assign(home, keep, { ratingCache: null });
         if (cached === undefined || cached === null) removeKey(cacheKey); else writeJson(cacheKey, cached);
         renderHome();
       }
     };
-    T('tune: raising the turnover weight lowers a player with turnovers by the expected amount', () => {
+    T('tune: a heavier yellow lowers a player with yellows by the expected amount', () => {
       const matches = tuneMatches(), roster = [tuneKeeper, tuneWing];
-      const before = rosterRatingPreview(matches, roster, ratingWeights()), heavier = rosterRatingPreview(matches, roster, { ...ratingWeights(), turnover: -0.6 });
+      const before = rosterRatingPreview(matches, roster, ratingWeights()), heavier = rosterRatingPreview(matches, roster, { ...ratingWeights(), yellow: -0.6 / POINTS_PER_GOAL });
       const [wingBefore, wingAfter] = [before, heavier].map((rows) => rows.find((r) => r.player.id === 'sp2'));
-      if (!nearTo(wingBefore.next, CONFIG.rating.base - 3 * 0.4) || !nearTo(wingAfter.next, CONFIG.rating.base - 3 * 0.6)) throw new Error(`next ${wingBefore.next} -> ${wingAfter.next}`);
-      if (!nearTo(wingAfter.current, wingBefore.next) || !nearTo(wingAfter.delta, -0.6) || wingAfter.last !== wingAfter.next) throw new Error(JSON.stringify(wingAfter));
+      if (!nearTo(wingBefore.next, 3 * RATING_KNOB_DEFAULTS.yellow) || !nearTo(wingAfter.next, 3 * -0.6)) throw new Error(`next ${wingBefore.next} -> ${wingAfter.next}`);
+      if (!nearTo(wingAfter.current, wingBefore.next) || !nearTo(wingAfter.delta, wingAfter.next - wingBefore.next) || wingAfter.last !== wingAfter.next) throw new Error(JSON.stringify(wingAfter));
       if (Object.keys(wingAfter).sort().join() !== 'current,delta,last,next,player') throw new Error('row shape ' + Object.keys(wingAfter));
       const keeperAfter = heavier.find((r) => r.player.id === 'sp1');
-      if (keeperAfter.delta !== 0 || keeperAfter.next !== CONFIG.rating.base) throw new Error('a keeper without turnovers does not move: ' + JSON.stringify(keeperAfter));
+      if (keeperAfter.delta !== null || keeperAfter.next !== null) throw new Error('a keeper who did nothing stays S/C: ' + JSON.stringify(keeperAfter));
       const absent = rosterRatingPreview(matches, [{ id: 'nobody', num: 9, name: 'Nobody', pos: 'LAT' }], ratingWeights())[0];
       if (absent.current !== null || absent.next !== null || absent.delta !== null || absent.last !== null) throw new Error('a player with no matches has no rating: ' + JSON.stringify(absent));
     });
-    T('tune: preview recombines without recomputing features', () => {
-      const matches = tuneMatches(), roster = [tuneKeeper, tuneWing], real = ratingFeatures;
+    T('tune: the saved ratings are worked out once; a knob change rates each match once for the whole squad', () => {
+      const matches = tuneMatches(), roster = [tuneKeeper, tuneWing], real = matchRatings;
       let calls = 0;
-      ratingFeatures = (...args) => { calls++; return real(...args); };
+      matchRatings = (...args) => { calls++; return real(...args); };
       try {
-        home.ratingFeatureCache = null;
+        home.ratingCache = null;
         rosterRatingPreview(matches, roster, ratingWeights());
-        const first = calls;
-        if (first !== matches.length * roster.length) throw new Error('features once per player and match: ' + first);
-        for (const turnover of [-0.5, -0.7, -0.9, -1.1]) rosterRatingPreview(matches, roster, { ...ratingWeights(), turnover });
-        if (calls !== first) throw new Error('a knob change recomputed the features: ' + (calls - first));
+        if (calls !== 2 * matches.length) throw new Error('saved and draft, once per match: ' + calls);
+        for (const yellow of [-0.1, -0.2, -0.3]) rosterRatingPreview(matches, roster, { ...ratingWeights(), yellow });
+        if (calls !== 5 * matches.length) throw new Error('a knob change re-rated the saved weights: ' + calls);
         rosterRatingPreview(tuneMatches(), roster, ratingWeights());
-        if (calls !== 2 * first) throw new Error('a new season array starts a new cache: ' + calls);
-      } finally { ratingFeatures = real; home.ratingFeatureCache = null; }
+        if (calls !== 7 * matches.length) throw new Error('a new season array starts a new cache: ' + calls);
+      } finally { matchRatings = real; home.ratingCache = null; }
     });
     await TA('tune: save persists and the team page uses the new ratings', async () => {
       await withTuneTeam(async (created) => {
         await showRatingTune();
         const saveButton = document.querySelector('[data-tune="save"]');
         if (home.view !== 'rating-tune' || !saveButton.disabled) throw new Error('opens clean, nothing to save: ' + home.view);
-        tuneInput(document.querySelector('input.tune-num[data-knob="turnover"]'), -0.6);
-        if (saveButton.disabled || !nearTo(Number(tuneRow('sp2').querySelector('[data-col="next"]').textContent.replace(',', '.')), CONFIG.rating.base - 1.8, 0.05)) throw new Error('preview row: ' + tuneRow('sp2').textContent);
+        tuneInput(document.querySelector('input.tune-num[data-knob="yellow"]'), -0.6);
+        if (saveButton.disabled || !nearTo(Number(tuneRow('sp2').querySelector('[data-col="next"]').textContent.replace(',', '.').replace('−', '-')), -1.8, 0.05)) throw new Error('preview row: ' + tuneRow('sp2').textContent);
         if (team.ratingWeights) throw new Error('nothing is saved before «Guardar»');
         saveButton.click();
         for (let i = 0; i < 8; i++) await tick0();
         const stored = (await backend.listTeams()).find((t) => t.id === created.id);
-        if (JSON.stringify(stored.ratingWeights) !== JSON.stringify({ turnover: -0.6 }) || JSON.stringify(team.ratingWeights) !== JSON.stringify({ turnover: -0.6 })) throw new Error('stored ' + JSON.stringify(stored.ratingWeights));
+        if (JSON.stringify(stored.ratingWeights) !== JSON.stringify({ yellow: -0.6 }) || JSON.stringify(team.ratingWeights) !== JSON.stringify({ yellow: -0.6 })) throw new Error('stored ' + JSON.stringify(stored.ratingWeights));
         if (!/guardada/.test($('home-status').textContent) || document.querySelector('[data-tune="save"]').disabled !== true) throw new Error('saved state: ' + $('home-status').textContent);
         const season = playerSeason(home.season, tuneWing);
-        if (!nearTo(season.rating, CONFIG.rating.base - 1.8, 0.05)) throw new Error('season rating with the new weights ' + season.rating);
+        if (!nearTo(season.rating, -1.8, 0.05)) throw new Error('season rating with the new weights ' + season.rating);
         home.playerId = 'sp2'; home.playerEdit = false; showHomeView('player');
         const poster = document.querySelector('.poster .rating-chip');
         if (!poster || poster.textContent !== ratingText(season.rating)) throw new Error('the player card reads the saved weights: ' + (poster && poster.textContent));
         await showRatingTune();
-        if (home.weightsDraft.turnover !== -0.6) throw new Error('the view reopens on the saved weights');
+        if (home.weightsDraft.yellow !== -0.6) throw new Error('the view reopens on the saved weights');
       });
     });
     await TA('tune: reset restores the defaults', async () => {
       await withTuneTeam(async (created) => {
-        await backend.updateTeam(created.id, { ratingWeights: { turnover: -0.9, red: -2 } });
+        await backend.updateTeam(created.id, { ratingWeights: { yellow: -0.9, conductDirect: -2 } });
         applyTeam((await backend.listTeams()).find((t) => t.id === created.id));
         await showRatingTune();
-        if (home.weightsDraft.turnover !== -0.9 || home.weightsDraft.red !== -2) throw new Error('opens on the saved weights');
+        if (home.weightsDraft.yellow !== -0.9 || home.weightsDraft.conductDirect !== -2) throw new Error('opens on the saved weights');
         document.querySelector('[data-tune="reset"]').click();
         if (JSON.stringify(home.weightsDraft) !== JSON.stringify(RATING_KNOB_DEFAULTS)) throw new Error('draft ' + JSON.stringify(home.weightsDraft));
         const shown = RATING_KNOBS.filter((k) => ['range', 'text'].every((type) => { const el = document.querySelector(`input[type="${type}"][data-knob="${k.key}"]`); return (type === 'range' ? Number(el.value) : parseKnobText(el.value)) !== RATING_KNOB_DEFAULTS[k.key]; }));
         if (shown.length) throw new Error('controls not reset: ' + shown.map((k) => k.key));
-        if (team.ratingWeights.turnover !== -0.9) throw new Error('reset alone saves nothing');
+        if (team.ratingWeights.yellow !== -0.9) throw new Error('reset alone saves nothing');
         document.querySelector('[data-tune="save"]').click();
         for (let i = 0; i < 8; i++) await tick0();
-        if (team.ratingWeights !== null || JSON.stringify(ratingWeights()) !== JSON.stringify(CONFIG.rating.weights)) throw new Error('saved defaults are stored as no weights: ' + JSON.stringify(team.ratingWeights));
+        if (team.ratingWeights !== null || !nearWeights(ratingWeights(), CONFIG.rating.weights)) throw new Error('saved defaults are stored as no weights: ' + JSON.stringify(team.ratingWeights));
         if ((await backend.listTeams()).find((t) => t.id === created.id).ratingWeights !== null) throw new Error('not stored');
       });
     });
     await TA('tune: input keeps focus', async () => {
       await withTuneTeam(async () => {
         await showRatingTune();
-        const number = document.querySelector('input.tune-num[data-knob="shot"]'), range = document.querySelector('input.tune-range[data-knob="shot"]');
+        const number = document.querySelector('input.tune-num[data-knob="assist"]'), range = document.querySelector('input.tune-range[data-knob="assist"]');
         number.focus();
         const rowsBefore = $('tune-rows').textContent;
         tuneInput(number, 1.5);
-        if (document.activeElement !== number || document.querySelector('input.tune-num[data-knob="shot"]') !== number) throw new Error('the number input was replaced or lost focus');
-        if (Number(range.value) !== 1.5 || home.weightsDraft.shot !== 1.5) throw new Error('range follows the number: ' + range.value);
+        if (document.activeElement !== number || document.querySelector('input.tune-num[data-knob="assist"]') !== number) throw new Error('the number input was replaced or lost focus');
+        if (Number(range.value) !== 1.5 || home.weightsDraft.assist !== 1.5) throw new Error('range follows the number: ' + range.value);
         range.focus(); tuneInput(range, 0.4);
         if (document.activeElement !== range || parseKnobText(number.value) !== 0.4) throw new Error('number follows the range: ' + number.value);
-        tuneInput(document.querySelector('input.tune-num[data-knob="turnover"]'), -1.2);
+        tuneInput(document.querySelector('input.tune-num[data-knob="yellow"]'), -1);
         if ($('tune-rows').textContent === rowsBefore) throw new Error('the preview did not move');
         number.focus(); number.value = ''; number.dispatchEvent(new Event('input', { bubbles: true }));
-        if (home.weightsDraft.shot !== 0.4 || document.activeElement !== number) throw new Error('a half-typed number changes nothing');
+        if (home.weightsDraft.assist !== 0.4 || document.activeElement !== number) throw new Error('a half-typed number changes nothing');
         number.value = '99'; number.dispatchEvent(new Event('input', { bubbles: true })); number.dispatchEvent(new Event('change', { bubbles: true }));
-        if (home.weightsDraft.shot !== knobOf('shot').max || parseKnobText(number.value) !== knobOf('shot').max) throw new Error('typed values clamp to the knob: ' + number.value);
+        if (home.weightsDraft.assist !== knobOf('assist').max || parseKnobText(number.value) !== knobOf('assist').max) throw new Error('typed values clamp to the knob: ' + number.value);
       });
     });
     T('tune: parseKnobText and knobText speak Spanish', () => {
@@ -2105,17 +2117,17 @@
       await withTuneTeam(async () => {
         await showRatingTune();
         const box = (key) => document.querySelector(`input.tune-num[data-knob="${key}"]`);
-        if (box('turnover').value !== '−0,40' || box('shot').value !== '0,80' || box('turnover').type !== 'text' || box('turnover').inputMode !== 'decimal') throw new Error('format ' + box('turnover').value + ' ' + box('shot').value);
-        box('turnover').value = '−0,6'; box('turnover').dispatchEvent(new Event('input', { bubbles: true })); box('turnover').dispatchEvent(new Event('change', { bubbles: true }));
-        if (home.weightsDraft.turnover !== -0.6 || box('turnover').value !== '−0,60' || Number(document.querySelector('input.tune-range[data-knob="turnover"]').value) !== -0.6) throw new Error('typed minus and comma: ' + box('turnover').value);
-        box('turnover').value = 'mucho'; box('turnover').dispatchEvent(new Event('input', { bubbles: true }));
-        if (home.weightsDraft.turnover !== -0.6) throw new Error('garbage must not change the weight');
-        box('turnover').dispatchEvent(new Event('change', { bubbles: true }));
-        if (box('turnover').value !== '−0,60' || !$('home-status').textContent.includes('Escribe un número')) throw new Error('revert + hint: ' + box('turnover').value + ' / ' + $('home-status').textContent);
-        box('turnover').value = '-0,5'; box('turnover').dispatchEvent(new Event('input', { bubbles: true })); box('turnover').dispatchEvent(new Event('change', { bubbles: true }));
-        if ($('home-status').textContent !== '' || box('turnover').value !== '−0,50') throw new Error('a valid entry clears the hint');
+        if (box('yellow').value !== '−0,30' || box('assist').value !== '0,45' || box('yellow').type !== 'text' || box('yellow').inputMode !== 'decimal') throw new Error('format ' + box('yellow').value + ' ' + box('assist').value);
+        box('yellow').value = '−0,6'; box('yellow').dispatchEvent(new Event('input', { bubbles: true })); box('yellow').dispatchEvent(new Event('change', { bubbles: true }));
+        if (home.weightsDraft.yellow !== -0.6 || box('yellow').value !== '−0,60' || Number(document.querySelector('input.tune-range[data-knob="yellow"]').value) !== -0.6) throw new Error('typed minus and comma: ' + box('yellow').value);
+        box('yellow').value = 'mucho'; box('yellow').dispatchEvent(new Event('input', { bubbles: true }));
+        if (home.weightsDraft.yellow !== -0.6) throw new Error('garbage must not change the weight');
+        box('yellow').dispatchEvent(new Event('change', { bubbles: true }));
+        if (box('yellow').value !== '−0,60' || !$('home-status').textContent.includes('Escribe un número')) throw new Error('revert + hint: ' + box('yellow').value + ' / ' + $('home-status').textContent);
+        box('yellow').value = '-0,5'; box('yellow').dispatchEvent(new Event('input', { bubbles: true })); box('yellow').dispatchEvent(new Event('change', { bubbles: true }));
+        if ($('home-status').textContent !== '' || box('yellow').value !== '−0,50') throw new Error('a valid entry clears the hint');
         const keeperBox = box('teamFaultKeeperShare');
-        if (!keeperBox || keeperBox.value !== '0,50') throw new Error('keeper share knob: ' + (keeperBox && keeperBox.value));
+        if (!keeperBox || keeperBox.value !== '0,40') throw new Error('keeper share knob: ' + (keeperBox && keeperBox.value));
       });
     });
     await TA('tune: leaving with unsaved changes asks first, and names are escaped', async () => {
@@ -2127,14 +2139,14 @@
         for (let i = 0; i < 5; i++) await tick0();
         if (home.view !== 'team') throw new Error('no changes: leaves at once, got ' + home.view);
         await showRatingTune();
-        tuneInput(document.querySelector('input.tune-num[data-knob="turnover"]'), -0.9);
+        tuneInput(document.querySelector('input.tune-num[data-knob="yellow"]'), -0.9);
         document.querySelector('.home-head [data-home-view="team"]').click();
-        if (home.view !== 'rating-tune' || home.armed !== 'tune-leave' || !document.querySelector('.tune-warn') || home.weightsDraft.turnover !== -0.9) throw new Error('first tap only asks: ' + home.view + ' ' + home.armed);
+        if (home.view !== 'rating-tune' || home.armed !== 'tune-leave' || !document.querySelector('.tune-warn') || home.weightsDraft.yellow !== -0.9) throw new Error('first tap only asks: ' + home.view + ' ' + home.armed);
         document.querySelector('.home-head [data-home-view="team"]').click();
         for (let i = 0; i < 5; i++) await tick0();
         if (home.view !== 'team' || home.armed !== null || team.ratingWeights) throw new Error('second tap leaves without saving: ' + home.view);
         await showRatingTune();
-        tuneInput(document.querySelector('input.tune-num[data-knob="turnover"]'), -0.9);
+        tuneInput(document.querySelector('input.tune-num[data-knob="yellow"]'), -0.9);
         document.querySelector('[data-tune="save"]').click();
         for (let i = 0; i < 8; i++) await tick0();
         document.querySelector('.home-head [data-home-view="team"]').click();
@@ -3009,10 +3021,10 @@
       for (let i = 0; i < 5; i++) await tick0();
       if (home.view !== 'team') throw new Error('nothing changed: Escape leaves at once, got ' + home.view);
       await showRatingTune();
-      tuneInput(document.querySelector('input.tune-num[data-knob="turnover"]'), -0.9);
+      tuneInput(document.querySelector('input.tune-num[data-knob="yellow"]'), -0.9);
       pressEscape();
       if (home.view !== 'rating-tune' || home.armed !== TUNE_LEAVE_ARM || leadingOf()[0].textContent !== '⚠ ¿Seguro?' || !document.querySelector('.tune-warn')) throw new Error('first Escape only arms: ' + home.view + ' ' + home.armed);
-      if (home.weightsDraft.turnover !== -0.9 || document.querySelector('#tune-save').disabled) throw new Error('the draft and Guardar survive the arming');
+      if (home.weightsDraft.yellow !== -0.9 || document.querySelector('#tune-save').disabled) throw new Error('the draft and Guardar survive the arming');
       leadingOf()[0].click();
       for (let i = 0; i < 5; i++) await tick0();
       if (home.view !== 'team' || home.armed !== null || team.ratingWeights) throw new Error('second tap leaves without saving: ' + home.view);
@@ -4271,10 +4283,13 @@
     state = sampleState(); ['home', 'sheet', 'final'].forEach((id) => { $(id).hidden = true; }); commit();
   };
   accountTests().then(() => loadPdfLibs()).then(() => {
-    T('pdf match', () => { addNote('Salida fallada del 9 en la 2ª acción — revisar'); const { doc, filename } = buildPdf('match'); undo(); __results.push('match pages ' + doc.getNumberOfPages() + ' ' + filename); window.__pdfMatch = doc.output('datauristring'); });
-    T('pdf players', () => { const { doc } = buildPdf('players'); __results.push('players pages ' + doc.getNumberOfPages()); window.__pdfPlayers = doc.output('datauristring'); });
-    T('pdf one', () => { const { filename } = buildPdf('p8'); __results.push(filename); });
-    return TA('final: shareReports still shares through shareFiles', async () => {
+    return TA('pdf match: one A4 image page per report page, and the frame is gone', async () => {
+      const { doc, filename } = await buildPdf('match');
+      if (doc.getNumberOfPages() !== REPORT_PAGES || filename !== `informe-${slug(state.us)}-${slug(state.them)}.pdf` || document.querySelector('iframe')) throw new Error(`${doc.getNumberOfPages()} pages ${filename}`);
+      window.__pdfMatch = doc.output('datauristring');
+    }).then(() => TA('pdf players', async () => { const { doc } = await buildPdf('players'); __results.push('players pages ' + doc.getNumberOfPages()); window.__pdfPlayers = doc.output('datauristring'); }))
+      .then(() => TA('pdf one', async () => { const { filename } = await buildPdf('p8'); __results.push(filename); }))
+      .then(() => TA('final: shareReports still shares through shareFiles', async () => {
       const done = withFinal(playedFew()), shared = [];
       const unstub = sheetStubs((data) => data.files.every((f) => f.type === 'application/pdf'), async (data) => { shared.push(data); });
       try {
@@ -4284,7 +4299,7 @@
         if (shared.length !== 1 || shared[0].files.length !== 2 || !/^informe-.+\.pdf$/.test(shared[0].files[0].name) || !shared[0].title.startsWith('Informe')) throw new Error(JSON.stringify(shared.map((d) => d.files.map((f) => f.name))));
         if ($('final-status').textContent !== 'Compartido.') throw new Error($('final-status').textContent);
       } finally { unstub(); done(); }
-    });
+    }));
   }).then(() => TA('final: e-mail attaches both PDFs through the share sheet, addresses first', async () => {
     const done = withFinal(playedFew()), shared = [];
     const unstub = sheetStubs((data) => data.files.every((f) => f.type === 'application/pdf'), async (data) => { shared.push(data); });
