@@ -629,6 +629,18 @@
       if (logged / plain > MAX_COURT_GROWTH) throw new Error(`${plain} -> ${logged} (${(100 * (logged / plain - 1)).toFixed(1)} %)`);
     } finally { restore(snap); }
   });
+  T('home or away: picked in the setup and shown with the venue', () => {
+    const snap = snapshot();
+    try {
+      state = freshMatch(state); state.venue = 'Vivero'; commit(); openSetup();
+      if (state.home !== null || matchPlaceText() !== 'Vivero' || document.querySelector('[data-match-home][aria-pressed="true"]')) throw new Error('not unset at first');
+      document.querySelector('[data-match-home="false"]').click();
+      if (state.home !== false || matchPlaceText() !== 'Vivero · Fuera' || document.querySelector('[data-match-home][aria-pressed="true"]').textContent !== 'Fuera') throw new Error('away');
+      document.querySelector('[data-match-home="true"]').click();
+      state.venue = '';
+      if (state.home !== true || matchPlaceText() !== 'Casa' || !finalText().split('\n')[1].startsWith('Casa')) throw new Error('home');
+    } finally { restore(snap); }
+  });
   T('fresh match: setup first, our roster kept, opponent reset', () => { const f = freshMatch(sampleState()); if (f.setupDone || f.finished || f.events.length || f.rivals.length || f.them !== 'Rival' || !f.players.length || f.clock.elapsedMs) throw new Error(JSON.stringify({ s: f.setupDone, e: f.events.length })); });
   T('setup screen: Empezar goes to the court with the clock stopped', () => { const snap = snapshot(); state = freshMatch(state); commit(); openSetup(); if (!document.querySelector('[data-start-match]') || !document.querySelector('[data-team="them"]') || !document.querySelector('#rival-dorsals')) throw new Error('setup content'); document.querySelector('[data-start-match]').click(); if (!state.setupDone || !$('sheet').hidden || isRunning()) throw new Error('start'); restore(snap); });
   T('setup refuses to start without a goalkeeper', () => { const snap = snapshot(); state = freshMatch(state); state.players = state.players.filter((p) => p.pos !== 'POR'); openSetup(); document.querySelector('[data-start-match]').click(); if (state.setupDone || $('sheet').hidden) throw new Error('started'); if (!$('setup-status').textContent.includes('portero')) throw new Error('msg'); restore(snap); });
@@ -1494,7 +1506,7 @@
       const rating = ratingText(cardRatings().get('p17').value);
       if (field.kpis.map((k) => k[0]).join() !== 'Goles,% tiro,Pases de gol,Min') throw new Error(field.kpis.map((k) => k[0]).join());
       if (field.kpis.map((k) => k[1]).join() !== `${goals}/${shots},${Math.round(goals * 100 / shots)}%,${assists},25`) throw new Error(field.kpis.map((k) => k[1]).join());
-      if (field.title !== state.them || field.score !== `${score().us}–${score().them}` || field.name !== 'Jenny' || field.num !== 17 || field.rating !== rating) throw new Error(JSON.stringify(field));
+      if (field.teams !== `${state.us} vs ${state.them}` || field.score !== `${score().us}–${score().them}` || field.name !== 'Jenny' || field.num !== 17 || field.rating !== rating) throw new Error(JSON.stringify(field));
       const faced = state.events.filter((e) => e.kind === 'RIVAL_SHOT' && e.gkId === 'p1');
       const saved = faced.filter((e) => groupOf(e.result) === 'PARADA').length, onGoal = faced.filter((e) => ['GOL', 'PARADA'].includes(groupOf(e.result))).length;
       const pens = faced.filter((e) => e.zone === '7M' && ['GOL', 'PARADA'].includes(groupOf(e.result))), pensSaved = pens.filter((e) => groupOf(e.result) === 'PARADA').length;
@@ -1540,12 +1552,12 @@
       if (lines.join(' ') !== spaced.toUpperCase()) throw new Error('name not whole: ' + lines);
       inBox(drawn.texts, drawn.ctx);
       // A 24-character rival fits the «us vs rival» line by shrinking.
-      const rival = 'Club Deportivo Balonmano', vs = drawnTexts({ ...base, title: rival }, noImages).texts.find((t) => t.text.includes(rival));
+      const rival = 'Club Deportivo Balonmano', vs = drawnTexts({ ...base, teams: `${base.teams.split(' vs ')[0]} vs ${rival}` }, noImages).texts.find((t) => t.text.includes(rival));
       if (!vs || vs.text.includes('…')) throw new Error('rival cut: ' + (vs && vs.text));
       // A name with no space shrinks to the floor before any ellipsis; beyond the floor it is cut and still fits.
       const solid = drawnTexts({ ...base, name: 'X'.repeat(MAX_NAME_LENGTH) }, noImages);
       if (solid.texts.some((t) => t.text.includes('…'))) throw new Error('24 characters without a space were cut');
-      const huge = 'Maximiliano '.repeat(12).trim(), cut = drawnTexts({ ...base, name: huge, title: huge, venue: huge }, noImages);
+      const huge = 'Maximiliano '.repeat(12).trim(), cut = drawnTexts({ ...base, name: huge, teams: huge, venue: huge }, noImages);
       if (!cut.texts.some((t) => t.text.endsWith('…'))) throw new Error('nothing was cut');
       inBox(cut.texts, cut.ctx);
       if (fitText(cut.ctx, 'Jose', MVP_CARD.w) !== 'Jose') throw new Error('short text changed');
@@ -1592,7 +1604,7 @@
       try {
         expected = state.players.length;
         data = ratingsCardData(state, matchRatings(state));
-        if (data.title !== state.them || data.score !== `${score().us}–${score().them}`) throw new Error(`${data.title} ${data.score}`);
+        if (data.match !== finalTitle()) throw new Error(`${data.match} ${finalTitle()}`);
       } finally { done(); }
       if (data.rows.length !== expected) throw new Error(`${data.rows.length} rows for ${expected} convocados`);
       const chips = data.rows.map((r) => r.rating);
@@ -3785,6 +3797,38 @@
       if (nextFixture(fixtures, new Map(), '2026-10-26').id !== 'c' || nextFixture(fixtures, new Map(), '2026-11-02') !== null) throw new Error('past weeks');
       if (nextFixture([], new Map(), '2026-10-24') !== null) throw new Error('empty');
     });
+    await TA('home or away: an unset match takes it from its calendar round, a coach choice wins', async () => {
+      const fixtures = home.fixtures, matches = home.teamMatches;
+      try {
+        home.fixtures = [fx('away', 2, '2026-10-25', 'BM Gades', { home: false }), fx('linked', 3, '2026-11-08', 'Nazareno', { matchId: 'm-naz' })];
+        home.teamMatches = [mt('m-gades', '2026-10-24', 'BM Gades'), mt('m-naz', '2026-11-01', 'Otro'), mt('m-free', '2026-12-01', 'Nadie')];
+        if (calendarHome('m-gades') !== false || calendarHome('m-naz') !== true || calendarHome('m-free') !== null) throw new Error('calendar home');
+        const saved = JSON.parse(snapshot());
+        delete saved.home;
+        if (restoreState(saved).home !== null) throw new Error('old save not null');
+        if (restoreState({ ...saved, home: true }).home !== true) throw new Error('coach choice lost');
+      } finally {
+        home.fixtures = fixtures; home.teamMatches = matches;
+      }
+    });
+    await TA('home team first: scoreline, cards and report header follow home or away', async () => {
+      const snap = snapshot();
+      try {
+        const sc = { us: 22, them: 21 };
+        state.us = 'Triana'; state.them = 'Gades';
+        state.home = null;
+        if (scoreLine(state, sc) !== 'Triana 22–21 Gades') throw new Error('unset: ' + scoreLine(state, sc));
+        state.home = true;
+        if (scoreLine(state, sc, ' – ') !== 'Triana 22 – 21 Gades') throw new Error('home: ' + scoreLine(state, sc, ' – '));
+        state.home = false;
+        const card = cardTeams(state, sc);
+        if (scoreLine(state, sc) !== 'Gades 21–22 Triana' || card.score !== '21–22' || card.teams !== 'Gades vs Triana' || card.match !== 'Gades 21–22 Triana') throw new Error('away: ' + JSON.stringify(card));
+        if (!finalTitle().startsWith('Gades ')) throw new Error('final title: ' + finalTitle());
+        const doc = new DOMParser().parseFromString(matchReportDocument(), 'text/html');
+        const names = [...doc.querySelector('header .score').querySelectorAll('.tm')].map((el) => el.textContent);
+        if (names.join() !== 'Gades,Triana') throw new Error('report header: ' + names);
+      } finally { restore(snap); }
+    });
     await TA('team page: fixtureRivalName cuts at a word boundary within the limit', async () => {
       if (fixtureRivalName('BALONMANO GADES - ASISA') !== 'BALONMANO GADES - ASISA') throw new Error('short name changed');
       const cut = fixtureRivalName('BM PROIN SAN JOSE RINCONADA SUR');
@@ -3830,14 +3874,14 @@
         openSquad({ fixtureId: fixture.id });
         if (home.view !== 'squad' || !$('home').textContent.includes('Jornada 4')) throw new Error('squad view does not say which round');
         await createMatch();
-        if (state.them !== 'BM PROIN SAN JOSE' || state.date !== '2026-11-07' || state.venue !== 'Pabellón Rinconada' || state.setupDone) throw new Error(JSON.stringify([state.them, state.date, state.venue]));
+        if (state.them !== 'BM PROIN SAN JOSE' || state.date !== '2026-11-07' || state.venue !== 'Pabellón Rinconada' || state.home !== false || state.setupDone) throw new Error(JSON.stringify([state.them, state.date, state.venue, state.home]));
         const linkedTo = currentMatchId;
         const stored = (await backend.listFixtures('cal-team'))[0];
         if (stored.matchId !== linkedTo || home.fixtures[0].matchId !== linkedTo) throw new Error('not linked ' + stored.matchId);
         if (!(await backend.listMatches('cal-team')).some((m) => m.id === linkedTo)) throw new Error('the match was not uploaded before the link');
         openSquad();
         await createMatch();
-        if (state.them !== 'Rival' || state.date !== todayIso() || state.venue !== '' || (await backend.listFixtures('cal-team'))[0].matchId !== linkedTo) throw new Error('a plain new match took the fixture');
+        if (state.them !== 'Rival' || state.date !== todayIso() || state.venue !== '' || state.home !== null || (await backend.listFixtures('cal-team'))[0].matchId !== linkedTo) throw new Error('a plain new match took the fixture');
         removeKey(MATCH_KEY_PREFIX + linkedTo); removeKey(MATCH_KEY_PREFIX + currentMatchId); removeKey(SQUAD_KEY_PREFIX + 'cal-team');
         ['home', 'sheet', 'final'].forEach((id) => { $(id).hidden = true; });
       });
