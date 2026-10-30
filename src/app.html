@@ -5699,6 +5699,8 @@ table { border-collapse: collapse; width: 100%; }
   // copy: a match goes on without coverage and is uploaded when the connection comes back.
   const SUPABASE_JS_URL = 'https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.js';
   const MATCH_KEY_PREFIX = 'hbstats:match:';
+  // A device copy the cloud refused because another device saved the match since: kept here, never uploaded.
+  const CONFLICT_KEY_PREFIX = 'hbstats:conflict:';
   const CACHE_KEY_PREFIX = 'hbstats:cache:';
   const CURRENT_MATCH_KEY = 'hbstats:current-match';
   const SQUAD_KEY_PREFIX = 'hbstats:squad:';
@@ -5743,7 +5745,10 @@ table { border-collapse: collapse; width: 100%; }
   }
   const localMatch = (id) => readJson(MATCH_KEY_PREFIX + id);
   const localMatches = () => storedKeys(MATCH_KEY_PREFIX).map(readJson).filter(Boolean);
-  const storeLocalMatch = (id, s, dirty) => writeJson(MATCH_KEY_PREFIX + id, { id, teamId: team.id, state: s, dirty: Boolean(dirty), savedAt: Date.now() });
+  // `version` is the cloud's updated_at the copy builds on (null before its first upload); an upload is refused when
+  // the cloud has moved past it. By default a copy keeps the version it had.
+  const storeLocalMatch = (id, s, dirty, version = localMatch(id)?.version ?? null) =>
+    writeJson(MATCH_KEY_PREFIX + id, { id, teamId: team.id, state: s, dirty: Boolean(dirty), savedAt: Date.now(), version });
 
   const matchStatus = (s) => (!s.setupDone ? 'setup' : s.finished ? 'finished' : 'live');
   function matchSummary(id, s) {
@@ -5827,11 +5832,13 @@ table { border-collapse: collapse; width: 100%; }
         return Object.keys(read().matches).filter((id) => read().matches[id].teamId === teamId)
           .map((id) => localMatch(id)).filter((m) => m && m.state).map((m) => ({ ...matchSummary(m.id, m.state), state: m.state }));
       },
-      async loadMatch(id) { const m = localMatch(id); return m ? m.state : null; },
+      // One device, no other writer: every save lands and there is no version to keep.
+      async loadMatch(id) { const m = localMatch(id); return m ? { state: m.state, version: null } : null; },
       async saveMatch(teamId, id, s) {
         const db = read();
         db.matches[id] = { teamId, summary: matchSummary(id, s) };
         write(db);
+        return { saved: true, version: null };
       },
       // Re-importing a calendar updates the file's columns and keeps the kickoff, the venue and the match link.
       async saveFixtures(teamId, { season, competition, fixtures }) {
@@ -5948,10 +5955,16 @@ table { border-collapse: collapse; width: 100%; }
         return check(await client.from('matches').select('id,played_on,rival,venue,status,score_us,score_them,state').eq('team_id', teamId)
           .order('played_on', { ascending: false, nullsFirst: false }).order('updated_at', { ascending: false })).filter((r) => r.state).map((r) => ({ ...toSummary(r), state: r.state }));
       },
-      async loadMatch(id) { const row = check(await client.from('matches').select('state').eq('id', id).maybeSingle()); return row ? row.state : null; },
-      async saveMatch(teamId, id, s) {
+      async loadMatch(id) {
+        const row = check(await client.from('matches').select('state,updated_at').eq('id', id).maybeSingle());
+        return row ? { state: row.state, version: row.updated_at } : null;
+      },
+      // { saved, version } or, when another device saved the match since `base.version`, { saved: false, version, state }
+      // with the cloud's copy (the save_match function in schema.sql decides).
+      async saveMatch(teamId, id, s, base = { version: null, editedAt: Date.now() }) {
         const m = matchSummary(id, s);
-        check(await client.from('matches').upsert({ id, team_id: teamId, played_on: m.date || null, rival: m.them, venue: m.venue, status: m.status, score_us: m.scoreUs, score_them: m.scoreThem, state: s }));
+        const row = { played_on: m.date || null, rival: m.them, venue: m.venue, status: m.status, score_us: m.scoreUs, score_them: m.scoreThem, state: s };
+        return check(await client.rpc('save_match', { p_id: id, p_team_id: teamId, p_base: base.version, p_edited_at: new Date(base.editedAt).toISOString(), p_row: row }));
       },
       async deleteMatch(id) { check(await client.from('matches').delete().eq('id', id)); },
       async listSessions(teamId) { return check(await client.from('attendance_sessions').select(SESSION_COLUMNS).eq('team_id', teamId).order('on_date', { ascending: false })).map(toSession); },
@@ -6032,19 +6045,37 @@ table { border-collapse: collapse; width: 100%; }
     clearTimeout(syncTimer);
     syncTimer = setTimeout(syncMatches, SYNC_DELAY_MS);
   }
-  // Uploads every match changed on this device; a failed one stays marked and goes on the next try.
-  async function syncMatches() {
+  // Uploads every match changed on this device; a failed one stays marked and goes on the next try. Runs one at a time,
+  // so two uploads of one copy never race (the second would carry a version the first already replaced).
+  let syncRun = Promise.resolve();
+  function syncMatches() {
     clearTimeout(syncTimer);
+    syncRun = syncRun.then(uploadDirtyMatches);
+    return syncRun;
+  }
+  async function uploadDirtyMatches() {
     if (!backend) return;
     for (const m of localMatches().filter((x) => x.dirty)) {
       try {
-        await backend.saveMatch(m.teamId, m.id, m.state);
+        const result = await backend.saveMatch(m.teamId, m.id, m.state, { version: m.version ?? null, editedAt: m.savedAt });
+        if (!result.saved) { adoptCloudMatch(m, result); continue; }
         const latest = localMatch(m.id);
-        if (latest && latest.savedAt === m.savedAt) writeJson(MATCH_KEY_PREFIX + m.id, { ...latest, dirty: false });
+        if (latest) writeJson(MATCH_KEY_PREFIX + m.id, { ...latest, version: result.version, dirty: latest.savedAt !== m.savedAt });
       } catch (err) {
         console.warn(`Match ${m.id} not uploaded yet: ${cloudErrorText(err)}`);
       }
     }
+  }
+  const CONFLICT_TEXT = 'Este partido se cambió en otro dispositivo: se ha cargado esa versión. Tu copia queda guardada en esta tablet.';
+  // Another device saved the match after this copy was read: the cloud's copy wins, this one is set aside.
+  function adoptCloudMatch(m, cloud) {
+    writeJson(`${CONFLICT_KEY_PREFIX}${m.id}:${m.savedAt}`, m);
+    writeJson(MATCH_KEY_PREFIX + m.id, { ...m, state: cloud.state, version: cloud.version, dirty: false, savedAt: Date.now() });
+    console.warn(`Match ${m.id}: newer copy in the cloud, this device's copy kept under ${CONFLICT_KEY_PREFIX}`);
+    if (m.id !== currentMatchId) return;
+    state = restoreState(cloud.state);
+    renderAll();
+    hint(CONFLICT_TEXT);
   }
   window.addEventListener('online', syncMatches);
 
@@ -7823,14 +7854,14 @@ table { border-collapse: collapse; width: 100%; }
     renderHome();
     homeStatus('Ficha guardada.');
   }
-  function enterMatch(id, saved, dirty, { sheetPlayer } = {}) {
+  function enterMatch(id, saved, dirty, { sheetPlayer, version } = {}) {
     currentMatchId = id;
     home.season = null;
     writeJson(CURRENT_MATCH_KEY, id);
     state = restoreState(saved);
     if (state.home == null) state.home = calendarHome(id);
     setTeamPhotos(home.roster.length ? home.roster : readJson(CACHE_KEY_PREFIX + `players:${team.id}`) || []);
-    storeLocalMatch(id, state, dirty);
+    storeLocalMatch(id, state, dirty, version);
     if (dirty) scheduleSync();
     resetPlayUi();
     ui.sheetMode = 'sheet';
@@ -7851,15 +7882,18 @@ table { border-collapse: collapse; width: 100%; }
     armBackGuard();
   }
   // The latest copy of a match: this device's when not uploaded yet, else the backend's (the device copy without coverage).
+  // A copy with changes not uploaded yet goes up first, so it is checked against the cloud before it is opened; it is
+  // opened as it is only while it cannot reach the cloud.
   async function loadLatestMatch(id) {
+    if (localMatch(id)?.dirty) await syncMatches();
     const saved = localMatch(id);
-    if (saved && saved.dirty) return { state: saved.state, dirty: true };
+    if (saved && saved.dirty) return { state: saved.state, dirty: true, version: saved.version ?? null };
     try {
       const remote = await backend.loadMatch(id);
       if (!remote) throw new Error('el partido ya no existe');
-      return { state: remote, dirty: false };
+      return { state: remote.state, dirty: false, version: remote.version };
     } catch (err) {
-      if (saved) return { state: saved.state, dirty: false };
+      if (saved) return { state: saved.state, dirty: false, version: saved.version ?? null };
       throw err;
     }
   }
@@ -7867,7 +7901,7 @@ table { border-collapse: collapse; width: 100%; }
     homeStatus('Abriendo el partido…');
     try {
       const latest = await loadLatestMatch(id);
-      enterMatch(id, latest.state, latest.dirty, options);
+      enterMatch(id, latest.state, latest.dirty, { ...options, version: latest.version });
     } catch (err) {
       homeStatus(`No se pudo abrir: ${cloudErrorText(err)}.`);
     }
@@ -7876,7 +7910,7 @@ table { border-collapse: collapse; width: 100%; }
   async function restartMatch(id) {
     try {
       const latest = await loadLatestMatch(id);
-      storeLocalMatch(id, restartedMatch(restoreState(latest.state)), true);
+      storeLocalMatch(id, restartedMatch(restoreState(latest.state)), true, latest.version);
       home.season = null;
     } catch (err) {
       homeStatus(`No se pudo reiniciar: ${cloudErrorText(err)}.`);
