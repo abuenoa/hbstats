@@ -998,6 +998,20 @@ span.att-foot { visibility: hidden; }
 .rate-tile.none { --rate: var(--soft); background: var(--soft); box-shadow: none; }
 .rate-tile.none b, .rate-tile.none span { color: var(--color-text-secondary); }
 .zone-map svg, .goal-chart svg, .radar svg, .evolution svg { display: block; width: 100%; height: auto; }
+/* Hot and cold spells: a match's stretches in the Hoja, the season's 10' blocks on the player card */
+.spells .spell { display: grid; grid-template-columns: 112px auto 1fr; align-items: baseline; gap: var(--space-3); margin: 0; padding: var(--space-2) 0; border-bottom: 1px solid var(--line); }
+.spells .spell:last-child { border-bottom: 0; }
+.spells .spell b { font: var(--type-title); }
+.spells .spell span:first-child { font-weight: 700; }
+.spell-bars { list-style: none; margin: 0; padding: 0; display: grid; gap: var(--space-2); }
+.spell-bars li { display: grid; grid-template-columns: 64px 1fr 56px; align-items: center; gap: var(--space-2); font-variant-numeric: tabular-nums; }
+.spell-bars i { display: block; height: 14px; width: var(--w); min-width: 2px; border-radius: var(--radius-sm); background: var(--color-text-tertiary); }
+.spell-bars i.pos { background: var(--color-success); }
+.spell-bars i.neg { background: var(--rating-bad); }
+.spell-bars b { text-align: right; }
+.spell-bars + .note { margin-top: var(--space-3); }
+.spell-bars li.hot span, .spell-bars li.hot b { color: var(--color-success-text); font-weight: 800; }
+.spell-bars li.cold span, .spell-bars li.cold b { color: var(--color-danger-text); font-weight: 800; }
 .match-table th, .match-table td { padding: var(--space-2) calc(var(--space-1) / 2); }
 .match-table th { letter-spacing: 0; padding-inline: var(--space-1); }
 .match-table .row-btn { padding: 0; }
@@ -1220,6 +1234,9 @@ span.att-foot { visibility: hidden; }
     shooterZones: { wingDxM: 6, wingDyM: 5, pivotM: 7.5, pivotDxM: 4, centreDxM: 2.8 },
     // Goals from one area that make a player on court the preselected shooter of the next shot from there.
     hotAreaGoals: 2,
+    // Hot and cold spells: the best and worst stretch of `windowSeconds` of a player's own actions in a match, shown
+    // when it reaches ±`minPoints` (a goal's worth); the season splits the match into blocks of the same length.
+    spells: { windowSeconds: 10 * 60, minPoints: 3 },
     // An armed panel action waits this long for the player.
     armMs: 4000,
     // The strip's «Finalizar» asks «¿Seguro?» and waits this long for the second tap.
@@ -2057,6 +2074,7 @@ span.att-foot { visibility: hidden; }
     return balance;
   }
   const SECONDS_PER_MINUTE = 60;
+  const MATCH_SECONDS = 2 * CONFIG.halfSeconds;
   const minutesText = (sec) => (sec == null ? '–' : String(Math.floor(sec / SECONDS_PER_MINUTE)));
   const plusMinusText = (v) => (v == null ? '–' : v > 0 ? `+${v}` : v < 0 ? `−${-v}` : '0');
   const courtFigures = (row) => [['Minutos', minutesText(row.seconds), ''], ['+/−', plusMinusText(row.plusMinus), 'goles a favor menos en contra']];
@@ -2322,6 +2340,35 @@ span.att-foot { visibility: hidden; }
     }));
   }
   const playerRating = (s, player, { weights = ratingWeights() } = {}) => matchRatings(s, [player], weights).get(player.id);
+  // The hottest and coldest stretch of a player's own rated actions (the moments of matchRatings), in points:
+  // { hot, cold }, each { from, to (seconds), points, actions } or null when it does not reach ±minPoints.
+  function playerSpells(moments) {
+    const { windowSeconds, minPoints } = CONFIG.spells;
+    const windows = moments.map((start) => {
+      const inside = moments.filter((x) => x.abs >= start.abs && x.abs < start.abs + windowSeconds);
+      return { from: start.abs, to: Math.min(start.abs + windowSeconds, MATCH_SECONDS), points: sumOf(inside, (x) => x.value) * POINTS_PER_GOAL, actions: inside.length };
+    });
+    const pick = (better) => windows.reduce((best, w) => (!best || better(w.points, best.points) ? w : best), null);
+    const hot = pick((a, b) => a > b), cold = pick((a, b) => a < b);
+    return { hot: hot && hot.points >= minPoints ? hot : null, cold: cold && cold.points <= -minPoints ? cold : null };
+  }
+  // A player's average points per rated match in each block of the match (0'–10', 10'–20', …).
+  function seasonSpellBlocks(matches, ratingsOf, player) {
+    const size = CONFIG.spells.windowSeconds, count = Math.ceil(MATCH_SECONDS / size);
+    const played = matches.map((m) => ratingsOf(m).get(player.id)).filter((x) => x && x.value != null);
+    return Array.from({ length: count }, (_, i) => ({
+      from: i * size, to: (i + 1) * size,
+      points: played.length ? sumOf(played, (x) => sumOf(x.moments.filter((mo) => Math.min(Math.floor(mo.abs / size), count - 1) === i), (mo) => mo.value)) * POINTS_PER_GOAL / played.length : 0
+    }));
+  }
+  const spellLineHtml = (label, spell, tone) => `<p class="spell ${tone}"><span>${label}</span><b>${minuteRangeText(spell.from, spell.to)}</b><span>${signedText(spell.points)} · ${plural(spell.actions, 'acción', 'acciones')}</span></p>`;
+  // «Racha»: the hot and cold stretches of a match, or why there are none.
+  function spellsCardHtml(s, player) {
+    const rating = matchRatings(s).get(player.id), { hot, cold } = playerSpells(rating ? rating.moments : []);
+    const lines = [hot && spellLineHtml('Más caliente', hot, 'r-good'), cold && spellLineHtml('Más frío', cold, 'r-bad')].filter(Boolean).join('');
+    return `<div class="sheet-card spells"><h3>Rachas · 10 minutos</h3>${lines || '<p class="note">Sin rachas: ningún tramo de 10 minutos sumó ni restó un gol.</p>'}</div>`;
+  }
+  const minuteRangeText = (from, to) => `${Math.floor(from / SECONDS_PER_MINUTE)}'–${Math.floor(to / SECONDS_PER_MINUTE)}'`;
   // «S/C» (no rating) reads in the neutral `rt-none` chip, never in a band.
   const RATING_NONE_BAND = 'rt-none';
   const signedText = (v) => (v < 0 ? `−${decimalText(-v)}` : `+${decimalText(v)}`);
@@ -4033,12 +4080,12 @@ span.att-foot { visibility: hidden; }
     const heading = `<h3 class="acta-h">#${p.num} ${esc(p.name)} · ${posOf(p).label}</h3>`;
     if (report.keeper) {
       const maps = MAP_GROUPS.map(([group, title]) => { const list = report.shots.filter((e) => groupOf(e.result) === group); return card(`${title} · ${list.length}`, shotMapSvg(list, 'GK', null)); }).join('');
-      return `${heading}${figuresHtml(report.figures)}
+      return `${heading}${figuresHtml(report.figures)}${spellsCardHtml(state, p)}
         <div class="match-grid">${maps}</div>
         ${tableHtml(report.zoneHead, report.zoneRows)}
         <div class="sheet-grid">${goalGridHtml(report.shots, 'PARADA', 'Detenidos por zona de portería', 'GK')}${goalGridHtml(report.shots, 'GOL', 'Encajados por zona de portería', 'GK')}</div>`;
     }
-    return `${heading}${figuresHtml(report.figures)}
+    return `${heading}${figuresHtml(report.figures)}${spellsCardHtml(state, p)}
       <div class="match-grid">${card(`Tiros · ${report.shots.length}`, shotMapSvg(report.shots, 'US', null))}${card('Por zona', tableHtml(report.zoneHead, report.zoneRows))}</div>
       <div class="sheet-grid">${card('Pérdidas por tipo', tableHtml(['Tipo', 'N'], report.turnoverRows))}${card('Fallos defensivos', tableHtml(['Tipo', 'N'], report.faultRows))}</div>
       ${card('Cronología', tableHtml(['Min', 'Acción'], report.timeline.length ? report.timeline : [['–', 'Sin acciones']]))}`;
@@ -7773,6 +7820,17 @@ table { border-collapse: collapse; width: 100%; }
     return `<div class="tile att-tile${low ? ' warn' : ''}"><p class="att-head">Asistencia · <b>${attendanceText(row.pct)}</b>${low ? ` ${lowAttendanceMark}` : ''}</p>
       <span>${counts}</span><span>Entrenos ${training} · Partidos ${match}</span></div>`;
   }
+  // Points per match in each 10' block of the season: where the player is hot and where cold.
+  function seasonSpellsHtml(player) {
+    const blocks = seasonSpellBlocks(home.season, savedRatingsFor(home.season), player);
+    const scale = Math.max(...blocks.map((b) => Math.abs(b.points))) || 1;
+    const [hot, cold] = [Math.max, Math.min].map((f) => blocks.find((b) => b.points === f(...blocks.map((x) => x.points))));
+    const bar = (b) => `<li class="${b === hot && b.points > 0 ? 'hot' : b === cold && b.points < 0 ? 'cold' : ''}"><span>${minuteRangeText(b.from, b.to)}</span>
+      <i style="--w:${(Math.abs(b.points) / scale) * PERCENT}%" class="${b.points < 0 ? 'neg' : b.points > 0 ? 'pos' : ''}"></i><b>${signedText(b.points)}</b></li>`;
+    const summary = [hot.points > 0 ? `más caliente ${minuteRangeText(hot.from, hot.to)}` : '', cold.points < 0 ? `más frío ${minuteRangeText(cold.from, cold.to)}` : ''].filter(Boolean).join(' · ');
+    return `<section class="sheet-card season-spells"><h3>Por tramos · puntos por partido</h3><ol class="spell-bars">${blocks.map(bar).join('')}</ol>
+      <p class="note">${summary ? summary[0].toUpperCase() + summary.slice(1) : 'Aún sin tramos destacados.'}</p></section>`;
+  }
   function playerSeasonHtml(player, season) {
     const best = teamBest(home.season, home.roster);
     const keeper = player.pos === 'POR';
@@ -7786,7 +7844,8 @@ table { border-collapse: collapse; width: 100%; }
       <div class="player-col"><section class="sheet-card zone-map"><h3>${card.titles.map}</h3>${zoneMapSvg(card.list, card.success, card.colours, card.counts)}
           <div class="rate-tiles">${card.tiles.map(([label, rate]) => rateTileHtml(label, rate)).join('')}</div></section>
         <section class="sheet-card"><h3>Partidos</h3><div class="table-wrap"><table class="match-table"><thead><tr>${card.heads.map((h) => `<th>${Array.isArray(h) ? `<abbr title="${h[1]}">${h[0]}</abbr>` : h}</th>`).join('')}</tr></thead><tbody>${rows}</tbody></table></div></section>
-        <section class="sheet-card evolution"><h3>Evolución</h3>${evolutionSvg(season.rows.slice().reverse(), card.barKey, card.barRate)}</section></div>
+        <section class="sheet-card evolution"><h3>Evolución</h3>${evolutionSvg(season.rows.slice().reverse(), card.barKey, card.barRate)}</section>
+        ${seasonSpellsHtml(player)}</div>
       <div class="player-col"><section class="sheet-card radar"><h3>${card.titles.radar}</h3>${card.radar}</section>
         <section class="sheet-card goal-chart"><h3>${card.titles.grid}</h3>${goalRateSvg(card.list, card.success)}</section></div></div>`;
   }
