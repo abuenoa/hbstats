@@ -150,6 +150,36 @@ drop policy if exists matches_all on public.matches;
 create policy matches_all on public.matches for all to authenticated
   using (private.is_team_member(team_id)) with check (private.is_team_member(team_id));
 
+-- A device uploads a match only over the version it started from (`p_base`, the updated_at it last read or wrote).
+-- When another device saved the match since, nothing is written and the newer row comes back, so a stale copy can
+-- never overwrite it. A copy saved before versions existed has no base: it loses to any row saved after its last edit
+-- (`p_edited_at`). Security invoker: the matches policy still decides who can read and write.
+create or replace function public.save_match(p_id uuid, p_team_id uuid, p_base timestamptz, p_edited_at timestamptz, p_row jsonb)
+returns jsonb
+language plpgsql security invoker set search_path = public as $$
+declare
+  current_row matches;
+begin
+  select * into current_row from matches where id = p_id for update;
+  if not found then
+    insert into matches (id, team_id, played_on, rival, venue, status, score_us, score_them, state)
+      values (p_id, p_team_id, (p_row->>'played_on')::date, p_row->>'rival', p_row->>'venue', p_row->>'status',
+        (p_row->>'score_us')::int, (p_row->>'score_them')::int, p_row->'state')
+      returning * into current_row;
+    return jsonb_build_object('saved', true, 'version', current_row.updated_at);
+  end if;
+  if current_row.updated_at is distinct from p_base and (p_base is not null or current_row.updated_at > p_edited_at) then
+    return jsonb_build_object('saved', false, 'version', current_row.updated_at, 'state', current_row.state);
+  end if;
+  update matches set played_on = (p_row->>'played_on')::date, rival = p_row->>'rival', venue = p_row->>'venue',
+      status = p_row->>'status', score_us = (p_row->>'score_us')::int, score_them = (p_row->>'score_them')::int, state = p_row->'state'
+    where id = p_id
+    returning * into current_row;
+  return jsonb_build_object('saved', true, 'version', current_row.updated_at);
+end $$;
+revoke all on function public.save_match(uuid, uuid, timestamptz, timestamptz, jsonb) from public, anon;
+grant execute on function public.save_match(uuid, uuid, timestamptz, timestamptz, jsonb) to authenticated;
+
 drop policy if exists rival_templates_own on public.rival_templates;
 create policy rival_templates_own on public.rival_templates for all to authenticated
   using (user_id = (select auth.uid())) with check (user_id = (select auth.uid()));

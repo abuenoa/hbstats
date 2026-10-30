@@ -2511,6 +2511,56 @@
     await TA('template editor: dorsals, duplicate refused, name required, saved to the profile', async () => { const keep = currentMatchId; leaveMatch(); await showProfile(); document.querySelector('[data-template-new]').click(); if (home.view !== 'template') throw new Error(home.view); $('tpl-dorsals').value = '4 7 9'; document.querySelector('[data-tpl-add]').click(); if (home.template.players.length !== 3) throw new Error('add'); $('tpl-dorsals').value = '10'; $('tpl-new-name').value = 'Gómez'; document.querySelector('[data-tpl-new-pos="new:PIV"]').click(); document.querySelector('[data-tpl-add]').click(); const g = home.template.players.find((r) => r.num === 10); if (!g || g.name !== 'Gómez' || g.pos !== 'PIV') throw new Error(JSON.stringify(g)); const r4 = home.template.players.find((r) => r.num === 4); const inp = document.querySelector(`[data-tpl-num="${r4.id}"]`); inp.value = '7'; inp.dispatchEvent(new Event('change', { bubbles: true })); if (r4.num !== 4 || !$('home-status').textContent.includes('ya está')) throw new Error('dup'); document.querySelector('[data-template-store]').click(); await tick0(); if (!$('home-status').textContent.includes('nombre')) throw new Error('nameless saved'); $('tpl-name').value = 'BM Sur'; document.querySelector('[data-template-store]').click(); for (let i = 0; i < 5; i++) await tick0(); if (home.view !== 'profile' || home.templates.length !== 1) throw new Error('not saved ' + home.view); const saved = (await backend.listTemplates())[0]; if (saved.name !== 'BM Sur' || saved.players.map((x) => x.num).join() !== '4,7,9,10' || saved.players[3].pos !== 'PIV' || saved.players[0].pos !== null || 'id' in saved.players[0]) throw new Error(JSON.stringify(saved)); document.querySelector('[data-template-new]').click(); $('tpl-name').value = 'bm sur'; $('tpl-dorsals').value = '1'; document.querySelector('[data-tpl-add]').click(); $('tpl-name').value = 'bm sur'; document.querySelector('[data-template-store]').click(); await tick0(); if (home.templates.length !== 1 || !$('home-status').textContent.includes('Ya tienes')) throw new Error('same name accepted'); await showProfile(); await openMatch(keep); });
     await TA('acta: «Cargar plantilla» fills the rival, «Guardar plantilla» updates the profile', async () => { ui.sheetMode = 'sheet'; ui.sheetTab = 'acta'; renderSheet(); $('sheet').hidden = false; const snap = snapshot(); try { state.rivals = []; renderSheet(); if ($('sheet').querySelector('[data-roster-export], [data-roster-import], [data-team-export]')) throw new Error('old file buttons in the acta'); document.querySelector('[data-template-pick]').click(); for (let i = 0; i < 3; i++) await tick0(); const t = home.templates[0]; document.querySelector(`[data-template-load="${t.id}"]`).click(); if (state.them !== 'BM Sur' || state.rivals.length !== 4 || state.rivals.find((r) => r.num === 10).name !== 'Gómez' || !state.rivals.every((r) => r.id)) throw new Error(JSON.stringify(state.rivals)); if (document.querySelector('[data-template-load]')) throw new Error('picker stays open'); addRivalDorsals('22'); document.querySelector('[data-template-save]').click(); for (let i = 0; i < 5; i++) await tick0(); const all = await backend.listTemplates(); if (all.length !== 1 || all[0].players.length !== 5 || !$('rival-status').textContent.includes('actualizada')) throw new Error($('rival-status').textContent); const r = state.rivals[0]; state.events.push({ id: 'x', kind: 'SHOT', rivalId: r.id }); document.querySelector('[data-template-pick]').click(); await tick0(); if (document.querySelector('[data-template-load]') || !$('rival-status').textContent.includes('Ya hay jugadas')) throw new Error('loaded over played dorsals'); } finally { restore(snap); $('sheet').hidden = true; } });
     await TA('profile: import a template file, export and delete it (asks twice)', async () => { const keep = currentMatchId; leaveMatch(); await showProfile(); await importTemplateFile(new File([JSON.stringify({ format: ROSTER_FORMAT, team: 'CB Este', players: [{ num: 3 }, { num: 8, name: 'Ruiz', pos: 'LAT' }] })], 'e.json', { type: 'application/json' })); if (home.view !== 'template' || $('tpl-name').value !== 'CB Este' || home.template.players.length !== 2) throw new Error('editor'); document.querySelector('[data-template-store]').click(); for (let i = 0; i < 5; i++) await tick0(); if (home.templates.length !== 2) throw new Error('not saved'); await importTemplateFile(new File([JSON.stringify({ format: ROSTER_FORMAT, team: 'CB ESTE', players: [{ num: 5 }] })], 'e.json', { type: 'application/json' })); if (!$('home-status').textContent.includes('sustituirá')) throw new Error('replace warning'); document.querySelector('[data-template-store]').click(); for (let i = 0; i < 5; i++) await tick0(); const este = home.templates.find((t) => t.name === 'CB Este'); if (home.templates.length !== 2 || este.players.length !== 1) throw new Error('not replaced'); await importTemplateFile(new File(['{nope'], 'e.json')); if (!$('home-status').textContent.includes('JSON')) throw new Error('bad file'); await showProfile(); document.querySelector(`[data-template-del="${este.id}"]`).click(); if (home.templates.length !== 2) throw new Error('deleted on first tap'); document.querySelector(`[data-template-del="${este.id}"]`).click(); for (let i = 0; i < 5; i++) await tick0(); if (home.templates.length !== 1 || (await backend.listTemplates()).length !== 1) throw new Error('not deleted'); await openMatch(keep); });
+    await TA('upload: the version the cloud returns is kept, and a change made meanwhile stays pending', async () => {
+      const real = backend.saveMatch, sent = [];
+      try {
+        let release;
+        backend.saveMatch = async (teamId, id, s, base) => { sent.push(base.version); await new Promise((r) => { release = r; }); return { saved: true, version: `v${sent.length}` }; };
+        addEvent('TURNOVER', { playerId: state.players.find((p) => p.pos !== 'POR').id, subtype: 'Pasos' });
+        const first = syncMatches(), second = syncMatches();
+        await tick0();
+        addEvent('TURNOVER', { playerId: state.players.find((p) => p.pos !== 'POR').id, subtype: 'Pasos' });
+        release(); await tick0(); await tick0();
+        if (localMatch(currentMatchId).version !== 'v1' || !localMatch(currentMatchId).dirty) throw new Error('first upload: ' + JSON.stringify({ v: localMatch(currentMatchId).version, d: localMatch(currentMatchId).dirty }));
+        release(); await first; await second;
+        if (sent.length !== 2 || sent[1] !== 'v1' || localMatch(currentMatchId).version !== 'v2' || localMatch(currentMatchId).dirty) throw new Error('second upload: ' + sent);
+      } finally { backend.saveMatch = real; }
+    });
+    await TA('upload: a copy the cloud refuses gives way to the cloud copy and is set aside', async () => {
+      const real = backend.saveMatch, id = currentMatchId, before = state.events.length;
+      const cloud = { ...JSON.parse(JSON.stringify(state)), them: 'Desde otra tablet', events: state.events.slice(0, 2) };
+      try {
+        backend.saveMatch = async () => ({ saved: false, version: 'v-other', state: cloud });
+        addEvent('TURNOVER', { playerId: state.players.find((p) => p.pos !== 'POR').id, subtype: 'Pasos' });
+        const mine = localMatch(id);
+        await syncMatches();
+        const now = localMatch(id), kept = readJson(`${CONFLICT_KEY_PREFIX}${id}:${mine.savedAt}`);
+        if (now.dirty || now.version !== 'v-other' || now.state.them !== 'Desde otra tablet') throw new Error('cloud copy not adopted');
+        if (state.them !== 'Desde otra tablet' || state.events.length !== 2) throw new Error('screen not reloaded');
+        if (!kept || kept.state.events.length !== before + 1) throw new Error('device copy not kept');
+        if (storedKeys(MATCH_KEY_PREFIX).some((k) => k.startsWith(CONFLICT_KEY_PREFIX))) throw new Error('conflict copy listed as a match');
+        removeKey(`${CONFLICT_KEY_PREFIX}${id}:${mine.savedAt}`);
+      } finally { backend.saveMatch = real; }
+    });
+    await TA('opening a match with changes not uploaded checks them against the cloud first', async () => {
+      const realSave = backend.saveMatch, realLoad = backend.loadMatch, id = currentMatchId;
+      const cloud = { ...JSON.parse(JSON.stringify(state)), them: 'Nube' };
+      try {
+        backend.saveMatch = async () => ({ saved: false, version: 'v9', state: cloud });
+        backend.loadMatch = async () => ({ state: cloud, version: 'v9' });
+        storeLocalMatch(id, { ...JSON.parse(JSON.stringify(state)), them: 'Tablet vieja' }, true, 'v1');
+        const latest = await loadLatestMatch(id);
+        if (latest.state.them !== 'Nube' || latest.dirty || latest.version !== 'v9') throw new Error(JSON.stringify({ them: latest.state.them, d: latest.dirty, v: latest.version }));
+        storedKeys(CONFLICT_KEY_PREFIX).forEach(removeKey);
+        backend.saveMatch = async () => { throw new Error('Failed to fetch'); };
+        storeLocalMatch(id, { ...JSON.parse(JSON.stringify(state)), them: 'Sin red' }, true, 'v9');
+        const offline = await loadLatestMatch(id);
+        if (offline.state.them !== 'Sin red' || !offline.dirty) throw new Error('offline copy not opened');
+      } finally {
+        backend.saveMatch = realSave; backend.loadMatch = realLoad;
+        storeLocalMatch(id, state, true); await syncMatches();
+      }
+    });
     await TA('failed upload keeps the match pending until the connection is back', async () => { const real = backend.saveMatch; backend.saveMatch = async () => { throw new Error('Failed to fetch'); }; addEvent('TURNOVER', { playerId: state.players.find((p) => p.pos !== 'POR').id, subtype: 'Pasos' }); await syncMatches(); const pending = localMatch(currentMatchId).dirty; backend.saveMatch = real; if (!pending) throw new Error('marked clean'); if (!withLocalChanges([]).some((x) => x.id === currentMatchId && x.pending)) throw new Error('not listed as pending'); await syncMatches(); if (localMatch(currentMatchId).dirty) throw new Error('not uploaded later'); });
     await TA('offline: the match list comes from the device copy', async () => { leaveMatch(); const real = backend.listMatches; backend.listMatches = async () => { throw new Error('Failed to fetch'); }; await showMatches(); backend.listMatches = real; if (!home.offline || !home.matches.length || !$('home').textContent.includes('Sin conexión')) throw new Error('offline list'); });
     await TA('restarting a match asks twice and keeps the setup with an empty log', async () => { await showMatches(); const row = home.matches.find((x) => x.status !== 'setup'); const id = row.id; const before = await loadLatestMatch(id); if (!before.state.events.length) throw new Error('nothing to restart'); document.querySelector(`[data-restart-match="${id}"]`).click(); if ((await loadLatestMatch(id)).state.events.length !== before.state.events.length) throw new Error('restarted on first tap'); document.querySelector(`[data-restart-match="${id}"]`).click(); for (let i = 0; i < 5; i++) await tick0(); const after = (await loadLatestMatch(id)).state; if (after.events.length || after.history.length || after.finished || after.clock.elapsedMs || after.clock.period !== 1 || after.timeoutsUsed) throw new Error(JSON.stringify(after.clock)); if (after.them !== before.state.them || after.players.length !== before.state.players.length || !after.setupDone) throw new Error('setup lost'); const listed = home.matches.find((x) => x.id === id); if (listed.scoreUs || listed.scoreThem || !$('home-status').textContent.includes('reiniciado')) throw new Error(JSON.stringify(listed)); if (document.querySelector('[data-restart-match]') && home.matches.some((x) => x.status === 'setup' && document.querySelector(`[data-restart-match="${x.id}"]`))) throw new Error('offered on a match not started'); });
@@ -3170,7 +3220,7 @@
     const sampleMatch = (over) => { const st = { ...sampleState(), sample: false, finished: true, ...over }; return { ...matchSummary('om1', st), state: st }; };
     const openFromCard = async (playerId, match, fn) => withTeams(async () => {
       const keepState = state, keepId = currentMatchId, keepTab = ui.sheetTab;
-      backend = { listMatchStates: async () => [match], listPlayers: async () => match.state.players, listMatches: async () => [], loadMatch: async () => match.state, saveMatch: async () => { throw new Error('Failed to fetch'); } };
+      backend = { listMatchStates: async () => [match], listPlayers: async () => match.state.players, listMatches: async () => [], loadMatch: async () => ({ state: match.state, version: null }), saveMatch: async () => { throw new Error('Failed to fetch'); } };
       try {
         home.roster = match.state.players; home.season = [match];
         showPlayer(playerId);
@@ -3495,11 +3545,15 @@
         next = { data: [{ id: 'm1', played_on: '2026-10-10', rival: 'Sur', venue: 'P', status: 'live', score_us: 3, score_them: 2 }], error: null };
         const [row] = await cloud.listMatches('t1');
         if (row.date !== '2026-10-10' || row.them !== 'Sur' || row.scoreUs !== 3) throw new Error(JSON.stringify(row));
-        next = { data: null, error: null }; calls.length = 0;
-        const s = sampleState(); await cloud.saveMatch('t1', 'm2', s);
-        const up = calls.find((c) => c[0] === 'upsert')[1];
-        if (up.team_id !== 't1' || up.rival !== s.them || up.score_us !== score(s.events).us || up.state !== s || up.status !== 'live') throw new Error(JSON.stringify(up).slice(0, 200));
-        next = { data: { id: 't9', club: 'C', name: 'N', brand: '#000000', brand2: '#ffffff', brand_ink: '#ffffff', crest: null }, error: null };
+        next = { data: { saved: true, version: 'v2' }, error: null }; calls.length = 0;
+        const s = sampleState(), result = await cloud.saveMatch('t1', 'm2', s, { version: 'v1', editedAt: Date.UTC(2026, 9, 30) });
+        const [, fn, args] = calls.find((c) => c[0] === 'rpc'), up = args.p_row;
+        if (fn !== 'save_match' || args.p_id !== 'm2' || args.p_team_id !== 't1' || args.p_base !== 'v1' || args.p_edited_at !== '2026-10-30T00:00:00.000Z') throw new Error(JSON.stringify(args).slice(0, 200));
+        if (up.rival !== s.them || up.score_us !== score(s.events).us || up.state !== s || up.status !== 'live' || result.version !== 'v2') throw new Error(JSON.stringify(up).slice(0, 200));
+        next = { data: { state: { events: [] }, updated_at: 'v3' }, error: null };
+        const loaded = await cloud.loadMatch('m2');
+        if (loaded.version !== 'v3' || !Array.isArray(loaded.state.events)) throw new Error(JSON.stringify(loaded));
+        next = { data: { id: 't9', club: 'C', name: 'N', brand: '#000000', brand2: '#ffffff', brand_ink: '#ffffff', crest: null }, error: null }; calls.length = 0;
         const created = await cloud.createTeam({ club: 'C', name: 'N', brand: '#000000', brand2: '#ffffff', brandInk: '#ffffff', crest: null });
         if (created.brandInk !== '#ffffff' || calls.find((c) => c[0] === 'rpc')[1] !== 'create_team') throw new Error('create');
         next = { data: { id: 't9', club: 'C', name: 'N', brand: '#000000', brand2: '#ffffff', brand_ink: '#ffffff', crest: null, rating_weights: { turnover: -0.6 } }, error: null }; calls.length = 0;
