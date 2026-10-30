@@ -652,6 +652,25 @@
   T('clock popup sets the typed time', () => { const snap = snapshot(); pauseClock(); openClockPop({ x: 100, y: 100 }); $('clock-input').value = '08:15'; $('clock-set').requestSubmit(); if (periodSeconds() !== 495 || !$('pop').hidden) throw new Error(clockText()); restore(snap); });
   T('time input keeps the colon while typing', () => { const cases = [['1', '00:01'], ['12', '00:12'], ['123', '01:23'], ['12:405', '24:05'], ['', '00:00'], ['ab12:3', '01:23']]; cases.forEach(([raw, out]) => { if (maskClockText(raw) !== out) throw new Error(raw + ' → ' + maskClockText(raw)); }); openClockPop({ x: 100, y: 100 }); const input = $('clock-input'); input.value = '12:403'; input.dispatchEvent(new Event('input', { bubbles: true })); const v = input.value; closePop(); if (v !== '24:03') throw new Error(v); });
   T('rewinding the clock shows the half-time window again', () => { const snap = snapshot(); const toEnd = () => { state.clock.elapsedMs = CONFIG.halfSeconds * 1000 - 500; state.clock.runningSince = Date.now() - 1000; checkTimers(); }; state.fired = []; state.clock = { period: 1, elapsedMs: 0, runningSince: null }; toEnd(); if ($('final').hidden) throw new Error('first'); $('final').hidden = true; setClockText('29:50'); if (state.fired.includes(HALFTIME_KEY) || state.alerts.some((a) => a.kind === 'period')) throw new Error('not re-armed'); toEnd(); if ($('final').hidden || !$('final').textContent.includes('Descanso')) throw new Error('not shown again'); restore(snap); });
+  T('correcting the clock keeps what the running 2\' have left; ended ones stay put', () => {
+    const snap = snapshot();
+    try {
+      pauseClock(); state.events = []; state.fired = []; state.clock = { period: 1, elapsedMs: 600 * 1000, runningSince: null };
+      const id = onCourtDef(); addSanction(id, '2M'); const ours = state.events.at(-1);
+      addRivalSanction(rivalOf(1).id, '2M'); const theirs = state.events.at(-1);
+      state.clock.elapsedMs = 650 * 1000;
+      const left = () => activeExclusions().map((x) => x.remaining).concat(activeRivalExclusions().map((x) => x.remaining));
+      if (left().join() !== '70,70') throw new Error('before: ' + left());
+      adjustClock(30);
+      if (left().join() !== '70,70') throw new Error('forward: ' + left());
+      setClockText('09:00');
+      if (left().join() !== '70,70' || ours.abs !== 600 || theirs.abs !== 600) throw new Error('back: ' + left());
+      state.clock.elapsedMs = (540 + 70) * 1000; checkTimers();
+      if (activeExclusions().length || !state.fired.includes(`ex-${ours.id}`) || !state.fired.includes(`rex-${theirs.id}`)) throw new Error('did not end on time');
+      const shiftAfter = ours.clockShift; adjustClock(-20);
+      if (ours.clockShift !== shiftAfter) throw new Error('an ended 2\' moved');
+    } finally { restore(snap); }
+  });
   T('rewinding after the final whistle shows the final summary again', () => { const snap = snapshot(); const toEnd = () => { state.clock.elapsedMs = CONFIG.halfSeconds * 1000 - 500; state.clock.runningSince = Date.now() - 1000; checkTimers(); }; state.clock = { period: 2, elapsedMs: 0, runningSince: null }; toEnd(); if (!state.finished) throw new Error('first'); $('final').hidden = true; adjustClock(-30); if (state.finished) throw new Error('still finished'); toEnd(); if (!state.finished || $('final').hidden || !$('final').textContent.includes('Final')) throw new Error('not shown again'); restore(snap); });
   T('an action by a bench player brings them on for the same position', () => { const snap = snapshot(); try { setPhase('ATK'); const lats = Object.keys(lineup()).filter((id) => playerById(id).pos === 'LAT'); addEvent('ACTION', { playerId: 'p21', action: 'ASIST' }, { bringOn: 'p21' }); if (!lineup().p21) throw new Error('not on court'); const gone = lats.filter((id) => !lineup()[id]); if (gone.length !== 1) throw new Error('replaced ' + gone); if (state.events.at(-1).playerId !== 'p21') throw new Error('event'); } finally { restore(snap); } });
   T('undo reverts the automatic substitution', () => { const snap = snapshot(); const canon = () => JSON.stringify(Object.entries(lineup()).sort()); try { setPhase('ATK'); const before = canon(); const n = state.events.length; addEvent('ACTION', { playerId: 'p21', action: 'ASIST' }, { bringOn: 'p21' }); const after = canon(); if (after === before) throw new Error('no swap'); undo(); if (state.events.length !== n) throw new Error('event kept'); if (canon() !== before) throw new Error('lineup not restored'); redo(); if (canon() !== after || state.events.length !== n + 1) throw new Error('redo'); } finally { restore(snap); } });

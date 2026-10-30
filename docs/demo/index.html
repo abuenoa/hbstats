@@ -1611,9 +1611,12 @@ span.att-foot { visibility: hidden; }
   const rivalExclusionEvents = () => exclusionsOf('RIVAL_SANCTION');
   // A 2' can be ended early (logged late, or the player is already back): an EXCLUSION_END event cuts its window.
   const earlyEndOf = (e, events = state.events) => events.find((x) => x.kind === 'EXCLUSION_END' && x.sanctionId === e.id) || null;
+  // A clock correction while a 2' runs stretches or shrinks its window by the same amount (`clockShift`), so the
+  // player still has the time that was left on it.
+  const exclusionLength = (e, seconds = CONFIG.exclusionSeconds) => seconds + (e.clockShift || 0);
   function exclusionEnd(e, events = state.events) {
     const early = earlyEndOf(e, events);
-    return Math.min(early ? early.abs : Infinity, e.abs + CONFIG.exclusionSeconds);
+    return Math.min(early ? early.abs : Infinity, e.abs + exclusionLength(e));
   }
   function runningExclusions(events) {
     const now = absSeconds();
@@ -2142,7 +2145,7 @@ span.att-foot { visibility: hidden; }
   function stateBaselines(s, set, t) {
     const r = CONFIG.rating, logged = (s.court || []).length > 0;
     const short = logged && set != null && fieldOnCourt(s, set).length < FIELD_PLAYERS_ON_COURT;
-    const plus = s.events.some((e) => e.kind === 'RIVAL_SANCTION' && e.card === '2M' && t >= e.abs && t < e.abs + r.exclusionSeconds);
+    const plus = s.events.some((e) => e.kind === 'RIVAL_SANCTION' && e.card === '2M' && t >= e.abs && t < e.abs + exclusionLength(e, r.exclusionSeconds));
     if (short && !plus) return r.shortHanded;
     if (plus && !short) return r.superiority;
     return { att: r.possession, def: r.possession };
@@ -2280,7 +2283,7 @@ span.att-foot { visibility: hidden; }
     // A match saved without a clock (old saves, test fixtures) ends at its last event.
     const end = (s.clock && matchEndAbs(s)) || Math.max(0, ...events.map((e) => e.abs));
     const shortCost = (e) => {
-      const until = Math.min(e.abs + r.exclusionSeconds, end), inWindow = (p) => p.abs >= e.abs && p.abs < until;
+      const until = Math.min(e.abs + exclusionLength(e, r.exclusionSeconds), end), inWindow = (p) => p.abs >= e.abs && p.abs < until;
       return attackPool.filter(inWindow).length * (r.possession - r.shortHanded.att) + defencePool.filter(inWindow).length * (r.shortHanded.def - r.possession);
     };
     events.filter((e) => e.kind === 'SANCTION').forEach((e) => {
@@ -2440,12 +2443,17 @@ span.att-foot { visibility: hidden; }
     state.fired = state.fired.filter((k) => k !== HALFTIME_KEY);
     state.alerts = state.alerts.filter((a) => !(a.kind === 'period' && a.period === 1));
   }
-  function adjustClock(deltaSec) {
-    state.clock.elapsedMs = clamp(periodElapsedMs() + deltaSec * 1000, 0, CONFIG.halfSeconds * 1000);
+  // A correction of the clock, not time played: the running 2' keep what they had left.
+  function correctClock(elapsedMs) {
+    const before = absSeconds(), running = [...exclusionEvents(), ...rivalExclusionEvents()].filter((e) => before < exclusionEnd(e));
+    state.clock.elapsedMs = elapsedMs;
     if (isRunning()) state.clock.runningSince = Date.now();
+    const shift = absSeconds() - before;
+    running.forEach((e) => { e.clockShift = (e.clockShift || 0) + shift; });
     rearmPeriodEnd();
     commit();
   }
+  const adjustClock = (deltaSec) => correctClock(clamp(periodElapsedMs() + deltaSec * 1000, 0, CONFIG.halfSeconds * 1000));
   function startPeriod(n) {
     if (keepsCourtLog()) logCourt(null);
     state.clock = { period: n, elapsedMs: 0, runningSince: null };
@@ -2485,10 +2493,7 @@ span.att-foot { visibility: hidden; }
   function setClockText(raw) {
     const shown = parseClockText(raw);
     if (shown == null) { hint(`Tiempo no válido: usa mm:ss hasta ${mmss(CONFIG.halfSeconds)}`); return false; }
-    state.clock.elapsedMs = (state.clockDown ? CONFIG.halfSeconds - shown : shown) * 1000;
-    if (isRunning()) state.clock.runningSince = Date.now();
-    rearmPeriodEnd();
-    commit();
+    correctClock((state.clockDown ? CONFIG.halfSeconds - shown : shown) * 1000);
     return true;
   }
   function finishMatch() {
@@ -2522,14 +2527,14 @@ span.att-foot { visibility: hidden; }
       changed = true;
     };
     exclusionEvents().forEach((e) => {
-      if (earlyEndOf(e) || abs < e.abs + CONFIG.exclusionSeconds) return;
+      if (earlyEndOf(e) || abs < e.abs + exclusionLength(e)) return;
       const p = playerById(e.playerId);
       const title = disqualifications().get(p.id) === e ? `Puede entrar otro por #${p.num} ${p.name}` : `#${p.num} ${p.name} puede volver`;
       fire(`ex-${e.id}`, { id: `ex-${e.id}`, kind: 'exclusion', title, body: "Fin de los 2'" }, SOUND_ALARM);
     });
     const rivalOut = rivalDisqualifications();
     rivalExclusionEvents().forEach((e) => {
-      if (earlyEndOf(e) || abs < e.abs + CONFIG.exclusionSeconds) return;
+      if (earlyEndOf(e) || abs < e.abs + exclusionLength(e)) return;
       const r = rivalById(e.rivalId);
       const title = !r ? `${state.them} vuelve a estar completo` : rivalOut.get(r.id) === e ? `${state.them}: puede entrar otro por ${rivalLabel(r)}` : `${state.them}: ${rivalLabel(r)} puede volver`;
       fire(`rex-${e.id}`, { id: `rex-${e.id}`, kind: 'exclusion', title, body: "Fin de su 2'" }, SOUND_ALARM);
