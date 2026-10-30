@@ -2008,6 +2008,25 @@
         if (!first || first.textContent !== ratingText(leaders(home.season, home.roster, 'rating')[0].value) || document.querySelector('[data-leader="rating"]').getAttribute('aria-pressed') !== 'true' || /NaN|undefined/.test($('home').textContent)) throw new Error('leaders view');
       } finally { Object.assign(home, keep); }
     });
+    T('spells: the hottest and coldest 10 minutes, only past a goal\'s worth', () => {
+      const mo = (abs, value) => ({ abs, value, label: 'x' });
+      const goalValue = CONFIG.spells.minPoints / POINTS_PER_GOAL;
+      const { hot, cold } = playerSpells([mo(60, goalValue), mo(300, goalValue / 2), mo(900, -goalValue / 2), mo(2000, -goalValue), mo(2400, -goalValue / 2), mo(3500, goalValue / 4)]);
+      if (!hot || hot.from !== 60 || hot.actions !== 2 || Math.abs(hot.points - 1.5 * CONFIG.spells.minPoints) > 1e-9) throw new Error('hot ' + JSON.stringify(hot));
+      if (!cold || cold.from !== 2000 || cold.actions !== 2 || Math.abs(cold.points + 1.5 * CONFIG.spells.minPoints) > 1e-9) throw new Error('cold ' + JSON.stringify(cold));
+      const late = playerSpells([mo(3500, goalValue)]).hot;
+      if (late.to !== MATCH_SECONDS) throw new Error('window runs past the end: ' + late.to);
+      const quiet = playerSpells([mo(100, goalValue / 2), mo(1500, -goalValue / 2)]);
+      if (quiet.hot || quiet.cold || playerSpells([]).hot) throw new Error('small stretches must not show');
+    });
+    T('spells: season blocks average the points per rated match, and an S/C match does not count', () => {
+      const player = { id: 'sp1' }, block = CONFIG.spells.windowSeconds;
+      const byMatch = { a: new Map([['sp1', { value: 1, moments: [{ abs: 30, value: 1 }, { abs: MATCH_SECONDS + 5, value: 1 }] }]]), b: new Map([['sp1', { value: 0, moments: [{ abs: block + 1, value: -1 }] }]]), c: new Map([['sp1', { value: null, moments: [{ abs: 30, value: 5 }] }]]) };
+      const blocks = seasonSpellBlocks([{ id: 'a' }, { id: 'b' }, { id: 'c' }], (m) => byMatch[m.id], player);
+      if (blocks.length !== MATCH_SECONDS / block) throw new Error('blocks ' + blocks.length);
+      const pts = blocks.map((b) => b.points / POINTS_PER_GOAL);
+      if (pts[0] !== 0.5 || pts[1] !== -0.5 || pts.at(-1) !== 0.5 || pts.slice(2, -1).some((x) => x !== 0)) throw new Error(pts.join());
+    });
     T('player card: rating chips in the table and on the poster', () => {
       const strong = ratedRow('pc1', { events: goalsOf(3) }), unrated = ratedRow('pc2', { events: [], court: [{ abs: 0, set: 1 }] });
       const keep = { season: home.season, roster: home.roster, view: home.view, playerId: home.playerId, playerMatchId: home.playerMatchId };
@@ -2690,6 +2709,7 @@
         ['3 goles en 4 lanzamientos', '1 partido jugado', '0 pérdidas', '1 gol al contraataque', 'Ari', 'Ari Gómez Ruiz', 'Extremo', '#5'].forEach((s) => { if (!text.includes(s)) throw new Error('missing «' + s + '»: ' + text.slice(0, 400)); });
         if (!document.querySelector('.player-page .radar svg') || !document.querySelector('.radar').textContent.includes('75%')) throw new Error('radar');
         if (!document.querySelector('.player-page .zone-map svg') || !document.querySelector('.player-page .goal-chart svg') || !document.querySelector('.player-page .evolution svg')) throw new Error('charts');
+        if (document.querySelectorAll('.season-spells .spell-bars li').length !== MATCH_SECONDS / CONFIG.spells.windowSeconds) throw new Error('season spells');
         const lead = document.querySelector('.tile.lead-field');
         if (!lead || !lead.textContent.includes('el mejor del equipo') || !lead.textContent.includes('75%')) throw new Error('lead tile');
         if (document.querySelectorAll('.match-table tbody tr').length !== 1 || /NaN|undefined/.test(text)) throw new Error('rows or NaN');
@@ -3232,6 +3252,8 @@
         if (figure('Goles') !== `${goalsOf(scorer)}/${shots.length}` || ui.sheetPlayer !== scorer.id) throw new Error('figures ' + figure('Goles'));
         if (chips().filter((c) => c.getAttribute('aria-pressed') === 'true').map((c) => c.dataset.sheetPlayer).join() !== scorer.id) throw new Error('pressed chip');
         const text = $('sheet').textContent;
+        const spells = playerSpells(matchRatings(state).get(scorer.id).moments), spellCard = $('sheet').querySelector('.spells');
+        if (!spellCard || (spells.hot && !spellCard.textContent.includes(minuteRangeText(spells.hot.from, spells.hot.to)))) throw new Error('spells card: ' + (spellCard && spellCard.textContent));
         ['Por zona', 'Pérdidas por tipo', 'Fallos defensivos', 'Cronología'].forEach((t) => { if (!text.includes(t)) throw new Error('missing «' + t + '»'); });
         if ($('sheet').querySelectorAll('.shot-map').length !== 1 || /NaN|undefined/.test(text)) throw new Error('map or text');
       } finally { $('sheet').hidden = true; state = keep.state; Object.assign(ui, { sheetTab: keep.tab, sheetPlayer: keep.picked }); renderSheet(); }
