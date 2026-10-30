@@ -1428,6 +1428,8 @@ span.att-foot { visibility: hidden; }
   });
 
   // ===================== State =====================
+  const pad2 = (n) => String(n).padStart(2, '0');
+  const localIso = (d) => `${d.getFullYear()}-${pad2(d.getMonth() + 1)}-${pad2(d.getDate())}`;
   // A match ready to prepare: our roster and preferences carried over; opponent, venue, clock and log reset.
   // `prefill` ({ them, date, venue, home }, from a fixture) replaces the defaults it names. `home` is true at home, false
   // away and null while nobody has said.
@@ -1470,7 +1472,8 @@ span.att-foot { visibility: hidden; }
     panelMode: 'acts', armedAction: null, armTimer: null
   };
 
-  function todayIso() { return new Date().toISOString().slice(0, 10); }
+  // The tablet's calendar day: just after midnight in Spain, UTC is still on the day before.
+  function todayIso() { return localIso(new Date()); }
   function sampleState() {
     const P = (id, num, name, pos) => ({ id, num, name, pos });
     // The rival is often known only by dorsal; a name is optional.
@@ -6700,8 +6703,6 @@ table { border-collapse: collapse; width: 100%; }
     const monday = day.getTime() - ((day.getUTCDay() + WEEK_LAST_DAY) % (WEEK_LAST_DAY + 1)) * DAY_MS;
     return [isoOfUtc(monday), isoOfUtc(monday + WEEK_LAST_DAY * DAY_MS)];
   }
-  const pad2 = (n) => String(n).padStart(2, '0');
-  const localIso = (d) => `${d.getFullYear()}-${pad2(d.getMonth() + 1)}-${pad2(d.getDate())}`;
   // The match a fixture was played as: its explicit link, else a free match of the same week (or the kickoff day) against the same rival.
   function fixtureMatch(f, matches, taken = new Set()) {
     const free = matches.filter((m) => !taken.has(m.id));
