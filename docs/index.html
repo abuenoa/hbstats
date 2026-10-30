@@ -5439,6 +5439,7 @@ table { border-collapse: collapse; width: 100%; }
           <div class="row-actions">
             <button class="btn primary press" type="button" data-final-mvp-share>Compartir MVP</button>
             <button class="btn press" type="button" data-final-ratings-share>Compartir puntuaciones</button>
+            <button class="btn press" type="button" data-final-whatsapp>WhatsApp</button>
           </div>
         </section></div>
       ${ratingsListHtml(state, ratings, seconds)}
@@ -5542,6 +5543,24 @@ table { border-collapse: collapse; width: 100%; }
     if (!ui.mvpCardBlob && !matchMvp(state, matchRatings(state)).id) { finalStatus(MVP_PREVIEW_TEXT.none); return; }
     shareCard(ui.mvpCardBlob, 'mvp', `MVP ${finalTitle()}`);
   }
+  // WhatsApp takes text only through its link; the images and PDFs go through the share buttons.
+  const WHATSAPP_URL = 'https://wa.me/?text=';
+  const WHATSAPP_SCORERS = 5;
+  // «Triana 22–22 BM Gades», place and date, the MVP and our top scorers: the message the chat picker opens with.
+  function whatsappText(s = state) {
+    const ratings = matchRatings(s), mvp = matchMvp(s, ratings), best = mvp.id ? playerById(mvp.id, s) : null;
+    const goals = (p) => sumOf(Object.values(playerStats(p.id, s.events).goals), (n) => n);
+    const scorers = s.players.map((p) => ({ name: p.name, goals: goals(p) })).filter((p) => p.goals > 0)
+      .sort((a, b) => b.goals - a.goals || a.name.localeCompare(b.name)).slice(0, WHATSAPP_SCORERS);
+    return [
+      `*${scoreLine(s, score(s.events))}*`,
+      [matchPlaceText(s), dateText(s.date)].filter(Boolean).join(' · '),
+      best ? `MVP: ${best.name} (${ratingText(ratingValue(ratings, best))})` : '',
+      scorers.length ? `Goles: ${scorers.map((p) => `${p.name} ${p.goals}`).join(', ')}` : ''
+    ].filter(Boolean).join('\n');
+  }
+  const whatsappUrl = (s = state) => WHATSAPP_URL + encodeURIComponent(whatsappText(s));
+  const shareOnWhatsApp = () => window.open(whatsappUrl(), '_blank', 'noopener');
   const shareRatingsCard = () => shareCard(ui.ratingsCardBlob, 'puntuaciones', `Puntuaciones ${finalTitle()}`);
   async function reportFiles() {
     await loadPdfLibs();
@@ -5632,6 +5651,7 @@ table { border-collapse: collapse; width: 100%; }
     if (b.hasAttribute('data-final-share')) shareReports();
     if (b.hasAttribute('data-final-mvp-share')) shareMvpCard();
     if (b.hasAttribute('data-final-ratings-share')) shareRatingsCard();
+    if (b.hasAttribute('data-final-whatsapp')) shareOnWhatsApp();
   });
 
   // ---- Sheet wiring ----
