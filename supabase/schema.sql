@@ -153,13 +153,15 @@ create policy matches_all on public.matches for all to authenticated
 -- A device uploads a match only over the version it started from (`p_base`, the updated_at it last read or wrote).
 -- When another device saved the match since, nothing is written and the newer row comes back, so a stale copy can
 -- never overwrite it. A copy saved before versions existed has no base: it loses to any row saved after its last edit
--- (`p_edited_at`). Security invoker: the matches policy still decides who can read and write.
+-- (`p_edited_at`). Security invoker: the matches policy still decides who can read and write. It marks its transaction
+-- so the trigger below lets its update through.
 create or replace function public.save_match(p_id uuid, p_team_id uuid, p_base timestamptz, p_edited_at timestamptz, p_row jsonb)
 returns jsonb
 language plpgsql security invoker set search_path = public as $$
 declare
   current_row matches;
 begin
+  perform set_config('hbstats.save_match', 'on', true);
   select * into current_row from matches where id = p_id for update;
   if not found then
     insert into matches (id, team_id, played_on, rival, venue, status, score_us, score_them, state)
@@ -179,6 +181,18 @@ begin
 end $$;
 revoke all on function public.save_match(uuid, uuid, timestamptz, timestamptz, jsonb) from public, anon;
 grant execute on function public.save_match(uuid, uuid, timestamptz, timestamptz, jsonb) to authenticated;
+-- A signed-in device changes a match only through save_match: an app from before versions (a plain upsert) is refused
+-- instead of overwriting newer work, and saves again once it reloads. The SQL editor (no auth.uid()) is not affected.
+create or replace function public.matches_only_through_save_match() returns trigger
+language plpgsql set search_path = public as $$
+begin
+  if auth.uid() is not null and current_setting('hbstats.save_match', true) is distinct from 'on' then
+    raise exception 'HBStats desactualizada: recarga la app para guardar este partido' using errcode = '42501';
+  end if;
+  return new;
+end $$;
+drop trigger if exists matches_only_through_save_match on public.matches;
+create trigger matches_only_through_save_match before update on public.matches for each row execute function public.matches_only_through_save_match();
 
 drop policy if exists rival_templates_own on public.rival_templates;
 create policy rival_templates_own on public.rival_templates for all to authenticated
