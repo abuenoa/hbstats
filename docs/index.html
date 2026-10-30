@@ -1218,6 +1218,8 @@ span.att-foot { visibility: hidden; }
     photoSizePx: 128,
     // Who usually shoots from a spot (m): wings wide and close to the goal line, pivots close and central, centre backs central.
     shooterZones: { wingDxM: 6, wingDyM: 5, pivotM: 7.5, pivotDxM: 4, centreDxM: 2.8 },
+    // Goals from one area that make a player on court the preselected shooter of the next shot from there.
+    hotAreaGoals: 2,
     // An armed panel action waits this long for the player.
     armMs: 4000,
     // The strip's «Finalizar» asks «¿Seguro?» and waits this long for the second tap.
@@ -2945,15 +2947,31 @@ span.att-foot { visibility: hidden; }
     if (dx < z.centreDxM) return 'CEN';
     return 'LAT';
   }
-  // Preselected shooter of a shot drawn in attack: the nearest available attacker of that position, else the nearest attacker.
+  // Where on court a shot or a spot is: the position it belongs to, with the side for wings and backs («EXT-L», «CEN»).
+  const SIDED_POSITIONS = ['EXT', 'LAT'];
+  function courtArea(pt) {
+    const pos = expectedPosition(pt);
+    return SIDED_POSITIONS.includes(pos) ? `${pos}-${pt.x < CENTER_X ? 'L' : 'R'}` : pos;
+  }
+  // Preselected shooter of a shot drawn in attack, among the attackers on court:
+  // 1. who has scored `hotAreaGoals` or more from that area (the most, then the nearest);
+  // 2. else the nearest attacker whose spot on court is in that area, judged by the spot (a substitute plays where the
+  //    player they replaced stood, whatever position their card says);
+  // 3. else the nearest attacker.
   function zoneShooterId(origin) {
     const out = ourOffCourt();
     const team = state.lineups.ATK;
     const field = Object.keys(team).filter((id) => playerById(id) && playerById(id).pos !== 'POR' && !out.has(id));
     const dist = (id) => Math.hypot(team[id].x - origin.x, team[id].y - origin.y);
     const nearest = (ids) => (ids.length ? ids.reduce((a, b) => (dist(b) < dist(a) ? b : a)) : null);
-    const pos = expectedPosition(origin);
-    return nearest(field.filter((id) => playerById(id).pos === pos)) || nearest(field);
+    const area = courtArea(origin);
+    const goalsHere = (id) => ourShots().filter((e) => e.playerId === id && e.result === 'GOL' && e.zone !== '7M' && e.origin && courtArea(e.origin) === area).length;
+    const hot = field.map((id) => ({ id, goals: goalsHere(id) })).filter((x) => x.goals >= CONFIG.hotAreaGoals);
+    if (hot.length) {
+      const most = Math.max(...hot.map((x) => x.goals));
+      return nearest(hot.filter((x) => x.goals === most).map((x) => x.id));
+    }
+    return nearest(field.filter((id) => courtArea(team[id]) === area)) || nearest(field);
   }
   // Players on court first, bench on the right; goalkeepers only when they are in `onCourt`.
   function playerPickerHtml(view, onCourt) {

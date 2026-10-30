@@ -684,6 +684,38 @@
   T('no Contraataque on a penalty shot', () => { const snap = snapshot(); try { setPhase('ATK'); addEvent('ACTION', { playerId: 'p8', action: 'PROV7' }); shotFromDrag(m(0, 9), { x: 500, y: 120 }, { x: 10, y: 10 }); if (document.querySelector('#pop [data-contra]')) throw new Error('contra offered'); if (!document.querySelector('#pop .zone-big').textContent.includes('7 m')) throw new Error('zone'); closePop(); } finally { cancelPenalty(); restore(snap); } });
   T('expected position from where the shot starts', () => { [[m(-8, 2), 'EXT'], [m(1, 6.5), 'PIV'], [m(0.5, 9.5), 'CEN'], [m(-4, 9), 'LAT'], [m(8, 3), 'EXT']].forEach(([pt, pos]) => { if (expectedPosition(pt) !== pos) throw new Error(`${JSON.stringify(pt)} → ${expectedPosition(pt)}, expected ${pos}`); }); });
   T('drawn attack shot preselects the court player of that zone', () => { const snap = snapshot(); try { setPhase('ATK'); disarm(); state.lineups.ATK = sampleState().lineups.ATK; shotFromDrag(m(-8, 2), { x: 500, y: 120 }, { x: 10, y: 10 }); const pressed = document.querySelector('[data-pick][aria-pressed="true"]'); if (!pressed || pressed.dataset.pick !== 'p22') throw new Error('preselected ' + (pressed && pressed.dataset.pick)); closePop(); } finally { restore(snap); } });
+  T('preselected shooter follows the spot on court, not the card position, after a substitution', () => {
+    const snap = snapshot();
+    try {
+      setPhase('ATK'); state.events = []; state.lineups.ATK = sampleState().lineups.ATK;
+      // Bokiki (card: CEN) comes on for Alex at left back; Gonzalo (CEN) stays at centre.
+      substituteFromBench('p11', 'p8');
+      if (zoneShooterId(m(-5, 9)) !== 'p11') throw new Error('left-back shot: ' + zoneShooterId(m(-5, 9)));
+      if (zoneShooterId(m(0.5, 9.5)) !== 'p19') throw new Error('centre shot: ' + zoneShooterId(m(0.5, 9.5)));
+      if (zoneShooterId(m(5, 9)) !== 'p18') throw new Error('right-back shot: ' + zoneShooterId(m(5, 9)));
+    } finally { restore(snap); }
+  });
+  T('a player with goals from an area is preselected for the next shot there while on court', () => {
+    const snap = snapshot();
+    try {
+      setPhase('ATK'); state.events = []; state.lineups.ATK = sampleState().lineups.ATK;
+      const goal = (playerId, origin, result = 'GOL') => addEvent('SHOT', { playerId, origin, target: { x: 500, y: 120 }, from: zoneFrom(origin), zone: zoneFrom(origin), result });
+      // Kike (pivot) scores twice from the left-back area.
+      goal('p13', m(-5, 9));
+      if (zoneShooterId(m(-5.5, 9.2)) !== 'p8') throw new Error('one goal is not a streak');
+      goal('p13', m(-4.5, 8.8));
+      if (zoneShooterId(m(-5.5, 9.2)) !== 'p13') throw new Error('hot player not preselected: ' + zoneShooterId(m(-5.5, 9.2)));
+      if (zoneShooterId(m(5.5, 9.2)) !== 'p18') throw new Error('the other side is another area');
+      // Alex scores three from there: the most goals win.
+      ['GOL', 'GOL', 'GOL'].forEach(() => goal('p8', m(-5, 9)));
+      if (zoneShooterId(m(-5.5, 9.2)) !== 'p8') throw new Error('most goals should win');
+      // Saved shots do not count, and a player who leaves the court is not preselected.
+      substituteFromBench('p5', 'p8');
+      if (zoneShooterId(m(-5.5, 9.2)) !== 'p13') throw new Error('benched player still preselected: ' + zoneShooterId(m(-5.5, 9.2)));
+      goal('p5', m(-5, 9), 'PARADA'); goal('p5', m(-5, 9), 'PARADA');
+      if (zoneShooterId(m(-5.5, 9.2)) !== 'p13') throw new Error('saves counted');
+    } finally { restore(snap); }
+  });
   T('a player off court (2 min) is never preselected', () => { const snap = snapshot(); try { setPhase('ATK'); state.lineups.ATK = sampleState().lineups.ATK; addSanction('p22', '2M'); const id = zoneShooterId(m(-8, 2)); if (!id || id === 'p22') throw new Error('got ' + id); } finally { restore(snap); } });
   T('a bench shooter picked for a drawn shot comes on', () => { const snap = snapshot(); try { setPhase('ATK'); state.lineups.ATK = sampleState().lineups.ATK; disarm(); shotFromDrag(m(-4, 9), { x: 500, y: 120 }, { x: 10, y: 10 }); document.querySelector('[data-pick="p21"]').click(); document.querySelector('[data-result="GOL"]').click(); if (state.events.at(-1).playerId !== 'p21') throw new Error('shooter'); if (!state.lineups.ATK.p21) throw new Error('not on court'); } finally { restore(snap); } });
   const tapEl = (el) => { const r = el.getBoundingClientRect(); const o = { bubbles: true, clientX: r.left + r.width / 2, clientY: r.top + r.height / 2, pointerId: 7, pointerType: 'pen' }; el.dispatchEvent(new PointerEvent('pointerdown', o)); el.dispatchEvent(new PointerEvent('pointerup', o)); };
