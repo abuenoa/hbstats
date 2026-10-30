@@ -1724,6 +1724,25 @@
         if (!shared[0].title.startsWith('Puntuaciones')) throw new Error(shared[0].title);
       } finally { unstub(); done(); }
     });
+    await TA('final: WhatsApp opens a chat with the score, the MVP and our scorers', async () => {
+      const done = withFinal(playedFew()), opened = [], open = window.open;
+      window.open = (...args) => { opened.push(args); return null; };
+      try {
+        $('final').querySelector('[data-final-whatsapp]').click();
+        if (opened.length !== 1 || !opened[0][0].startsWith(WHATSAPP_URL) || opened[0][1] !== '_blank') throw new Error(JSON.stringify(opened));
+        const lines = decodeURIComponent(opened[0][0].slice(WHATSAPP_URL.length)).split('\n');
+        if (lines[0] !== `*${finalTitle()}*`) throw new Error('score line: ' + lines[0]);
+        const mvp = matchMvp(state, matchRatings(state));
+        if (mvp.id && !lines.some((l) => l.startsWith(`MVP: ${playerById(mvp.id).name} (`))) throw new Error('mvp: ' + lines);
+        const scorers = lines.find((l) => l.startsWith('Goles: '));
+        if (scorers && scorers.slice('Goles: '.length).split(', ').length > WHATSAPP_SCORERS) throw new Error('too many scorers: ' + scorers);
+      } finally { window.open = open; done(); }
+    });
+    await TA('whatsapp text: away match puts the rival first and skips a match with no goals', async () => {
+      const s = { ...JSON.parse(snapshot()), us: 'Triana', them: 'Gades', home: false, venue: '', date: '2026-10-24', events: [], mvpId: null };
+      const text = whatsappText(s);
+      if (!text.startsWith('*Gades 0–0 Triana*\nFuera · ') || text.includes('Goles:')) throw new Error(text);
+    });
     await TA('final: both share buttons call share() inside the tap, and wait when the card is not ready', async () => {
       const done = withFinal(playedFew()), shared = [];
       const unstub = sheetStubs(() => true, async (data) => { shared.push(data.files[0].name); });
