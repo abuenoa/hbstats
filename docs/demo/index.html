@@ -6434,11 +6434,11 @@ table { border-collapse: collapse; width: 100%; }
     </form>`;
   }
   function appBarHtml() {
-    const tab = (view, label) => `<button class="press" type="button" data-home-view="${view}" aria-pressed="${home.view === view || (view === 'matches' && home.view === 'squad') || (view === 'team' && ['team-edit', 'player', 'player-match', 'attendance', 'rating-tune'].includes(home.view))}">${label}</button>`;
+    const tab = (view, label) => `<button class="press" type="button" data-home-view="${view}" aria-pressed="${home.view === view || (view === 'matches' && home.view === 'squad') || (view === 'team' && ['team-edit', 'player', 'player-match', 'rating-tune'].includes(home.view))}">${label}</button>`;
     return `<div class="home-head app-bar">
       <img class="crest home-crest" src="${esc(crestSrc(team))}" alt="">
       <div class="home-title"><h1>${esc(team.name)}</h1><small>${esc(team.club)}</small></div>
-      <div class="tabs" role="group" aria-label="Secciones">${tab('team', 'Equipo')}${tab('matches', 'Partidos')}${tab('stats', 'Estadísticas')}</div>
+      <div class="tabs" role="group" aria-label="Secciones">${tab('team', 'Equipo')}${tab('attendance', 'Asistencia')}${tab('matches', 'Partidos')}${tab('stats', 'Estadísticas')}</div>
     </div>`;
   }
   // A match left on this tablet by the per-club release (same site), if any.
@@ -6556,7 +6556,7 @@ table { border-collapse: collapse; width: 100%; }
       return { leading, title: `${player.name} · ${match.them}`, actions: `<button class="btn primary press" type="button" data-player-match-open="${match.id}">Abrir el partido</button>` };
     },
     'team-edit': () => ({ leading: backToTeam(), title: 'Editar equipo' }),
-    attendance: () => ({ leading: backToTeam(), title: 'Asistencia' }),
+    attendance: () => ({ leading: backToTeams(), title: 'Asistencia' }),
     squad: () => ({ leading: cancelButtonHtml(`data-home-view="matches"`), title: 'Convocatoria', actions: `<button class="btn go play press" type="button" data-squad-next ${squadReady() ? '' : 'disabled'}>Siguiente ›</button>` }),
     'rating-tune': () => ({
       leading: cancelButtonHtml('data-home-view="team"', TUNE_LEAVE_ARM),
@@ -7302,19 +7302,20 @@ table { border-collapse: collapse; width: 100%; }
   function squadCardHtml() {
     const groups = positionGroupsHtml(squadFaceHtml(attendanceRowsNow()));
     return `<section class="sheet-card squad"><h3>Plantilla · ${home.roster.length}</h3>${groups || '<p class="note">Todavía no hay jugadores.</p>'}
-      <div class="row-actions"><button class="btn press" type="button" data-home-view="team-edit">Editar equipo</button><button class="btn press" type="button" data-home-view="attendance">Asistencia</button><button class="btn press" type="button" data-rating-tune>Ajustar puntuación</button></div></section>`;
+      <div class="row-actions"><button class="btn press" type="button" data-home-view="team-edit">Editar equipo</button><button class="btn press" type="button" data-rating-tune>Ajustar puntuación</button></div></section>`;
   }
   // The team rate, the sessions behind it and the players with most absences (faltas, then justificadas).
+  const ATTENDANCE_QUICK_HTML = '<div class="row-actions"><button class="btn primary press" type="button" data-home-view="attendance">Pasar lista de hoy</button></div>';
   function attendanceCardHtml() {
     const rows = attendanceRowsNow();
-    if (!rows) return '';
+    if (!rows) return `<section class="sheet-card attendance-card"><h3>Asistencia</h3>${ATTENDANCE_QUICK_HTML}<p class="note">Aún no hay sesiones.</p></section>`;
     const days = attendanceDays(home.sessions, home.stateMatches);
     const countOf = (kind) => days.filter((d) => d.session.kind === kind).length;
     const rate = pct(rows.reduce((n, r) => n + r.P, 0), rows.reduce((n, r) => n + r.counted, 0));
     const worst = rows.filter((r) => r.F || r.J).sort((a, b) => b.F - a.F || b.J - a.J || a.player.num - b.player.num).slice(0, ABSENCE_LEADERS);
     const list = worst.map((r, i) => `<li><button class="leader press" type="button" data-player="${esc(r.player.id)}"><i class="rank">${i + 1}</i>${discHtml(r.player)}
         <span class="who"><b>${esc(r.player.name)}</b><small>${plural(r.F, 'falta', 'faltas')} · ${plural(r.J, 'justificada', 'justificadas')}</small></span><strong class="value">${r.F}</strong></button></li>`).join('');
-    return `<section class="sheet-card attendance-card"><h3>Asistencia</h3>
+    return `<section class="sheet-card attendance-card"><h3>Asistencia</h3>${ATTENDANCE_QUICK_HTML}
       <div class="record"><b>${attendanceText(rate)}${lowAttendance(rate) ? ` ${lowAttendanceMark}` : ''}</b><small>${plural(countOf(SESSION_KINDS.TRAINING), 'entreno', 'entrenos')} · ${plural(countOf(SESSION_KINDS.MATCH), 'partido', 'partidos')}</small></div>
       <h4 class="att-sub">Más faltas</h4>${list ? `<ol class="leader-list">${list}</ol>` : '<p class="note">Nadie ha faltado.</p>'}</section>`;
   }
@@ -7715,6 +7716,7 @@ table { border-collapse: collapse; width: 100%; }
         <div class="att-bar"><label class="field">Fecha<input class="in" type="date" id="att-date" value="${esc(home.attendanceDate)}"></label>
           <div class="chips" role="group" aria-label="Tipo de sesión">${chips}</div>
           <div class="att-sum"><p class="att-count">${counted}</p>${statusHtml(attendanceStatusText())}</div></div>
+        <p class="note att-how">Todos cuentan como presentes: toca a quien no esté. Cada toque cambia a ${[...MARK_CODES.map((c) => ATTENDANCE[c]), ATTENDANCE[session.kind === SESSION_KINDS.MATCH ? 'NC' : 'P']].join(' → ')}.</p>
         ${attendanceNoteRowHtml(session)}
         <div class="pos-groups">${positionGroupsHtml((p) => attendanceFaceHtml(p, session, match)) || '<p class="note">Todavía no hay jugadores.</p>'}</div>${remove}</section>`;
   }
