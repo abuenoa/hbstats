@@ -143,7 +143,8 @@
     --dorsal-ink: #0e0e10;
   }
 }
-:root[data-theme="dark"] {
+/* The pages outside a match (.home) always wear the dark theme: the «noche de partido» look the coach chose. */
+:root[data-theme="dark"], .home {
   color-scheme: dark;
   --bg: #0e0e10; --glow-red: rgba(var(--brand-rgb), .20); --glow-gold: rgba(var(--brand-2-rgb), .08);
   --surface: #18181b; --soft: #232327; --btn: rgba(255, 255, 255, .07);
@@ -985,6 +986,48 @@ span.att-foot { visibility: hidden; }
 .rate-tile.none { --rate: var(--soft); background: var(--soft); box-shadow: none; }
 .rate-tile.none b, .rate-tile.none span { color: var(--color-text-secondary); }
 .zone-map svg, .goal-chart svg, .radar svg, .evolution svg { display: block; width: 100%; height: auto; }
+/* ---------- «Noche de partido»: the video-game look of every page outside a match ---------- */
+.home {
+  color: var(--fg); color-scheme: dark;
+  --bg: #0e1116; --surface: #161a21; --soft: #1d222b; --line: #262c36; --fg: #f2f3f5; --muted: #c5c9d1;
+  --glass: #161a21; --glass-strong: #161a21; --glass-edge: #262c36; --shadow: none;
+  --game-accent: rgb(var(--brand-2-rgb)); --game-ink: #0e1116; --radar-ink: var(--game-accent); --color-danger-text: #f87171;
+  /* Tokens built on others resolve where they are declared: declared again here so they take the values above. */
+  --color-bg-page: var(--bg); --color-bg-surface: var(--surface); --color-bg-subtle: var(--soft); --color-border: var(--line);
+  --color-text: var(--fg); --color-text-secondary: var(--muted); --color-success: var(--rating-good); --color-on-success: var(--rating-ink-good);
+  --radius-xl: 6px; --radius-lg: 6px; --radius-md: 4px;
+}
+.home .top-bar { border-radius: 0 0 var(--radius-md) var(--radius-md); border-width: 0 0 3px; border-color: var(--brand); }
+.home .home-title h1, .home .page-title, .home .poster-name, .home .next-rival { font-family: var(--font-display); font-weight: 800; text-transform: uppercase; letter-spacing: .04em; }
+.home .sheet-card { border-color: var(--line); box-shadow: none; }
+.home table { color: var(--fg); }
+.home .sheet-card > h3, .home .grid-title { font-family: var(--font-display); font-size: 1.25rem; font-weight: 700; letter-spacing: .1em; color: var(--game-accent); }
+.home .tabs button { font-family: var(--font-display); font-size: 1.05rem; text-transform: uppercase; letter-spacing: .06em; }
+.home .tabs button[aria-pressed="true"] { background: var(--game-accent); border-color: var(--game-accent); color: var(--game-ink); }
+.home .record b, .home .season-kpi b, .home .leader .value { color: var(--game-accent); }
+.home .season-kpi.hot b { color: inherit; }
+/* Cards on a grid line up: every card of a row is as tall as the tallest */
+.home .team-page, .home .player-grid { align-items: stretch; }
+.home .player-col { align-content: start; }
+.home .player-col > .sheet-card:last-child { flex-grow: 1; }
+/* Squad: each player is a trading card with their overall */
+.home .face { border-radius: var(--radius-md); border-top: 4px solid var(--pos); box-shadow: none; background: var(--soft); position: relative; }
+.face-overall { position: absolute; left: var(--space-1); top: var(--space-1); font-family: var(--font-display); font-weight: 800; font-size: 1.25rem; line-height: 1; color: var(--game-accent); }
+/* Player card: a shield-shaped trading card with the overall, the position and the attributes */
+.home .poster { background: linear-gradient(160deg, var(--brand), color-mix(in srgb, var(--brand) 35%, #0e1116) 70%); color: #ffffff; clip-path: polygon(0 0, 100% 0, 100% 96%, 50% 100%, 0 96%); padding-bottom: var(--space-8); border: 0; }
+.home .poster .poster-sub, .home .poster .poster-rating, .home .poster .sentences, .home .poster .tile:not(.lead-field, .lead-keeper) span { color: rgba(255, 255, 255, .85); }
+.home .poster .sentences b { color: #ffffff; text-decoration-color: var(--game-accent); }
+.home .poster .tile:not(.lead-field, .lead-keeper) { background: rgba(0, 0, 0, .28); }
+.home .poster .poster-dorsal { color: #ffffff; opacity: .12; }
+.home .poster-face .disc { box-shadow: 0 0 0 5px var(--game-accent), 0 0 32px rgba(var(--brand-2-rgb), .45); }
+.home .poster > .game-overall { position: absolute; left: var(--space-4); top: var(--space-4); display: grid; justify-items: center; line-height: 1; z-index: 1; }
+.game-overall b { font-family: var(--font-display); font-weight: 800; font-size: 4rem; color: var(--game-accent); }
+.game-overall span { font-family: var(--font-display); font-weight: 700; font-size: 1.25rem; letter-spacing: .1em; }
+.home .poster-face { justify-self: end; margin: var(--space-6) var(--space-3) 0 0; }
+.home .game-attrs { display: grid; grid-template-columns: 1fr 1fr; gap: var(--space-1) var(--space-6); margin: var(--space-2) 0 0; padding: var(--space-3) 0 0; border-top: 2px solid rgba(255, 255, 255, .35); list-style: none; font-family: var(--font-display); font-size: 1.25rem; letter-spacing: .04em; }
+.home .game-attrs li { display: flex; justify-content: flex-start; gap: var(--space-2); align-items: baseline; font: inherit; }
+.game-attrs abbr { text-decoration: none; }
+.game-attrs b { min-width: 2ch; color: var(--game-accent); font-weight: 800; font-variant-numeric: tabular-nums; }
 /* Hot and cold spells: a match's stretches in the Hoja, the season's 10' blocks on the player card */
 .spells .spell { display: grid; grid-template-columns: 112px auto 1fr; align-items: baseline; gap: var(--space-3); margin: 0; padding: var(--space-2) 0; border-bottom: 1px solid var(--line); }
 .spells .spell:last-child { border-bottom: 0; }
@@ -7004,22 +7047,22 @@ table { border-collapse: collapse; width: 100%; }
   const decimalText = (v) => v.toFixed(1).replace('.', ',');
   const percentText = (v) => `${Math.round(v * PERCENT)}%`;
   const FIELD_AXES = [
-    { key: 'pct', label: 'Acierto', group: 'act-good', text: percentText },
-    { key: 'goals', label: 'Goles', group: 'act-good', text: decimalText },
-    { key: 'assists', label: 'Pases de gol', group: 'act-good', text: decimalText },
-    { key: 'prov7', label: 'Provoca 7 m', group: 'act-good', text: decimalText },
-    { key: 'recoveries', label: 'Recuperaciones', group: 'act-def', text: decimalText },
-    { key: 'blocks', label: 'Blocajes', group: 'act-def', text: decimalText },
-    { key: 'security', label: 'Seguridad', group: 'act-bad', text: decimalText, inverted: true },
-    { key: 'discipline', label: 'Disciplina', group: 'act-rule', text: decimalText, inverted: true }
+    { key: 'pct', label: 'Acierto', short: 'ACI', group: 'act-good', text: percentText },
+    { key: 'goals', label: 'Goles', short: 'GOL', group: 'act-good', text: decimalText },
+    { key: 'assists', label: 'Pases de gol', short: 'PAS', group: 'act-good', text: decimalText },
+    { key: 'prov7', label: 'Provoca 7 m', short: 'P7M', group: 'act-good', text: decimalText },
+    { key: 'recoveries', label: 'Recuperaciones', short: 'REC', group: 'act-def', text: decimalText },
+    { key: 'blocks', label: 'Blocajes', short: 'BLO', group: 'act-def', text: decimalText },
+    { key: 'security', label: 'Seguridad', short: 'SEG', group: 'act-bad', text: decimalText, inverted: true },
+    { key: 'discipline', label: 'Disciplina', short: 'DIS', group: 'act-rule', text: decimalText, inverted: true }
   ];
   const KEEPER_AXES = [
-    { key: 'pct', label: 'Paradas', group: 'act-def', text: percentText },
-    { key: 'near', label: 'Cerca', group: 'act-def', text: percentText },
-    { key: 'far', label: 'Lejos', group: 'act-def', text: percentText },
-    { key: 'p7', label: '7 m', group: 'act-rule', text: percentText },
-    { key: 'contra', label: 'Contra', group: 'act-bad', text: percentText },
-    { key: 'assists', label: 'Asistencias', group: 'act-good', text: decimalText }
+    { key: 'pct', label: 'Paradas', short: 'PAR', group: 'act-def', text: percentText },
+    { key: 'near', label: 'Cerca', short: 'CER', group: 'act-def', text: percentText },
+    { key: 'far', label: 'Lejos', short: 'LEJ', group: 'act-def', text: percentText },
+    { key: 'p7', label: '7 m', short: '7M', group: 'act-rule', text: percentText },
+    { key: 'contra', label: 'Contra', short: 'CON', group: 'act-bad', text: percentText },
+    { key: 'assists', label: 'Asistencias', short: 'ASI', group: 'act-good', text: decimalText }
   ];
   // Raw per-match (or rate) value of every axis; security and discipline are the turnovers and faults per match.
   function fieldValues(season) {
@@ -7038,10 +7081,20 @@ table { border-collapse: collapse; width: 100%; }
     };
   }
   function radar(axes, values, best) {
-    return axes.map(({ key, label, group, text, inverted }) => {
+    return axes.map(({ key, label, short, group, text, inverted }) => {
       const share = best[key] ? clamp(values[key] / best[key], 0, 1) : 0;
-      return { key, label, value: values[key], text: text(values[key]), fraction: inverted ? 1 - share : share, group };
+      return { key, label, short, value: values[key], text: text(values[key]), fraction: inverted ? 1 - share : share, group };
     });
+  }
+  // The trading-card figures: each radar axis on a 40–99 scale against the team's best, and their mean as the overall.
+  const GAME_SCALE = { floor: 40, top: 99 };
+  const gameScore = (fraction) => Math.round(GAME_SCALE.floor + (GAME_SCALE.top - GAME_SCALE.floor) * clamp(fraction, 0, 1));
+  const gameOverall = (axes) => gameScore(sumOf(axes, (a) => clamp(a.fraction, 0, 1)) / axes.length);
+  // A player's season axes, or null before their first match.
+  function seasonAxes(player, best = teamBest(home.season, home.roster)) {
+    const season = playerSeason(home.season || [], player);
+    if (!season.rows.length) return null;
+    return player.pos === 'POR' ? keeperRadar(season, best.keeper) : fieldRadar(season, best.field);
   }
   const fieldRadar = (season, best) => radar(FIELD_AXES, fieldValues(season), best);
   const keeperRadar = (season, best) => radar(KEEPER_AXES, keeperValues(season), best);
@@ -7069,7 +7122,7 @@ table { border-collapse: collapse; width: 100%; }
   const svgNum = (v) => Number(v.toFixed(1));
   const RADAR = {
     w: 580, h: 396, radius: 130, rings: [0.25, 0.5, 0.75, 1], labelGap: 18, valueLift: 18, captionDrop: 20, edge: 0.5,
-    ringWidth: 1.5, spokeWidth: 3, spokeOpacity: 0.55, areaWidth: 2, areaOpacity: 0.08, dotR: 6, valueSize: 28,
+    ringWidth: 1.5, spokeWidth: 3, spokeOpacity: 0.55, areaWidth: 3, areaOpacity: 0.25, dotR: 6, valueSize: 28,
     centre: { halfW: 48, above: 30, h: 56, corner: 12, opacity: 0.9, valueSize: 34, valueDrop: 6, captionDrop: 24 }
   };
   function radarSvg(axes, centreText, centreLabel) {
@@ -7089,7 +7142,7 @@ table { border-collapse: collapse; width: 100%; }
       return `<text class="chart-num" x="${x}" y="${valueY}" font-size="${RADAR.valueSize}" text-anchor="${anchor}">${esc(a.text)}</text><text class="chart-cap" x="${x}" y="${captionY}" text-anchor="${anchor}">${esc(a.label)}</text>`;
     }).join('');
     return `<svg viewBox="0 0 ${RADAR.w} ${RADAR.h}" role="img">${rings}${spokes}
-      <polygon points="${polygon((a) => RADAR.radius * clamp(a.fraction, 0, 1))}" fill="var(--fg)" fill-opacity="${RADAR.areaOpacity}" stroke="var(--fg)" stroke-width="${RADAR.areaWidth}" stroke-linejoin="round"/>
+      <polygon points="${polygon((a) => RADAR.radius * clamp(a.fraction, 0, 1))}" fill="var(--radar-ink, var(--fg))" fill-opacity="${RADAR.areaOpacity}" stroke="var(--radar-ink, var(--fg))" stroke-width="${RADAR.areaWidth}" stroke-linejoin="round"/>
       ${dots}${labels}
       <rect class="radar-centre" x="${cx - RADAR.centre.halfW}" y="${cy - RADAR.centre.above}" width="${2 * RADAR.centre.halfW}" height="${RADAR.centre.h}" rx="${RADAR.centre.corner}" fill="var(--surface)" fill-opacity="${RADAR.centre.opacity}"/>
       <text class="chart-num" x="${cx}" y="${cy + RADAR.centre.valueDrop}" font-size="${RADAR.centre.valueSize}" text-anchor="middle">${esc(centreText)}</text><text class="chart-cap" x="${cx}" y="${cy + RADAR.centre.captionDrop}" text-anchor="middle">${esc(centreLabel)}</text></svg>`;
@@ -7282,11 +7335,13 @@ table { border-collapse: collapse; width: 100%; }
   // The «!» says it in text; the warn colour only backs it up.
   const lowAttendanceMark = '<i class="att-low" role="img" aria-label="Asistencia baja">!</i>';
   function squadFaceHtml(rows) {
+    const best = home.season ? teamBest(home.season, home.roster) : null;
     return (p) => {
+      const axes = best && seasonAxes(p, best), overall = axes ? `<b class="face-overall" aria-label="Media ${gameOverall(axes)}">${gameOverall(axes)}</b>` : '';
       const row = rows && rows.find((r) => r.player.id === p.id), low = row && lowAttendance(row.pct);
       const rate = row ? `<small class="face-att${low ? ' warn' : ''}">${low ? `${lowAttendanceMark} ` : ''}${attendanceText(row.pct)}</small>` : '';
       const said = row ? `, asistencia ${attendanceText(row.pct)}${low ? ', baja' : ''}` : '';
-      return `<button class="face press" type="button" data-player="${esc(p.id)}" style="--pos:${posOf(p).color}" aria-label="#${p.num} ${esc(p.name)}${said}">${discHtml(p)}<span>${esc(p.name)}</span>${rate}</button>`;
+      return `<button class="face press" type="button" data-player="${esc(p.id)}" style="--pos:${posOf(p).color}" aria-label="#${p.num} ${esc(p.name)}${said}">${overall}${discHtml(p)}<span>${esc(p.name)}</span>${rate}</button>`;
     };
   }
   function squadCardHtml() {
@@ -7791,13 +7846,13 @@ table { border-collapse: collapse; width: 100%; }
   const minutesSentence = (season) => (season.rows.some((r) => r.seconds != null) ? [`${unit(Math.floor(season.totals.seconds / SECONDS_PER_MINUTE), 'minuto en pista', 'minutos en pista')} en partidos con registro`] : []);
   // What differs between a field player's card and a goalkeeper's; `best` is the team best of the player's kind.
   function fieldCard(season, best) {
-    const t = season.totals, shots = season.rows.flatMap((r) => r.shotsList), rates = zoneRates(shots, isGoal, anyShot);
+    const t = season.totals, shots = season.rows.flatMap((r) => r.shotsList), rates = zoneRates(shots, isGoal, anyShot), axes = fieldRadar(season, best);
     const counterGoals = shots.filter((e) => isGoal(e) && shotZone(e) === ZONE_CONTRA).length;
     return {
       sentences: [`${unit(t.goals, 'gol', 'goles')} en ${unit(t.shots, 'lanzamiento', 'lanzamientos')}`, unit(season.rows.length, 'partido jugado', 'partidos jugados'), unit(t.turnovers, 'pérdida', 'pérdidas'), unit(counterGoals, 'gol al contraataque', 'goles al contraataque'), ...minutesSentence(season)],
       lead: { figure: pctText(pct(t.goals, t.shots)), label: 'acierto', cls: 'lead-field', leads: t.shots >= CONFIG.leaders.minShots && leadsTeam(fieldValues(season).pct, best.pct) },
       second: { figure: decimalText(perMatch(season, t.goals)), label: 'goles por partido' },
-      radar: radarSvg(fieldRadar(season, best), pctText(pct(t.goals, t.shots)), '% tiro'),
+      axes, radar: radarSvg(axes, pctText(pct(t.goals, t.shots)), '% tiro'),
       titles: { map: 'Mapa de tiros · temporada', radar: 'Perfil frente al equipo', grid: 'Dónde marca' },
       list: shots, success: isGoal, counts: anyShot, colours: CARD_ZONE_COLOURS.field, tiles: [['7 m', rates.get(ZONE_P7)], ['Contraataque', rates.get(ZONE_CONTRA)]],
       heads: ['Fecha', 'Rival', 'Res.', 'Nota', 'Min', ['Gol', 'Goles'], '%', ['Pas', 'Pases'], ['Pér', 'Pérdidas'], '+/−'],
@@ -7806,12 +7861,12 @@ table { border-collapse: collapse; width: 100%; }
     };
   }
   function keeperCard(season, best) {
-    const t = season.totals, faced = season.rows.flatMap((r) => r.facedList), rates = zoneRates(faced, isSave), penalties = rates.get(ZONE_P7) || { ok: 0, n: 0 };
+    const t = season.totals, faced = season.rows.flatMap((r) => r.facedList), rates = zoneRates(faced, isSave), penalties = rates.get(ZONE_P7) || { ok: 0, n: 0 }, axes = keeperRadar(season, best);
     return {
       sentences: [`${unit(t.saves, 'parada', 'paradas')} de <b>${t.onTarget}</b> a puerta`, `<b>${penalties.ok}</b> de <b>${penalties.n}</b> ${penalties.n === 1 ? 'penalti parado' : 'penaltis parados'}`, unit(t.onTarget - t.saves, 'gol encajado', 'goles encajados'), unit(season.rows.length, 'partido jugado', 'partidos jugados'), ...minutesSentence(season)],
       lead: { figure: pctText(pct(t.saves, t.onTarget)), label: 'paradas · temporada', cls: 'lead-keeper', leads: leadsTeam(keeperValues(season).pct, best.pct) },
       second: { figure: decimalText(perMatch(season, t.saves)), label: 'paradas por partido' },
-      radar: radarSvg(keeperRadar(season, best), pctText(pct(t.saves, t.onTarget)), '% paradas'),
+      axes, radar: radarSvg(axes, pctText(pct(t.saves, t.onTarget)), '% paradas'),
       titles: { map: 'Paradas por zona de lanzamiento', radar: 'Perfil de portero', grid: 'Dónde para · % por zona de portería' },
       list: faced, success: isSave, counts: onTarget, colours: CARD_ZONE_COLOURS.keeper, tiles: [['7 m', rates.get(ZONE_P7)], ['Contraataque', rates.get(ZONE_CONTRA)]],
       heads: ['Fecha', 'Rival', 'Res.', 'Nota', 'Min', ['Par', 'Paradas'], '%', '7 m', ['Gol', 'Goles']],
@@ -7821,13 +7876,16 @@ table { border-collapse: collapse; width: 100%; }
   }
   // The player leads a rate when it is above zero and nobody who played has a higher one.
   const leadsTeam = (own, best) => own > 0 && own >= best;
-  function posterHtml(player, mvps, body = '', rating = null) {
+  // `axes` (the season radar) add the overall and the attributes of a trading card.
+  function posterHtml(player, mvps, body = '', rating = null, axes = null) {
     const pos = posOf(player);
-    return `<section class="sheet-card poster" style="--pos:${pos.color}"><span class="poster-dorsal" aria-hidden="true" data-contrast-skip>${player.num}</span>
+    const overall = axes ? `<span class="game-overall" aria-label="Media ${gameOverall(axes)}"><b>${gameOverall(axes)}</b><span>${player.pos}</span></span>` : '';
+    const attrs = axes ? `<ul class="game-attrs" aria-label="Atributos">${axes.map((a) => `<li><b>${gameScore(a.fraction)}</b><abbr title="${esc(a.label)}">${a.short}</abbr></li>`).join('')}</ul>` : '';
+    return `<section class="sheet-card poster" style="--pos:${pos.color}"><span class="poster-dorsal" aria-hidden="true" data-contrast-skip>${player.num}</span>${overall}
       <span class="poster-face">${discHtml(player, pos)}${mvps ? crownSvg('crown-face') : ''}</span>
       <h2 class="poster-name">${esc(player.name)}</h2>
       <p class="poster-sub">${player.fullName ? `${esc(player.fullName)} · ` : ''}${pos.label} · #${player.num}</p>
-      ${rating == null ? '' : `<p class="poster-rating">${ratingChipHtml(rating)}<span>nota de la temporada</span></p>`}${body}</section>`;
+      ${rating == null ? '' : `<p class="poster-rating">${ratingChipHtml(rating)}<span>nota de la temporada</span></p>`}${attrs}${body}</section>`;
   }
   // «Asistencia · 92 %», the counts behind it and the split between trainings and matches.
   function attendanceTileHtml(player) {
@@ -7858,7 +7916,7 @@ table { border-collapse: collapse; width: 100%; }
     const body = `<div class="sentences">${card.sentences.map((x) => `<p>${x}</p>`).join('')}</div>
       <div class="tiles"><div class="tile ${card.lead.cls}"><b>${card.lead.figure}</b><span>${card.lead.label}${card.lead.leads ? ' · el mejor del equipo' : ''}</span></div>
         <div class="tile"><b>${card.second.figure}</b><span>${card.second.label}</span></div>${attendanceTileHtml(player)}</div>${mvp}`;
-    return `<div class="player-grid"><div class="player-col">${posterHtml(player, season.mvps, body, season.rating)}</div>
+    return `<div class="player-grid"><div class="player-col">${posterHtml(player, season.mvps, body, season.rating, card.axes)}</div>
       <div class="player-col"><section class="sheet-card zone-map"><h3>${card.titles.map}</h3>${zoneMapSvg(card.list, card.success, card.colours, card.counts)}
           <div class="rate-tiles">${card.tiles.map(([label, rate]) => rateTileHtml(label, rate)).join('')}</div></section>
         <section class="sheet-card"><h3>Partidos</h3><div class="table-wrap"><table class="match-table"><thead><tr>${card.heads.map((h) => `<th>${Array.isArray(h) ? `<abbr title="${h[1]}">${h[0]}</abbr>` : h}</th>`).join('')}</tr></thead><tbody>${rows}</tbody></table></div></section>
