@@ -3135,7 +3135,10 @@
       attendance: () => showHomeView('attendance'),
     };
     // Each view's leading label and the view it lands on; the player's match goes back to the player's card.
-    const NAV_BACK = { team: ['‹ Mis equipos', 'profile'], matches: ['‹ Mis equipos', 'profile'], stats: ['‹ Mis equipos', 'profile'], player: ['‹ Equipo', 'team'], 'player-match': [`‹ ${cardField.name}`, 'player'], 'team-edit': ['‹ Equipo', 'team'], attendance: ['‹ Mis equipos', 'profile'] };
+    const NAV_BACK = { team: ['Mis equipos', 'profile'], matches: ['Mis equipos', 'profile'], stats: ['Mis equipos', 'profile'], player: ['‹ Equipo', 'team'], 'player-match': [`‹ ${cardField.name}`, 'player'], 'team-edit': ['‹ Equipo', 'team'], attendance: ['Mis equipos', 'profile'] };
+    // The main tabs have no way back of their own: the corner icon to «Mis equipos» is their leading control.
+    const NAV_MAIN_TABS = ['team', 'matches', 'stats', 'attendance'];
+    const labelOf = (b) => b.getAttribute('aria-label') || b.textContent;
     const NAV_TITLED = { player: cardField.name, 'player-match': `${cardField.name} · ${cardMatch().state.them}`, 'team-edit': 'Editar equipo', attendance: 'Asistencia' };
     // Runs fn over a seeded team page and puts the home state back afterwards.
     const withNavHome = async (fn, matches = [cardMatch()]) => {
@@ -3149,8 +3152,17 @@
     await TA('nav: every management view has one leading control', async () => withNavHome(async () => {
       for (const [view, open] of Object.entries(NAV_VIEW_OPENERS)) {
         open();
-        const leading = leadingOf(), bar = pageBarOf();
-        if (leading.length !== 1 || !bar) throw new Error(`${view}: ${leading.length} leading controls`);
+        const leading = leadingOf(), bar = pageBarOf(), corner = document.querySelectorAll('#home .app-bar .teams-corner');
+        if (corner.length !== 1) throw new Error(`${view}: ${corner.length} «Mis equipos» corners`);
+        if (leading.length !== 1) throw new Error(`${view}: ${leading.length} leading controls`);
+        if (NAV_MAIN_TABS.includes(view)) {
+          if (leading[0] !== corner[0]) throw new Error(`${view}: the corner is not the leading control`);
+          const head = corner[0].parentElement.getBoundingClientRect(), box = corner[0].getBoundingClientRect();
+          if (Math.abs(box.right - head.right) > NAV_BAR_TOLERANCE_PX) throw new Error(`${view}: the corner is not at the right edge of the bar`);
+          if (bar?.querySelector('[data-nav-leading], .back-nav')) throw new Error(`${view}: a way back in the page bar`);
+          continue;
+        }
+        if (!bar) throw new Error(`${view}: no page bar`);
         if (bar.querySelector('button, a[href], input, select, [tabindex]') !== leading[0]) throw new Error(`${view}: the leading control is not the first focusable one`);
         if (Math.abs(leading[0].getBoundingClientRect().left - bar.getBoundingClientRect().left) > NAV_BAR_TOLERANCE_PX) throw new Error(`${view}: the leading control is not at the left edge of the bar`);
         const chevrons = [...$('home').querySelectorAll('*')].filter((el) => !el.children.length && el !== leading[0] && el.textContent.trim().startsWith('‹'));
@@ -3165,7 +3177,7 @@
       for (const [view, [label, parent]] of Object.entries(NAV_BACK)) {
         NAV_VIEW_OPENERS[view]();
         const [leading] = leadingOf();
-        if (leading.textContent !== label) throw new Error(`${view}: «${leading.textContent}» instead of «${label}»`);
+        if (labelOf(leading) !== label) throw new Error(`${view}: «${labelOf(leading)}» instead of «${label}»`);
         leading.click();
         for (let i = 0; i < 5; i++) await tick0();
         if (home.view !== parent) throw new Error(`${view}: back landed on ${home.view}, not ${parent}`);
@@ -3175,7 +3187,7 @@
       const primaries = { team: 1, matches: 1, stats: 0, player: 0, 'player-match': 1, 'team-edit': 0, attendance: 0 };
       for (const [view, open] of Object.entries(NAV_VIEW_OPENERS)) {
         open();
-        const found = pageBarOf().querySelectorAll('.btn.primary, .btn.go');
+        const found = pageBarOf()?.querySelectorAll('.btn.primary, .btn.go') || [];
         if (found.length !== primaries[view]) throw new Error(`${view}: ${found.length} primary buttons in the page bar`);
         if (found.length && pageBarOf().querySelector('.page-actions').lastElementChild !== found[0]) throw new Error(`${view}: the primary is not last`);
         if (document.querySelector('#home .app-bar .btn.primary, #home .app-bar .btn.go')) throw new Error(`${view}: a primary in the app bar`);
@@ -4427,7 +4439,7 @@
         const pressed = [...document.querySelectorAll('.app-bar .tabs button')].filter((b) => b.getAttribute('aria-pressed') === 'true').map((b) => b.textContent);
         if (pressed.join() !== 'Asistencia') throw new Error('pressed ' + pressed);
         if (!document.querySelector('.att-how') || !document.querySelector('.att-how').textContent.includes('toca a quien no esté')) throw new Error('no how-to line');
-        if (!document.querySelector('#home .page-bar [data-nav-leading]').textContent.includes('Mis equipos')) throw new Error('leading');
+        if (document.querySelector('#home [data-nav-leading]') !== document.querySelector('#home .teams-corner')) throw new Error('leading');
       });
     });
     // Attendance rates: pure rows first, then the three pages that show them.
