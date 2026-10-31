@@ -642,7 +642,6 @@ button.rex-chip { border: 0; cursor: pointer; position: relative; }
 .player-card .rating-kpi { justify-items: start; }
 .sheet-card .keypoints { gap: var(--space-2); }
 .stat-tile:last-child:nth-child(4n+3) { grid-column: span 2; }
-.final-mail { display: grid; gap: var(--space-1); font: var(--type-caption); font-weight: 700; color: var(--muted); text-transform: uppercase; letter-spacing: .06em; }
 #sheet .page-bar { margin-bottom: var(--space-3); }
 /* One line at 1024 px: the row scrolls sideways before it wraps */
 .sheet-tabs { flex-wrap: nowrap; overflow-x: auto; margin-bottom: var(--space-3); }
@@ -1514,7 +1513,7 @@ span.att-foot { visibility: hidden; }
     return {
       sample: false, setupDone: false, finished: false,
       us: from.us, players: from.players, lineups: from.lineups, gkId: from.gkId,
-      autoPhase: from.autoPhase, clockDown: Boolean(from.clockDown), reportEmail: from.reportEmail || '', mvpId: null,
+      autoPhase: from.autoPhase, clockDown: Boolean(from.clockDown), mvpId: null,
       them: prefill.them || 'Rival', rivals: [], venue: prefill.venue || '', home: prefill.home ?? null, date: prefill.date || todayIso(), phase: DEFAULT_PHASE,
       clock: { period: 1, elapsedMs: 0, runningSince: null }, timeoutsUsed: 0, timeoutsUsedThem: 0, timeout: null,
       events: [], fired: [], alerts: [], history: [], future: [], court: [], courtSets: []
@@ -1606,7 +1605,7 @@ span.att-foot { visibility: hidden; }
     shot(745, 'p17', [7.4, 2.2], [0.9, 0.2], 'GOL');
     E.filter((e) => e.kind === 'RIVAL_SHOT').forEach((e, i) => { e.rivalId = rivals[i % rivals.length].id; });
     return {
-      sample: true, setupDone: true, finished: false, reportEmail: '', us: team.name, them: 'Rival', venue: 'Pabellón Vivero', date: todayIso(), players, rivals, lineups, phase: DEFAULT_PHASE, autoPhase: true, gkId: 'p1',
+      sample: true, setupDone: true, finished: false, us: team.name, them: 'Rival', venue: 'Pabellón Vivero', date: todayIso(), players, rivals, lineups, phase: DEFAULT_PHASE, autoPhase: true, gkId: 'p1',
       clock: { period: 1, elapsedMs: 760 * 1000, runningSince: null },
       timeoutsUsed: 0, timeoutsUsedThem: 0, timeout: null, events: E, fired: [], alerts: [],
       history: E.map((e) => ({ added: [e], removed: [] })), future: []
@@ -1615,7 +1614,7 @@ span.att-foot { visibility: hidden; }
   // A saved match (from this device or the cloud) ready to play on; throws when it is not a match.
   function restoreState(saved) {
     if (!saved || !Array.isArray(saved.players) || !Array.isArray(saved.events) || !Array.isArray(saved.history)) throw new Error('el partido guardado está dañado');
-    const s = Object.assign({ rivals: [], venue: '', home: null, date: todayIso(), setupDone: true, finished: false, reportEmail: '', mvpId: null }, JSON.parse(JSON.stringify(saved)));
+    const s = Object.assign({ rivals: [], venue: '', home: null, date: todayIso(), setupDone: true, finished: false, mvpId: null }, JSON.parse(JSON.stringify(saved)));
     s.clock.runningSince = null; // never resume the clock on its own after a reload
     return s;
   }
@@ -5465,13 +5464,7 @@ table { border-collapse: collapse; width: 100%; }
     return canvasPng(canvas, 'The ratings card');
   }
 
-  // ---- Final summary: both teams side by side, and the reports by e-mail or share sheet ----
-  const EMAIL_PATTERN = /^[^\s@,;]+@[^\s@,;]+\.[^\s@,;]+$/;
-  // "a@x.es, b@y.es" → ['a@x.es', 'b@y.es']; null if any address is not valid.
-  function parseEmails(raw) {
-    const list = String(raw).split(/[\s,;]+/).filter(Boolean);
-    return list.length && list.every((a) => EMAIL_PATTERN.test(a)) ? list : null;
-  }
+  // ---- Final summary: both teams side by side, and one share of the cards and reports ----
   function finalRows() {
     const { us, them } = liveStats();
     const s = score();
@@ -5496,11 +5489,6 @@ table { border-collapse: collapse; width: 100%; }
     ];
   }
   const finalTitle = () => scoreLine(state, score());
-  function finalText() {
-    const head = [finalTitle(), [matchPlaceText(), matchDateText()].filter(Boolean).join(' · ')].filter(Boolean);
-    return [...head, '', ...finalRows().map(([label, a, b]) => `${label}: ${state.us} ${a} · ${state.them} ${b}`)].join('\n');
-  }
-  const mailtoUrl = (emails, attached) => `mailto:${emails.join(',')}?subject=${encodeURIComponent(`Informe ${finalTitle()}`)}&body=${encodeURIComponent(`${finalText()}\n\nAdjunta los PDF descargados en la tablet: ${attached.join(', ')}.`)}`;
   // The headline numbers of both teams; `better` says which way is good, to colour our value against theirs.
   function summaryKpis() {
     const { us, them } = liveStats();
@@ -5578,37 +5566,25 @@ table { border-collapse: collapse; width: 100%; }
   function setMvp(id) {
     state.mvpId = state.mvpId === id ? null : id;
     save();
-    const typed = $('final-email');
-    openFinal(typed ? typed.value : undefined);
+    openFinal();
   }
-  function openFinal(email = state.reportEmail) {
+  function openFinal() {
     releaseMvpCard();
     const seconds = minutesOnCourt(state), ratings = matchRatings(state);
     $('final').innerHTML = `<div class="final-card glass">
       ${finalHeadHtml('Final')}
       <div class="final-hero">${kpiTilesHtml()}
-        <section class="sheet-card mvp-share"><h3>Imágenes para compartir</h3>
+        <section class="sheet-card mvp-share"><h3>Imagen del MVP</h3>
           <div class="mvp-preview" id="mvp-preview" aria-live="polite"></div>
-          <div class="row-actions">
-            <button class="btn primary press" type="button" data-final-mvp-share>Compartir MVP</button>
-            <button class="btn press" type="button" data-final-ratings-share>Compartir puntuaciones</button>
-            <button class="btn press" type="button" data-final-whatsapp>WhatsApp</button>
-          </div>
         </section></div>
       ${ratingsListHtml(state, ratings, seconds)}
       ${mvpPickHtml()}
       ${summaryDetailHtml()}
-      <section class="sheet-card final-reports"><h3>Informes</h3>
-        <label class="final-mail">Enviar los PDF a<input class="in" id="final-email" type="email" inputmode="email" autocomplete="email" placeholder="entrenador@club.es, otro@club.es" value="${esc(email || '')}"></label>
-        <div class="row-actions">
-          <button class="btn press" type="button" data-final-mail>Enviar por correo</button>
-          <button class="btn press" type="button" data-final-share>Compartir PDF</button>
-        </div>
-        <p class="note" id="final-status" aria-live="polite">${esc(MAIL_TEXT.intro)}</p>
-      </section>
+      <p class="note" id="final-status" aria-live="polite">${esc(SHARE_TEXT.intro)}</p>
       <div class="row-actions final-actions">
         ${finalLeadingHtml()}<span class="spacer"></span>
         <button class="btn press" type="button" data-final-sheet>Ver estadísticas</button>
+        <button class="btn primary press" type="button" data-final-share>Compartir</button>
       </div>
     </div>`;
     $('final').hidden = false;
@@ -5643,7 +5619,7 @@ table { border-collapse: collapse; width: 100%; }
       show(`<img class="mvp-preview-img" src="${ui.mvpCardUrl}" alt="Tarjeta del MVP: ${esc(data.name)}">`);
     } catch (err) {
       console.error('MVP card failed', err);
-      if (ticket === ui.mvpCardTicket) show(esc(MVP_PREVIEW_TEXT.failed));
+      if (ticket === ui.mvpCardTicket) { ui.mvpCardBlob = false; show(esc(MVP_PREVIEW_TEXT.failed)); }
     }
   }
   // 'shared', 'cancelled' (the coach closed the sheet) or 'unsupported'; any other failure is thrown for the caller to report.
@@ -5658,9 +5634,10 @@ table { border-collapse: collapse; width: 100%; }
     }
   }
   const SHARE_STATUS = { shared: 'Compartido.', cancelled: 'Compartir cancelado.' };
-  const IMAGE_TEXT = {
-    preparing: 'La imagen se está preparando, vuelve a tocar en un momento.', denied: 'El menú de compartir no se abrió: vuelve a tocar el botón.',
-    failed: 'No se pudo compartir la imagen.', ratingsFailed: 'No se pudo preparar la imagen de puntuaciones.'
+  const SHARE_TEXT = {
+    intro: 'Compartir abre el menú del sistema con la imagen del MVP, la de puntuaciones y los dos PDF: elige WhatsApp, Gmail, Drive…',
+    preparing: 'Las imágenes y los PDF se están preparando, vuelve a tocar en un momento.', denied: 'El menú de compartir no se abrió: vuelve a tocar el botón.',
+    ratingsFailed: 'No se pudo preparar la imagen de puntuaciones.'
   };
   // The ratings card, built as soon as the final screen opens so the share tap needs no wait.
   async function renderRatingsCard() {
@@ -5670,41 +5647,16 @@ table { border-collapse: collapse; width: 100%; }
       if (ticket === ui.mvpCardTicket) ui.ratingsCardBlob = blob;
     } catch (err) {
       console.error('Ratings card failed', err);
-      if (ticket === ui.mvpCardTicket) finalStatus(IMAGE_TEXT.ratingsFailed);
+      if (ticket === ui.mvpCardTicket) { ui.ratingsCardBlob = false; finalStatus(SHARE_TEXT.ratingsFailed); }
     }
   }
-  // An image through the share sheet, called straight from the tap: the share sheet needs the tap's user activation, so
-  // nothing is awaited before `share()`. A device that cannot share files gets a download instead.
-  async function shareImage(blob, filename, title) {
-    try {
-      const result = await shareFiles([new File([blob], filename, { type: blob.type })], title, title);
-      if (result !== 'unsupported') { finalStatus(SHARE_STATUS[result]); return; }
-      await offerFile(filename, blob);
-      finalStatus(`Imagen descargada: ${filename}.`);
-    } catch (err) {
-      console.error('Image share failed', err);
-      finalStatus(err && err.name === 'NotAllowedError' ? IMAGE_TEXT.denied : err && err.code ? fileErrorText(err) : IMAGE_TEXT.failed);
-    }
-  }
-  const shareFilename = (prefix) => `${prefix}-${slug(state.us)}-${slug(state.them)}.png`;
-  // A card that is not ready yet is not awaited (that would spend the tap): the coach taps again.
-  function shareCard(blob, prefix, title) {
-    if (!blob) { finalStatus(IMAGE_TEXT.preparing); return; }
-    shareImage(blob, shareFilename(prefix), title);
-  }
-  function shareMvpCard() {
-    if (!ui.mvpCardBlob && !matchMvp(state, matchRatings(state)).id) { finalStatus(MVP_PREVIEW_TEXT.none); return; }
-    shareCard(ui.mvpCardBlob, 'mvp', `MVP ${finalTitle()}`);
-  }
-  // WhatsApp takes text only through its link; the images and PDFs go through the share buttons.
-  const WHATSAPP_URL = 'https://wa.me/?text=';
-  const WHATSAPP_SCORERS = 5;
-  // «Triana 22–22 BM Gades», place and date, the MVP and our top scorers: the message the chat picker opens with.
-  function whatsappText(s = state) {
+  // The message that goes with the files: «Triana 22–22 BM Gades», place and date, the MVP and our top scorers.
+  const SHARE_SCORERS = 5;
+  function shareText(s = state) {
     const ratings = matchRatings(s), mvp = matchMvp(s, ratings), best = mvp.id ? playerById(mvp.id, s) : null;
     const goals = (p) => sumOf(Object.values(playerStats(p.id, s.events).goals), (n) => n);
     const scorers = s.players.map((p) => ({ name: p.name, goals: goals(p) })).filter((p) => p.goals > 0)
-      .sort((a, b) => b.goals - a.goals || a.name.localeCompare(b.name)).slice(0, WHATSAPP_SCORERS);
+      .sort((a, b) => b.goals - a.goals || a.name.localeCompare(b.name)).slice(0, SHARE_SCORERS);
     return [
       `*${scoreLine(s, score(s.events))}*`,
       [matchPlaceText(s), dateText(s.date)].filter(Boolean).join(' · '),
@@ -5712,9 +5664,6 @@ table { border-collapse: collapse; width: 100%; }
       scorers.length ? `Goles: ${scorers.map((p) => `${p.name} ${p.goals}`).join(', ')}` : ''
     ].filter(Boolean).join('\n');
   }
-  const whatsappUrl = (s = state) => WHATSAPP_URL + encodeURIComponent(whatsappText(s));
-  const shareOnWhatsApp = () => window.open(whatsappUrl(), '_blank', 'noopener');
-  const shareRatingsCard = () => shareCard(ui.ratingsCardBlob, 'puntuaciones', `Puntuaciones ${finalTitle()}`);
   async function reportFiles() {
     await loadPdfLibs();
     const files = [];
@@ -5723,7 +5672,7 @@ table { border-collapse: collapse; width: 100%; }
   }
   const pdfFiles = (files) => files.map((f) => new File([f.blob], f.filename, { type: 'application/pdf' }));
   // The report PDFs, built as soon as the final screen opens so a share tap needs no wait (the share sheet needs the
-  // tap's user activation, which a PDF build can outlast). A failed build leaves `false` and the taps build on demand.
+  // tap's user activation, which a PDF build can outlast). A failed build leaves `false`, and the share goes without them.
   async function renderReportFiles() {
     const ticket = ui.mvpCardTicket;
     try {
@@ -5734,77 +5683,39 @@ table { border-collapse: collapse; width: 100%; }
       if (ticket === ui.mvpCardTicket) ui.reportFiles = false;
     }
   }
-  const MAIL_TEXT = {
-    intro: 'Enviar por correo: abre el menú de compartir con los PDF adjuntos; elige Gmail y pega las direcciones en «Para» (quedan copiadas). Compartir PDF: los mismos adjuntos a WhatsApp, Drive…',
-    preparing: 'Los PDF se están preparando, vuelve a tocar en un momento.',
-    copied: 'Elige Gmail y pega las direcciones en «Para»: ya están copiadas.',
-    notCopied: 'Elige Gmail y escribe las direcciones en «Para»: están al principio del mensaje.'
-  };
-  const mailShareText = (emails) => `Para: ${emails.join(', ')}\n\n${finalText()}`;
-  // Copies the addresses for the coach to paste; resolves whether they were copied, never rejects.
-  function copyEmails(emails) {
-    if (!navigator.clipboard || typeof navigator.clipboard.writeText !== 'function') return Promise.resolve(false);
-    return navigator.clipboard.writeText(emails.join(', ')).then(() => true, (err) => { console.warn('E-mail addresses not copied', err); return false; });
+  const shareFilename = (prefix, ext) => `${prefix}-${slug(state.us)}-${slug(state.them)}.${ext}`;
+  // What one share carries: the MVP and ratings cards and the report PDFs, or null while any of them is still being built
+  // (awaiting it would spend the tap). Each build leaves `false` when it failed, and that file is left out.
+  function shareBundle() {
+    const mvpPending = ui.mvpCardBlob === null && Boolean(matchMvp(state, matchRatings(state)).id);
+    if (mvpPending || ui.ratingsCardBlob === null || ui.reportFiles === null) return null;
+    const png = (blob, prefix) => (blob ? [new File([blob], shareFilename(prefix, 'png'), { type: blob.type })] : []);
+    return [...png(ui.mvpCardBlob, 'mvp'), ...png(ui.ratingsCardBlob, 'puntuaciones'), ...(ui.reportFiles || [])];
   }
-  // The PDFs attached through the share sheet (Gmail on the tablet), called straight from the tap: nothing is awaited
-  // before `share()`. A device that cannot share files downloads them and opens the mail app with the summary instead.
-  function sendReportsByMail() {
-    const emails = parseEmails($('final-email').value);
-    if (!emails) { finalStatus('Escribe una o varias direcciones de correo válidas, separadas por comas.'); return; }
-    state.reportEmail = emails.join(', ');
-    save();
-    if (navigator.canShare && ui.reportFiles !== false) {
-      if (!ui.reportFiles) { finalStatus(MAIL_TEXT.preparing); return; }
-      if (navigator.canShare({ files: ui.reportFiles })) { mailThroughShareSheet(emails, ui.reportFiles); return; }
-    }
-    mailWithDownloads(emails);
-  }
-  async function mailThroughShareSheet(emails, files) {
-    const copied = copyEmails(emails);
+  // One button, the system's share sheet: Android and iOS list the apps (WhatsApp, Gmail, Drive…) and the coach picks.
+  // Called straight from the tap, as the sheet needs its user activation; a device that cannot share files downloads them.
+  async function shareMatch() {
+    const files = shareBundle();
+    if (!files) { finalStatus(SHARE_TEXT.preparing); return; }
     try {
-      const result = await shareFiles(files, `Informe ${finalTitle()}`, mailShareText(emails));
-      finalStatus(result === 'shared' ? SHARE_STATUS.shared : `${SHARE_STATUS[result]} ${(await copied) ? MAIL_TEXT.copied : MAIL_TEXT.notCopied}`);
+      const result = await shareFiles(files, finalTitle(), shareText());
+      if (result !== 'unsupported') { finalStatus(SHARE_STATUS[result]); return; }
+      for (const f of files) await offerFile(f.name, f);
+      finalStatus(`Este dispositivo no comparte archivos: descargados ${files.map((f) => f.name).join(', ')}.`);
     } catch (err) {
-      console.error('Report e-mail share failed', err);
-      finalStatus(err && err.name === 'NotAllowedError' ? 'El menú de compartir no se abrió: vuelve a tocar el botón.' : `No se pudo compartir: ${(err && err.message) || 'error desconocido'}.`);
-    }
-  }
-  async function mailWithDownloads(emails) {
-    finalStatus('Preparando los PDF…');
-    try {
-      const files = await reportFiles();
-      for (const f of files) await offerFile(f.filename, f.blob);
-      finalStatus(`Descargados: ${files.map((f) => f.filename).join(', ')}. Abriendo el correo…`);
-      window.location.href = mailtoUrl(emails, files.map((f) => f.filename));
-    } catch (err) {
-      console.error('Report e-mail failed', err);
-      finalStatus(err instanceof Error ? `No se pudieron preparar los PDF: ${err.message}.` : fileErrorText(err));
-    }
-  }
-  async function shareReports() {
-    if (ui.reportFiles === null && navigator.canShare) { finalStatus(MAIL_TEXT.preparing); return; }
-    try {
-      const files = ui.reportFiles || pdfFiles(await reportFiles());
-      const result = await shareFiles(files, `Informe ${finalTitle()}`, finalText());
-      finalStatus(result === 'unsupported' ? 'Este dispositivo no permite compartir archivos: usa «Enviar por correo».' : SHARE_STATUS[result]);
-    } catch (err) {
-      console.error('Report share failed', err);
-      finalStatus(`No se pudo compartir: ${(err && err.message) || 'error desconocido'}.`);
+      console.error('Match share failed', err);
+      finalStatus(err && err.name === 'NotAllowedError' ? SHARE_TEXT.denied : err && err.code ? fileErrorText(err) : `No se pudo compartir: ${(err && err.message) || 'error desconocido'}.`);
     }
   }
   $('final').addEventListener('click', (ev) => {
     const b = ev.target.closest('button');
     if (!b) return;
     if (b.dataset.mvp) { setMvp(b.dataset.mvp); return; }
-    if (b.hasAttribute('data-ratings-all')) { ui.ratingsAll = !ui.ratingsAll; openFinal($('final-email').value); return; }
+    if (b.hasAttribute('data-ratings-all')) { ui.ratingsAll = !ui.ratingsAll; openFinal(); return; }
     if (b.hasAttribute('data-final-close')) { hideFinal(); return; }
     if (b.hasAttribute('data-final-sheet')) { hideFinal(); ui.sheetReturn = { summary: state.finished ? 'final' : 'halftime' }; ui.sheetMode = 'sheet'; ui.sheetTab = 'summary'; renderSheet(); $('sheet').hidden = false; armBackGuard(); return; }
     if (b.hasAttribute('data-second-half')) { startSecondHalf(); return; }
-    if (b.hasAttribute('data-final-mail')) { sendReportsByMail(); return; }
-    if (b.hasAttribute('data-final-share')) shareReports();
-    if (b.hasAttribute('data-final-mvp-share')) shareMvpCard();
-    if (b.hasAttribute('data-final-ratings-share')) shareRatingsCard();
-    if (b.hasAttribute('data-final-whatsapp')) shareOnWhatsApp();
+    if (b.hasAttribute('data-final-share')) shareMatch();
   });
 
   // ---- Sheet wiring ----
@@ -8227,7 +8138,7 @@ table { border-collapse: collapse; width: 100%; }
     writeJson(SQUAD_KEY_PREFIX + team.id, players.map((p) => p.id));
     const prefs = state.sample ? {} : state;
     const base = { us: team.name, players, lineups: { ATK: {}, DEF: {} }, gkId: players.find((p) => p.pos === 'POR').id,
-      autoPhase: prefs.autoPhase !== false, clockDown: Boolean(prefs.clockDown), reportEmail: prefs.reportEmail || '' };
+      autoPhase: prefs.autoPhase !== false, clockDown: Boolean(prefs.clockDown) };
     const id = newUuid();
     enterMatch(id, freshMatch(base, fixture ? fixturePrefill(fixture) : {}), true);
     if (fixture) await linkFixtureToMatch(fixture, id);
