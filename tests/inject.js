@@ -746,6 +746,58 @@
   T('tapping the armed type again disarms, another type switches', withSample(() => { setPhase('DEF'); const sub = (k) => document.querySelector(`#acts [data-panel-sub="${k}"]`); sub('LATE').click(); sub('HELP').click(); if (!ui.armedAction || ui.armedAction.sub !== 'HELP') throw new Error('no switch'); sub('HELP').click(); if (ui.armedAction || document.querySelector('.target')) throw new Error('not disarmed'); }));
   T('the actions panel fits without scrolling', withSample(() => { document.querySelector('[data-panel-mode="acts"]').click(); ['ATK', 'DEF'].forEach((ph) => { setPhase(ph); const box = $('acts').closest('.scroll'); if (box.scrollHeight > box.clientHeight) throw new Error(ph + ' scrolls by ' + (box.scrollHeight - box.clientHeight)); }); }));
   T('a pending penalty or armed action does not follow into another match', withSample(() => { setPhase('ATK'); addEvent('ACTION', { playerId: 'p8', action: 'PROV7' }); armAction('ASIST'); openSample(); if (ui.penalty || ui.armedAction || ui.armTimer || $('penalty-spot').getAttribute('visibility') === 'visible' || !$('armed-bar').hidden) throw new Error('carried over'); }));
+  T('our goal asks for the pass of goal; one tap logs it, a 7 m or a pass already logged does not ask', () => {
+    const snap = snapshot();
+    try {
+      setPhase('ATK'); state.lineups.ATK = sampleState().lineups.ATK; disarm(); closePop();
+      setPhase('ATK'); shotFromDrag(m(0, 8), { x: 500, y: 120 }, { x: 10, y: 10 });
+      const scorer = ui.popView.playerId;
+      document.querySelector('[data-result="GOL"]').click();
+      if (!ui.popView || ui.popView.type !== 'assist') throw new Error('no assist question');
+      const offered = [...document.querySelectorAll('[data-assist]')].map((b) => b.dataset.assist);
+      const expected = Object.keys(state.lineups.ATK).filter((id) => id !== scorer && !ourOffCourt().has(id)).concat(state.gkId);
+      if (offered.includes(scorer) || offered.slice().sort().join() !== expected.sort().join()) throw new Error('offered ' + offered + ' expected ' + expected);
+      document.querySelector('[data-assist="p8"]').click();
+      const a = state.events.at(-1);
+      if (a.kind !== 'ACTION' || a.action !== 'ASIST' || a.playerId !== 'p8' || ui.popView) throw new Error('assist not logged');
+      // A pass logged from the panel just before the next goal: no question.
+      addEvent('ACTION', { playerId: 'p8', action: 'ASIST' });
+      setPhase('ATK'); shotFromDrag(m(0, 8), { x: 500, y: 120 }, { x: 10, y: 10 });
+      document.querySelector('[data-result="GOL"]').click();
+      if (ui.popView) throw new Error('asked again after a logged pass');
+      // A save never asks, and «Sin pase» closes without logging.
+      setPhase('ATK'); shotFromDrag(m(0, 8), { x: 500, y: 120 }, { x: 10, y: 10 });
+      document.querySelector('[data-result="PARADA"]').click();
+      if (ui.popView) throw new Error('asked after a save');
+      state.events = state.events.filter((e) => !(e.kind === 'ACTION' && e.action === 'ASIST'));
+      setPhase('ATK'); shotFromDrag(m(0, 8), { x: 500, y: 120 }, { x: 10, y: 10 });
+      document.querySelector('[data-result="GOL"]').click();
+      const n = state.events.length;
+      document.querySelector('#pop [data-close]').click();
+      if (ui.popView || state.events.length !== n) throw new Error('Sin pase logged something');
+      // A 7 m goal does not ask.
+      addEvent('ACTION', { playerId: 'p8', action: 'PROV7' });
+      setPhase('ATK'); shotFromDrag(m(0, 9), { x: 500, y: 120 }, { x: 10, y: 10 });
+      document.querySelector('[data-result="GOL"]').click();
+      if (ui.popView) throw new Error('asked after a 7 m');
+    } finally { closePop(); cancelPenalty(); restore(snap); }
+  });
+  T('a pending 7 m: tapping the goal is the shot from the mark', () => {
+    const snap = snapshot();
+    try {
+      setPhase('ATK'); closePop();
+      addEvent('ACTION', { playerId: 'p8', action: 'PROV7' });
+      if (!$('armed-bar').textContent.includes('toca')) throw new Error('bar: ' + $('armed-bar').textContent);
+      const court = $('court'), ctm = court.getScreenCTM(), at = (x, y) => ({ clientX: ctm.a * x + ctm.e, clientY: ctm.d * y + ctm.f });
+      court.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true, pointerId: 7, ...at(500, 120) }));
+      if (!ui.popView || ui.popView.type !== 'ourShot' || !ui.popView.penalty || !samePt(ui.popView.origin, PENALTY_SPOT)) throw new Error('no 7 m popup: ' + JSON.stringify(ui.popView && { t: ui.popView.type, p: ui.popView.penalty }));
+      document.querySelector('[data-result="PARADA"]').click();
+      const e = state.events.at(-1);
+      if (e.kind !== 'SHOT' || e.from !== '7M' || e.result !== 'PARADA' || ui.penalty) throw new Error(JSON.stringify(e));
+      court.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true, pointerId: 8, ...at(500, 120) }));
+      if (ui.popView) throw new Error('a tap on the goal with no 7 m opened something');
+    } finally { closePop(); cancelPenalty(); restore(snap); }
+  });
   T('undoing the penalty shot brings the penalty back', withSample(() => { setPhase('ATK'); addEvent('ACTION', { playerId: 'p8', action: 'PROV7' }); shotFromDrag(m(0, 9), { x: 500, y: 120 }, { x: 10, y: 10 }); document.querySelector('[data-result="GOL"]').click(); if (ui.penalty) throw new Error('kept after shot'); undo(); if (!ui.penalty || ui.penalty.team !== 'us') throw new Error('not restored by undo'); redo(); if (ui.penalty) throw new Error('kept after redo'); }));
   T('undo after a manual swap leaves a consistent lineup', withSample(() => { setPhase('ATK'); addEvent('ACTION', { playerId: 'p21', action: 'ASIST' }, { bringOn: 'p21' }); const team = lineup(); team.p5 = team.p21; delete team.p21; const n = Object.keys(team).length; undo(); const spots = Object.values(lineup()).map((p) => `${p.x},${p.y}`); if (Object.keys(lineup()).length !== n || new Set(spots).size !== spots.length || !lineup().p5) throw new Error(JSON.stringify(lineup())); }));
   T('the bench note survives the action hint', withSample(() => { setPhase('ATK'); Object.keys(lineup()).filter((id) => playerById(id).pos === 'PIV').forEach((id) => delete lineup()[id]); commit(); armAction('ASIST'); tapEl(document.querySelector('.bench-player[data-id="p10"]')); if (state.events.at(-1).playerId !== 'p10' || !$('hint').textContent.includes('Arrástralo')) throw new Error('hint ' + $('hint').textContent); }));
