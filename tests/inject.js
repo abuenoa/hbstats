@@ -398,6 +398,16 @@
   T('attack analysis is symmetric and consistent', () => { const a = attackAnalysis('them'), b = attackAnalysis('us'); const keys = (o) => Object.keys(o).sort().join(); if (keys(a) !== keys(b)) throw new Error('shape'); [a, b].forEach((x) => { const laneTotal = x.lanes.reduce((t, l) => t + l.list.length, 0); if (laneTotal !== x.field.length) throw new Error('lanes ' + laneTotal + '/' + x.field.length); if (x.field.length + x.penalties.length !== x.shots.length) throw new Error('7m split'); }); if (a.topShooter.label[0] !== '#') throw new Error('rival top'); });
   T('key points react to the data', () => { const saved = state.events; const shot = (o, t, res, rivalId) => makeEvent('RIVAL_SHOT', { gkId: state.gkId, rivalId, origin: m(o[0], o[1]), target: gf(t[0], t[1]), zone: zoneFrom(m(o[0], o[1])), result: res, contra: false }); state.events = [shot([-8, 1.5], [0.15, 0.2], 'GOL', 'r4'), shot([-8.2, 1.4], [0.15, 0.25], 'GOL', 'r4'), shot([-7.9, 1.7], [0.1, 0.2], 'GOL', 'r4'), shot([-1, 6.5], [0.5, 0.9], 'GOL', 'r7')]; const k = keyPoints(); state.events = saved; const txt = k.defence.map((x) => x.text).join(' | '); if (!txt.includes('extremo izq.')) throw new Error('lane: ' + txt); if (!txt.includes('6 m')) throw new Error('penetration: ' + txt); if (!txt.includes('#4')) throw new Error('scorer: ' + txt); if (!txt.includes('arriba izquierda')) throw new Error('sector: ' + txt); if (k.defence.some((x) => x.tone !== 'bad')) throw new Error('tone'); });
   T('key points empty without data', () => { const saved = state.events; state.events = []; const k = keyPoints(); state.events = saved; if (k.defence.length || k.attack.length) throw new Error(JSON.stringify(k)); });
+  T('analysis tab: each block starts level with its twin', () => {
+    try {
+      ui.sheetTab = 'analysis'; renderSheet(); $('sheet').hidden = false;
+      const [a, b] = [...document.querySelectorAll('.analysis-col')].map((c) => [...c.children]);
+      const blocks = Number(getComputedStyle(document.querySelector('.analysis')).getPropertyValue('--analysis-blocks'));
+      if (a.length !== blocks || b.length !== blocks) throw new Error(`blocks ${a.length}/${b.length} vs ${blocks}`);
+      const off = a.filter((el, i) => Math.abs(el.getBoundingClientRect().top - b[i].getBoundingClientRect().top) > GEOMETRY_TOLERANCE_PX);
+      if (off.length) throw new Error('not level: ' + off.map((el) => el.className).join());
+    } finally { $('sheet').hidden = true; }
+  });
   T('analysis tab renders both teams alike', () => { ui.sheetTab = 'analysis'; renderSheet(); const cols = document.querySelectorAll('.analysis-col'); if (cols.length !== 2) throw new Error('cols'); const shape = (c) => [...c.querySelectorAll('.sum span, th')].map((e) => e.textContent).join('|'); if (shape(cols[0]) !== shape(cols[1])) throw new Error('shape'); });
   T('plural', () => { if (plural(1, 'gol', 'goles') !== '1 gol' || plural(2, 'gol', 'goles') !== '2 goles') throw new Error('plural'); });
   const snapshot = () => JSON.stringify(state);
@@ -641,6 +651,9 @@
       document.querySelector('[data-match-home="true"]').click();
       state.venue = '';
       if (state.home !== true || matchPlaceText() !== 'Casa' || !finalText().split('\n')[1].startsWith('Casa')) throw new Error('home');
+      const icons = HOME_AWAY.map((isHome) => document.querySelector(`[data-match-home="${isHome}"] .venue-icon`)?.innerHTML);
+      const drawn = (paths) => { const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg'); svg.innerHTML = paths; return svg.innerHTML; };
+      if (icons[0] !== drawn(HOME_AWAY_ICONS.true) || icons[1] !== drawn(HOME_AWAY_ICONS.false)) throw new Error('house and plane icons');
     } finally { restore(snap); }
   });
   T('fresh match: setup first, our roster kept, opponent reset', () => { const f = freshMatch(sampleState()); if (f.setupDone || f.finished || f.events.length || f.rivals.length || f.them !== 'Rival' || !f.players.length || f.clock.elapsedMs) throw new Error(JSON.stringify({ s: f.setupDone, e: f.events.length })); });
@@ -3511,7 +3524,7 @@
         leaveMatch = () => { left++; };
         state.setupDone = false; openSetup();
         pressEscape();
-        if (left !== 1 || ui.sheetMode !== 'setup') throw new Error('Escape must run «‹ Partidos», left ' + left);
+        if (left !== 1 || ui.sheetMode !== 'setup') throw new Error('Escape must run «Atrás», left ' + left);
       } finally { leaveMatch = real; restore(snap); }
     });
     await TA('nav: Escape while typing in the final card keeps the card and the address', async () => {
@@ -3529,7 +3542,8 @@
     });
     await TA('live strip unchanged', async () => {
       const home$ = $('btn-home');
-      if (home$.textContent !== '‹ Partidos' || !home$.classList.contains('back') || home$.classList.contains('back-nav') || home$.hasAttribute('data-nav-leading')) throw new Error('«‹ Partidos» changed');
+      if (home$.textContent !== 'Atrás' || !home$.querySelector('svg') || !home$.classList.contains('back') || home$.classList.contains('back-nav') || home$.hasAttribute('data-nav-leading')) throw new Error('«Atrás» changed');
+      if (getComputedStyle(home$).backgroundColor !== 'rgb(212, 32, 42)') throw new Error('«Atrás» is not red: ' + getComputedStyle(home$).backgroundColor);
       const stray = [...document.querySelectorAll('[data-nav-leading], .page-bar')].filter((el) => !el.closest('#home, #sheet, #final'));
       if (stray.length) throw new Error('page bar on the live screen');
     });
@@ -3665,7 +3679,7 @@
     await TA('deleting a team asks twice and opens the remaining one', async () => { const other = home.teams.find((x) => x.id !== team.id); await selectTeam(other); showHomeView('team-edit'); document.querySelector('[data-delete-team]').click(); if (home.teams.length !== 2) throw new Error('deleted on first tap'); document.querySelector('[data-delete-team]').click(); for (let i = 0; i < 5; i++) await tick0(); if (home.teams.length !== 1 || home.view !== 'profile' || document.querySelector(`[data-open-team="${other.id}"]`)) throw new Error('not deleted'); if ((await backend.listTeams()).some((x) => x.id === other.id)) throw new Error('still in backend'); });
     await TA('a failed team deletion is reported and keeps the team', async () => { await selectTeam(home.teams[0]); if (team.id === null) throw new Error('deleted team left applied'); const real = backend.deleteTeam; backend.deleteTeam = async () => { throw new Error('solo quien creó el equipo puede borrarlo'); }; showHomeView('team-edit'); document.querySelector('[data-delete-team]').click(); document.querySelector('[data-delete-team]').click(); for (let i = 0; i < 5; i++) await tick0(); backend.deleteTeam = real; if (home.teams.length !== 1 || !$('home-status').textContent.includes('quien creó')) throw new Error($('home-status').textContent); });
     await TA('deleting the last team asks for a new one, with nothing to cancel back to', async () => { showHomeView('team-edit'); document.querySelector('[data-delete-team]').click(); document.querySelector('[data-delete-team]').click(); for (let i = 0; i < 5; i++) await tick0(); if (home.teams.length || home.view !== 'team-new' || document.querySelector('[data-cancel-team]') || team.id !== null) throw new Error(home.view); });
-    await TA('demo opens the sample match, offers sign-in and saves nothing', async () => { const keys = storedKeys(MATCH_KEY_PREFIX).length; openDemo(); try { if (!state.sample || !state.events.length || !$('home').hidden || $('btn-home').textContent !== 'Entrar' || team.name !== 'Demo') throw new Error('demo'); addEvent('TURNOVER', { playerId: 'p8', subtype: 'Pasos' }); if (currentMatchId || storedKeys(MATCH_KEY_PREFIX).length !== keys) throw new Error('saved'); } finally { $('btn-home').textContent = '‹ Partidos'; } });
+    await TA('demo opens the sample match, offers sign-in and saves nothing', async () => { const keys = storedKeys(MATCH_KEY_PREFIX).length, leave = $('btn-home'), [inner, label] = [leave.innerHTML, leave.getAttribute('aria-label')]; openDemo(); try { if (!state.sample || !state.events.length || !$('home').hidden || $('btn-home').textContent !== 'Entrar' || team.name !== 'Demo') throw new Error('demo'); addEvent('TURNOVER', { playerId: 'p8', subtype: 'Pasos' }); if (currentMatchId || storedKeys(MATCH_KEY_PREFIX).length !== keys) throw new Error('saved'); } finally { leave.innerHTML = inner; leave.setAttribute('aria-label', label); } });
     await TA('cloud errors are explained in Spanish', async () => { if (cloudErrorText({ message: 'Invalid login credentials' }) !== 'email o contraseña incorrectos' || cloudErrorText(new TypeError('Failed to fetch')) !== 'sin conexión') throw new Error('map'); });
     await TA('Supabase backend maps rows and reports errors', async () => {
       const calls = []; let next = { data: [], error: null };
