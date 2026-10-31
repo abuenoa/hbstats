@@ -798,7 +798,9 @@ a:focus-visible, input:focus-visible, select:focus-visible, summary:focus-visibl
 .home-status:empty { display: none; }
 .home-status { font: var(--type-body); color: var(--fg); }
 .home-head { display: flex; align-items: center; gap: var(--space-4); flex-wrap: wrap; }
-.teams-corner { margin-left: auto; flex: none; width: var(--target); }
+.teams-corner { flex: none; width: var(--target); }
+.app-actions { margin-left: auto; }
+.app-bar > .tabs + .teams-corner { margin-left: auto; }
 /* Sticks flush with the top of the screen: the offset cancels the gutter of .home, so nothing scrolls past above the bar. */
 .top-bar { padding: var(--space-2) var(--space-4); border-radius: var(--radius-lg); position: sticky; top: calc(var(--home-gutter) * -1); z-index: 2; display: grid; gap: var(--space-2); }
 .top-bar .home-crest, .top-bar .app-mark { width: var(--target); height: var(--target); }
@@ -808,7 +810,8 @@ a:focus-visible, input:focus-visible, select:focus-visible, summary:focus-visibl
 .page-title { flex: 1 1 auto; min-width: 0; margin: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font: var(--type-title); }
 .page-actions { margin-left: auto; display: flex; gap: var(--space-2); flex-wrap: nowrap; }
 .page-bar [data-player-edit][aria-pressed="true"] { background: var(--gold); border-color: var(--gold); color: #151515; }
-.btn.back-nav { flex: none; background: var(--surface); border-color: var(--line); color: var(--fg); }
+/* Every way back to the screen above is red, like «Atrás» on the live screen, so it never reads as an action. */
+.btn.back-nav, .btn.teams-corner { flex: none; background: var(--red); border-color: transparent; color: #ffffff; }
 .home-crest { width: 52px; height: 52px; }
 .home-title { min-width: 0; }
 .home-title h1 { margin: 0; font: var(--type-title); text-transform: uppercase; letter-spacing: .02em; }
@@ -864,6 +867,7 @@ body:has(#home:not([hidden])) { overflow: hidden; }
   .home .app-bar .tabs { grid-row: 2; grid-column: 1 / -1; flex-wrap: nowrap; overflow-x: auto; }
   .home .app-bar .tabs button { flex: none; }
   .home .app-bar .teams-corner { grid-row: 1; grid-column: 3; }
+  .home .app-bar .app-actions { grid-row: 3; grid-column: 1 / -1; }
   .home .app-bar .tabs button { padding-inline: var(--space-3); font-size: .9rem; }
   .next-body .next-what { flex: 1 1 100%; }
   .next-body .next-rival { overflow-wrap: normal; }
@@ -6575,13 +6579,14 @@ table { border-collapse: collapse; width: 100%; }
   // The way to «Mis equipos» sits in the bar's corner, away from the page's own way back; on a main tab, which has no way
   // back of its own, it is also what Escape and the system back press.
   const TEAMS_ICON = '<svg viewBox="0 0 24 24" width="22" height="22" aria-hidden="true" fill="currentColor"><rect x="3" y="3" width="8" height="8" rx="1.5"/><rect x="13" y="3" width="8" height="8" rx="1.5"/><rect x="3" y="13" width="8" height="8" rx="1.5"/><rect x="13" y="13" width="8" height="8" rx="1.5"/></svg>';
-  function appBarHtml(leadsBack) {
+  // `actions`: those of a main tab, level with the corner (a main tab has no page bar of its own).
+  function appBarHtml(leadsBack, actions = '') {
     const tab = (view, label) => `<button class="press" type="button" data-home-view="${view}" aria-pressed="${home.view === view || (view === 'matches' && home.view === 'squad') || (view === 'team' && ['team-edit', 'player', 'player-match', 'rating-tune'].includes(home.view))}">${label}</button>`;
     return `<div class="home-head app-bar">
       <img class="crest home-crest" src="${esc(crestSrc(team))}" alt="">
       <div class="home-title"><h1>${esc(team.name)}</h1><small>${esc(team.club)}</small></div>
       <div class="tabs" role="group" aria-label="Secciones">${tab('team', 'Equipo')}${tab('attendance', 'Asistencia')}${tab('matches', 'Partidos')}${tab('stats', 'Estadísticas')}</div>
-      <button class="btn icon teams-corner press" type="button" data-home-view="profile"${leadsBack ? ' data-nav-leading' : ''} aria-label="${NAV_LABELS.teams}" title="${NAV_LABELS.teams}">${TEAMS_ICON}</button>
+      ${actions ? `<div class="page-actions app-actions">${actions}</div>` : ''}<button class="btn icon teams-corner press" type="button" data-home-view="profile"${leadsBack ? ' data-nav-leading' : ''} aria-label="${NAV_LABELS.teams}" title="${NAV_LABELS.teams}">${TEAMS_ICON}</button>
     </div>`;
   }
   // A match left on this tablet by the per-club release (same site), if any.
@@ -6723,7 +6728,7 @@ table { border-collapse: collapse; width: 100%; }
   // The page bar of each team view: where it leads, what it is called and what it can do. A player or match that is gone, or
   // a season still loading, leaves the leading control alone: the view itself shows the note or moves on.
   const HOME_BARS = {
-    team: () => ({ actions: NEW_MATCH_BUTTON }),
+    team: () => ({ actions: `<button class="btn press" type="button" data-home-view="team-edit">Editar equipo</button>${NEW_MATCH_BUTTON}` }),
     matches: () => ({ actions: `<button class="btn press" type="button" data-sample>Ver partido de ejemplo</button>${NEW_MATCH_BUTTON}` }),
     stats: () => ({}),
     player: () => {
@@ -6814,8 +6819,8 @@ table { border-collapse: collapse; width: 100%; }
     else if (PROFILE_VIEWS[v]) body = `${profileHeadHtml(PROFILE_BARS[v] ? pageBarHtml(PROFILE_BARS[v]()) : '')}<main class="home-body">${PROFILE_VIEWS[v]()}</main>`;
     else {
       // The page first: a bar may read state its view sets up (the tuning draft).
-      const page = HOME_VIEWS[v](), bar = HOME_BARS[v]();
-      body = `<header class="top-bar glass">${appBarHtml(!bar.leading)}${Object.keys(bar).length ? pageBarHtml(bar) : ''}</header><main class="home-body">${page}</main>`;
+      const page = HOME_VIEWS[v](), bar = HOME_BARS[v](), mainTab = !bar.leading && !bar.title;
+      body = `<header class="top-bar glass">${appBarHtml(!bar.leading, mainTab ? bar.actions : '')}${mainTab ? '' : pageBarHtml(bar)}</header><main class="home-body">${page}</main>`;
     }
     $('home').innerHTML = `<div class="home-wrap${AUTH_VIEWS.includes(v) ? ' centred' : ''}">${body}</div>`;
     stripStaffControls($('home'));
@@ -7518,7 +7523,7 @@ table { border-collapse: collapse; width: 100%; }
       return players.length ? `<h4 class="squad-pos" style="--pos:${pos === 'POR' ? 'var(--fg)' : CONFIG.positions[pos].color}">${POSITION_GROUPS[pos]}</h4>${players.map(face).join('')}` : '';
     }).join('');
     return `<section class="sheet-card squad"><h3>Plantilla · ${home.roster.length}</h3>${faces ? `<div class="faces squad-faces">${faces}</div>` : '<p class="note">Todavía no hay jugadores.</p>'}
-      <div class="row-actions"><button class="btn press" type="button" data-home-view="team-edit">Editar equipo</button><button class="btn press" type="button" data-rating-tune>Ajustar puntuación</button></div></section>`;
+      <div class="row-actions"><button class="btn press" type="button" data-rating-tune>Ajustar puntuación</button></div></section>`;
   }
   // ---- Attendance trends: trainings by week and by weekday, and who misses or is injured most ----
   const WEEKDAY_FULL_NAMES = ['Domingo', 'Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado'];

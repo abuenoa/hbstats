@@ -3238,15 +3238,20 @@
         if (home.view !== parent) throw new Error(`${view}: back landed on ${home.view}, not ${parent}`);
       }
     }));
-    await TA('nav: one primary per page bar and none in the app bar', async () => withNavHome(async () => {
+    await TA('nav: one primary per bar, last; a main tab keeps its actions level with the corner', async () => withNavHome(async () => {
       const primaries = { team: 1, matches: 1, stats: 0, player: 0, 'player-match': 1, 'team-edit': 0, attendance: 0 };
       for (const [view, open] of Object.entries(NAV_VIEW_OPENERS)) {
         open();
-        const found = pageBarOf()?.querySelectorAll('.btn.primary, .btn.go') || [];
-        if (found.length !== primaries[view]) throw new Error(`${view}: ${found.length} primary buttons in the page bar`);
-        if (found.length && pageBarOf().querySelector('.page-actions').lastElementChild !== found[0]) throw new Error(`${view}: the primary is not last`);
-        if (document.querySelector('#home .app-bar .btn.primary, #home .app-bar .btn.go')) throw new Error(`${view}: a primary in the app bar`);
+        const actions = NAV_MAIN_TABS.includes(view) && !NAV_TITLED[view] ? document.querySelector('#home .app-actions') : pageBarOf()?.querySelector('.page-actions');
+        const found = actions ? actions.querySelectorAll('.btn.primary, .btn.go') : [];
+        if (found.length !== primaries[view]) throw new Error(`${view}: ${found.length} primary buttons`);
+        if (found.length && actions.lastElementChild !== found[0]) throw new Error(`${view}: the primary is not last`);
+        if (document.querySelector('#home .app-bar > .btn.primary, #home .app-bar > .btn.go')) throw new Error(`${view}: a primary loose in the app bar`);
       }
+      showHomeView('team');
+      const corner = document.querySelector('#home .teams-corner').getBoundingClientRect(), add = document.querySelector('#home .app-actions [data-new-match]').getBoundingClientRect();
+      if (Math.abs((corner.top + corner.bottom) / 2 - (add.top + add.bottom) / 2) > NAV_BAR_TOLERANCE_PX || !document.querySelector('#home .app-actions [data-home-view="team-edit"]')) throw new Error('team actions not level with the corner');
+      if (getComputedStyle(document.querySelector('#home .teams-corner')).backgroundColor !== 'rgb(212, 32, 42)') throw new Error('the way back is not red');
     }));
     await TA('nav: sub-views have a title', async () => withNavHome(async () => {
       for (const [view, title] of Object.entries(NAV_TITLED)) {
