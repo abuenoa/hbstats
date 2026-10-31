@@ -1087,6 +1087,8 @@ span.att-foot { visibility: hidden; }
 .stats-page { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--space-4); align-items: stretch; }
 .stats-page > .sheet-card { display: flex; flex-direction: column; gap: var(--space-3); }
 .stats-page .stat-tiles { margin-bottom: 0; }
+.callup { display: grid; gap: var(--space-3); }
+.callup-preview { display: block; width: min(100%, 360px); height: auto; aspect-ratio: 1080 / 1350; border-radius: var(--radius-md); }
 .rating-trail { display: flex; flex-wrap: wrap; gap: var(--space-2) var(--space-4); margin: 0; padding: 0; list-style: none; }
 .rating-trail li { display: flex; align-items: center; gap: var(--space-2); font: var(--type-caption); color: var(--muted); }
 .stats-page .wide { grid-column: 1 / -1; }
@@ -5483,6 +5485,99 @@ table { border-collapse: collapse; width: 100%; }
     return canvasPng(canvas, 'The ratings card');
   }
 
+  // The convocatoria for the team's group: the club colours, the crest, the rival, when and where, and the called-up players
+  // in two columns, over a handball court and a ball. Portrait like the MVP card, so it fills a phone screen.
+  const CALLUP_CARD = {
+    w: 1080, h: 1350, pad: 64, fadeEnd: 0.55, minAccentContrast: 3,
+    crest: { x: 64, y: 56, size: 160 }, titleY: 150, titleSize: 104, titleMinSize: 72, teamY: 206, teamSize: 40,
+    band: { y: 262, h: 168, gap: 16, radius: 24, labelY: 52, labelSize: 24, valueY: 104, valueSize: 40, valueMinSize: 26, subY: 144, subSize: 26 },
+    list: { top: 486, bottom: 1096, colGap: 40, maxRow: 88, nameScale: 0.6, minNameScale: 0.75, numW: 84 },
+    footerY: 1176, footerSize: 64,
+    court: { cy: 1350, area: 300, nine: 480, width: 6, dash: [26, 20], alpha: 0.16 },
+    ball: { cx: 540, cy: 1276, r: 52, seam: 5, alpha: 0.95 }
+  };
+  const CALLUP_TITLE = 'Convocatoria', CALLUP_KEEPER_MARK = ' (P)';
+  const callupFooter = (teamName) => `¡Vamos ${teamName}!`;
+  // The kickoff as the group reads it: { day: «sábado, 7 nov», time: «12:00» }, the time empty when it is unknown.
+  function callupWhen(date, kickoff) {
+    const day = new Date(kickoff || `${date}T12:00:00`);
+    return { day: day.toLocaleDateString('es-ES', { weekday: 'long', day: 'numeric', month: 'short' }), time: kickoff ? day.toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit' }) : '' };
+  }
+  // What the card shows: the match of that day (its acta) or else the calendar round, and the players called up, keepers first.
+  function callupCardData(date, players, t = team) {
+    const match = attendanceMatch(date), fixture = (home.fixtures || []).find((f) => (f.kickoff ? localIso(new Date(f.kickoff)) : f.weekend) === date) || null;
+    const rival = match ? match.state.them : fixture ? fixtureRivalName(fixture.opponent) : '';
+    const isHome = match ? match.state.home : fixture ? fixture.home : null;
+    return {
+      team: t.name, crest: crestSrc(t), brand: t.brand, brand2: t.brand2, brandInk: t.brandInk,
+      rival, place: isHome == null ? '' : homeAwayText(isHome), when: callupWhen(date, fixture && fixture.kickoff), venue: (match && match.state.venue) || (fixture && fixture.venue) || '',
+      players: players.slice().sort(benchOrder).map((p) => ({ num: p.num, name: `${p.name.toUpperCase()}${p.pos === 'POR' ? CALLUP_KEEPER_MARK : ''}` }))
+    };
+  }
+  // The court behind the list: the 6 m area and the dashed 9 m line, faint, rising from the bottom edge.
+  function drawCallupCourt(ctx) {
+    const { w } = CALLUP_CARD, c = CALLUP_CARD.court;
+    ctx.save();
+    ctx.globalAlpha = c.alpha; ctx.strokeStyle = CARD_PALETTE.ink; ctx.lineWidth = c.width;
+    ctx.beginPath(); ctx.arc(w / 2, c.cy, c.area, Math.PI, 2 * Math.PI); ctx.stroke();
+    ctx.setLineDash(c.dash); ctx.beginPath(); ctx.arc(w / 2, c.cy, c.nine, Math.PI, 2 * Math.PI); ctx.stroke();
+    ctx.restore();
+  }
+  // A handball: a white ball with the curved seams of its panels.
+  function drawCallupBall(ctx) {
+    const { cx, cy, r, seam, alpha } = CALLUP_CARD.ball;
+    ctx.save();
+    ctx.globalAlpha = alpha;
+    ctx.fillStyle = CARD_PALETTE.ink; ctx.beginPath(); ctx.arc(cx, cy, r, 0, 2 * Math.PI); ctx.fill();
+    ctx.strokeStyle = CARD_PALETTE.base; ctx.lineWidth = seam;
+    inCircle(ctx, cx, cy, r, () => {
+      ctx.beginPath(); ctx.arc(cx - r, cy, r, -Math.PI / 2, Math.PI / 2); ctx.stroke();
+      ctx.beginPath(); ctx.arc(cx + r, cy, r, Math.PI / 2, 3 * Math.PI / 2); ctx.stroke();
+      ctx.beginPath(); ctx.moveTo(cx, cy - r); ctx.lineTo(cx, cy + r); ctx.stroke();
+    });
+    ctx.restore();
+  }
+  // Draws the convocatoria on `canvas`; `images.crest` is the loaded crest (null when missing or broken).
+  function drawCallupCard(canvas, data, images = { crest: null }) {
+    const C = CALLUP_CARD, P = CARD_PALETTE, { semi, regular } = CARD_WEIGHTS, ctx = canvas.getContext('2d');
+    const text = cardWriter(ctx, C.w - 2 * C.pad), accent = cardAccent(data, C.minAccentContrast), { crest, band, list } = C;
+    canvas.width = C.w; canvas.height = C.h;
+    paintCardBackground(ctx, C.w, C.h, data.brand, C.h * C.fadeEnd);
+    drawCallupCourt(ctx);
+    drawCallupBall(ctx);
+    const headX = images.crest ? crest.x + crest.size + C.pad / 2 : C.pad, headW = C.w - C.pad - headX;
+    if (images.crest) inCircle(ctx, crest.x + crest.size / 2, crest.y + crest.size / 2, crest.size / 2, () => ctx.drawImage(images.crest, crest.x, crest.y, crest.size, crest.size));
+    text(CALLUP_TITLE.toUpperCase(), headX, C.titleY, 'left', accent, cardDisplay, C.titleSize, headW, C.titleMinSize);
+    text(data.team.toUpperCase(), headX, C.teamY, 'left', data.brandInk, cardDisplay, C.teamSize, headW);
+    // The band: rival, when and where, one tile each.
+    const tiles = [['Rival', data.rival || '–', data.place], ['Cuándo', data.when.day, data.when.time], ['Pabellón', data.venue || '–', '']];
+    const tileW = (C.w - 2 * C.pad - (tiles.length - 1) * band.gap) / tiles.length;
+    tiles.forEach(([label, value, sub], i) => {
+      const x = C.pad + i * (tileW + band.gap), inner = tileW - 2 * band.gap;
+      ctx.beginPath(); ctx.roundRect(x, band.y, tileW, band.h, band.radius); ctx.fillStyle = P.tile; ctx.fill();
+      text(label.toUpperCase(), x + band.gap, band.y + band.labelY, 'left', accent, cardBody(semi), band.labelSize, inner);
+      text(value, x + band.gap, band.y + band.valueY, 'left', P.ink, cardDisplay, band.valueSize, inner, band.valueMinSize);
+      if (sub) text(sub, x + band.gap, band.y + band.subY, 'left', P.inkSoft, cardBody(regular), band.subSize, inner);
+    });
+    // The players: two columns, filled top to bottom, the rows as tall as the space allows.
+    const perColumn = Math.ceil(data.players.length / 2), rowH = Math.min(list.maxRow, (list.bottom - list.top) / Math.max(perColumn, 1));
+    const colW = (C.w - 2 * C.pad - list.colGap) / 2, size = rowH * list.nameScale;
+    data.players.forEach((p, i) => {
+      const col = Math.floor(i / perColumn), x = C.pad + col * (colW + list.colGap), y = list.top + (i % perColumn + 1) * rowH - (rowH - size) / 2;
+      text(String(p.num), x, y, 'left', accent, cardDisplay, size, list.numW);
+      text(p.name, x + list.numW, y, 'left', P.ink, cardDisplay, size, colW - list.numW, size * list.minNameScale);
+    });
+    text(callupFooter(data.team).toUpperCase(), C.w / 2, C.footerY, 'center', accent, cardDisplay, C.footerSize);
+  }
+  async function callupCardBlob(data) {
+    const { heavy, semi, regular } = CARD_WEIGHTS;
+    await loadCardFonts([cardFont(heavy, CALLUP_CARD.titleSize, 'display'), cardFont(semi, CALLUP_CARD.band.labelSize, 'body'), cardFont(regular, CALLUP_CARD.band.subSize, 'body')]);
+    const [crest] = await loadCardImages([data.crest]);
+    const canvas = document.createElement('canvas');
+    drawCallupCard(canvas, data, { crest });
+    return canvasPng(canvas, 'The convocatoria card');
+  }
+
   // ---- Final summary: both teams side by side, and one share of the cards and reports ----
   function finalRows() {
     const { us, them } = liveStats();
@@ -5818,7 +5913,7 @@ table { border-collapse: collapse; width: 100%; }
   let currentMatchId = null;
   let syncTimer = null;
   let attendanceSyncTimer = null;
-  const home = { view: 'loading', user: null, teams: [], roster: [], matches: [], season: null, templates: [], template: null, squad: new Set(), leaderMetric: 'goals', playerId: null, playerMatchId: null, playerEdit: false, playerDraft: null, offline: false, error: '', draft: null, crestDraft: undefined, armed: null, passwordChange: false, seasonOffline: false, sessions: null, fixtures: null, teamMatches: [], fixtureEdit: null, squadFixture: null, attendanceDate: null, attendanceKind: null, attendanceNoteFor: null, stateMatches: [], statsSort: null, statsMetric: 'goals', statsPlayer: null, weightsDraft: null, ratingCache: null };
+  const home = { view: 'loading', user: null, teams: [], roster: [], matches: [], season: null, templates: [], template: null, squad: new Set(), leaderMetric: 'goals', playerId: null, playerMatchId: null, playerEdit: false, playerDraft: null, offline: false, error: '', draft: null, crestDraft: undefined, armed: null, passwordChange: false, seasonOffline: false, sessions: null, fixtures: null, teamMatches: [], fixtureEdit: null, squadFixture: null, attendanceDate: null, attendanceKind: null, attendanceNoteFor: null, stateMatches: [], statsSort: null, statsMetric: 'goals', statsPlayer: null, callupPicks: null, callup: null, callupBusy: null, weightsDraft: null, ratingCache: null };
 
   // ---- Device storage ----
   function readJson(key) {
@@ -7756,7 +7851,64 @@ table { border-collapse: collapse; width: 100%; }
           <div class="att-sum"><p class="att-count">${counted}</p>${statusHtml(attendanceStatusText())}</div></div>
         <p class="note att-how">Todos cuentan como presentes: toca a quien no esté. Cada toque cambia a ${[...MARK_CODES.map((c) => ATTENDANCE[c]), ATTENDANCE[session.kind === SESSION_KINDS.MATCH ? 'NC' : 'P']].join(' → ')}.</p>
         ${attendanceNoteRowHtml(session)}
-        <div class="pos-groups">${positionGroupsHtml((p) => attendanceFaceHtml(p, session, match)) || '<p class="note">Todavía no hay jugadores.</p>'}</div>${remove}</section>`;
+        <div class="pos-groups">${positionGroupsHtml((p) => attendanceFaceHtml(p, session, match)) || '<p class="note">Todavía no hay jugadores.</p>'}</div>${remove}</section>
+      ${session.kind === SESSION_KINDS.MATCH && home.roster.length ? callupHtml(session, match) : ''}`;
+  }
+  // ---- The convocatoria image of a match day: the coach picks the players, the image follows on its own ----
+  // Picked at first: the acta's squad when the match exists, else everyone not marked absent or injured.
+  function callupPicked(session, match) {
+    if (home.callupPicks && home.callupPicks.date === session.date) return home.callupPicks.ids;
+    return new Set(home.roster.filter((p) => (match ? sessionStatus(session, p.id, match) === 'P' : !MARK_CODES.includes(sessionStatus(session, p.id, null)))).map((p) => p.id));
+  }
+  const callupKey = (date, players) => `${date}|${players.map((p) => p.id).join()}`;
+  function callupHtml(session, match) {
+    const picked = callupPicked(session, match), players = home.roster.filter((p) => picked.has(p.id));
+    const chips = home.roster.slice().sort(benchOrder).map((p) => `<button class="chip press" type="button" data-callup-pick="${esc(p.id)}" aria-pressed="${picked.has(p.id)}">#${p.num} ${esc(p.name)}</button>`).join('');
+    const ready = players.length && home.callup && home.callup.key === callupKey(session.date, players);
+    if (players.length && !ready) queueMicrotask(() => renderCallupCard(session.date, players));
+    const preview = !players.length ? '<p class="note">Elige a los convocados para generar la imagen.</p>'
+      : ready ? `<img class="callup-preview" src="${home.callup.url}" alt="Convocatoria: ${plural(players.length, 'jugador', 'jugadores')}">` : '<p class="note">Generando la imagen…</p>';
+    return `<section class="sheet-card callup"><h3>Convocatoria · ${players.length}</h3>
+      <div class="chips" role="group" aria-label="Convocados">${chips}</div>
+      ${preview}<div class="row-actions"><button class="btn primary press" type="button" data-callup-share${ready ? '' : ' disabled'}>Compartir convocatoria</button></div></section>`;
+  }
+  // Builds the image for these players once; the page shows it when it is ready, if the selection has not moved on.
+  async function renderCallupCard(date, players) {
+    const key = callupKey(date, players);
+    if (home.callupBusy === key) return;
+    home.callupBusy = key;
+    try {
+      const blob = await callupCardBlob(callupCardData(date, players));
+      if (home.callupBusy !== key) return;
+      if (home.callup) URL.revokeObjectURL(home.callup.url);
+      home.callup = { key, blob, url: URL.createObjectURL(blob) };
+      if (home.view === 'attendance') renderHome();
+    } catch (err) {
+      console.error('Convocatoria card failed', err);
+      homeStatus('No se pudo generar la imagen de la convocatoria.');
+    } finally {
+      if (home.callupBusy === key) home.callupBusy = null;
+    }
+  }
+  function toggleCallupPick(playerId) {
+    const session = currentSession(), ids = new Set(callupPicked(session, attendanceMatch(session.date)));
+    if (ids.has(playerId)) ids.delete(playerId); else ids.add(playerId);
+    home.callupPicks = { date: session.date, ids };
+    renderHome();
+  }
+  // Through the system share sheet, straight from the tap; a device that cannot share files downloads the image.
+  async function shareCallup() {
+    if (!home.callup) return;
+    const file = new File([home.callup.blob], `convocatoria-${slug(team.name)}-${home.attendanceDate}.png`, { type: home.callup.blob.type });
+    try {
+      const result = await shareFiles([file], `${CALLUP_TITLE} ${team.name}`, `${CALLUP_TITLE} · ${team.name}`);
+      if (result !== 'unsupported') { homeStatus(SHARE_STATUS[result]); return; }
+      await offerFile(file.name, file);
+      homeStatus(`Imagen descargada: ${file.name}.`);
+    } catch (err) {
+      console.error('Convocatoria share failed', err);
+      homeStatus(err && err.name === 'NotAllowedError' ? SHARE_TEXT.denied : `No se pudo compartir: ${(err && err.message) || 'error desconocido'}.`);
+    }
   }
   async function showAttendance() {
     Object.assign(home, { attendanceDate: todayIso(), attendanceNoteFor: null });
@@ -8467,6 +8619,8 @@ table { border-collapse: collapse; width: 100%; }
     if (b.hasAttribute('data-forgot')) { sendPasswordReset(); return; }
     if (b.hasAttribute('data-sign-out')) { signOut(); return; }
     if (b.dataset.att) { tapAttendance(b.dataset.att); return; }
+    if (b.dataset.callupPick) { toggleCallupPick(b.dataset.callupPick); return; }
+    if (b.hasAttribute('data-callup-share')) { shareCallup(); return; }
     if (b.dataset.attKind) { openAttendanceDay(home.attendanceDate, b.dataset.attKind); return; }
     if (b.dataset.attNote) { home.attendanceNoteFor = b.dataset.attNote; renderHome(); document.querySelector(`[data-att-note-input="${b.dataset.attNote}"]`).focus(); return; }
     if (b.hasAttribute('data-att-note-save')) { home.attendanceNoteFor = null; renderHome(); return; }
