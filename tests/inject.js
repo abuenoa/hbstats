@@ -2569,6 +2569,11 @@
         if (home.view !== 'stats' || document.querySelector('[data-home-view="stats"]').getAttribute('aria-pressed') !== 'true') throw new Error('view ' + home.view);
         const titles = [...document.querySelectorAll('.stats-page > section > h3')].map((h) => h.textContent).join('|');
         if (titles !== 'Evolución del equipo|Evolución de jugadores|Tiro|Portería|Tipos de ataque|Goles tras pérdida|Pérdidas por jugador|Jugadores') throw new Error(titles);
+        // The figures with a club target take its colour; the counts without one stay neutral.
+        const tileTone = (label) => [...document.querySelectorAll('.stats-page > section:first-child .stat-tile')].find((x) => x.querySelector('span').textContent === label).querySelector('strong').className;
+        const season = teamSeason([statsMatchA(), statsMatchB()]);
+        if (tileTone('% tiro') !== rate(pct(season.shotGoals, season.shots), 'shooting') || tileTone('% paradas') !== rate(pct(season.saves, season.onTarget), 'gk') || tileTone('Recuperaciones') !== '') throw new Error('tones ' + ['% tiro', '% paradas', 'Recuperaciones'].map(tileTone));
+        if (tileTone('Pérdidas') !== rate(turnoverShare(season.turnovers, season.shots), 'turnovers')) throw new Error('turnovers tone ' + tileTone('Pérdidas'));
         // Cards side by side are as tall as each other.
         const pairs = [...document.querySelectorAll('.stats-page > section:not(.wide)')].map((s) => s.getBoundingClientRect());
         for (let i = 0; i + 1 < pairs.length; i += 2) if (Math.abs(pairs[i].top - pairs[i + 1].top) > 1 || Math.abs(pairs[i].height - pairs[i + 1].height) > 1) throw new Error(`row ${i / 2}: ${pairs[i].height} vs ${pairs[i + 1].height}`);

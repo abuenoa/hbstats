@@ -1033,6 +1033,9 @@ span.att-foot { visibility: hidden; }
 :is(.home, .sheet) .tabs button[aria-pressed="true"] { background: var(--game-accent); border-color: var(--game-accent); color: var(--game-ink); }
 :is(.home, .sheet) .record b, :is(.home, .sheet) .season-kpi b, :is(.home, .sheet) .leader .value { color: var(--game-accent); }
 :is(.home, .sheet) .season-kpi.hot b { color: inherit; }
+:is(.home, .sheet) .season-kpi b.r-good, .stat-tile strong.r-good { color: var(--color-success-text); }
+:is(.home, .sheet) .season-kpi b.r-warn, .stat-tile strong.r-warn { color: var(--color-warning-text); }
+:is(.home, .sheet) .season-kpi b.r-bad, .stat-tile strong.r-bad { color: var(--color-danger-text); }
 /* Cards on a grid line up: every card of a row is as tall as the tallest */
 :is(.home, .sheet) .team-page, :is(.home, .sheet) .player-grid { align-items: stretch; }
 :is(.home, .sheet) .player-col { align-content: start; }
@@ -1495,6 +1498,12 @@ span.att-foot { visibility: hidden; }
     if (dist >= CONFIG.zones.elevenFromM) return '11M';
     return dist >= CONFIG.zones.nineFromM ? '9M' : '6M';
   }
+  const TARGET_COLOUR_NOTE = 'Verde: cumple el objetivo del club o va por delante del rival; ámbar: cerca; rojo: por debajo. Los recuentos sin objetivo no se colorean.';
+  // The tone of the season figures that have no club target: ahead of the rival is good, behind is bad, even is neither.
+  const balanceTone = (ours, theirs) => (ours > theirs ? 'r-good' : ours < theirs ? 'r-bad' : '');
+  const attendanceTone = (value) => (value == null ? '' : lowAttendance(value) ? 'r-bad' : 'r-good');
+  // Turnovers as the share of our possessions (shots plus turnovers), the figure the club's target is set on.
+  const turnoverShare = (turnovers, shots) => pct(turnovers, turnovers + shots);
   function rate(value, key) {
     if (value == null) return 'r-none';
     const [good, poor, dir] = CONFIG.targets[key];
@@ -4246,7 +4255,7 @@ span.att-foot { visibility: hidden; }
     const onGoal = (list) => list.filter(onTarget).length;
     const players = state.players.slice().sort(byPosition).map((p) => summaryPlayerHtml(p, ratings)).join('');
     return `<div class="stat-tiles summary-tiles">${summaryTilesHtml(matchFigures())}</div>
-      <p class="note">Color según los objetivos del club; los recuentos sin objetivo no se colorean.</p>
+      <p class="note">${TARGET_COLOUR_NOTE}</p>
       <div class="summary-cols">
         <div class="summary-col">${summaryChartHtml('Nuestros tiros · % de gol por zona', 'zone-map', ours.length, () => zoneMapSvg(ours, isGoal, CARD_ZONE_COLOURS.field, anyShot))}
           ${summaryChartHtml('Dónde marcamos', 'goal-chart', onGoal(ours), () => goalRateSvg(ours, isGoal))}</div>
@@ -7422,7 +7431,7 @@ table { border-collapse: collapse; width: 100%; }
     if (matches === null) return '<section class="sheet-card season-card"><h3>Temporada</h3><p class="note">Cargando…</p></section>';
     if (!matches.length) return '<section class="sheet-card season-card"><h3>Temporada</h3><p class="note">Sin partidos todavía</p></section>';
     const s = teamSeason(matches);
-    const tile = (value, label, cls = '') => `<div class="season-kpi${cls}"><b>${value}</b><span>${label}</span></div>`;
+    const tile = (value, label, cls = '', tone = '') => `<div class="season-kpi${cls}"><b class="${tone}">${value}</b><span>${label}</span></div>`;
     const form = s.form.map((r) => `<i class="form-chip res-${r}">${r}</i>`).join('');
     const perMatch = decimalText(s.goalsFor / matches.length);
     const latest = s.latest;
@@ -7433,16 +7442,16 @@ table { border-collapse: collapse; width: 100%; }
     return `<section class="sheet-card season-card"><h3>Temporada</h3>
       <div class="record"><b>${s.won}–${s.drawn}–${s.lost}</b><small>ganados · empatados · perdidos</small></div>
       <div class="form-chips">${form}</div>
-      <div class="season-kpis">${tile(s.goalsFor, `goles a favor · ${perMatch} por partido`, ' hot')}${tile(s.goalsAgainst, 'goles en contra')}
-        ${tile(pctText(pct(s.shotGoals, s.shots)), `acierto en tiro (${s.shotGoals}/${s.shots})`)}${tile(pctText(pct(s.saves, s.onTarget)), `paradas (${s.saves}/${s.onTarget})`)}
-        ${tile(s.turnovers, 'pérdidas')}${tile(s.recoveries, 'recuperaciones')}${teamAttendanceTile(tile)}</div>${last}</section>`;
+      <div class="season-kpis">${tile(s.goalsFor, `goles a favor · ${perMatch} por partido`, ' hot')}${tile(s.goalsAgainst, 'goles en contra', '', balanceTone(s.goalsFor, s.goalsAgainst))}
+        ${tile(pctText(pct(s.shotGoals, s.shots)), `acierto en tiro (${s.shotGoals}/${s.shots})`, '', rate(pct(s.shotGoals, s.shots), 'shooting'))}${tile(pctText(pct(s.saves, s.onTarget)), `paradas (${s.saves}/${s.onTarget})`, '', rate(pct(s.saves, s.onTarget), 'gk'))}
+        ${tile(s.turnovers, `pérdidas · ${pctText(turnoverShare(s.turnovers, s.shots))} de las posesiones`, '', rate(turnoverShare(s.turnovers, s.shots), 'turnovers'))}${tile(s.recoveries, 'recuperaciones')}${teamAttendanceTile(tile)}</div>${last}</section>`;
   }
   // The team's attendance rate as one more season figure, once there are sessions.
   function teamAttendanceTile(tile) {
     const rows = attendanceRowsNow();
     if (!rows) return '';
     const rate = pct(sumOf(rows, (r) => r.P), sumOf(rows, (r) => r.counted));
-    return tile(`${attendanceText(rate)}${lowAttendance(rate) ? ` ${lowAttendanceMark}` : ''}`, `asistencia (${plural(attendanceDays(home.sessions, home.stateMatches).length, 'sesión', 'sesiones')})`);
+    return tile(`${attendanceText(rate)}${lowAttendance(rate) ? ` ${lowAttendanceMark}` : ''}`, `asistencia (${plural(attendanceDays(home.sessions, home.stateMatches).length, 'sesión', 'sesiones')})`, '', attendanceTone(rate));
   }
   function leadersCardHtml(matches) {
     const chips = LEADER_METRICS.map(({ key, label }) => `<button class="chip press" type="button" data-leader="${key}" aria-pressed="${home.leaderMetric === key}">${label}</button>`).join('');
@@ -7697,13 +7706,15 @@ table { border-collapse: collapse; width: 100%; }
   function teamEvolutionCardHtml(rows) {
     const goalsFor = sumOf(rows, (r) => r.scoreUs), goalsAgainst = sumOf(rows, (r) => r.scoreThem), n = rows.length;
     const results = (code) => rows.filter((r) => r.result === code).length;
-    const goals = sumOf(rows, (r) => r.goals), shots = sumOf(rows, (r) => r.shots), saves = sumOf(rows, (r) => r.saves), onTarget = sumOf(rows, (r) => r.onTarget);
+    const goals = sumOf(rows, (r) => r.goals), shots = sumOf(rows, (r) => r.shots), saves = sumOf(rows, (r) => r.saves), onTarget = sumOf(rows, (r) => r.onTarget), turnovers = sumOf(rows, (r) => r.turnovers);
     const metric = TEAM_EVOLUTION_METRICS[home.statsMetric] || TEAM_EVOLUTION_METRICS.goals;
     const table = rows.map((r) => `<tr><td>${esc(shortDateText(r.date))}</td><td class="who">${esc(r.them)}</td><td class="${resultClass(r)}">${r.scoreUs}–${r.scoreThem}</td><td>${pctText(r.shooting)}</td><td>${pctText(r.savePct)}</td><td>${r.turnovers}</td><td>${r.recoveries}</td></tr>`).join('');
     return `<section class="sheet-card wide"><h3>Evolución del equipo</h3>
-      ${statsTilesHtml([['Balance', `${results(RESULT_OF.win)}–${results(RESULT_OF.draw)}–${results(RESULT_OF.loss)}`, 'ganados · empatados · perdidos'], ['A favor', goalsFor, `${decimalText(goalsFor / n)} por partido`],
-        ['En contra', goalsAgainst, `${decimalText(goalsAgainst / n)} por partido`], ['% tiro', pctText(pct(goals, shots)), `${goals}/${shots}`], ['% paradas', pctText(pct(saves, onTarget)), `${saves}/${onTarget}`],
-        ['Pérdidas', decimalText(sumOf(rows, (r) => r.turnovers) / n), 'por partido'], ['Recuperaciones', decimalText(sumOf(rows, (r) => r.recoveries) / n), 'por partido']])}
+      ${statsTilesHtml([['Balance', `${results(RESULT_OF.win)}–${results(RESULT_OF.draw)}–${results(RESULT_OF.loss)}`, 'ganados · empatados · perdidos', balanceTone(results(RESULT_OF.win), results(RESULT_OF.loss))],
+        ['A favor', goalsFor, `${decimalText(goalsFor / n)} por partido`, balanceTone(goalsFor, goalsAgainst)], ['En contra', goalsAgainst, `${decimalText(goalsAgainst / n)} por partido`, balanceTone(goalsFor, goalsAgainst)],
+        ['% tiro', pctText(pct(goals, shots)), `${goals}/${shots}`, rate(pct(goals, shots), 'shooting')], ['% paradas', pctText(pct(saves, onTarget)), `${saves}/${onTarget}`, rate(pct(saves, onTarget), 'gk')],
+        ['Pérdidas', decimalText(turnovers / n), `por partido · ${pctText(turnoverShare(turnovers, shots))} de las posesiones`, rate(turnoverShare(turnovers, shots), 'turnovers')],
+        ['Recuperaciones', decimalText(sumOf(rows, (r) => r.recoveries) / n), 'por partido']])}
       ${metricChipsHtml(TEAM_EVOLUTION_METRICS, home.statsMetric, 'data-stats-metric')}${evolutionChartHtml(rows, metric.series)}
       <details class="stats-details"><summary>Tabla por partido</summary><div class="table-wrap"><table><thead><tr><th>Fecha</th><th class="who">Rival</th><th>Res.</th><th>% tiro</th><th>% par.</th><th>Pérd.</th><th>Recup.</th></tr></thead><tbody>${table}</tbody></table></div></details></section>`;
   }
@@ -7721,8 +7732,8 @@ table { border-collapse: collapse; width: 100%; }
     return `<section class="sheet-card wide player-evolution"><h3>Evolución de jugadores</h3>
       <div class="chips" role="group" aria-label="Jugador">${chips}</div>
       ${statsTilesHtml([['Nota', season.rating == null ? '–' : ratingText(season.rating), 'media de la temporada'], ['Partidos', season.rows.length, `${season.mvps} MVP`],
-        ...(keeper ? [['% paradas', pctText(pct(season.totals.saves, season.totals.onTarget)), `${season.totals.saves}/${season.totals.onTarget}`]]
-          : [['Goles', season.totals.goals, `${decimalText(perMatch(season, season.totals.goals))} por partido`], ['% tiro', pctText(pct(season.totals.goals, season.totals.shots)), `${season.totals.goals}/${season.totals.shots}`],
+        ...(keeper ? [['% paradas', pctText(pct(season.totals.saves, season.totals.onTarget)), `${season.totals.saves}/${season.totals.onTarget}`, rate(pct(season.totals.saves, season.totals.onTarget), 'gk')]]
+          : [['Goles', season.totals.goals, `${decimalText(perMatch(season, season.totals.goals))} por partido`], ['% tiro', pctText(pct(season.totals.goals, season.totals.shots)), `${season.totals.goals}/${season.totals.shots}`, rate(pct(season.totals.goals, season.totals.shots), 'shooting')],
             ['Pases de gol', season.totals.assists, `${decimalText(perMatch(season, season.totals.assists))} por partido`], ['Recuperaciones', season.totals.recoveries, `${decimalText(perMatch(season, season.totals.recoveries))} por partido`]])])}
       ${evolutionChartHtml(season.rows, series, 'bars')}
       <h4 class="att-sub">Nota por partido</h4><ol class="rating-trail">${notes}</ol>
@@ -7731,7 +7742,7 @@ table { border-collapse: collapse; width: 100%; }
   function shootingCardHtml(rows) {
     const goals = sumOf(rows, (r) => r.goals), shots = sumOf(rows, (r) => r.shots);
     return `<section class="sheet-card"><h3>Tiro</h3>
-      ${statsTilesHtml([['% tiro', pctText(pct(goals, shots)), `${goals}/${shots}`], ['Fallos 6 m', sumOf(rows, (r) => r.miss6), FAILED_SHOT_NOTE], ['Fallos 9 m', sumOf(rows, (r) => r.miss9), FAILED_SHOT_NOTE]])}
+      ${statsTilesHtml([['% tiro', pctText(pct(goals, shots)), `${goals}/${shots}`, rate(pct(goals, shots), 'shooting')], ['Fallos 6 m', sumOf(rows, (r) => r.miss6), FAILED_SHOT_NOTE], ['Fallos 9 m', sumOf(rows, (r) => r.miss9), FAILED_SHOT_NOTE]])}
       <p class="chart-title">Tiros fallados por partido</p>
       ${barsBlockHtml(rows, [{ key: 'miss6', label: 'Fallos 6 m', token: STATS_TOKENS.miss6 }, { key: 'miss9', label: 'Fallos 9 m', token: STATS_TOKENS.miss9 }])}</section>`;
   }
@@ -7767,7 +7778,7 @@ table { border-collapse: collapse; width: 100%; }
     }));
     const tiles = keepers.map((id) => {
       const saves = sumOf(rows, (r) => sumOf(r.keepers.filter((k) => k.id === id), (k) => k.saves)), onTarget = sumOf(rows, (r) => sumOf(r.keepers.filter((k) => k.id === id), (k) => k.onTarget));
-      return [nameOf(id), pctText(pct(saves, onTarget)), `${saves}/${onTarget} paradas`];
+      return [nameOf(id), pctText(pct(saves, onTarget)), `${saves}/${onTarget} paradas`, rate(pct(saves, onTarget), 'gk')];
     });
     return `<section class="sheet-card zone-map"><h3>Portería</h3>
       ${tiles.length ? statsTilesHtml(tiles) : '<p class="note">Sin lanzamientos del rival.</p>'}${trendBlockHtml(rows, series)}
@@ -7795,7 +7806,7 @@ table { border-collapse: collapse; width: 100%; }
     if (home.season === null) return `${statusHtml()}<p class="note">Cargando…</p>`;
     if (!home.season.length) return `${statusHtml()}${note}<section class="sheet-card"><h3>Estadísticas</h3><p class="note">Sin partidos todavía</p></section>`;
     const matches = home.season.slice().reverse(), rows = matches.map(teamMatchRow);
-    return `${statusHtml()}${note}<div class="stats-page">${teamEvolutionCardHtml(rows)}${playerEvolutionCardHtml(matches)}${shootingCardHtml(rows)}${goalkeepingCardHtml(rows, matches)}${attackCardHtml(rows)}${afterTurnoverCardHtml(rows)}${turnoversCardHtml(matches)}${playersCardHtml(matches)}</div>`;
+    return `${statusHtml()}${note}<p class="note">${TARGET_COLOUR_NOTE}</p><div class="stats-page">${teamEvolutionCardHtml(rows)}${playerEvolutionCardHtml(matches)}${shootingCardHtml(rows)}${goalkeepingCardHtml(rows, matches)}${attackCardHtml(rows)}${afterTurnoverCardHtml(rows)}${turnoversCardHtml(matches)}${playersCardHtml(matches)}</div>`;
   }
   async function showStats() {
     showHomeView('stats');
