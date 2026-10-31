@@ -812,8 +812,7 @@ a:focus-visible, input:focus-visible, select:focus-visible, summary:focus-visibl
 .home-status { font: var(--type-body); color: var(--fg); }
 .home-head { display: flex; align-items: center; gap: var(--space-4); flex-wrap: wrap; }
 .teams-corner { flex: none; width: var(--target); }
-.app-actions { margin-left: auto; }
-.app-bar > .tabs + .teams-corner { margin-left: auto; }
+.app-end { margin-left: auto; display: flex; align-items: center; gap: var(--space-2); }
 /* Sticks flush with the top of the screen: the offset cancels the gutter of .home, so nothing scrolls past above the bar. */
 .top-bar { padding: var(--space-2) var(--space-4); border-radius: var(--radius-lg); position: sticky; top: calc(var(--home-gutter) * -1); z-index: 2; display: grid; gap: var(--space-2); }
 .top-bar .home-crest, .top-bar .app-mark { width: var(--target); height: var(--target); }
@@ -879,6 +878,7 @@ body:has(#home:not([hidden])) { overflow: hidden; }
   .home .app-bar { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; }
   .home .app-bar .tabs { grid-row: 2; grid-column: 1 / -1; flex-wrap: nowrap; overflow-x: auto; }
   .home .app-bar .tabs button { flex: none; }
+  .home .app-bar .app-end { display: contents; }
   .home .app-bar .teams-corner { grid-row: 1; grid-column: 3; }
   .home .app-bar .app-actions { grid-row: 3; grid-column: 1 / -1; }
   .home .app-bar .tabs button { padding-inline: var(--space-3); font-size: .9rem; }
@@ -6601,7 +6601,7 @@ table { border-collapse: collapse; width: 100%; }
       <img class="crest home-crest" src="${esc(crestSrc(team))}" alt="">
       <div class="home-title"><h1>${esc(team.name)}</h1><small>${esc(team.club)}</small></div>
       <div class="tabs" role="group" aria-label="Secciones">${tab('team', 'Equipo')}${tab('attendance', 'Asistencia')}${tab('matches', 'Partidos')}${tab('stats', 'Estadísticas')}</div>
-      ${actions ? `<div class="page-actions app-actions">${actions}</div>` : ''}<button class="btn icon teams-corner press" type="button" data-home-view="profile"${leadsBack ? ' data-nav-leading' : ''} aria-label="${NAV_LABELS.teams}" title="${NAV_LABELS.teams}">${TEAMS_ICON}</button>
+      <div class="app-end">${actions ? `<div class="page-actions app-actions">${actions}</div>` : ''}<button class="btn icon teams-corner press" type="button" data-home-view="profile"${leadsBack ? ' data-nav-leading' : ''} aria-label="${NAV_LABELS.teams}" title="${NAV_LABELS.teams}">${TEAMS_ICON}</button></div>
     </div>`;
   }
   // A match left on this tablet by the per-club release (same site), if any.
