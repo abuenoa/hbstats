@@ -1327,7 +1327,7 @@ span.att-foot { visibility: hidden; }
     // beaten and 7 m committed (−); closeFactor / lateFactor multiply what happens late and close (context).
     // Bands: lower bound in points, label and chip class (the --rating-<band> tokens), best first.
     rating: {
-      pointsPerGoal: 3, decimals: 1, minPossessions: 5, shrinkPossessions: 15,
+      pointsPerGoal: 3, decimals: 1, minPossessions: 5, shrinkPossessions: 15, mvpFullShare: 2 / 3,
       pOn: { '6M': 0.60, '9M': 0.50, '11M': 0.40, CONTRA: 0.75, '7M': 0.75 },
       onTargetRate: { '6M': 0.80, '9M': 0.70, '11M': 0.60, CONTRA: 0.95, '7M': 0.95 },
       possession: 0.43, shortHanded: { att: 0.32, def: 0.58 }, superiority: { att: 0.58, def: 0.32 },
@@ -2442,10 +2442,19 @@ span.att-foot { visibility: hidden; }
   }
   const RATINGS_COLLAPSED_ROWS = 5;
   const MVP_SOURCE = { coach: 'coach', rating: 'rating' };
-  // The coach's pick wins; otherwise the top rating is only a provisional MVP and is never stored.
+  // For the provisional MVP a positive rating counts in full from `mvpFullShare` of the match on court and in proportion
+  // to the minutes below it, so a short spell cannot outweigh a decisive full match. Unknown minutes count in full.
+  function mvpScore(ratings, player, seconds) {
+    const value = ratingValue(ratings, player);
+    if (value == null || value <= 0 || !seconds) return value;
+    return value * Math.min(1, (seconds.get(player.id) || 0) / (CONFIG.rating.mvpFullShare * MATCH_SECONDS));
+  }
+  // The coach's pick wins; otherwise the top MVP score is only a provisional MVP and is never stored. The sort is stable,
+  // so equal scores keep the tie-breaks of the ranking.
   function matchMvp(s, ratings, seconds = minutesOnCourt(s)) {
     if (s.players.some((p) => p.id === s.mvpId)) return { id: s.mvpId, source: MVP_SOURCE.coach };
-    const [top] = rankedByRating(s, ratings, seconds);
+    const score = (p) => mvpScore(ratings, p, seconds) ?? -Infinity;
+    const [top] = rankedByRating(s, ratings, seconds).sort((a, b) => score(b) - score(a));
     return top && ratingValue(ratings, top) != null ? { id: top.id, source: MVP_SOURCE.rating } : { id: null, source: null };
   }
   // What made the rating: its band and every line that moved it, in points (each rounded on its own).
