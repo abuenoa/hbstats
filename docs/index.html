@@ -6178,9 +6178,10 @@ table { border-collapse: collapse; width: 100%; }
         const roleOf = new Map(check(roles).map((m) => [m.team_id, m.role]));
         return check(rows).map((r) => toTeam(r, roleOf.get(r.id)));
       },
-      // An account for a roster player: the invite-player function links it and returns the sign-in link to share.
-      async invitePlayer(teamId, playerId, email) {
-        const { data, error } = await client.functions.invoke('invite-player', { body: { teamId, playerId, email } });
+      // An account for a coach or a roster player (`member` is { role, playerId }): the invite-player function links it and
+      // returns the sign-in link to share.
+      async inviteMember(teamId, member, email) {
+        const { data, error } = await client.functions.invoke('invite-player', { body: { teamId, ...member, email } });
         if (error) throw new Error((await error.context?.json?.().catch(() => null))?.error || error.message);
         return data;
       },
@@ -6651,38 +6652,42 @@ table { border-collapse: collapse; width: 100%; }
       ${armedButton('delete-team', 'Borrar equipo', 'data-delete-team')}</div>`;
     return `${calendarRowHtml()}
       <div class="team-layout"><section class="sheet-card"><h3>Equipo</h3>${teamFormHtml(team, false)}${remove}</section><section class="sheet-card">${teamRosterHtml()}</section></div>
-      ${backend.needsLogin ? playerAccountsHtml() : ''}`;
+      ${backend.needsLogin ? teamAccountsHtml() : ''}`;
   }
   // ---- Player accounts: the coach invites a roster player by e-mail and shares the sign-in link by WhatsApp or mail ----
   // Without a share sheet the link goes to WhatsApp, the coaches' channel with the players.
   const WHATSAPP_URL = 'https://wa.me/?text=';
   const EMAIL_PATTERN = /^[^\s@,;]+@[^\s@,;]+\.[^\s@,;]+$/;
-  function playerAccountsHtml() {
-    const options = home.roster.slice().sort(benchOrder).map((p) => `<option value="${esc(p.id)}">#${p.num} ${esc(p.name)}</option>`).join('');
+  // The first choice of the invite: a coach, with the same full access as the owner; the others are roster players.
+  const COACH_INVITE = 'coach';
+  function teamAccountsHtml() {
+    const options = [`<option value="${COACH_INVITE}">Entrenador · acceso total</option>`,
+      ...home.roster.slice().sort(benchOrder).map((p) => `<option value="${esc(p.id)}">Jugador · #${p.num} ${esc(p.name)}</option>`)].join('');
     const link = home.inviteLink ? `<p class="note">Enlace para ${esc(home.inviteLink.name)}: ábrelo una vez para entrar y poner su contraseña.</p>
       <div class="row-actions"><button class="btn primary press" type="button" data-invite-share>Compartir enlace</button></div>` : '';
-    return `<section class="sheet-card player-accounts"><h3>Cuentas de jugadores</h3>
-      <p class="note">El jugador verá los partidos, las estadísticas y la asistencia de todo el equipo, sin poder cambiar nada.</p>
-      <div class="row-actions"><label class="field">Jugador<select class="in" id="invite-player">${options}</select></label>
-        <label class="field">Correo<input class="in" id="invite-email" type="email" inputmode="email" autocomplete="off" placeholder="jugador@correo.es"></label>
+    return `<section class="sheet-card team-accounts"><h3>Cuentas del equipo</h3>
+      <p class="note">Un entrenador puede hacer lo mismo que tú. Un jugador ve los partidos, las estadísticas y la asistencia de todo el equipo, sin poder cambiar nada.</p>
+      <div class="row-actions"><label class="field">Cuenta para<select class="in" id="invite-who">${options}</select></label>
+        <label class="field">Correo<input class="in" id="invite-email" type="email" inputmode="email" autocomplete="off" placeholder="nombre@correo.es"></label>
         <button class="btn press" type="button" data-invite>Invitar</button></div>${link}</section>`;
   }
-  async function invitePlayer() {
-    const player = rosterPlayer($('invite-player').value), email = $('invite-email').value.trim();
-    if (!player) return;
+  async function inviteMember() {
+    const who = $('invite-who').value, email = $('invite-email').value.trim(), coach = who === COACH_INVITE, player = coach ? null : rosterPlayer(who);
+    if (!coach && !player) return;
     if (!EMAIL_PATTERN.test(email)) { homeStatus('Escribe un correo válido.'); return; }
+    const name = coach ? email : player.name;
     homeStatus('Invitando…');
     try {
-      const result = await backend.invitePlayer(team.id, player.id, email);
-      home.inviteLink = result.link ? { name: player.name, url: result.link } : null;
+      const result = await backend.inviteMember(team.id, coach ? { role: COACH_INVITE } : { role: PLAYER_ROLE, playerId: player.id }, email);
+      home.inviteLink = result.link ? { name, url: result.link } : null;
       renderHome();
-      homeStatus(result.link ? `${player.name} tiene cuenta nueva: comparte el enlace con él.` : `${player.name} ya tenía cuenta: ya ve el equipo al entrar.`);
+      homeStatus(result.link ? `Cuenta nueva para ${name}: comparte el enlace.` : `${name} ya tenía cuenta: ya ve el equipo al entrar.`);
     } catch (err) {
       homeStatus(`No se pudo invitar: ${cloudErrorText(err)}.`);
     }
   }
   async function shareInviteLink() {
-    const { name, url } = home.inviteLink, text = `${name}, entra en HBStats para ver los partidos y estadísticas de ${team.name}:`;
+    const { url } = home.inviteLink, text = `Entra en HBStats con ${team.name}:`;
     try {
       if (navigator.share) { await navigator.share({ title: 'HBStats', text, url }); return; }
       window.open(`${WHATSAPP_URL}${encodeURIComponent(`${text} ${url}`)}`, '_blank', 'noopener');
@@ -8770,7 +8775,7 @@ table { border-collapse: collapse; width: 100%; }
     if (b.hasAttribute('data-sign-out')) { signOut(); return; }
     if (b.dataset.att) { tapAttendance(b.dataset.att); return; }
     if (b.dataset.callupPick) { toggleCallupPick(b.dataset.callupPick); return; }
-    if (b.hasAttribute('data-invite')) { invitePlayer(); return; }
+    if (b.hasAttribute('data-invite')) { inviteMember(); return; }
     if (b.hasAttribute('data-invite-share')) { shareInviteLink(); return; }
     if (b.hasAttribute('data-callup-share')) { shareCallup(); return; }
     if (b.dataset.attKind) { openAttendanceDay(home.attendanceDate, b.dataset.attKind); return; }
