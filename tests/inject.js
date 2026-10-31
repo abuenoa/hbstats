@@ -2568,7 +2568,16 @@
         tab.click(); await tick0();
         if (home.view !== 'stats' || document.querySelector('[data-home-view="stats"]').getAttribute('aria-pressed') !== 'true') throw new Error('view ' + home.view);
         const titles = [...document.querySelectorAll('.stats-page > section > h3')].map((h) => h.textContent).join('|');
-        if (titles !== 'Tendencia|Tiro|Tipos de ataque|Goles tras pérdida|Portería|Pérdidas por jugador|Jugadores') throw new Error(titles);
+        if (titles !== 'Evolución del equipo|Evolución de jugadores|Tiro|Portería|Tipos de ataque|Goles tras pérdida|Pérdidas por jugador|Jugadores') throw new Error(titles);
+        // Cards side by side are as tall as each other.
+        const pairs = [...document.querySelectorAll('.stats-page > section:not(.wide)')].map((s) => s.getBoundingClientRect());
+        for (let i = 0; i + 1 < pairs.length; i += 2) if (Math.abs(pairs[i].top - pairs[i + 1].top) > 1 || Math.abs(pairs[i].height - pairs[i + 1].height) > 1) throw new Error(`row ${i / 2}: ${pairs[i].height} vs ${pairs[i + 1].height}`);
+        // The coach picks what the team chart shows and whose evolution he reads.
+        document.querySelector('[data-stats-metric="saves"]').click();
+        if (home.statsMetric !== 'saves' || !document.querySelector('[data-stats-metric="saves"][aria-pressed="true"]') || !$('home').textContent.includes('% de paradas')) throw new Error('metric');
+        document.querySelector('[data-stats-player="sp3"]').click();
+        if (home.statsPlayer !== 'sp3' || !document.querySelector('[data-stats-player="sp3"][aria-pressed="true"]') || document.querySelectorAll('.rating-trail li').length !== 2) throw new Error('player evolution');
+        home.statsMetric = 'goals'; home.statsPlayer = null;
         if (/NaN|undefined/.test($('home').textContent) || !document.querySelector('.stats-page svg')) throw new Error('content');
       });
     });
