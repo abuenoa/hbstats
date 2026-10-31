@@ -2577,8 +2577,10 @@
         if (home.statsMetric !== 'saves' || !document.querySelector('[data-stats-metric="saves"][aria-pressed="true"]') || !$('home').textContent.includes('% de paradas')) throw new Error('metric');
         document.querySelector('[data-stats-player="sp3"]').click();
         if (home.statsPlayer !== 'sp3' || !document.querySelector('[data-stats-player="sp3"][aria-pressed="true"]') || document.querySelectorAll('.rating-trail li').length !== 2) throw new Error('player evolution');
-        home.statsMetric = 'goals'; home.statsPlayer = null;
         if (/NaN|undefined/.test($('home').textContent) || !document.querySelector('.stats-page svg')) throw new Error('content');
+        document.querySelector('.player-evolution .row-actions [data-player="sp3"]').click();
+        if (home.view !== 'player' || home.playerId !== 'sp3') throw new Error('«Ver más» did not open the card: ' + home.view);
+        home.statsMetric = 'goals'; home.statsPlayer = null;
       });
     });
     T('stats: per-match rows add up to the season totals of teamSeason', () => {
@@ -4504,14 +4506,12 @@
         if ((await backend.listSessions('cal-team')).length || localSessions().length || home.sessions.length || !/Presente/.test(badgeOf(id)) || document.querySelector('[data-att-delete]')) throw new Error('session kept');
       });
     });
-    await TA('attendance view: a main tab, and «Pasar lista de hoy» on the team page', async () => {
+    await TA('attendance view: a main tab of the team', async () => {
       await withAttendanceView(async () => {
         showHomeView('team');
         const tabs = [...document.querySelectorAll('.app-bar .tabs button')].map((b) => b.textContent);
         if (tabs.join() !== 'Equipo,Asistencia,Partidos,Estadísticas') throw new Error('tabs ' + tabs);
-        const quick = document.querySelector('.attendance-card [data-home-view="attendance"]');
-        if (!quick || quick.textContent !== 'Pasar lista de hoy') throw new Error('no quick button');
-        quick.click();
+        document.querySelector('.app-bar [data-home-view="attendance"]').click();
         for (let i = 0; i < 5; i++) await tick0();
         if (home.view !== 'attendance' || !document.querySelector('[data-att]') || home.attendanceDate !== todayIso()) throw new Error(home.view);
         const pressed = [...document.querySelectorAll('.app-bar .tabs button')].filter((b) => b.getAttribute('aria-pressed') === 'true').map((b) => b.textContent);
@@ -4552,8 +4552,7 @@
         const text = $('home').textContent;
         if (/NaN|undefined/.test(text) || !document.querySelector('.squad [data-player="ra2"] .face-att') || document.querySelector('[data-player="ra2"] .face-att').textContent.trim() !== '–') throw new Error('squad: ' + text.slice(0, 200));
         home.sessions = []; showHomeView('team');
-        if (document.querySelector('.attendance-card .record') || document.querySelector('.face-att')) throw new Error('rates shown without sessions');
-        if (!document.querySelector('.attendance-card [data-home-view="attendance"]')) throw new Error('no way to take the first attendance');
+        if (/asistencia \(/.test($('home').textContent) || document.querySelector('.face-att')) throw new Error('rates shown without sessions');
       });
     });
     await TA('player card: attendance tile with percent and counts', async () => {
@@ -4567,19 +4566,30 @@
         if (document.querySelector('.att-tile .att-low') === null) throw new Error('50 % is below warnPct and needs the «!»');
       });
     });
-    await TA('team page: most absences ranked by faltas, then justificadas', async () => {
+    await TA('attendance page: most absences ranked by faltas, injuries apart', async () => {
       await withAttendanceView(async () => {
         const marks = (...codes) => Object.fromEntries(codes.map(([id, s]) => [id, { s }]));
         home.roster = [1, 2, 3, 4, 5].map((n) => ({ id: 'rt' + n, num: n, name: 'Jugador ' + n, pos: 'LI' }));
         home.stateMatches = []; home.season = [];
-        home.sessions = [rateSession('2026-10-01', 'ENTRENO', marks(['rt1', 'F'], ['rt2', 'J'], ['rt3', 'F'], ['rt4', 'J'])), rateSession('2026-10-02', 'ENTRENO', marks(['rt3', 'F'], ['rt2', 'J'], ['rt1', 'J']))];
-        showHomeView('team');
-        const card = document.querySelector('.attendance-card');
-        if (!card || !/Más faltas/.test(card.textContent) || !card.textContent.includes('2 entrenos · 0 partidos')) throw new Error(card && card.textContent);
-        const order = [...card.querySelectorAll('[data-player]')].map((b) => b.dataset.player).join();
+        home.sessions = [rateSession('2026-10-01', 'ENTRENO', marks(['rt1', 'F'], ['rt2', 'J'], ['rt3', 'F'], ['rt4', 'J'], ['rt5', 'L'])), rateSession('2026-10-02', 'ENTRENO', marks(['rt3', 'F'], ['rt2', 'J'], ['rt1', 'J']))];
+        showHomeView('attendance');
+        const card = [...document.querySelectorAll('.att-insights .sheet-card')].find((s) => /Quién falta más/.test(s.textContent));
+        if (!card || !/Más lesiones/.test(card.textContent)) throw new Error(card && card.textContent);
+        const injured = [...card.querySelectorAll('.att-sub ~ ol [data-player]')].map((b) => b.dataset.player).join();
+        if (injured !== 'rt5') throw new Error('injuries: ' + injured);
+        const order = [...card.querySelector('ol').querySelectorAll('[data-player]')].map((b) => b.dataset.player).join();
         if (order !== 'rt3,rt1,rt2') throw new Error('order: ' + order);
-        if (card.querySelector('[data-player="rt5"]') || card.querySelector('[data-player="rt4"]')) throw new Error('only the top 3 with absences');
+        if (card.querySelector('ol').querySelector('[data-player="rt5"], [data-player="rt4"]')) throw new Error('only the top 3 with faltas');
       });
+    });
+    T('attendance trends: trainings by week and by weekday, matches and injuries left out', () => {
+      const sessions = [rateSession('2026-10-13', 'ENTRENO', { ra1: { s: 'F' } }), rateSession('2026-10-15', 'ENTRENO', { ra2: { s: 'L' } }),
+        rateSession('2026-10-20', 'ENTRENO'), rateSession('2026-10-18', 'PARTIDO', { ra3: { s: 'F' } })];
+      const weeks = trainingRates(sessions, ratePlayers, mondayOf).sort((a, b) => a.key.localeCompare(b.key));
+      if (weeks.map((w) => `${w.key}:${w.sessions}:${w.P}/${w.counted}:${w.pct}`).join() !== '2026-10-12:2:4/5:80,2026-10-19:1:3/3:100') throw new Error(JSON.stringify(weeks));
+      const days = new Map(trainingRates(sessions, ratePlayers, weekdayOf).map((d) => [d.key, d]));
+      if (days.get(2).sessions !== 2 || days.get(2).pct !== 83 || days.get(4).pct !== 100 || days.has(6)) throw new Error(JSON.stringify([...days.values()]));
+      if (mondayOf('2026-10-18') !== '2026-10-12' || mondayOf('2026-10-19') !== '2026-10-19') throw new Error('monday');
     });
     await TA('squad: low attendance is marked with text, not colour only', async () => {
       await withAttendanceView(async () => {
