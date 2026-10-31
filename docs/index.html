@@ -866,7 +866,30 @@ a:focus-visible, input:focus-visible, select:focus-visible, summary:focus-visibl
 .squad-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(160px, 1fr)); gap: var(--space-2); }
 .home input { -webkit-user-select: text; user-select: text; }
 /* Team page: season card, leaders, squad */
-.team-page { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.1fr) minmax(0, 1.3fr); gap: var(--space-4); align-items: start; }
+.team-page { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) minmax(0, 1.25fr); gap: var(--space-4); align-items: start; }
+.att-insights { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--space-4); align-items: stretch; }
+.att-insights .wide { grid-column: 1 / -1; }
+/* The team pages on a phone: the page behind never scrolls sideways; the bar keeps the crest, the name and the corner
+   on one line with the tabs scrolling under them; the next match and the roster rows stack. */
+body:has(#home:not([hidden])) { overflow: hidden; }
+@media (max-width: 700px) {
+  .home .app-bar { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; }
+  .home .app-bar .tabs { grid-row: 2; grid-column: 1 / -1; flex-wrap: nowrap; overflow-x: auto; }
+  .home .app-bar .tabs button { flex: none; }
+  .home .app-bar .teams-corner { grid-row: 1; grid-column: 3; }
+  .home .app-bar .tabs button { padding-inline: var(--space-3); font-size: .9rem; }
+  .next-body .next-what { flex: 1 1 100%; }
+  .next-body .next-rival { overflow-wrap: normal; }
+  .home .att .pos-groups { display: grid; }
+  .home .att .faces { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); }
+  .home .att .att-cell { width: auto; }
+  .home .att .face span.att-badge { white-space: nowrap; font-size: .68rem; }
+  .roster-table thead { display: none; }
+  .roster-table tr { display: grid; grid-template-columns: 5rem minmax(0, 1fr) auto; align-items: center; gap: var(--space-2); padding: var(--space-2); border-bottom: 1px solid var(--line); }
+  .roster-table td { padding: 0; border: 0; }
+  .roster-table td:nth-child(3) { grid-row: 2; grid-column: 1 / -1; }
+}
+@media (max-width: 700px) { .att-insights { grid-template-columns: minmax(0, 1fr); } }
 .record b { display: block; font: var(--type-kpi); font-variant-numeric: tabular-nums; }
 .record small { font: var(--type-caption); color: var(--muted); }
 .form-chips { display: flex; gap: var(--space-2); margin: var(--space-3) 0; }
@@ -1029,7 +1052,8 @@ span.att-foot { visibility: hidden; }
 :is(.home, .sheet) .player-col > .sheet-card:last-child { flex-grow: 1; }
 /* Squad: each player is a trading card with their overall */
 :is(.home, .sheet) .face { border-radius: var(--radius-md); border-top: 4px solid var(--pos); box-shadow: none; background: var(--soft); position: relative; }
-.face-overall { position: absolute; left: var(--space-1); top: var(--space-1); font-family: var(--font-display); font-weight: 800; font-size: 1.25rem; line-height: 1; color: var(--game-accent); }
+.home .squad-faces .face { padding-top: var(--space-6); }
+.face-overall { position: absolute; left: var(--space-2); top: var(--space-1); font-family: var(--font-display); font-weight: 800; font-size: 1.25rem; line-height: 1; color: var(--game-accent); }
 /* Player card: a shield-shaped trading card with the overall, the position and the attributes */
 :is(.home, .sheet) .poster { background: linear-gradient(160deg, var(--brand), color-mix(in srgb, var(--brand) 35%, #0e1116) 70%); color: #ffffff; clip-path: polygon(0 0, 100% 0, 100% 96%, 50% 100%, 0 96%); padding-bottom: var(--space-8); border: 0; }
 :is(.home, .sheet) .poster .poster-sub, :is(.home, .sheet) .poster .poster-rating, :is(.home, .sheet) .poster .sentences, :is(.home, .sheet) .poster .tile:not(.lead-field, .lead-keeper) span { color: rgba(255, 255, 255, .85); }
@@ -1095,8 +1119,9 @@ span.att-foot { visibility: hidden; }
 .stats-page .stat-tiles, .stats-page .stat-tiles:last-child { grid-template-columns: repeat(auto-fit, minmax(7.5rem, 1fr)); margin-bottom: var(--space-3); }
 .stats-page .stat-tile:last-child:nth-child(4n+3) { grid-column: auto; }
 .stats-page figure { margin: 0; }
-.stats-page .trend svg, .stats-page .zone-map svg { display: block; width: 100%; height: auto; }
-.stats-page .trend svg { max-height: 15rem; }
+.trend svg, .stats-page .zone-map svg { display: block; width: 100%; height: auto; }
+.trend svg { max-height: 15rem; }
+.trend { margin: 0; }
 .chart-title { margin: var(--space-3) 0 var(--space-1); font: var(--type-caption); font-weight: 700; color: var(--muted); }
 .sheet-card .chart-legend { display: flex; flex-wrap: wrap; gap: var(--space-1) var(--space-4); margin-bottom: var(--space-2); }
 .sheet-card .chart-legend li { display: flex; justify-content: flex-start; align-items: center; gap: var(--space-2); }
@@ -6608,7 +6633,7 @@ table { border-collapse: collapse; width: 100%; }
       <div class="row-actions"><b>${home.roster.length}/${MAX_TEAM_ROSTER}</b>
         <button class="btn primary press" type="button" data-team-add ${home.roster.length >= MAX_TEAM_ROSTER ? 'disabled' : ''}>+ Jugador</button>
         <button class="btn press" type="button" data-team-export>Exportar</button><button class="btn press" type="button" data-roster-import="team">Importar</button></div>
-      ${rows ? `<div class="table-wrap"><table><thead><tr><th>Dorsal</th><th style="text-align:left">Jugador</th><th style="text-align:left">Puesto</th><th></th></tr></thead><tbody>${rows}</tbody></table></div>`
+      ${rows ? `<div class="table-wrap"><table class="roster-table"><thead><tr><th>Dorsal</th><th style="text-align:left">Jugador</th><th style="text-align:left">Puesto</th><th></th></tr></thead><tbody>${rows}</tbody></table></div>`
         : '<p class="note">Añade a tus jugadores (al menos un portero) o importa un archivo de plantilla.</p>'}
       <p class="note">En cada partido eliges la convocatoria entre estos jugadores. Quitar a alguien no cambia los partidos ya jugados.</p>`;
   }
@@ -7425,7 +7450,14 @@ table { border-collapse: collapse; width: 100%; }
       <div class="form-chips">${form}</div>
       <div class="season-kpis">${tile(s.goalsFor, `goles a favor · ${perMatch} por partido`, ' hot')}${tile(s.goalsAgainst, 'goles en contra')}
         ${tile(pctText(pct(s.shotGoals, s.shots)), `acierto en tiro (${s.shotGoals}/${s.shots})`)}${tile(pctText(pct(s.saves, s.onTarget)), `paradas (${s.saves}/${s.onTarget})`)}
-        ${tile(s.turnovers, 'pérdidas')}${tile(s.recoveries, 'recuperaciones')}</div>${last}</section>`;
+        ${tile(s.turnovers, 'pérdidas')}${tile(s.recoveries, 'recuperaciones')}${teamAttendanceTile(tile)}</div>${last}</section>`;
+  }
+  // The team's attendance rate as one more season figure, once there are sessions.
+  function teamAttendanceTile(tile) {
+    const rows = attendanceRowsNow();
+    if (!rows) return '';
+    const rate = pct(sumOf(rows, (r) => r.P), sumOf(rows, (r) => r.counted));
+    return tile(`${attendanceText(rate)}${lowAttendance(rate) ? ` ${lowAttendanceMark}` : ''}`, `asistencia (${plural(attendanceDays(home.sessions, home.stateMatches).length, 'sesión', 'sesiones')})`);
   }
   function leadersCardHtml(matches) {
     const chips = LEADER_METRICS.map(({ key, label }) => `<button class="chip press" type="button" data-leader="${key}" aria-pressed="${home.leaderMetric === key}">${label}</button>`).join('');
@@ -7459,24 +7491,55 @@ table { border-collapse: collapse; width: 100%; }
     };
   }
   function squadCardHtml() {
-    const groups = positionGroupsHtml(squadFaceHtml(attendanceRowsNow()));
-    return `<section class="sheet-card squad"><h3>Plantilla · ${home.roster.length}</h3>${groups || '<p class="note">Todavía no hay jugadores.</p>'}
+    // One grid by position (the colour on top of each card says which), so the column stays as short as the others.
+    const faces = home.roster.slice().sort(benchOrder).map(squadFaceHtml(attendanceRowsNow())).join('');
+    return `<section class="sheet-card squad"><h3>Plantilla · ${home.roster.length}</h3>${faces ? `<div class="faces squad-faces">${faces}</div>` : '<p class="note">Todavía no hay jugadores.</p>'}
       <div class="row-actions"><button class="btn press" type="button" data-home-view="team-edit">Editar equipo</button><button class="btn press" type="button" data-rating-tune>Ajustar puntuación</button></div></section>`;
   }
-  // The team rate, the sessions behind it and the players with most absences (faltas, then justificadas).
-  const ATTENDANCE_QUICK_HTML = '<div class="row-actions"><button class="btn primary press" type="button" data-home-view="attendance">Pasar lista de hoy</button></div>';
-  function attendanceCardHtml() {
-    const rows = attendanceRowsNow();
-    if (!rows) return `<section class="sheet-card attendance-card"><h3>Asistencia</h3>${ATTENDANCE_QUICK_HTML}<p class="note">Aún no hay sesiones.</p></section>`;
-    const days = attendanceDays(home.sessions, home.stateMatches);
-    const countOf = (kind) => days.filter((d) => d.session.kind === kind).length;
-    const rate = pct(rows.reduce((n, r) => n + r.P, 0), rows.reduce((n, r) => n + r.counted, 0));
-    const worst = rows.filter((r) => r.F || r.J).sort((a, b) => b.F - a.F || b.J - a.J || a.player.num - b.player.num).slice(0, ABSENCE_LEADERS);
-    const list = worst.map((r, i) => `<li><button class="leader press" type="button" data-player="${esc(r.player.id)}"><i class="rank">${i + 1}</i>${discHtml(r.player)}
-        <span class="who"><b>${esc(r.player.name)}</b><small>${plural(r.F, 'falta', 'faltas')} · ${plural(r.J, 'justificada', 'justificadas')}</small></span><strong class="value">${r.F}</strong></button></li>`).join('');
-    return `<section class="sheet-card attendance-card"><h3>Asistencia</h3>${ATTENDANCE_QUICK_HTML}
-      <div class="record"><b>${attendanceText(rate)}${lowAttendance(rate) ? ` ${lowAttendanceMark}` : ''}</b><small>${plural(countOf(SESSION_KINDS.TRAINING), 'entreno', 'entrenos')} · ${plural(countOf(SESSION_KINDS.MATCH), 'partido', 'partidos')}</small></div>
-      <h4 class="att-sub">Más faltas</h4>${list ? `<ol class="leader-list">${list}</ol>` : '<p class="note">Nadie ha faltado.</p>'}</section>`;
+  // ---- Attendance trends: trainings by week and by weekday, and who misses or is injured most ----
+  const WEEKDAY_FULL_NAMES = ['Domingo', 'Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado'];
+  const DAYS_PER_WEEK = 7, MONDAY = 1;
+  const dayOf = (iso) => new Date(`${iso}T12:00:00`);
+  const weekdayOf = (iso) => dayOf(iso).getDay();
+  const mondayOf = (iso) => { const d = dayOf(iso); d.setDate(d.getDate() - ((d.getDay() - MONDAY + DAYS_PER_WEEK) % DAYS_PER_WEEK)); return localIso(d); };
+  // The trainings grouped by keyOf(date): sessions, presentes and counted marks (as attendanceRows counts them).
+  function trainingRates(sessions, roster, keyOf) {
+    const groups = new Map();
+    sessions.filter((x) => x.kind === SESSION_KINDS.TRAINING).forEach((session) => {
+      const key = keyOf(session.date), g = groups.get(key) || { key, sessions: 0, P: 0, counted: 0 };
+      g.sessions += 1;
+      roster.forEach((p) => {
+        const code = sessionStatus(session, p.id, null);
+        if (code === 'NC' || CONFIG.attendance.excludeFromRate.includes(code)) return;
+        g.counted += 1;
+        if (code === 'P') g.P += 1;
+      });
+      groups.set(key, g);
+    });
+    return [...groups.values()].map((g) => ({ ...g, pct: pct(g.P, g.counted) }));
+  }
+  // The first ABSENCE_LEADERS of `ranked` as a leader list: `count(row)` under the name and `value(row)` on the right.
+  const absenceListHtml = (ranked, count, value) => ranked.slice(0, ABSENCE_LEADERS)
+    .map((r, i) => `<li><button class="leader press" type="button" data-player="${esc(r.player.id)}"><i class="rank">${i + 1}</i>${discHtml(r.player)}
+        <span class="who"><b>${esc(r.player.name)}</b><small>${count(r)}</small></span><strong class="value">${value(r)}</strong></button></li>`).join('');
+  const byDorsal = (a, b) => a.player.num - b.player.num;
+  function attendanceTrendsHtml() {
+    const trainings = (home.sessions || []).filter((x) => x.kind === SESSION_KINDS.TRAINING), rows = attendanceRowsNow();
+    if (!trainings.length || !rows) return '<section class="sheet-card att-trends"><h3>Tendencia de entrenos</h3><p class="note">Aún no hay entrenos con asistencia.</p></section>';
+    const weeks = trainingRates(trainings, home.roster, mondayOf).sort((a, b) => a.key.localeCompare(b.key)).map((w) => ({ date: w.key, rate: w.pct == null ? NaN : w.pct / PERCENT }));
+    const days = trainingRates(trainings, home.roster, weekdayOf).sort((a, b) => ((a.key - MONDAY + DAYS_PER_WEEK) % DAYS_PER_WEEK) - ((b.key - MONDAY + DAYS_PER_WEEK) % DAYS_PER_WEEK));
+    const rates = days.map((d) => d.pct).filter((v) => v != null), best = Math.max(...rates), worst = Math.min(...rates);
+    const tone = (d) => (days.length < 2 || best === worst ? '' : d.pct === worst ? ' r-bad' : d.pct === best ? ' r-good' : '');
+    const dayRows = days.map((d) => `<div class="share-row"><span class="share-label"><b>${WEEKDAY_FULL_NAMES[d.key]}</b><span class="${tone(d).trim()}">${attendanceText(d.pct)} · ${plural(d.sessions, 'entreno', 'entrenos')}</span></span>
+        <span class="share-bar"><i style="--share:${d.pct || 0}%;--bar:var(--${lowAttendance(d.pct) ? 'act-bad' : 'act-good'})"></i></span></div>`).join('');
+    const absences = absenceListHtml(rows.filter((r) => r.F || r.J).sort((a, b) => b.F - a.F || b.J - a.J || byDorsal(a, b)),
+      (r) => `${plural(r.F, 'falta', 'faltas')} · ${plural(r.J, 'justificada', 'justificadas')}`, (r) => r.F);
+    const injuries = absenceListHtml(rows.filter((r) => r.L).sort((a, b) => b.L - a.L || byDorsal(a, b)), (r) => plural(r.L, 'sesión lesionado', 'sesiones lesionado'), (r) => r.L);
+    return `<div class="att-insights">
+      <section class="sheet-card att-trends wide"><h3>Asistencia a entrenos por semana</h3>${evolutionChartHtml(weeks, [{ key: 'rate', label: '% de asistencia', token: 'act-good', rate: true }])}</section>
+      <section class="sheet-card"><h3>Por día de la semana</h3><div class="share-list">${dayRows}</div><p class="note">En verde el día que más vienen, en rojo el que menos.</p></section>
+      <section class="sheet-card"><h3>Quién falta más</h3>${absences ? `<ol class="leader-list">${absences}</ol>` : '<p class="note">Nadie ha faltado.</p>'}
+        <h4 class="att-sub">Más lesiones</h4>${injuries ? `<ol class="leader-list">${injuries}</ol>` : '<p class="note">Nadie lesionado.</p>'}</section></div>`;
   }
   const homeAwayBadge = (f) => `<span class="venue-badge">${homeAwayHtml(f.home)}</span>`;
   function fixtureEditorHtml(f) {
@@ -7536,7 +7599,7 @@ table { border-collapse: collapse; width: 100%; }
     const fixtures = home.fixtures || [];
     const links = linkFixtures(fixtures, home.teamMatches);
     return `${statusHtml()}${note}
-      <div class="team-page">${nextFixtureCardHtml(fixtures, links)}${seasonCardHtml(home.season)}${leadersCardHtml(home.season)}${attendanceCardHtml()}${squadCardHtml()}${calendarCardHtml(fixtures, links)}</div>`;
+      <div class="team-page">${nextFixtureCardHtml(fixtures, links)}${seasonCardHtml(home.season)}${leadersCardHtml(home.season)}${squadCardHtml()}${calendarCardHtml(fixtures, links)}</div>`;
   }
   // The season stays loaded while the coach moves between the team pages; anything that changes it clears it.
   async function ensureSeason() {
@@ -7677,7 +7740,8 @@ table { border-collapse: collapse; width: 100%; }
           : [['Goles', season.totals.goals, `${decimalText(perMatch(season, season.totals.goals))} por partido`], ['% tiro', pctText(pct(season.totals.goals, season.totals.shots)), `${season.totals.goals}/${season.totals.shots}`],
             ['Pases de gol', season.totals.assists, `${decimalText(perMatch(season, season.totals.assists))} por partido`], ['Recuperaciones', season.totals.recoveries, `${decimalText(perMatch(season, season.totals.recoveries))} por partido`]])])}
       ${evolutionChartHtml(season.rows, series, 'bars')}
-      <h4 class="att-sub">Nota por partido</h4><ol class="rating-trail">${notes}</ol></section>`;
+      <h4 class="att-sub">Nota por partido</h4><ol class="rating-trail">${notes}</ol>
+      <div class="row-actions"><button class="btn primary press" type="button" data-player="${esc(player.id)}">Ver más de ${esc(player.name)} ›</button></div></section>`;
   }
   function shootingCardHtml(rows) {
     const goals = sumOf(rows, (r) => r.goals), shots = sumOf(rows, (r) => r.shots);
@@ -7917,7 +7981,8 @@ table { border-collapse: collapse; width: 100%; }
         <p class="note att-how">Todos cuentan como presentes: toca a quien no esté. Cada toque cambia a ${[...MARK_CODES.map((c) => ATTENDANCE[c]), ATTENDANCE[session.kind === SESSION_KINDS.MATCH ? 'NC' : 'P']].join(' → ')}.</p>
         ${attendanceNoteRowHtml(session)}
         <div class="pos-groups">${positionGroupsHtml((p) => attendanceFaceHtml(p, session, match)) || '<p class="note">Todavía no hay jugadores.</p>'}</div>${remove}</section>
-      ${session.kind === SESSION_KINDS.MATCH && home.roster.length ? callupHtml(session, match) : ''}`;
+      ${session.kind === SESSION_KINDS.MATCH && home.roster.length ? callupHtml(session, match) : ''}
+      ${attendanceTrendsHtml()}`;
   }
   // ---- The convocatoria image of a match day: the coach picks the players, the image follows on its own ----
   // Picked at first: the acta's squad when the match exists, else everyone not marked absent or injured.
