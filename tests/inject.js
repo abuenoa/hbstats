@@ -2588,6 +2588,20 @@
         home.statsMetric = 'goals'; home.statsPlayer = null;
       });
     });
+    await TA('team page: recent matches and leaders fill their card and never spill', async () => {
+      await withStatsPage([statsMatchA(), statsMatchB()].map((m) => ({ ...m, status: 'finished' })), async () => {
+        showHomeView('team');
+        if (!/Últimos partidos/.test($('home').textContent)) throw new Error('no recent matches');
+        for (const sel of ['.recent-list', '.leader-list']) {
+          const list = document.querySelector(sel), bottom = list.getBoundingClientRect().bottom;
+          if (!list.children.length || [...list.children].some((row) => row.getBoundingClientRect().bottom > bottom + 1)) throw new Error(`${sel} spills: list ${Math.round(list.getBoundingClientRect().height)}, rows ${[...list.children].map((r) => Math.round(r.getBoundingClientRect().height))}`);
+        }
+        const cards = ['.season-card', '.leaders', '.squad'].map((s) => document.querySelector(s).getBoundingClientRect().height);
+        if (Math.max(...cards) - Math.min(...cards) > 1) throw new Error('columns ' + cards.join());
+      });
+      const all = leaders([statsMatchA()], statsPlayers, 'goals', { limit: statsPlayers.length, zeros: true });
+      if (all.length <= leaders([statsMatchA()], statsPlayers, 'goals').length || all[all.length - 1].value !== 0) throw new Error('zeros: ' + all.map((r) => r.value));
+    });
     T('stats: per-match rows add up to the season totals of teamSeason', () => {
       const matches = [statsMatchA(), statsMatchB()], rows = matches.map(teamMatchRow), t = teamSeason(matches);
       const total = (pick) => sumOf(rows, pick);
