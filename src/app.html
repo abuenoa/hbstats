@@ -457,8 +457,8 @@ button.rex-chip { border: 0; cursor: pointer; position: relative; }
 .ev time { font-family: var(--font-display); font-weight: 700; font-size: 16px; color: var(--muted); font-variant-numeric: tabular-nums; }
 .ev.fresh { animation: flash 1.4s ease-out; }
 .strip-actions { display: flex; gap: 8px; flex: none; }
-/* Leaving the match: first in the strip and dark, so it reads apart from the match actions. */
-.btn.back { flex: none; background: var(--fg); color: var(--bg); border-color: transparent; }
+/* Leaving the match: first in the strip and red, so it reads apart from the match actions. */
+.btn.back { flex: none; display: inline-flex; align-items: center; gap: var(--space-1); background: var(--red); color: #ffffff; border-color: transparent; }
 @keyframes flash { from { box-shadow: 0 0 0 3px var(--gold); } to { box-shadow: 0 0 0 0 transparent; } }
 @keyframes enter { from { transform: scale(.95); opacity: 0; filter: blur(6px); } to { transform: none; opacity: 1; filter: none; } }
 @keyframes ring { 0%, 100% { transform: none; } 25% { transform: translateX(-4px); } 75% { transform: translateX(4px); } }
@@ -717,8 +717,10 @@ td.zero { color: var(--color-text-tertiary); }
 .pos-btn { min-width: 48px; min-height: var(--target); border-radius: var(--radius-sm); border: 2px solid transparent; background: var(--soft); color: var(--muted); font: var(--type-caption); font-weight: 800; }
 .pos-btn[aria-pressed="true"] { background: var(--c); color: #fff; }
 .pos-btn.dark[aria-pressed="true"] { color: #151515; }
-.analysis { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: var(--space-5); align-items: start; }
-.analysis-col { display: grid; gap: var(--space-4); min-width: 0; }
+/* Both columns share their rows (subgrid), so each block starts level with its twin however long the other side runs. */
+.analysis { --analysis-blocks: 5; display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); column-gap: var(--space-5); row-gap: var(--space-4); align-items: start; }
+.analysis-col { display: grid; grid-row: span var(--analysis-blocks); grid-template-rows: subgrid; min-width: 0; }
+.analysis-col .keypoints { align-content: start; }
 .analysis-col .acta-h { margin: 4px 0 0; }
 .keypoints { margin: 0; padding: 0; list-style: none; display: grid; gap: var(--space-2); }
 .keypoints li { padding: 8px 10px 8px 12px; border-radius: var(--radius-sm); background: var(--surface); border: 1px solid var(--line); border-left: 5px solid var(--faint); font: var(--type-caption); }
@@ -925,7 +927,9 @@ span.att-foot { visibility: hidden; }
 .next-round { font: var(--type-caption); font-weight: 700; letter-spacing: .1em; text-transform: uppercase; color: var(--muted); }
 .next-rival { font: var(--type-title); overflow-wrap: anywhere; }
 .next-when { font: var(--type-heading); font-variant-numeric: tabular-nums; }
-.venue-badge { justify-self: start; padding: var(--space-1) var(--space-3); border-radius: var(--radius-full); border: 1px solid var(--line); background: var(--soft); font: var(--type-caption); font-weight: 700; white-space: nowrap; }
+.venue-icon { flex: none; }
+[data-match-home] { display: inline-flex; align-items: center; gap: var(--space-1); }
+.venue-badge { display: inline-flex; align-items: center; gap: var(--space-1); justify-self: start; padding: var(--space-1) var(--space-3); border-radius: var(--radius-full); border: 1px solid var(--line); background: var(--soft); font: var(--type-caption); font-weight: 700; white-space: nowrap; }
 .cal-list { margin: 0; padding: 0; list-style: none; display: grid; }
 .calendar-card .cal-row { display: grid; grid-template-columns: 40px 168px minmax(0, 1fr) 64px 128px auto; align-items: center; gap: var(--space-3); min-height: var(--tap); padding: var(--space-2) var(--space-3); border-bottom: 1px solid var(--line); }
 .calendar-card .cal-row:last-child { border-bottom-color: transparent; }
@@ -1212,7 +1216,7 @@ span.att-foot { visibility: hidden; }
   </div>
 
   <footer class="strip glass">
-    <button class="btn back press" id="btn-home" type="button">‹ Partidos</button>
+    <button class="btn back press" id="btn-home" type="button" aria-label="Atrás, a Partidos"><svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M15 5l-7 7 7 7"/></svg><span>Atrás</span></button>
     <div class="events" id="events" aria-label="Últimas acciones (toca una para borrarla)"></div>
     <div class="strip-actions">
       <button class="btn press" id="btn-undo" type="button" aria-label="Deshacer">↶</button>
@@ -4068,7 +4072,7 @@ span.att-foot { visibility: hidden; }
         ${field('Nuestro equipo', `type="text" maxlength="${MAX_NAME_LENGTH}" value="${esc(state.us)}" data-team="us"`)}
         ${field('Rival', `type="text" maxlength="${MAX_NAME_LENGTH}" value="${esc(state.them)}" data-team="them"`)}
         ${field('Lugar', `type="text" maxlength="${MAX_VENUE_LENGTH}" value="${esc(state.venue)}" placeholder="Pabellón, ciudad" data-match="venue"`)}
-        <div class="acta-choice">Jugamos<div class="row-actions" role="group" aria-label="Jugamos en casa o fuera">${HOME_AWAY.map((isHome) => `<button class="chip press" type="button" data-match-home="${isHome}" aria-pressed="${state.home === isHome}">${homeAwayText(isHome)}</button>`).join('')}</div></div>
+        <div class="acta-choice">Jugamos<div class="row-actions" role="group" aria-label="Jugamos en casa o fuera">${HOME_AWAY.map((isHome) => `<button class="chip press" type="button" data-match-home="${isHome}" aria-pressed="${state.home === isHome}">${homeAwayHtml(isHome)}</button>`).join('')}</div></div>
         ${field('Fecha', `type="date" value="${esc(state.date)}" data-match="date"`)}
       </div>
       <div class="acta-rosters">
@@ -4402,6 +4406,12 @@ span.att-foot { visibility: hidden; }
   }
   const HOME_AWAY = [true, false];
   const homeAwayText = (isHome) => (isHome ? 'Casa' : 'Fuera');
+  // A house at home, a plane away, before the word wherever the page shows it.
+  const HOME_AWAY_ICONS = {
+    true: '<path d="M3 11l9-8 9 8"/><path d="M5 10v10h5v-6h4v6h5V10"/>',
+    false: '<path d="M2 16l20-6-3-3-7 2-6-5-2 1 4 6-5 2-2-1-1 1z"/><path d="M5 21h14"/>',
+  };
+  const homeAwayHtml = (isHome) => `<svg class="venue-icon" viewBox="0 0 24 24" width="18" height="18" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">${HOME_AWAY_ICONS[Boolean(isHome)]}</svg>${homeAwayText(isHome)}`;
   // «Pabellón Vivero · Casa»: the venue and, once known, whether we play at home.
   const matchPlaceText = (s = state) => [s.venue, s.home == null ? '' : homeAwayText(s.home)].filter(Boolean).join(' · ');
   // The two sides as a scoreline reads them: the home team first, ours while nobody has said where we play.
@@ -7368,7 +7378,7 @@ table { border-collapse: collapse; width: 100%; }
       <div class="record"><b>${attendanceText(rate)}${lowAttendance(rate) ? ` ${lowAttendanceMark}` : ''}</b><small>${plural(countOf(SESSION_KINDS.TRAINING), 'entreno', 'entrenos')} · ${plural(countOf(SESSION_KINDS.MATCH), 'partido', 'partidos')}</small></div>
       <h4 class="att-sub">Más faltas</h4>${list ? `<ol class="leader-list">${list}</ol>` : '<p class="note">Nadie ha faltado.</p>'}</section>`;
   }
-  const homeAwayBadge = (f) => `<span class="venue-badge">${homeAwayText(f.home)}</span>`;
+  const homeAwayBadge = (f) => `<span class="venue-badge">${homeAwayHtml(f.home)}</span>`;
   function fixtureEditorHtml(f) {
     const kickoff = f.kickoff ? new Date(f.kickoff) : null;
     return `<div class="fixture-edit">
@@ -8098,7 +8108,7 @@ table { border-collapse: collapse; width: 100%; }
   // mirroring the views: one guard entry sits above the page, each back consumes it, and the handler pushes it again
   // while the screen still has an exit. At the root (no leading control) nothing is pushed and the browser leaves.
   const BACK_GUARD_STATE = { hbstatsGuard: true };
-  const LIVE_BACK_HINT = 'Para salir del partido, pulsa ‹ Partidos';
+  const LIVE_BACK_HINT = 'Para salir del partido, pulsa Atrás';
   function armBackGuard() {
     if (ui.backGuard || DEMO) return;
     history.pushState(BACK_GUARD_STATE, '');
@@ -8161,12 +8171,13 @@ table { border-collapse: collapse; width: 100%; }
     hideFinal();
     renderAll();
     armBackGuard();
-    hint('Partido de ejemplo · «‹ Partidos» para volver a tus partidos');
+    hint('Partido de ejemplo · «Atrás» para volver a tus partidos');
   }
   // The public demo: a match in progress to play with; «Entrar» leads to the real app.
   function openDemo() {
     applyTeam({ ...DEFAULT_TEAM, club: 'HBStats', name: 'Demo' });
     $('btn-home').textContent = 'Entrar';
+    $('btn-home').removeAttribute('aria-label');
     openSample();
     hint('Partido de demostración: prueba lo que quieras · «Entrar» para usar tu cuenta');
   }
