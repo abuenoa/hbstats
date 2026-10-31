@@ -913,6 +913,20 @@ body:has(#home:not([hidden])) { overflow: hidden; }
 .season-kpi.hot { background: var(--brand); color: var(--brand-ink); }
 .season-kpi.hot span { color: inherit; }
 .last-match { display: flex; align-items: center; gap: var(--space-3); margin-top: var(--space-6); }
+.recent-list { margin: 0; padding: 0; list-style: none; display: grid; align-content: start; }
+.recent-list .last-match { width: 100%; margin: 0; padding: var(--space-5) 0 var(--space-2); border: 0; border-bottom: 1px solid var(--line); background: none; color: var(--fg); font: inherit; text-align: left; }
+.squad-faces .squad-pos { grid-column: 1 / -1; margin: var(--space-2) 0 0; font: var(--type-caption); font-weight: 700; letter-spacing: .1em; text-transform: uppercase; color: var(--muted); display: flex; align-items: center; gap: var(--space-2); }
+.squad-faces .squad-pos::before { content: ""; width: 8px; height: 8px; border-radius: 50%; background: var(--pos); }
+.squad-faces .squad-pos:first-child { margin-top: 0; }
+.home .squad-faces { grid-template-columns: repeat(auto-fill, minmax(68px, 1fr)); }
+.home .squad-faces .face { --face-disc: 46px; }
+.home .squad-faces .face span:not(.disc) { display: block; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-size: .75rem; }
+/* Three columns of one height: the lists of Temporada and Líderes do not size their card (one row at least); they fill
+   what the tallest card leaves, and fitFillLists drops the rows that do not fit. */
+@media (min-width: 1101px) {
+  .team-page > .season-card, .team-page > .leaders { display: flex; flex-direction: column; }
+  .team-page > .season-card > .recent-list, .team-page > .leaders > .leader-list { contain: size; flex: 1; min-height: 6rem; overflow: hidden; }
+}
 .mvp-face-static { position: relative; flex: none; display: inline-flex; }
 .last-who { display: grid; min-width: 0; flex: 1; }
 .last-who small { font: var(--type-caption); color: var(--muted); }
@@ -6820,6 +6834,7 @@ table { border-collapse: collapse; width: 100%; }
     }
     $('home').innerHTML = `<div class="home-wrap${AUTH_VIEWS.includes(v) ? ' centred' : ''}">${body}</div>`;
     stripStaffControls($('home'));
+    fitFillLists($('home'));
     $('home').hidden = false;
   }
   function showHomeView(view) {
@@ -7438,15 +7453,18 @@ table { border-collapse: collapse; width: 100%; }
     if (metric === 'pct') return t.shots >= CONFIG.leaders.minShots ? { value: pct(t.goals, t.shots), detail: `${who} · ${shotLine}` } : null;
     return { value: t.recoveries, detail: `${who} · ${plural(season.rows.length, 'partido', 'partidos')}` };
   }
-  // Goalkeepers are ranked for assists and MVPs too; a zero value never makes the list (except the % tiro of a qualified shooter).
-  function leaders(matches, roster, metric) {
+  // Goalkeepers are ranked for assists and MVPs too; a zero value makes the list only with `zeros` (a list that fills its
+  // card), and always for the % tiro of a qualified shooter.
+  function leaders(matches, roster, metric, { limit = LEADER_LIMIT, zeros = false } = {}) {
     return roster.map((player) => ({ player, figure: leaderFigure(player, playerSeason(matches, player), metric) }))
-      .filter(({ figure }) => figure && (figure.value > 0 || metric === 'pct'))
+      .filter(({ figure }) => figure && (figure.value > 0 || zeros || metric === 'pct'))
       .map(({ player, figure }) => ({ player, value: figure.value, detail: figure.detail }))
       .sort((a, b) => b.value - a.value || a.player.num - b.player.num)
-      .slice(0, LEADER_LIMIT);
+      .slice(0, limit);
   }
   const resultClass = (m) => `res-${matchResult(m)}`;
+  // Where the cards of a row grow apart (narrow screens) the recent matches stop at this many.
+  const RECENT_MATCHES = 3;
   function seasonCardHtml(matches) {
     if (matches === null) return '<section class="sheet-card season-card"><h3>Temporada</h3><p class="note">Cargando…</p></section>';
     if (!matches.length) return '<section class="sheet-card season-card"><h3>Temporada</h3><p class="note">Sin partidos todavía</p></section>';
@@ -7454,11 +7472,14 @@ table { border-collapse: collapse; width: 100%; }
     const tile = (value, label, cls = '', tone = '') => `<div class="season-kpi${cls}"><b class="${tone}">${value}</b><span>${label}</span></div>`;
     const form = s.form.map((r) => `<i class="form-chip res-${r}">${r}</i>`).join('');
     const perMatch = decimalText(s.goalsFor / matches.length);
-    const latest = s.latest;
-    const mvp = latest && mvpOf(latest.state);
-    const last = latest ? `<h3>Último partido</h3><div class="last-match">${mvp ? `<span class="mvp-face-static">${discHtml(mvp)}${crownSvg('crown-face')}</span>` : ''}
-        <span class="last-who"><b>${esc(latest.them)}</b><small>${esc(dateText(latest.date))}${latest.venue ? ` · ${esc(latest.venue)}` : ''}</small></span>
-        <strong class="last-score ${resultClass(latest)}">${latest.scoreUs}–${latest.scoreThem}</strong></div>` : '';
+    const ratingsOf = savedRatingsFor(matches);
+    const recent = matches.filter((m) => m.status === 'finished').map((m) => {
+      const pick = matchMvp(m.state, ratingsOf(m)), mvp = pick.id ? rosterPlayer(pick.id) || m.state.players.find((p) => p.id === pick.id) : null, face = mvp ? `<span class="mvp-face-static">${discHtml(mvp)}${crownSvg('crown-face')}</span>` : '<span class="mvp-face-static"></span>';
+      return `<li><button class="last-match press" type="button" data-open-match="${m.id}" aria-label="Ver el partido contra ${esc(m.them)}">${face}
+        <span class="last-who"><b>${esc(m.them)}</b><small>${esc(dateText(m.date))}${m.venue ? ` · ${esc(m.venue)}` : ''}</small></span>
+        <strong class="last-score ${resultClass(m)}">${m.scoreUs}–${m.scoreThem}</strong></button></li>`;
+    }).join('');
+    const last = recent ? `<h3>Últimos partidos</h3><ol class="recent-list" data-fill="${RECENT_MATCHES}">${recent}</ol>` : '';
     return `<section class="sheet-card season-card"><h3>Temporada</h3>
       <div class="record"><b>${s.won}–${s.drawn}–${s.lost}</b><small>ganados · empatados · perdidos</small></div>
       <div class="form-chips">${form}</div>
@@ -7475,10 +7496,10 @@ table { border-collapse: collapse; width: 100%; }
   }
   function leadersCardHtml(matches) {
     const chips = LEADER_METRICS.map(({ key, label }) => `<button class="chip press" type="button" data-leader="${key}" aria-pressed="${home.leaderMetric === key}">${label}</button>`).join('');
-    const rows = (matches && matches.length ? leaders(matches, home.roster, home.leaderMetric) : []);
+    const rows = (matches && matches.length ? leaders(matches, home.roster, home.leaderMetric, { limit: home.roster.length, zeros: true }) : []);
     const list = rows.map((r, i) => `<li><button class="leader press" type="button" data-player="${esc(r.player.id)}"><i class="rank">${i + 1}</i>${discHtml(r.player)}
         <span class="who"><b>${esc(r.player.name)}</b><small>${esc(r.detail)}</small></span><strong class="value">${home.leaderMetric === 'rating' ? ratingChipHtml(r.value) : `${r.value}${home.leaderMetric === 'pct' ? '%' : ''}`}</strong></button></li>`).join('');
-    const body = !matches || !matches.length ? '' : list ? `<ol class="leader-list">${list}</ol>` : '<p class="note">Nadie con datos en esta categoría.</p>';
+    const body = !matches || !matches.length ? '' : list ? `<ol class="leader-list" data-fill="${LEADER_LIMIT}">${list}</ol>` : '<p class="note">Nadie con datos en esta categoría.</p>';
     return `<section class="sheet-card leaders"><h3>Líderes</h3><div class="chips">${chips}</div>${body}</section>`;
   }
   // The roster by position group, each player drawn by `faceOf`.
@@ -7506,7 +7527,11 @@ table { border-collapse: collapse; width: 100%; }
   }
   function squadCardHtml() {
     // One grid by position (the colour on top of each card says which), so the column stays as short as the others.
-    const faces = home.roster.slice().sort(benchOrder).map(squadFaceHtml(attendanceRowsNow())).join('');
+    const face = squadFaceHtml(attendanceRowsNow());
+    const faces = SQUAD_GROUP_ORDER.map((pos) => {
+      const players = home.roster.filter((p) => (POSITION_GROUPS[p.pos] ? p.pos : 'CEN') === pos).sort((a, b) => a.num - b.num);
+      return players.length ? `<h4 class="squad-pos" style="--pos:${pos === 'POR' ? 'var(--fg)' : CONFIG.positions[pos].color}">${POSITION_GROUPS[pos]}</h4>${players.map(face).join('')}` : '';
+    }).join('');
     return `<section class="sheet-card squad"><h3>Plantilla · ${home.roster.length}</h3>${faces ? `<div class="faces squad-faces">${faces}</div>` : '<p class="note">Todavía no hay jugadores.</p>'}
       <div class="row-actions"><button class="btn press" type="button" data-home-view="team-edit">Editar equipo</button><button class="btn press" type="button" data-rating-tune>Ajustar puntuación</button></div></section>`;
   }
@@ -7608,6 +7633,21 @@ table { border-collapse: collapse; width: 100%; }
     return `<section class="sheet-card calendar-card"><h3>Calendario</h3><ol class="cal-list">${rows}</ol></section>`;
   }
   const SEASON_OFFLINE_NOTE = '<p class="note">Sin conexión: solo cuentan los partidos abiertos en esta tablet.</p>';
+  // Lists that fill the rest of their card: on a wide screen the card takes the height of its row and the rows that do
+  // not fit are dropped; where the card grows with its content the list keeps `data-fill` rows.
+  function fitFillLists(root) {
+    root.querySelectorAll('[data-fill]').forEach((list) => {
+      if (getComputedStyle(list).contain.includes('size')) {
+        while (list.children.length > 1 && list.scrollHeight > list.clientHeight + 1) list.lastElementChild.remove();
+      } else [...list.children].slice(Number(list.dataset.fill)).forEach((row) => row.remove());
+    });
+  }
+  // The fitted lists depend on the window: a new size draws the team page again.
+  let fillResizeFrame = 0;
+  window.addEventListener('resize', () => {
+    cancelAnimationFrame(fillResizeFrame);
+    fillResizeFrame = requestAnimationFrame(() => { if (!$('home').hidden && home.view === 'team') renderHome(); });
+  });
   function teamPageHtml() {
     const note = home.seasonOffline ? SEASON_OFFLINE_NOTE : home.offline ? '<p class="note">Sin conexión: ves la copia guardada en esta tablet.</p>' : '';
     const fixtures = home.fixtures || [];
