@@ -12,10 +12,10 @@
     court: { x: 205, y: 100.39, w: 750, h: 595.61 },
     bench: { x: 17, y: 122.19, w: 170, h: 384.98 },
     panel: { x: 972, y: 93.39, w: 292, h: 609.61 },
-    'actions:btn-undo': { x: 798.44, y: 722, w: 48, h: 59 },
-    'actions:btn-redo': { x: 854.44, y: 722, w: 48, h: 59 },
-    'actions:btn-stop': { x: 910.44, y: 722, w: 101.7, h: 59 },
-    'actions:btn-sheet': { x: 1020.14, y: 722, w: 68.12, h: 59 },
+    'actions:btn-undo': { x: 735.03, y: 722, w: 48, h: 59 },
+    'actions:btn-redo': { x: 791.03, y: 722, w: 48, h: 59 },
+    'actions:btn-stop': { x: 847.03, y: 722, w: 101.7, h: 59 },
+    'actions:btn-sheet': { x: 956.73, y: 722, w: 131.53, h: 59 },
     'actions:btn-finish': { x: 1096.27, y: 722, w: 102.73, h: 59 },
     'actions:btn-theme': { x: 1207, y: 722, w: 48, h: 59 },
     'tokens:p1': { x: 539.39, y: 293.29, w: 81.22, h: 77.84 },
@@ -225,8 +225,8 @@
         try {
           const css = getComputedStyle(disc);
           if (css.outlineStyle !== 'solid' || css.outlineWidth !== '1px' || css.outlineOffset !== '-1px') throw new Error(`#${id}: ${css.outlineStyle} ${css.outlineWidth} offset ${css.outlineOffset}`);
-          // The pages outside a match are always dark, so their outline is the dark one even in the light theme.
-          const outline = id === 'home' ? 'rgba(255, 255, 255, 0.1)' : 'rgba(0, 0, 0, 0.1)';
+          // The pages outside a match and the match report are always dark, so their outline is the dark one even in the light theme.
+          const outline = id === 'final' ? 'rgba(0, 0, 0, 0.1)' : 'rgba(255, 255, 255, 0.1)';
           if (inTheme('light', () => css.outlineColor) !== outline) throw new Error(`#${id}: colour ${css.outlineColor}`);
         } finally { disc.remove(); }
       });
@@ -1073,6 +1073,12 @@
   const rowIds = () => ratingRows().map((r) => r.dataset.ratingPlayer);
   const crownedIds = () => ratingRows().filter((r) => r.querySelector('.crown-face')).map((r) => r.dataset.ratingPlayer);
   const provisionalLabel = () => $('final').querySelector('.ratings').textContent.includes('MVP provisional');
+  T('final: every rating chip shows its whole figure', onFinal({ events: sampleState().events }, () => {
+    // A chip squeezed by its column keeps its box, so compare it with the width it takes when free.
+    const natural = (c) => { c.style.width = 'max-content'; const w = c.getBoundingClientRect().width; c.style.width = ''; return w; };
+    const clipped = ratingRows().map((r) => r.querySelector('.rating-chip')).filter((c) => natural(c) > c.getBoundingClientRect().width + GEOMETRY_TOLERANCE_PX).map((c) => c.textContent);
+    if (clipped.length) throw new Error('clipped: ' + clipped.join());
+  }));
   // p22 plays the second half only (30 min, 7/8 from 6 m and a recovery); p8 plays the whole match (5/9 from 9 m, 2 assists, 1 turnover).
   const secondHalfStar = () => ({
     courtSets: [['p8', 'p1'], ['p8', 'p22', 'p1']], court: [{ abs: 0, set: 0 }, { abs: CONFIG.halfSeconds, set: 1 }],
@@ -1186,7 +1192,7 @@
     if (ui.sheetTab !== 'reports' || !$('sheet').querySelector(`[data-pdf="${strip[0].dataset.pdfPick}"]`)) throw new Error('the card opens the player PDF list');
     if (document.activeElement !== $('sheet').querySelector(`[data-pdf="${strip[0].dataset.pdfPick}"]`)) throw new Error('the player PDF button is not focused');
     openFinal(); document.querySelector('[data-final-sheet]').click();
-    if (ui.sheetTab !== 'summary' || $('sheet').hidden || !$('final').hidden) throw new Error('«Ver Hoja» must open the summary');
+    if (ui.sheetTab !== 'summary' || $('sheet').hidden || !$('final').hidden) throw new Error('«Ver estadísticas» must open the summary');
   }));
   T('sheet: matchFigures equals liveStats for the sample', onSummary(sampleState(), () => {
     const f = matchFigures(state), live = liveStats(), zone = (id) => live.us.zones.find((z) => z.id === id).FALLO;
