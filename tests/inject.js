@@ -4413,6 +4413,28 @@
         if (document.querySelectorAll('.att-foot').length !== 3) throw new Error('every tile needs the footer slot');
       });
     });
+    await TA('convocatoria: picked from the acta, follows the coach and shares one image', async () => {
+      const day = todayIso(), acta = { id: 'mc', date: day, them: 'BM Gades', status: 'setup', state: { players: [{ id: 'x' }], them: 'BM Gades', venue: 'Pabellón Centro', home: false } };
+      await withAttendanceView(async () => {
+        acta.state.players = [home.roster[1], home.roster[0]].map((p) => ({ id: p.id }));
+        home.stateMatches = [acta]; home.teamMatches = [{ id: 'mc', date: day, them: 'BM Gades' }];
+        home.callupPicks = null; home.callup = null;
+        await showAttendance();
+        const picked = () => [...document.querySelectorAll('[data-callup-pick][aria-pressed="true"]')].map((b) => b.dataset.callupPick).sort().join();
+        if (picked() !== [home.roster[0].id, home.roster[1].id].sort().join()) throw new Error('not the acta: ' + picked());
+        const data = callupCardData(day, [home.roster[1], home.roster[0]]);
+        if (data.players.map((p) => p.name).join() !== 'PORTERO UNO (P),LATERAL SIETE' || data.rival !== 'BM Gades' || data.place !== 'Fuera' || data.venue !== 'Pabellón Centro') throw new Error(JSON.stringify(data));
+        document.querySelector(`[data-callup-pick="${home.roster[2].id}"]`).click();
+        if (home.callupPicks.ids.size !== 3 || !/Convocatoria · 3/.test(document.querySelector('.callup h3').textContent)) throw new Error('pick not added');
+        for (let i = 0; i < 100 && !document.querySelector('.callup-preview'); i++) await new Promise((r) => setTimeout(r, 20));
+        const img = document.querySelector('.callup-preview'), share = document.querySelector('[data-callup-share]');
+        if (!img || !img.src.startsWith('blob:') || share.disabled) throw new Error('no preview');
+        const shared = [], unstub = sheetStubs(() => true, async (d) => { shared.push(d); });
+        try { share.click(); } finally { unstub(); }
+        if (shared.length !== 1 || !/^convocatoria-.+\.png$/.test(shared[0].files[0].name) || shared[0].files[0].type !== 'image/png') throw new Error(JSON.stringify(shared.map((d) => d.files.map((f) => f.name))));
+      });
+      home.callupPicks = null; home.callup = null;
+    });
     await TA('attendance view: a match still in setup locks its convocados and its id is backfilled', async () => {
       const day = todayIso();
       await withAttendanceView(async () => {
