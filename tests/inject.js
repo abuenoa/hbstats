@@ -225,7 +225,9 @@
         try {
           const css = getComputedStyle(disc);
           if (css.outlineStyle !== 'solid' || css.outlineWidth !== '1px' || css.outlineOffset !== '-1px') throw new Error(`#${id}: ${css.outlineStyle} ${css.outlineWidth} offset ${css.outlineOffset}`);
-          if (inTheme('light', () => css.outlineColor) !== 'rgba(0, 0, 0, 0.1)') throw new Error(`#${id}: colour ${css.outlineColor}`);
+          // The pages outside a match are always dark, so their outline is the dark one even in the light theme.
+          const outline = id === 'home' ? 'rgba(255, 255, 255, 0.1)' : 'rgba(0, 0, 0, 0.1)';
+          if (inTheme('light', () => css.outlineColor) !== outline) throw new Error(`#${id}: colour ${css.outlineColor}`);
         } finally { disc.remove(); }
       });
       const benchDisc = document.createElement('span');
@@ -2060,7 +2062,12 @@
         if (!first || first.textContent !== ratingText(leaders(home.season, home.roster, 'rating')[0].value) || document.querySelector('[data-leader="rating"]').getAttribute('aria-pressed') !== 'true' || /NaN|undefined/.test($('home').textContent)) throw new Error('leaders view');
       } finally { Object.assign(home, keep); }
     });
-    T('spells: the hottest and coldest 10 minutes, only past a goal\'s worth', () => {
+    T('game card: attributes on a 40–99 scale and the overall as their mean', () => {
+    if (gameScore(0) !== GAME_SCALE.floor || gameScore(1) !== GAME_SCALE.top || gameScore(2) !== GAME_SCALE.top || gameScore(-1) !== GAME_SCALE.floor) throw new Error('scale ends');
+    const axes = [{ fraction: 1 }, { fraction: 0 }, { fraction: 0.5 }, { fraction: 0.5 }];
+    if (gameOverall(axes) !== gameScore(0.5)) throw new Error('overall ' + gameOverall(axes));
+  });
+  T('spells: the hottest and coldest 10 minutes, only past a goal\'s worth', () => {
       const mo = (abs, value) => ({ abs, value, label: 'x' });
       const goalValue = CONFIG.spells.minPoints / POINTS_PER_GOAL;
       const { hot, cold } = playerSpells([mo(60, goalValue), mo(300, goalValue / 2), mo(900, -goalValue / 2), mo(2000, -goalValue), mo(2400, -goalValue / 2), mo(3500, goalValue / 4)]);
@@ -2766,6 +2773,11 @@
         if (!lead || !lead.textContent.includes('el mejor del equipo') || !lead.textContent.includes('75%')) throw new Error('lead tile');
         if (document.querySelectorAll('.match-table tbody tr').length !== 1 || /NaN|undefined/.test(text)) throw new Error('rows or NaN');
         if (!document.querySelector('#home .page-bar [data-nav-leading]').textContent.includes('‹ Equipo')) throw new Error('back button');
+        const overall = document.querySelector('.poster .game-overall b'), attrs = document.querySelectorAll('.poster .game-attrs li');
+        if (!overall || !/^\d{2}$/.test(overall.textContent) || attrs.length !== FIELD_AXES.length) throw new Error('trading card: ' + (overall && overall.textContent) + ' / ' + attrs.length);
+        showHomeView('team');
+        const badge = document.querySelector(`.squad [data-player="ca"] .face-overall`);
+        if (!badge || badge.textContent !== overall.textContent) throw new Error('squad overall ' + (badge && badge.textContent));
       } finally { Object.assign(home, keep); }
     });
     await TA('player card: goalkeeper card uses keeper sentences and radar', async () => {
