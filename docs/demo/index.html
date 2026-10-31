@@ -805,6 +805,7 @@ a:focus-visible, input:focus-visible, select:focus-visible, summary:focus-visibl
 .home-status:empty { display: none; }
 .home-status { font: var(--type-body); color: var(--fg); }
 .home-head { display: flex; align-items: center; gap: var(--space-4); flex-wrap: wrap; }
+.teams-corner { margin-left: auto; flex: none; width: var(--target); }
 /* Sticks flush with the top of the screen: the offset cancels the gutter of .home, so nothing scrolls past above the bar. */
 .top-bar { padding: var(--space-2) var(--space-4); border-radius: var(--radius-lg); position: sticky; top: calc(var(--home-gutter) * -1); z-index: 2; display: grid; gap: var(--space-2); }
 .top-bar .home-crest, .top-bar .app-mark { width: var(--target); height: var(--target); }
@@ -6476,12 +6477,16 @@ table { border-collapse: collapse; width: 100%; }
       ${statusHtml()}
     </form>`;
   }
-  function appBarHtml() {
+  // The way to «Mis equipos» sits in the bar's corner, away from the page's own way back; on a main tab, which has no way
+  // back of its own, it is also what Escape and the system back press.
+  const TEAMS_ICON = '<svg viewBox="0 0 24 24" width="22" height="22" aria-hidden="true" fill="currentColor"><rect x="3" y="3" width="8" height="8" rx="1.5"/><rect x="13" y="3" width="8" height="8" rx="1.5"/><rect x="3" y="13" width="8" height="8" rx="1.5"/><rect x="13" y="13" width="8" height="8" rx="1.5"/></svg>';
+  function appBarHtml(leadsBack) {
     const tab = (view, label) => `<button class="press" type="button" data-home-view="${view}" aria-pressed="${home.view === view || (view === 'matches' && home.view === 'squad') || (view === 'team' && ['team-edit', 'player', 'player-match', 'rating-tune'].includes(home.view))}">${label}</button>`;
     return `<div class="home-head app-bar">
       <img class="crest home-crest" src="${esc(crestSrc(team))}" alt="">
       <div class="home-title"><h1>${esc(team.name)}</h1><small>${esc(team.club)}</small></div>
       <div class="tabs" role="group" aria-label="Secciones">${tab('team', 'Equipo')}${tab('attendance', 'Asistencia')}${tab('matches', 'Partidos')}${tab('stats', 'Estadísticas')}</div>
+      <button class="btn icon teams-corner press" type="button" data-home-view="profile"${leadsBack ? ' data-nav-leading' : ''} aria-label="${NAV_LABELS.teams}" title="${NAV_LABELS.teams}">${TEAMS_ICON}</button>
     </div>`;
   }
   // A match left on this tablet by the per-club release (same site), if any.
@@ -6578,13 +6583,12 @@ table { border-collapse: collapse; width: 100%; }
   }
   const NEW_MATCH_BUTTON = '<button class="btn go press" type="button" data-new-match>+ Nuevo partido</button>';
   const backToTeam = () => backButtonHtml(NAV_LABELS.team, 'data-home-view="team"');
-  const backToTeams = () => backButtonHtml(NAV_LABELS.teams, 'data-home-view="profile"');
   // The page bar of each team view: where it leads, what it is called and what it can do. A player or match that is gone, or
   // a season still loading, leaves the leading control alone: the view itself shows the note or moves on.
   const HOME_BARS = {
-    team: () => ({ leading: backToTeams(), actions: NEW_MATCH_BUTTON }),
-    matches: () => ({ leading: backToTeams(), actions: `<button class="btn press" type="button" data-sample>Ver partido de ejemplo</button>${NEW_MATCH_BUTTON}` }),
-    stats: () => ({ leading: backToTeams() }),
+    team: () => ({ actions: NEW_MATCH_BUTTON }),
+    matches: () => ({ actions: `<button class="btn press" type="button" data-sample>Ver partido de ejemplo</button>${NEW_MATCH_BUTTON}` }),
+    stats: () => ({}),
     player: () => {
       const player = rosterPlayer(home.playerId);
       if (!player || home.season === null) return { leading: backToTeam() };
@@ -6599,7 +6603,7 @@ table { border-collapse: collapse; width: 100%; }
       return { leading, title: `${player.name} · ${match.them}`, actions: `<button class="btn primary press" type="button" data-player-match-open="${match.id}">Abrir el partido</button>` };
     },
     'team-edit': () => ({ leading: backToTeam(), title: 'Editar equipo' }),
-    attendance: () => ({ leading: backToTeams(), title: 'Asistencia' }),
+    attendance: () => ({ title: 'Asistencia' }),
     squad: () => ({ leading: cancelButtonHtml(`data-home-view="matches"`), title: 'Convocatoria', actions: `<button class="btn go play press" type="button" data-squad-next ${squadReady() ? '' : 'disabled'}>Siguiente ›</button>` }),
     'rating-tune': () => ({
       leading: cancelButtonHtml('data-home-view="team"', TUNE_LEAVE_ARM),
@@ -6673,8 +6677,8 @@ table { border-collapse: collapse; width: 100%; }
     else if (PROFILE_VIEWS[v]) body = `${profileHeadHtml(PROFILE_BARS[v] ? pageBarHtml(PROFILE_BARS[v]()) : '')}<main class="home-body">${PROFILE_VIEWS[v]()}</main>`;
     else {
       // The page first: a bar may read state its view sets up (the tuning draft).
-      const page = HOME_VIEWS[v]();
-      body = `<header class="top-bar glass">${appBarHtml()}${pageBarHtml(HOME_BARS[v]())}</header><main class="home-body">${page}</main>`;
+      const page = HOME_VIEWS[v](), bar = HOME_BARS[v]();
+      body = `<header class="top-bar glass">${appBarHtml(!bar.leading)}${Object.keys(bar).length ? pageBarHtml(bar) : ''}</header><main class="home-body">${page}</main>`;
     }
     $('home').innerHTML = `<div class="home-wrap${AUTH_VIEWS.includes(v) ? ' centred' : ''}">${body}</div>`;
     $('home').hidden = false;
