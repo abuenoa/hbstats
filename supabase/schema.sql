@@ -275,3 +275,73 @@ create policy attendance_all on public.attendance_sessions for all to authentica
     private.is_team_member(team_id)
     and (match_id is null or exists (select 1 from public.matches m where m.id = match_id and m.team_id = attendance_sessions.team_id))
   );
+
+-- Players with an account: a team member with role 'player', linked to their roster row. They read everything of
+-- their team (matches, statistics, roster, calendar, attendance) and change nothing; only the staff (owner and
+-- coaches) write. The coach invites a player through the invite-player edge function.
+alter table public.team_members add column if not exists player_id uuid references public.players (id) on delete cascade;
+alter table public.team_members drop constraint if exists team_members_role_check;
+alter table public.team_members add constraint team_members_role_check check (role in ('owner', 'coach', 'player'));
+alter table public.team_members drop constraint if exists team_members_player_role;
+alter table public.team_members add constraint team_members_player_role check ((role = 'player') = (player_id is not null));
+create unique index if not exists team_members_one_account_per_player on public.team_members (player_id) where player_id is not null;
+
+create or replace function private.is_team_staff(team uuid) returns boolean
+language sql stable security definer set search_path = public as $$
+  select exists (select 1 from team_members where team_id = team and user_id = auth.uid() and role in ('owner', 'coach'));
+$$;
+revoke all on function private.is_team_staff(uuid) from public, anon;
+grant execute on function private.is_team_staff(uuid) to authenticated;
+
+drop policy if exists teams_update on public.teams;
+create policy teams_update on public.teams for update to authenticated
+  using (private.is_team_staff(id)) with check (private.is_team_staff(id));
+
+drop policy if exists players_all on public.players;
+drop policy if exists players_read on public.players;
+create policy players_read on public.players for select to authenticated using (private.is_team_member(team_id));
+drop policy if exists players_write on public.players;
+create policy players_write on public.players for all to authenticated
+  using (private.is_team_staff(team_id)) with check (private.is_team_staff(team_id));
+
+drop policy if exists matches_all on public.matches;
+drop policy if exists matches_read on public.matches;
+create policy matches_read on public.matches for select to authenticated using (private.is_team_member(team_id));
+drop policy if exists matches_write on public.matches;
+create policy matches_write on public.matches for all to authenticated
+  using (private.is_team_staff(team_id)) with check (private.is_team_staff(team_id));
+
+drop policy if exists fixtures_all on public.fixtures;
+drop policy if exists fixtures_read on public.fixtures;
+create policy fixtures_read on public.fixtures for select to authenticated using (private.is_team_member(team_id));
+drop policy if exists fixtures_write on public.fixtures;
+create policy fixtures_write on public.fixtures for all to authenticated
+  using (private.is_team_staff(team_id))
+  with check (
+    private.is_team_staff(team_id)
+    and (match_id is null or exists (select 1 from public.matches m where m.id = match_id and m.team_id = fixtures.team_id))
+  );
+
+drop policy if exists attendance_all on public.attendance_sessions;
+drop policy if exists attendance_read on public.attendance_sessions;
+create policy attendance_read on public.attendance_sessions for select to authenticated using (private.is_team_member(team_id));
+drop policy if exists attendance_write on public.attendance_sessions;
+create policy attendance_write on public.attendance_sessions for all to authenticated
+  using (private.is_team_staff(team_id))
+  with check (
+    private.is_team_staff(team_id)
+    and (match_id is null or exists (select 1 from public.matches m where m.id = match_id and m.team_id = attendance_sessions.team_id))
+  );
+
+-- The staff can take a player's account off the team (the account itself stays).
+drop policy if exists members_remove_player on public.team_members;
+create policy members_remove_player on public.team_members for delete to authenticated
+  using (role = 'player' and private.is_team_staff(team_id));
+
+-- The invite-player edge function (service role) finds an existing account by e-mail; nobody else can call it.
+create or replace function public.user_id_by_email(p_email text) returns uuid
+language sql stable security definer set search_path = auth, public as $$
+  select id from auth.users where lower(email) = lower(p_email) limit 1;
+$$;
+revoke all on function public.user_id_by_email(text) from public, anon, authenticated;
+grant execute on function public.user_id_by_email(text) to service_role;

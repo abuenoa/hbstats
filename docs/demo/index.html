@@ -1362,6 +1362,17 @@ span.att-foot { visibility: hidden; }
   // The team the app wears (name, colours, crest): the signed-in coach's team once the home screen loads it.
   const DEFAULT_TEAM = { id: null, club: 'Mi club', name: 'Mi equipo', brand: '#d4202a', brand2: '#f5c400', brandInk: '#ffffff', crest: null };
   let team = DEFAULT_TEAM;
+  // A player's account reads everything of the team and changes nothing; the database refuses their writes too.
+  const PLAYER_ROLE = 'player', STAFF_ROLE = 'owner';
+  const readOnly = () => team.role === PLAYER_ROLE;
+  // The controls that change the team, its matches, calendar or attendance: they leave the page for a player.
+  const STAFF_ONLY_SELECTOR = ['[data-new-match]', '[data-player-edit]', '[data-home-view="team-edit"]', '[data-rating-tune]', '[data-fixture-edit]',
+    '[data-calendar-import]', '[data-restart-match]', '[data-delete-match]', '[data-att-delete]', '[data-att-note]', '.callup', '[data-tab="acta"]'].join();
+  function stripStaffControls(root) {
+    if (!readOnly()) return;
+    root.querySelectorAll(STAFF_ONLY_SELECTOR).forEach((el) => el.remove());
+    root.querySelectorAll('[data-att]').forEach((el) => { el.disabled = true; });
+  }
   // AGPL-3.0: anyone using the app gets a link to its source code.
   const SOURCE_URL = 'https://github.com/abuenoa/hbstats';
   const sourceNoteHtml = () => `<p class="note">HBStats es software libre (AGPL-3.0): <a href="${SOURCE_URL}" target="_blank" rel="noopener">código fuente y contribuciones</a>.</p>`;
@@ -4243,6 +4254,7 @@ span.att-foot { visibility: hidden; }
     const back = ui.sheetReturn;
     if (back?.playerId) return `${(playerById(back.playerId) || rosterPlayer(back.playerId))?.name} · ${state.them}`;
     if (back?.summary) return NAV_LABELS[back.summary];
+    if (back?.matches) return NAV_LABELS.matches;
     return NAV_LABELS.liveMatch;
   }
   function renderSheet() {
@@ -4256,6 +4268,7 @@ span.att-foot { visibility: hidden; }
     $('sheet').innerHTML = `${pageBarHtml({ leading: backButtonHtml(sheetBackLabel(), 'data-close-sheet'), title: scoreLine(state, s) })}
       <div class="tabs sheet-tabs" role="group" aria-label="Secciones">${Object.entries(SHEET_TABS).map(([k, label]) => `<button class="press" type="button" data-tab="${k}" aria-pressed="${k === ui.sheetTab}">${label}</button>`).join('')}</div>
       <div class="sheet-body">${SHEET_RENDERERS[ui.sheetTab]()}</div>`;
+    stripStaffControls($('sheet'));
   }
   const sheetStatus = (id, text) => { const el = $(id); if (el) el.textContent = text; };
   function openSetup() {
@@ -5908,7 +5921,7 @@ table { border-collapse: collapse; width: 100%; }
   let currentMatchId = null;
   let syncTimer = null;
   let attendanceSyncTimer = null;
-  const home = { view: 'loading', user: null, teams: [], roster: [], matches: [], season: null, templates: [], template: null, squad: new Set(), leaderMetric: 'goals', playerId: null, playerMatchId: null, playerEdit: false, playerDraft: null, offline: false, error: '', draft: null, crestDraft: undefined, armed: null, passwordChange: false, seasonOffline: false, sessions: null, fixtures: null, teamMatches: [], fixtureEdit: null, squadFixture: null, attendanceDate: null, attendanceKind: null, attendanceNoteFor: null, stateMatches: [], statsSort: null, statsMetric: 'goals', statsPlayer: null, callupPicks: null, callup: null, callupBusy: null, weightsDraft: null, ratingCache: null };
+  const home = { view: 'loading', user: null, teams: [], roster: [], matches: [], season: null, templates: [], template: null, squad: new Set(), leaderMetric: 'goals', playerId: null, playerMatchId: null, playerEdit: false, playerDraft: null, offline: false, error: '', draft: null, crestDraft: undefined, armed: null, passwordChange: false, seasonOffline: false, sessions: null, fixtures: null, teamMatches: [], fixtureEdit: null, squadFixture: null, attendanceDate: null, attendanceKind: null, attendanceNoteFor: null, stateMatches: [], statsSort: null, statsMetric: 'goals', statsPlayer: null, callupPicks: null, callup: null, callupBusy: null, inviteLink: null, weightsDraft: null, ratingCache: null };
 
   // ---- Device storage ----
   function readJson(key) {
@@ -6099,7 +6112,8 @@ table { border-collapse: collapse; width: 100%; }
     if (!window.supabase) await loadScript(SUPABASE_JS_URL);
     const client = window.supabase.createClient(config.url, config.anonKey, { auth: { persistSession: true, autoRefreshToken: true, detectSessionInUrl: true } });
     const check = (result) => { if (result.error) throw new Error(result.error.message); return result.data; };
-    const toTeam = (r) => ({ id: r.id, club: r.club, name: r.name, brand: r.brand, brand2: r.brand2, brandInk: r.brand_ink, crest: r.crest, ratingWeights: r.rating_weights });
+    // A team the user creates or edits is theirs to run, so its role is the owner's unless listTeams says otherwise.
+    const toTeam = (r, role = STAFF_ROLE) => ({ id: r.id, club: r.club, name: r.name, brand: r.brand, brand2: r.brand2, brandInk: r.brand_ink, crest: r.crest, ratingWeights: r.rating_weights, role });
     const teamRow = (t) => ({ club: t.club, name: t.name, brand: t.brand, brand2: t.brand2, brand_ink: t.brandInk, crest: t.crest,
       ...(t.ratingWeights === undefined ? {} : { rating_weights: t.ratingWeights }) });
     const PLAYER_COLUMNS = 'id,num,name,pos,full_name,photo';
@@ -6118,7 +6132,19 @@ table { border-collapse: collapse; width: 100%; }
       async signOut() { check(await client.auth.signOut()); },
       async sendPasswordReset(email) { check(await client.auth.resetPasswordForEmail(email, { redirectTo: `${location.origin}${location.pathname}` })); },
       async setPassword(password) { check(await client.auth.updateUser({ password })); },
-      async listTeams() { return check(await client.from('teams').select('*').order('created_at')).map(toTeam); },
+      // Each team with the signed-in user's role in it (owner, coach or player).
+      async listTeams() {
+        const { session } = check(await client.auth.getSession());
+        const [rows, roles] = await Promise.all([client.from('teams').select('*').order('created_at'), client.from('team_members').select('team_id, role').eq('user_id', session.user.id)]);
+        const roleOf = new Map(check(roles).map((m) => [m.team_id, m.role]));
+        return check(rows).map((r) => toTeam(r, roleOf.get(r.id)));
+      },
+      // An account for a roster player: the invite-player function links it and returns the sign-in link to share.
+      async invitePlayer(teamId, playerId, email) {
+        const { data, error } = await client.functions.invoke('invite-player', { body: { teamId, playerId, email } });
+        if (error) throw new Error((await error.context?.json?.().catch(() => null))?.error || error.message);
+        return data;
+      },
       async createTeam(t) {
         return toTeam(check(await client.rpc('create_team', { p_club: t.club, p_name: t.name, p_brand: t.brand, p_brand2: t.brand2, p_brand_ink: t.brandInk, p_crest: t.crest })));
       },
@@ -6220,7 +6246,7 @@ table { border-collapse: collapse; width: 100%; }
 
   // ---- Match saving and upload ----
   function save() {
-    if (!currentMatchId) return; // the sample match is never saved
+    if (!currentMatchId || readOnly()) return; // the sample match and a player's view are never saved
     storeLocalMatch(currentMatchId, state, true);
     scheduleSync();
   }
@@ -6557,7 +6583,7 @@ table { border-collapse: collapse; width: 100%; }
       <div class="match-top">${chip}<span class="match-who"><b class="match-rival">${esc(m.them)}</b><small>${where}</small></span>
         <strong class="match-score${finished ? ` res-${result}` : ''}">${setup ? '–' : `${m.scoreUs}–${m.scoreThem}`}</strong></div>
       ${meta ? `<div class="match-meta">${meta}</div>` : ''}
-      <div class="match-foot"><div class="row-actions"><button class="btn primary press" type="button" data-open-match="${m.id}">${finished ? 'Ver' : 'Seguir'}</button>${setup ? '' : armedButton(`restart-${m.id}`, 'Reiniciar', `data-restart-match="${m.id}" aria-label="Reiniciar el partido contra ${esc(m.them)}"`)}${armedButton(`delete-${m.id}`, 'Borrar', `data-delete-match="${m.id}" aria-label="Borrar el partido contra ${esc(m.them)}"`)}</div>${face}</div></article>`;
+      <div class="match-foot"><div class="row-actions"><button class="btn primary press" type="button" data-open-match="${m.id}">${finished || readOnly() ? 'Ver' : 'Seguir'}</button>${setup ? '' : armedButton(`restart-${m.id}`, 'Reiniciar', `data-restart-match="${m.id}" aria-label="Reiniciar el partido contra ${esc(m.them)}"`)}${armedButton(`delete-${m.id}`, 'Borrar', `data-delete-match="${m.id}" aria-label="Borrar el partido contra ${esc(m.them)}"`)}</div>${face}</div></article>`;
   }
   function matchesHtml() {
     const rounds = matchRounds();
@@ -6585,7 +6611,45 @@ table { border-collapse: collapse; width: 100%; }
     const remove = `<div class="team-delete"><p class="note">Borrar el equipo borra también su plantilla y todos sus partidos. Solo puede hacerlo quien lo creó.</p>
       ${armedButton('delete-team', 'Borrar equipo', 'data-delete-team')}</div>`;
     return `${calendarRowHtml()}
-      <div class="team-layout"><section class="sheet-card"><h3>Equipo</h3>${teamFormHtml(team, false)}${remove}</section><section class="sheet-card">${teamRosterHtml()}</section></div>`;
+      <div class="team-layout"><section class="sheet-card"><h3>Equipo</h3>${teamFormHtml(team, false)}${remove}</section><section class="sheet-card">${teamRosterHtml()}</section></div>
+      ${backend.needsLogin ? playerAccountsHtml() : ''}`;
+  }
+  // ---- Player accounts: the coach invites a roster player by e-mail and shares the sign-in link by WhatsApp or mail ----
+  // Without a share sheet the link goes to WhatsApp, the coaches' channel with the players.
+  const WHATSAPP_URL = 'https://wa.me/?text=';
+  const EMAIL_PATTERN = /^[^\s@,;]+@[^\s@,;]+\.[^\s@,;]+$/;
+  function playerAccountsHtml() {
+    const options = home.roster.slice().sort(benchOrder).map((p) => `<option value="${esc(p.id)}">#${p.num} ${esc(p.name)}</option>`).join('');
+    const link = home.inviteLink ? `<p class="note">Enlace para ${esc(home.inviteLink.name)}: ábrelo una vez para entrar y poner su contraseña.</p>
+      <div class="row-actions"><button class="btn primary press" type="button" data-invite-share>Compartir enlace</button></div>` : '';
+    return `<section class="sheet-card player-accounts"><h3>Cuentas de jugadores</h3>
+      <p class="note">El jugador verá los partidos, las estadísticas y la asistencia de todo el equipo, sin poder cambiar nada.</p>
+      <div class="row-actions"><label class="field">Jugador<select class="in" id="invite-player">${options}</select></label>
+        <label class="field">Correo<input class="in" id="invite-email" type="email" inputmode="email" autocomplete="off" placeholder="jugador@correo.es"></label>
+        <button class="btn press" type="button" data-invite>Invitar</button></div>${link}</section>`;
+  }
+  async function invitePlayer() {
+    const player = rosterPlayer($('invite-player').value), email = $('invite-email').value.trim();
+    if (!player) return;
+    if (!EMAIL_PATTERN.test(email)) { homeStatus('Escribe un correo válido.'); return; }
+    homeStatus('Invitando…');
+    try {
+      const result = await backend.invitePlayer(team.id, player.id, email);
+      home.inviteLink = result.link ? { name: player.name, url: result.link } : null;
+      renderHome();
+      homeStatus(result.link ? `${player.name} tiene cuenta nueva: comparte el enlace con él.` : `${player.name} ya tenía cuenta: ya ve el equipo al entrar.`);
+    } catch (err) {
+      homeStatus(`No se pudo invitar: ${cloudErrorText(err)}.`);
+    }
+  }
+  async function shareInviteLink() {
+    const { name, url } = home.inviteLink, text = `${name}, entra en HBStats para ver los partidos y estadísticas de ${team.name}:`;
+    try {
+      if (navigator.share) { await navigator.share({ title: 'HBStats', text, url }); return; }
+      window.open(`${WHATSAPP_URL}${encodeURIComponent(`${text} ${url}`)}`, '_blank', 'noopener');
+    } catch (err) {
+      if (err && err.name !== 'AbortError') homeStatus(`No se pudo compartir: ${err.message}.`);
+    }
   }
   function calendarRowHtml() {
     const latest = home.fixtures && home.fixtures.length ? home.fixtures[home.fixtures.length - 1].season : null;
@@ -6711,6 +6775,7 @@ table { border-collapse: collapse; width: 100%; }
       body = `<header class="top-bar glass">${appBarHtml(!bar.leading)}${Object.keys(bar).length ? pageBarHtml(bar) : ''}</header><main class="home-body">${page}</main>`;
     }
     $('home').innerHTML = `<div class="home-wrap${AUTH_VIEWS.includes(v) ? ' centred' : ''}">${body}</div>`;
+    stripStaffControls($('home'));
     $('home').hidden = false;
   }
   function showHomeView(view) {
@@ -8166,7 +8231,7 @@ table { border-collapse: collapse; width: 100%; }
   function enterMatch(id, saved, dirty, { sheetPlayer, version } = {}) {
     currentMatchId = id;
     home.season = null;
-    writeJson(CURRENT_MATCH_KEY, id);
+    if (!readOnly()) writeJson(CURRENT_MATCH_KEY, id);
     state = restoreState(saved);
     if (state.home == null) state.home = calendarHome(id);
     setTeamPhotos(home.roster.length ? home.roster : readJson(CACHE_KEY_PREFIX + `players:${team.id}`) || []);
@@ -8179,9 +8244,17 @@ table { border-collapse: collapse; width: 100%; }
     hideFinal();
     renderAll();
     armBackGuard();
-    if (!state.setupDone) openSetup();
+    if (readOnly()) openMatchViewer(sheetPlayer);
+    else if (!state.setupDone) openSetup();
     else if (sheetPlayer) openSheetPlayer(sheetPlayer);
     else if (state.finished) openFinal();
+  }
+  // A player opens a match in its statistics, never on the live screen: «‹ Partidos» (or their card) leads back.
+  function openMatchViewer(playerId) {
+    if (playerId) { openSheetPlayer(playerId); return; }
+    Object.assign(ui, { sheetMode: 'sheet', sheetTab: 'summary', sheetReturn: { matches: true } });
+    renderSheet();
+    $('sheet').hidden = false;
   }
   // The match opened from a player's card: the Hoja on his tab, and «‹ Ficha» to go back to that card's match view.
   function openSheetPlayer(playerId) {
@@ -8278,7 +8351,8 @@ table { border-collapse: collapse; width: 100%; }
       ui.sheetReturn = null;
       $('sheet').hidden = true;
       (back.summary === 'final' ? openFinal : openHalftime)();
-    } else if (back) backToPlayerMatch(back);
+    } else if (back?.matches) leaveMatch();
+    else if (back) backToPlayerMatch(back);
     else $('sheet').hidden = true;
   }
   function backToPlayerMatch({ playerId, matchId }) {
@@ -8615,6 +8689,8 @@ table { border-collapse: collapse; width: 100%; }
     if (b.hasAttribute('data-sign-out')) { signOut(); return; }
     if (b.dataset.att) { tapAttendance(b.dataset.att); return; }
     if (b.dataset.callupPick) { toggleCallupPick(b.dataset.callupPick); return; }
+    if (b.hasAttribute('data-invite')) { invitePlayer(); return; }
+    if (b.hasAttribute('data-invite-share')) { shareInviteLink(); return; }
     if (b.hasAttribute('data-callup-share')) { shareCallup(); return; }
     if (b.dataset.attKind) { openAttendanceDay(home.attendanceDate, b.dataset.attKind); return; }
     if (b.dataset.attNote) { home.attendanceNoteFor = b.dataset.attNote; renderHome(); document.querySelector(`[data-att-note-input="${b.dataset.attNote}"]`).focus(); return; }

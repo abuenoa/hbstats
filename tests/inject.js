@@ -3249,6 +3249,31 @@
       if (bar.height > NAV_TOP_BAR_MAX_PX || leading.top < 0 || leading.bottom > innerHeight) throw new Error(`top bar ${bar.height}px, leading at ${leading.top}..${leading.bottom}`);
       scroller.scrollTop = 0;
     }, Array.from({ length: 6 }, (_, i) => ({ ...cardMatch(), id: `cm${i + 1}` }))));
+    await TA('player account: reads the team and its matches, changes nothing', async () => withNavHome(async () => {
+      const role = team.role, keepId = currentMatchId, snap = snapshot(), current = localStorage.getItem(CURRENT_MATCH_KEY);
+      team.role = PLAYER_ROLE;
+      try {
+        const staffOnly = () => [...$('home').querySelectorAll(STAFF_ONLY_SELECTOR)].map((el) => el.outerHTML.slice(0, 60));
+        for (const open of [() => showHomeView('team'), () => showHomeView('matches'), () => showPlayer('ca'), () => showHomeView('attendance')]) {
+          open();
+          if (staffOnly().length) throw new Error(`${home.view}: ${staffOnly().join(' | ')}`);
+        }
+        if (![...document.querySelectorAll('[data-att]')].every((b) => b.disabled)) throw new Error('attendance faces still tap');
+        enterMatch('viewer-x', JSON.parse(snap), false);
+        if ($('sheet').hidden || ui.sheetTab !== 'summary' || document.querySelector('#sheet [data-tab="acta"]') || localStorage.getItem(CURRENT_MATCH_KEY) === JSON.stringify('viewer-x')) throw new Error('not a read-only view');
+        state.them = 'Cambiado'; save();
+        if (localMatch('viewer-x')?.dirty) throw new Error('a player view was saved for upload');
+        document.querySelector('#sheet [data-close-sheet]').click();
+        for (let i = 0; i < 5; i++) await tick0();
+        if (!$('sheet').hidden || currentMatchId !== null || home.view !== 'matches') throw new Error(`back: ${home.view}`);
+      } finally {
+        team.role = role; removeKey(MATCH_KEY_PREFIX + 'viewer-x');
+        if (current === null) removeKey(CURRENT_MATCH_KEY); else localStorage.setItem(CURRENT_MATCH_KEY, current);
+        currentMatchId = keepId; restore(snap);
+      }
+      showHomeView('team');
+      if (!document.querySelector('[data-new-match]')) throw new Error('the staff lost their controls');
+    }));
     await TA('nav: Escape on attendance, a main tab, goes back to Mis equipos', async () => withNavHome(async () => {
       showHomeView('attendance');
       pressEscape();
