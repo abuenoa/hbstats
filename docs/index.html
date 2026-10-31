@@ -156,8 +156,8 @@
     --dorsal-ink: #0e0e10;
   }
 }
-/* The pages outside a match (.home) always wear the dark theme: the «noche de partido» look the coach chose. */
-:root[data-theme="dark"], .home {
+/* The pages outside a match (.home) and the match report (.sheet) always wear the dark theme: the «noche de partido» look the coach chose. */
+:root[data-theme="dark"], .home, .sheet {
   color-scheme: dark;
   --bg: #0e0e10; --glow-red: rgba(var(--brand-rgb), .20); --glow-gold: rgba(var(--brand-2-rgb), .08);
   --surface: #18181b; --soft: #232327; --btn: rgba(255, 255, 255, .07);
@@ -609,9 +609,9 @@ button.rex-chip { border: 0; cursor: pointer; position: relative; }
 .rating-row { --face-disc: 40px; border-bottom: 1px solid var(--line); }
 .ratings .rating-row { display: block; }
 .ratings .rating-row:nth-child(even) { background: var(--soft); }
-.rating-line { display: grid; grid-template-columns: var(--face-disc) minmax(0, 1fr) repeat(3, 7ch) 4.5ch var(--space-4); align-items: center; column-gap: var(--space-3); min-height: 52px; padding: var(--space-1) var(--space-2); }
+.rating-line { display: grid; grid-template-columns: var(--face-disc) minmax(0, 1fr) repeat(4, 7ch) var(--space-4); align-items: center; column-gap: var(--space-3); min-height: 52px; padding: var(--space-1) var(--space-2); }
 .rating-line .disc { flex: none; width: var(--face-disc); height: var(--face-disc); font-size: 16px; }
-.rating-line .rating-chip { min-width: 0; }
+.rating-line .rating-chip { min-width: 0; justify-self: end; }
 .rating-who { flex: 1; min-width: 0; display: grid; overflow-wrap: anywhere; }
 .rating-line::after { content: ""; flex: none; width: var(--space-4); text-align: center; color: var(--muted); }
 .ratings > .btn { justify-self: start; min-height: var(--target); }
@@ -999,8 +999,8 @@ span.att-foot { visibility: hidden; }
 .rate-tile.none { --rate: var(--soft); background: var(--soft); box-shadow: none; }
 .rate-tile.none b, .rate-tile.none span { color: var(--color-text-secondary); }
 .zone-map svg, .goal-chart svg, .radar svg, .evolution svg { display: block; width: 100%; height: auto; }
-/* ---------- «Noche de partido»: the video-game look of every page outside a match ---------- */
-.home {
+/* ---------- «Noche de partido»: the video-game look of every page outside a match and the match report ---------- */
+.home, .sheet {
   color: var(--fg); color-scheme: dark;
   --bg: #0e1116; --surface: #161a21; --soft: #1d222b; --line: #262c36; --fg: #f2f3f5; --muted: #c5c9d1;
   --glass: #161a21; --glass-strong: #161a21; --glass-edge: #262c36; --shadow: none;
@@ -1010,35 +1010,35 @@ span.att-foot { visibility: hidden; }
   --color-text: var(--fg); --color-text-secondary: var(--muted); --color-success: var(--rating-good); --color-on-success: var(--rating-ink-good);
   --radius-xl: 6px; --radius-lg: 6px; --radius-md: 4px;
 }
-.home .top-bar { border-radius: 0 0 var(--radius-md) var(--radius-md); border-width: 0 0 3px; border-color: var(--brand); }
-.home .home-title h1, .home .page-title, .home .poster-name, .home .next-rival { font-family: var(--font-display); font-weight: 800; text-transform: uppercase; letter-spacing: .04em; }
-.home .sheet-card { border-color: var(--line); box-shadow: none; }
-.home table { color: var(--fg); }
-.home .sheet-card > h3, .home .grid-title { font-family: var(--font-display); font-size: 1.25rem; font-weight: 700; letter-spacing: .1em; color: var(--game-accent); }
-.home .tabs button { font-family: var(--font-display); font-size: 1.05rem; text-transform: uppercase; letter-spacing: .06em; }
-.home .tabs button[aria-pressed="true"] { background: var(--game-accent); border-color: var(--game-accent); color: var(--game-ink); }
-.home .record b, .home .season-kpi b, .home .leader .value { color: var(--game-accent); }
-.home .season-kpi.hot b { color: inherit; }
+:is(.home, .sheet) .top-bar { border-radius: 0 0 var(--radius-md) var(--radius-md); border-width: 0 0 3px; border-color: var(--brand); }
+:is(.home, .sheet) .home-title h1, :is(.home, .sheet) .page-title, :is(.home, .sheet) .poster-name, :is(.home, .sheet) .next-rival { font-family: var(--font-display); font-weight: 800; text-transform: uppercase; letter-spacing: .04em; }
+:is(.home, .sheet) .sheet-card { border-color: var(--line); box-shadow: none; }
+:is(.home, .sheet) table { color: var(--fg); }
+:is(.home, .sheet) .sheet-card > h3, :is(.home, .sheet) .grid-title { font-family: var(--font-display); font-size: 1.25rem; font-weight: 700; letter-spacing: .1em; color: var(--game-accent); }
+:is(.home, .sheet) .tabs button { font-family: var(--font-display); font-size: 1.05rem; text-transform: uppercase; letter-spacing: .06em; }
+:is(.home, .sheet) .tabs button[aria-pressed="true"] { background: var(--game-accent); border-color: var(--game-accent); color: var(--game-ink); }
+:is(.home, .sheet) .record b, :is(.home, .sheet) .season-kpi b, :is(.home, .sheet) .leader .value { color: var(--game-accent); }
+:is(.home, .sheet) .season-kpi.hot b { color: inherit; }
 /* Cards on a grid line up: every card of a row is as tall as the tallest */
-.home .team-page, .home .player-grid { align-items: stretch; }
-.home .player-col { align-content: start; }
-.home .player-col > .sheet-card:last-child { flex-grow: 1; }
+:is(.home, .sheet) .team-page, :is(.home, .sheet) .player-grid { align-items: stretch; }
+:is(.home, .sheet) .player-col { align-content: start; }
+:is(.home, .sheet) .player-col > .sheet-card:last-child { flex-grow: 1; }
 /* Squad: each player is a trading card with their overall */
-.home .face { border-radius: var(--radius-md); border-top: 4px solid var(--pos); box-shadow: none; background: var(--soft); position: relative; }
+:is(.home, .sheet) .face { border-radius: var(--radius-md); border-top: 4px solid var(--pos); box-shadow: none; background: var(--soft); position: relative; }
 .face-overall { position: absolute; left: var(--space-1); top: var(--space-1); font-family: var(--font-display); font-weight: 800; font-size: 1.25rem; line-height: 1; color: var(--game-accent); }
 /* Player card: a shield-shaped trading card with the overall, the position and the attributes */
-.home .poster { background: linear-gradient(160deg, var(--brand), color-mix(in srgb, var(--brand) 35%, #0e1116) 70%); color: #ffffff; clip-path: polygon(0 0, 100% 0, 100% 96%, 50% 100%, 0 96%); padding-bottom: var(--space-8); border: 0; }
-.home .poster .poster-sub, .home .poster .poster-rating, .home .poster .sentences, .home .poster .tile:not(.lead-field, .lead-keeper) span { color: rgba(255, 255, 255, .85); }
-.home .poster .sentences b { color: #ffffff; text-decoration-color: var(--game-accent); }
-.home .poster .tile:not(.lead-field, .lead-keeper) { background: rgba(0, 0, 0, .28); }
-.home .poster .poster-dorsal { color: #ffffff; opacity: .12; }
-.home .poster-face .disc { box-shadow: 0 0 0 5px var(--game-accent), 0 0 32px rgba(var(--brand-2-rgb), .45); }
-.home .poster > .game-overall { position: absolute; left: var(--space-4); top: var(--space-4); display: grid; justify-items: center; line-height: 1; z-index: 1; }
+:is(.home, .sheet) .poster { background: linear-gradient(160deg, var(--brand), color-mix(in srgb, var(--brand) 35%, #0e1116) 70%); color: #ffffff; clip-path: polygon(0 0, 100% 0, 100% 96%, 50% 100%, 0 96%); padding-bottom: var(--space-8); border: 0; }
+:is(.home, .sheet) .poster .poster-sub, :is(.home, .sheet) .poster .poster-rating, :is(.home, .sheet) .poster .sentences, :is(.home, .sheet) .poster .tile:not(.lead-field, .lead-keeper) span { color: rgba(255, 255, 255, .85); }
+:is(.home, .sheet) .poster .sentences b { color: #ffffff; text-decoration-color: var(--game-accent); }
+:is(.home, .sheet) .poster .tile:not(.lead-field, .lead-keeper) { background: rgba(0, 0, 0, .28); }
+:is(.home, .sheet) .poster .poster-dorsal { color: #ffffff; opacity: .12; }
+:is(.home, .sheet) .poster-face .disc { box-shadow: 0 0 0 5px var(--game-accent), 0 0 32px rgba(var(--brand-2-rgb), .45); }
+:is(.home, .sheet) .poster > .game-overall { position: absolute; left: var(--space-4); top: var(--space-4); display: grid; justify-items: center; line-height: 1; z-index: 1; }
 .game-overall b { font-family: var(--font-display); font-weight: 800; font-size: 4rem; color: var(--game-accent); }
 .game-overall span { font-family: var(--font-display); font-weight: 700; font-size: 1.25rem; letter-spacing: .1em; }
-.home .poster-face { justify-self: end; margin: var(--space-6) var(--space-3) 0 0; }
-.home .game-attrs { display: grid; grid-template-columns: 1fr 1fr; gap: var(--space-1) var(--space-6); margin: var(--space-2) 0 0; padding: var(--space-3) 0 0; border-top: 2px solid rgba(255, 255, 255, .35); list-style: none; font-family: var(--font-display); font-size: 1.25rem; letter-spacing: .04em; }
-.home .game-attrs li { display: flex; justify-content: flex-start; gap: var(--space-2); align-items: baseline; font: inherit; }
+:is(.home, .sheet) .poster-face { justify-self: end; margin: var(--space-6) var(--space-3) 0 0; }
+:is(.home, .sheet) .game-attrs { display: grid; grid-template-columns: 1fr 1fr; gap: var(--space-1) var(--space-6); margin: var(--space-2) 0 0; padding: var(--space-3) 0 0; border-top: 2px solid rgba(255, 255, 255, .35); list-style: none; font-family: var(--font-display); font-size: 1.25rem; letter-spacing: .04em; }
+:is(.home, .sheet) .game-attrs li { display: flex; justify-content: flex-start; gap: var(--space-2); align-items: baseline; font: inherit; }
 .game-attrs abbr { text-decoration: none; }
 .game-attrs b { min-width: 2ch; color: var(--game-accent); font-weight: 800; font-variant-numeric: tabular-nums; }
 /* Hot and cold spells: a match's stretches in the Hoja, the season's 10' blocks on the player card */
@@ -1232,7 +1232,7 @@ span.att-foot { visibility: hidden; }
       <button class="btn press" id="btn-undo" type="button" aria-label="Deshacer">↶</button>
       <button class="btn press" id="btn-redo" type="button" aria-label="Rehacer">↷</button>
       <button class="btn primary press" id="btn-stop" type="button">⏸ Parar</button>
-      <button class="btn press" id="btn-sheet" type="button">Hoja</button>
+      <button class="btn press" id="btn-sheet" type="button">Estadísticas</button>
       <button class="btn press" id="btn-finish" type="button">Finalizar</button>
       <button class="btn icon press" id="btn-theme" type="button" aria-label="Cambiar a modo oscuro">☾</button>
     </div>
@@ -1241,7 +1241,7 @@ span.att-foot { visibility: hidden; }
 
 <div class="scrim" id="scrim" hidden></div>
 <div class="pop" id="pop" role="dialog" aria-modal="false" hidden></div>
-<div class="sheet" id="sheet" role="dialog" aria-label="Hoja del partido" hidden></div>
+<div class="sheet" id="sheet" role="dialog" aria-label="Estadísticas del partido" hidden></div>
 <div class="final" id="final" role="dialog" aria-modal="true" aria-label="Resumen final" hidden></div>
 <div class="home" id="home" role="dialog" aria-label="HBStats" hidden></div>
 <input type="file" id="roster-file" accept=".json,application/json" hidden>
@@ -5556,7 +5556,7 @@ table { border-collapse: collapse; width: 100%; }
       ${summaryDetailHtml()}
       <div class="row-actions final-actions">
         ${finalLeadingHtml()}<span class="spacer"></span>
-        <button class="btn press" type="button" data-final-sheet>Ver Hoja</button>
+        <button class="btn press" type="button" data-final-sheet>Ver estadísticas</button>
         ${state.clock.period === 1 ? '<button class="btn go press" type="button" data-second-half>▶ 2ª parte</button>' : ''}
       </div>
     </div>`;
@@ -5602,7 +5602,7 @@ table { border-collapse: collapse; width: 100%; }
       </section>
       <div class="row-actions final-actions">
         ${finalLeadingHtml()}<span class="spacer"></span>
-        <button class="btn press" type="button" data-final-sheet>Ver Hoja</button>
+        <button class="btn press" type="button" data-final-sheet>Ver estadísticas</button>
       </div>
     </div>`;
     $('final').hidden = false;
