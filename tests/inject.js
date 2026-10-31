@@ -3117,7 +3117,7 @@
       attendance: () => showHomeView('attendance'),
     };
     // Each view's leading label and the view it lands on; the player's match goes back to the player's card.
-    const NAV_BACK = { team: ['‹ Mis equipos', 'profile'], matches: ['‹ Mis equipos', 'profile'], stats: ['‹ Mis equipos', 'profile'], player: ['‹ Equipo', 'team'], 'player-match': [`‹ ${cardField.name}`, 'player'], 'team-edit': ['‹ Equipo', 'team'], attendance: ['‹ Equipo', 'team'] };
+    const NAV_BACK = { team: ['‹ Mis equipos', 'profile'], matches: ['‹ Mis equipos', 'profile'], stats: ['‹ Mis equipos', 'profile'], player: ['‹ Equipo', 'team'], 'player-match': [`‹ ${cardField.name}`, 'player'], 'team-edit': ['‹ Equipo', 'team'], attendance: ['‹ Mis equipos', 'profile'] };
     const NAV_TITLED = { player: cardField.name, 'player-match': `${cardField.name} · ${cardMatch().state.them}`, 'team-edit': 'Editar equipo', attendance: 'Asistencia' };
     // Runs fn over a seeded team page and puts the home state back afterwards.
     const withNavHome = async (fn, matches = [cardMatch()]) => {
@@ -3185,11 +3185,11 @@
       if (bar.height > NAV_TOP_BAR_MAX_PX || leading.top < 0 || leading.bottom > innerHeight) throw new Error(`top bar ${bar.height}px, leading at ${leading.top}..${leading.bottom}`);
       scroller.scrollTop = 0;
     }, Array.from({ length: 6 }, (_, i) => ({ ...cardMatch(), id: `cm${i + 1}` }))));
-    await TA('nav: Escape on attendance goes back to Equipo', async () => withNavHome(async () => {
+    await TA('nav: Escape on attendance, a main tab, goes back to Mis equipos', async () => withNavHome(async () => {
       showHomeView('attendance');
       pressEscape();
       for (let i = 0; i < 5; i++) await tick0();
-      if (home.view !== 'team') throw new Error(home.view);
+      if (home.view !== 'profile') throw new Error(home.view);
     }));
     // The bar of an edit task: «Cancelar» first, the one primary last.
     const checkEditBar = (view) => {
@@ -4396,14 +4396,20 @@
         if ((await backend.listSessions('cal-team')).length || localSessions().length || home.sessions.length || !/Presente/.test(badgeOf(id)) || document.querySelector('[data-att-delete]')) throw new Error('session kept');
       });
     });
-    await TA('attendance view: the team page offers Asistencia', async () => {
+    await TA('attendance view: a main tab, and «Pasar lista de hoy» on the team page', async () => {
       await withAttendanceView(async () => {
         showHomeView('team');
-        const open = document.querySelector('.squad [data-home-view="attendance"]');
-        if (!open || open.textContent !== 'Asistencia') throw new Error('no Asistencia button');
-        open.click();
+        const tabs = [...document.querySelectorAll('.app-bar .tabs button')].map((b) => b.textContent);
+        if (tabs.join() !== 'Equipo,Asistencia,Partidos,Estadísticas') throw new Error('tabs ' + tabs);
+        const quick = document.querySelector('.attendance-card [data-home-view="attendance"]');
+        if (!quick || quick.textContent !== 'Pasar lista de hoy') throw new Error('no quick button');
+        quick.click();
         for (let i = 0; i < 5; i++) await tick0();
-        if (home.view !== 'attendance' || !document.querySelector('[data-att]')) throw new Error(home.view);
+        if (home.view !== 'attendance' || !document.querySelector('[data-att]') || home.attendanceDate !== todayIso()) throw new Error(home.view);
+        const pressed = [...document.querySelectorAll('.app-bar .tabs button')].filter((b) => b.getAttribute('aria-pressed') === 'true').map((b) => b.textContent);
+        if (pressed.join() !== 'Asistencia') throw new Error('pressed ' + pressed);
+        if (!document.querySelector('.att-how') || !document.querySelector('.att-how').textContent.includes('toca a quien no esté')) throw new Error('no how-to line');
+        if (!document.querySelector('#home .page-bar [data-nav-leading]').textContent.includes('Mis equipos')) throw new Error('leading');
       });
     });
     // Attendance rates: pure rows first, then the three pages that show them.
@@ -4438,7 +4444,8 @@
         const text = $('home').textContent;
         if (/NaN|undefined/.test(text) || !document.querySelector('.squad [data-player="ra2"] .face-att') || document.querySelector('[data-player="ra2"] .face-att').textContent.trim() !== '–') throw new Error('squad: ' + text.slice(0, 200));
         home.sessions = []; showHomeView('team');
-        if (document.querySelector('.attendance-card') || document.querySelector('.face-att')) throw new Error('rates shown without sessions');
+        if (document.querySelector('.attendance-card .record') || document.querySelector('.face-att')) throw new Error('rates shown without sessions');
+        if (!document.querySelector('.attendance-card [data-home-view="attendance"]')) throw new Error('no way to take the first attendance');
       });
     });
     await TA('player card: attendance tile with percent and counts', async () => {
