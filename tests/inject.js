@@ -1126,17 +1126,33 @@
     if (pick(null, 'k', 'f') !== 'k') throw new Error('a goalkeeper counts saves');
     if (pick(null, 'a', 'g') !== 'g' || pick(null, 'g', 'a') !== 'g') throw new Error('lower dorsal last');
     const higher = new Map([['a', { value: 7.1, rated: true }], ['b', { value: 7, rated: true }]]);
-    if (matchMvp(s, higher, new Map([['b', 3600]])).id !== 'a') throw new Error('rating first');
+    if (matchMvp(s, higher, new Map([['a', 2400], ['b', 3600]])).id !== 'a') throw new Error('rating first');
     const none = new Map(s.players.map((p) => [p.id, { value: null, rated: false }]));
     if (JSON.stringify(matchMvp(s, none, null)) !== '{"id":null,"source":null}') throw new Error('nobody rated');
     if (matchMvp({ ...s, mvpId: 'zz' }, rate('a'), null).source !== 'rating') throw new Error('a pick outside the squad is ignored');
     if (JSON.stringify(matchMvp({ ...s, mvpId: 'b' }, rate('a'), null)) !== '{"id":"b","source":"coach"}') throw new Error('coach');
   });
-  T('final: a second-half player with the top rating is the provisional MVP', onFinal(secondHalfStar(), () => {
-    const ratings = matchRatings(state), star = ratings.get('p22'), full = ratings.get('p8');
-    if (!(star.value > full.value && full.value > 0)) throw new Error([star.value, full.value].join());
-    if (matchMvp(state, ratings).id !== 'p22' || rowIds()[0] !== 'p22' || crownedIds().join() !== 'p22') throw new Error('second-half player not MVP: ' + rowIds().slice(0, 2));
+  T('final: a half-match star counts his rating in proportion for the MVP', onFinal(secondHalfStar(), () => {
+    const ratings = matchRatings(state), seconds = minutesOnCourt(state), star = ratings.get('p22'), full = ratings.get('p8');
+    const share = seconds.get('p22') / (CONFIG.rating.mvpFullShare * MATCH_SECONDS);
+    if (!(star.value > full.value && full.value > 0 && share < 1)) throw new Error([star.value, full.value, share].join());
+    const expected = star.value * share > full.value ? 'p22' : 'p8';
+    if (matchMvp(state, ratings).id !== expected || rowIds()[0] !== expected || crownedIds().join() !== expected) throw new Error(`MVP ${matchMvp(state, ratings).id}, expected ${expected}`);
   }));
+  T('mvp score: full from two thirds of the match, in proportion below, unknown minutes in full', () => {
+    const full = CONFIG.rating.mvpFullShare * MATCH_SECONDS, ratings = new Map([['a', { value: 6 }], ['b', { value: -2 }], ['c', { value: null }]]);
+    const at = (id, sec) => mvpScore(ratings, { id }, new Map([[id, sec]]));
+    if (at('a', full) !== 6 || at('a', MATCH_SECONDS) !== 6 || at('a', full / 2) !== 3) throw new Error([at('a', full), at('a', full / 2)].join());
+    if (at('b', full / 2) !== -2 || at('c', full) !== null || mvpScore(ratings, { id: 'a' }, null) !== 6) throw new Error('negative, unrated or unknown minutes');
+  });
+  // The Gades match (24 Oct): the keeper rated higher in 24' than the decisive wing in 60'; the wing is the MVP.
+  T('final: a full-match player beats a higher-rated short spell for the MVP', () => {
+    const player = (id, num, pos) => ({ id, num, pos });
+    const s = { players: [player('wing', 22, 'EXT'), player('gk', 55, 'POR')], events: [], mvpId: null };
+    const ratings = new Map([['wing', { value: 6.7, rated: true }], ['gk', { value: 8.1, rated: true }]]);
+    if (matchMvp(s, ratings, new Map([['wing', MATCH_SECONDS], ['gk', 24 * SECONDS_PER_MINUTE]])).id !== 'wing') throw new Error('the short spell won');
+    if (matchMvp(s, ratings, null).id !== 'gk') throw new Error('unknown minutes: the rating decides');
+  });
   T('final: the coach\'s pick overrides and clears', onFinal(playedFew(), () => {
     const click = (id) => document.querySelector(`[data-mvp="${id}"]`).click();
     click('p8');
