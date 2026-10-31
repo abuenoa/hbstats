@@ -2890,7 +2890,7 @@ span.att-foot { visibility: hidden; }
     bar.hidden = !p && !ui.penalty;
     bar.classList.toggle('penalty', !p && Boolean(ui.penalty));
     if (p) bar.innerHTML = `${discHtml(p)}<b>Dibuja el tiro</b><button class="btn press" type="button" data-unarm aria-label="Cancelar lanzamiento">✕</button>`;
-    else if (ui.penalty) bar.innerHTML = `<b>${ui.penalty.team === 'us' ? 'Penalti a favor' : 'Penalti en contra'} · dibuja el tiro</b><button class="btn press" type="button" data-unarm aria-label="Cancelar el penalti">✕</button>`;
+    else if (ui.penalty) bar.innerHTML = `<b>${ui.penalty.team === 'us' ? 'Penalti a favor' : 'Penalti en contra'} · toca dónde acaba en la portería</b><button class="btn press" type="button" data-unarm aria-label="Cancelar el penalti">✕</button>`;
   }
   function updateLiveBits() {
     const t = document.querySelector('[data-live-timeout]');
@@ -3099,6 +3099,26 @@ span.att-foot { visibility: hidden; }
     view.preset = direct;
     ui.popView = view;
     openPop(shotPopHtml(view), anchor, Boolean(view.pick) || view.rivalPick);
+  }
+  // ---- Quick follow-ups: after our goal, who gave the pass is one tap away ----
+  // Not for a 7 m, and not when a pass of goal was already logged just before the shot.
+  function asksForAssist(view, result) {
+    if (view.type !== 'ourShot' || result !== 'GOL' || view.penalty) return false;
+    const goal = state.events.at(-1), withinSeconds = CONFIG.rating.windows.assist;
+    return !state.events.some((e) => e.kind === 'ACTION' && e.action === 'ASIST' && e !== goal && goal.abs - e.abs >= 0 && goal.abs - e.abs <= withinSeconds);
+  }
+  // Teammates on court (the goalkeeper too) except the scorer; tapping outside or «Sin pase» skips it.
+  function openAssistPop(scorerId, anchor) {
+    const out = ourOffCourt(), onCourt = new Set([...Object.keys(state.lineups.ATK), state.gkId]);
+    const mates = state.players.filter((p) => onCourt.has(p.id) && p.id !== scorerId && !out.has(p.id)).sort(byPosition);
+    ui.popView = { type: 'assist', anchor };
+    openPop(`<header><div><b>¿Pase de gol?</b><small>Un toque, o sigue sin marcarlo</small></div></header>
+      <div class="picks">${mates.map((p) => `<button class="pick press" type="button" data-assist="${p.id}">${discHtml(p)}<span>${esc(p.name)}</span></button>`).join('')}</div>
+      <button class="act c-neutral" type="button" data-close>Sin pase</button>`, anchor, true);
+  }
+  function logAssist(playerId) {
+    const result = addEvent('ACTION', { playerId, action: 'ASIST' }, { bringOn: playerId });
+    hint(withBenchNote(`${describe(state.events.at(-1))} · ↶ deshacer`, result));
   }
   function openGkPop(anchor, focusId) {
     const gk = playerById(focusId || state.gkId);
@@ -3319,7 +3339,13 @@ span.att-foot { visibility: hidden; }
       return;
     }
     if (b.hasAttribute('data-contra')) { v.contra = !v.contra; b.setAttribute('aria-pressed', String(v.contra)); return; }
-    if (b.dataset.result) { closePop(); commitShot(v, b.dataset.result); return; }
+    if (b.dataset.result) {
+      closePop();
+      commitShot(v, b.dataset.result);
+      if (asksForAssist(v, b.dataset.result)) openAssistPop(v.playerId, v.anchor);
+      return;
+    }
+    if (b.dataset.assist) { closePop(); logAssist(b.dataset.assist); return; }
     if (b.dataset.gk && isDisqualified(b.dataset.gk)) { hint('Ese portero está descalificado'); return; }
     if (b.dataset.gk) { const g = playerById(b.dataset.gk); state.gkId = g.id; closePop(); commit(); hint(`Portero: #${g.num} ${g.name}`); return; }
     if (b.dataset.clock === 'toggle') { closePop(); toggleClock(); return; }
@@ -3417,6 +3443,11 @@ span.att-foot { visibility: hidden; }
     } else if (pt.y > GOAL_LINE_Y) {
       ui.drag = { type: 'shot', origin: ui.penalty ? { ...PENALTY_SPOT } : { x: pt.x, y: pt.y }, pointerId: ev.pointerId };
       startDraw(ui.drag.origin);
+    } else if (ui.penalty) {
+      // A 7 m starts on the mark: a tap where it ended in the goal is enough.
+      ev.preventDefault();
+      shotFromDrag(PENALTY_SPOT, pt, { x: ev.clientX, y: ev.clientY });
+      return;
     } else return;
     svg.setPointerCapture(ev.pointerId);
     ev.preventDefault();
