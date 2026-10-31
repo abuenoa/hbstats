@@ -650,7 +650,7 @@
       if (state.home !== false || matchPlaceText() !== 'Vivero · Fuera' || document.querySelector('[data-match-home][aria-pressed="true"]').textContent !== 'Fuera') throw new Error('away');
       document.querySelector('[data-match-home="true"]').click();
       state.venue = '';
-      if (state.home !== true || matchPlaceText() !== 'Casa' || !finalText().split('\n')[1].startsWith('Casa')) throw new Error('home');
+      if (state.home !== true || matchPlaceText() !== 'Casa' || !shareText(state).split('\n')[1].startsWith('Casa')) throw new Error('home');
       const icons = HOME_AWAY.map((isHome) => document.querySelector(`[data-match-home="${isHome}"] .venue-icon`)?.innerHTML);
       const drawn = (paths) => { const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg'); svg.innerHTML = paths; return svg.innerHTML; };
       if (icons[0] !== drawn(HOME_AWAY_ICONS.true) || icons[1] !== drawn(HOME_AWAY_ICONS.false)) throw new Error('house and plane icons');
@@ -833,8 +833,6 @@
   T('turnovers are shown as a count, not a percentage', () => { ui.source = 'US'; renderLive(); const live = liveStats(); const tile = [...$('live').querySelectorAll('.kpi')].find((k) => k.textContent.includes('Pérdidas')); if (tile.querySelector('strong').textContent !== String(live.us.turnovers)) throw new Error('live ' + tile.textContent); const row = finalRows().find((r) => r[0] === 'Pérdidas'); if (row[1] !== live.us.turnovers || row[2] !== live.them.turnovers) throw new Error('final ' + row); if (summaryKpis().find((k) => k.label === 'Pérdidas').sub.some((t) => t.includes('%'))) throw new Error('tile sub'); ui.source = 'GK'; renderLive(); });
   T('shooter leaders: most shots, goals and misses', () => { const l = shooterLeaders(rivalShots()); if (l.scores.shooter.num !== 9 || l.shoots.shooter.num !== 9 || l.misses.shooter.num !== 7) throw new Error([l.shoots.shooter.num, l.scores.shooter.num, l.misses.shooter.num].join()); if (shooterLeaders([]).scores !== null) throw new Error('empty'); ui.sheetTab = 'gk'; ui.sheetGoal = 'GK'; renderSheet(); if (document.querySelectorAll('.shot-map').length !== 2 || !$('sheet').textContent.includes('Más falla')) throw new Error('gk tab'); });
   T('play after the final whistle does not restart the clock', () => { const snap = snapshot(); state.finished = true; pauseClock(); state.clock.elapsedMs = 0; addEvent('TURNOVER', { playerId: 'p8', subtype: 'Pasos' }); if (isRunning()) throw new Error('restarted'); restore(snap); });
-  T('report e-mail addresses and mailto', () => { if (!parseEmails('a@x.es, b@y.com;c@z.org') || parseEmails('a@x.es, nope') || parseEmails('')) throw new Error('parse'); const url = mailtoUrl(['a@x.es', 'b@y.com'], ['informe.pdf']); if (!url.startsWith('mailto:a@x.es,b@y.com?subject=') || !decodeURIComponent(url).includes(finalTitle()) || !decodeURIComponent(url).includes('informe.pdf')) throw new Error(url); });
-  T('invalid e-mail is refused without leaving the page', () => { const snap = snapshot(); openFinal(); $('final-email').value = 'entrenador@'; document.querySelector('[data-final-mail]').click(); if (!$('final-status').textContent.includes('válidas')) throw new Error($('final-status').textContent); restore(snap); });
   T('mvp: final screen picks, changes and clears the MVP', () => {
     const snap = snapshot(); openFinal();
     const pick = (id) => document.querySelector(`[data-mvp="${id}"]`).click();
@@ -844,13 +842,6 @@
     if (restoreState(JSON.parse(snapshot())).mvpId !== a) throw new Error('not kept by restoreState');
     pick(a); if (state.mvpId !== null) throw new Error('clear ' + state.mvpId);
     pick(a); pick(b); if (state.mvpId !== b) throw new Error('change ' + state.mvpId);
-    restore(snap);
-  });
-  T('mvp: picking keeps an e-mail typed but not sent', () => {
-    const snap = snapshot(); openFinal();
-    $('final-email').value = 'entrenador@club.es';
-    document.querySelector(`[data-mvp="${state.players[0].id}"]`).click();
-    if ($('final-email').value !== 'entrenador@club.es') throw new Error('typed e-mail lost: ' + $('final-email').value);
     restore(snap);
   });
   T('mvp: old saved matches restore with no MVP', () => { const saved = JSON.parse(snapshot()); delete saved.mvpId; if (restoreState(saved).mvpId !== null) throw new Error('not null'); });
@@ -1284,7 +1275,7 @@
       const rows = Object.fromEntries(finalRows().map((r) => [r[0], r.slice(1)]));
       if (rows['% de tiro 6 m'].join('|') !== '2/3 · 67%|1/4 · 25%' || rows['% de tiro 9 m+'].join('|') !== '1/3 · 33%|1/3 · 33%') throw new Error(JSON.stringify(rows));
       if (rows['% paradas 6 m'].join('|') !== '2/3 · 67%|1/3 · 33%' || rows['% paradas 9 m+'].join('|') !== '1/2 · 50%|1/2 · 50%') throw new Error(JSON.stringify(rows));
-      if (!rows['% de tiro'] || !rows['Paradas del portero'] || !finalText().includes('% de tiro 9 m+:')) throw new Error('overall rows or e-mail text');
+      if (!rows['% de tiro'] || !rows['Paradas del portero']) throw new Error('overall rows');
     } finally { restore(snap); }
   });
   T('halftime: shows failed shots 6 m and 9 m and the top turnovers', () => {
@@ -1307,7 +1298,7 @@
     const snap = snapshot();
     try {
       openFinal();
-      const order = ['.final-head', '.kpi-tiles', '.mvp-share', '.ratings', '.mvp-pick', 'details.more', '.final-mail'].map((sel) => $('final').querySelector(sel));
+      const order = ['.final-head', '.kpi-tiles', '.mvp-share', '.ratings', '.mvp-pick', 'details.more', '#final-status', '.final-actions'].map((sel) => $('final').querySelector(sel));
       if (order.some((el) => !el)) throw new Error('missing section ' + order.map(Boolean).join());
       order.slice(1).forEach((el, i) => { if (!(order[i].compareDocumentPosition(el) & Node.DOCUMENT_POSITION_FOLLOWING)) throw new Error('out of order at ' + i); });
       ['.mvp-share', '.ratings', '.mvp-pick'].forEach((sel) => { if (!$('final').querySelector(sel).classList.contains('sheet-card')) throw new Error(sel + ' is not a sheet-card'); });
@@ -1320,7 +1311,7 @@
   T('final: rating rows span the card and the actions stay in reach', onFinal(playedFew(), () => {
     const row = ratingRows().find((r) => r.querySelector('details')), wide = (el) => el.getBoundingClientRect().width;
     if (!row || Math.abs(wide(row.querySelector('details')) - wide(row)) > 1) throw new Error('the row breakdown must span the row');
-    if ([...$('final').querySelectorAll('button.primary')].map((b) => b.textContent).join() !== 'Compartir MVP') throw new Error('one primary');
+    if ([...$('final').querySelectorAll('button.primary')].map((b) => b.textContent).join() !== 'Compartir') throw new Error('one primary');
     if (!$('final').querySelector('.final-actions [data-final-sheet]') || !$('final').querySelector('.final-actions [data-final-close]')) throw new Error('sticky footer');
     const close = $('final').querySelector('[data-final-close]').getBoundingClientRect();
     if (close.bottom > window.innerHeight) throw new Error('the leading control is below the fold: ' + close.bottom);
@@ -1590,6 +1581,8 @@
     Object.defineProperty(navigator, 'share', { value: share, configurable: true });
     return () => ['canShare', 'share'].forEach((key) => { if (saved[key]) Object.defineProperty(navigator, key, saved[key]); else delete navigator[key]; });
   };
+  // The MVP card, the ratings card and the report PDFs a final screen builds as it opens.
+  const allReady = () => Promise.all([ui.mvpCardReady, ui.ratingsCardReady, ui.reportFilesReady]);
   const revokedUrls = () => {
     const revoke = URL.revokeObjectURL.bind(URL), revoked = [];
     URL.revokeObjectURL = (url) => { revoked.push(url); revoke(url); };
@@ -1776,7 +1769,7 @@
         const img = previewImg();
         if (!img || !img.src.startsWith('blob:') || img.src !== ui.mvpCardUrl) throw new Error('no preview image');
         if (!img.alt.includes('Diego')) throw new Error('not the provisional MVP: ' + img.alt);
-        if (!$('final').querySelector('[data-final-mvp-share]')) throw new Error('share button missing');
+        if ($('final').querySelectorAll('[data-final-share]').length !== 1 || $('final').querySelector('.final-actions [data-final-share]') === null) throw new Error('one share button at the bottom');
       } finally { done(); }
       const noMvp = withFinal({ events: [], courtSets: [[]], court: [{ abs: 0, set: 0 }] });
       try {
@@ -1819,68 +1812,71 @@
       const click = HTMLAnchorElement.prototype.click, clicked = [], spy = revokedUrls();
       HTMLAnchorElement.prototype.click = function () { clicked.push({ download: this.download, href: this.href }); };
       let shared = 0, unstub = sheetStubs(() => false, async () => { shared++; });
-      const tap = async () => { $('final').querySelector('[data-final-mvp-share]').click(); await ui.mvpCardReady; for (let i = 0; i < 5; i++) await tick0(); };
+      const tap = async () => { $('final').querySelector('[data-final-share]').click(); for (let i = 0; i < 20; i++) await tick0(); };
       try {
-        await ui.mvpCardReady;
+        await allReady();
         await tap();
-        if (shared || clicked.length !== 1 || !/^mvp-.+\.png$/.test(clicked[0].download) || !clicked[0].href.startsWith('blob:')) throw new Error(JSON.stringify(clicked) + ' shared ' + shared);
+        const files = (ui.reportFiles || []).length + 2;
+        if (shared || clicked.length !== files || !/^mvp-.+\.png$/.test(clicked[0].download) || !/^puntuaciones-.+\.png$/.test(clicked[1].download) || !clicked[0].href.startsWith('blob:')) throw new Error(JSON.stringify(clicked) + ' shared ' + shared);
         await new Promise((r) => setTimeout(r, 1100));
         if (!spy.revoked.includes(clicked[0].href)) throw new Error('download URL not revoked');
         // A cancelled sheet is not an error; any other failure says so.
         unstub(); unstub = sheetStubs(() => true, async () => { throw Object.assign(new Error('x'), { name: 'AbortError' }); });
         await tap();
-        if (clicked.length !== 1 || /No se pudo/.test($('final-status').textContent)) throw new Error('cancel: ' + $('final-status').textContent);
+        if (clicked.length !== files || /No se pudo/.test($('final-status').textContent)) throw new Error('cancel: ' + $('final-status').textContent);
         unstub(); unstub = sheetStubs(() => true, async () => { throw new Error('boom'); });
         await tap();
-        if ($('final-status').textContent !== 'No se pudo compartir la imagen.') throw new Error('failure: ' + $('final-status').textContent);
+        if ($('final-status').textContent !== 'No se pudo compartir: boom.') throw new Error('failure: ' + $('final-status').textContent);
         unstub(); unstub = sheetStubs(() => true, async () => { throw Object.assign(new Error('Must be handling a user gesture'), { name: 'NotAllowedError' }); });
         await tap();
         if (!/vuelve a tocar el botón/.test($('final-status').textContent) || /gesture/.test($('final-status').textContent)) throw new Error('denied: ' + $('final-status').textContent);
       } finally { unstub(); HTMLAnchorElement.prototype.click = click; spy.stop(); done(); }
     });
-    await TA('final: the ratings button shares the ratings image', async () => {
+    await TA('final: one share carries both images, the PDFs and the match text', async () => {
       const done = withFinal(playedFew()), shared = [];
       const unstub = sheetStubs(() => true, async (data) => { shared.push(data); });
       try {
-        await ui.mvpCardReady; await ui.ratingsCardReady;
-        $('final').querySelector('[data-final-ratings-share]').click();
-        if (shared.length !== 1 || !/^puntuaciones-.+\.png$/.test(shared[0].files[0].name) || shared[0].files[0].type !== 'image/png') throw new Error(JSON.stringify(shared.map((d) => d.files[0].name)));
-        if (!shared[0].title.startsWith('Puntuaciones')) throw new Error(shared[0].title);
-      } finally { unstub(); done(); }
-    });
-    await TA('final: WhatsApp opens a chat with the score, the MVP and our scorers', async () => {
-      const done = withFinal(playedFew()), opened = [], open = window.open;
-      window.open = (...args) => { opened.push(args); return null; };
-      try {
-        $('final').querySelector('[data-final-whatsapp]').click();
-        if (opened.length !== 1 || !opened[0][0].startsWith(WHATSAPP_URL) || opened[0][1] !== '_blank') throw new Error(JSON.stringify(opened));
-        const lines = decodeURIComponent(opened[0][0].slice(WHATSAPP_URL.length)).split('\n');
+        await allReady();
+        $('final').querySelector('[data-final-share]').click();
+        if (shared.length !== 1) throw new Error('shared ' + shared.length);
+        const names = shared[0].files.map((f) => f.name), pdfs = (ui.reportFiles || []).map((f) => f.name);
+        if (!/^mvp-.+\.png$/.test(names[0]) || !/^puntuaciones-.+\.png$/.test(names[1]) || names.slice(2).join() !== pdfs.join()) throw new Error(names.join());
+        if (shared[0].title !== finalTitle()) throw new Error(shared[0].title);
+        const lines = shared[0].text.split('\n');
         if (lines[0] !== `*${finalTitle()}*`) throw new Error('score line: ' + lines[0]);
         const mvp = matchMvp(state, matchRatings(state));
         if (mvp.id && !lines.some((l) => l.startsWith(`MVP: ${playerById(mvp.id).name} (`))) throw new Error('mvp: ' + lines);
         const scorers = lines.find((l) => l.startsWith('Goles: '));
-        if (scorers && scorers.slice('Goles: '.length).split(', ').length > WHATSAPP_SCORERS) throw new Error('too many scorers: ' + scorers);
-      } finally { window.open = open; done(); }
+        if (scorers && scorers.slice('Goles: '.length).split(', ').length > SHARE_SCORERS) throw new Error('too many scorers: ' + scorers);
+      } finally { unstub(); done(); }
     });
-    await TA('whatsapp text: away match puts the rival first and skips a match with no goals', async () => {
+    await TA('final: a failed card is left out of the share instead of blocking it', async () => {
+      const done = withFinal(playedFew()), shared = [];
+      const unstub = sheetStubs(() => true, async (data) => { shared.push(data); });
+      try {
+        await allReady();
+        ui.ratingsCardBlob = false;
+        $('final').querySelector('[data-final-share]').click();
+        if (shared.length !== 1 || shared[0].files.some((f) => f.name.startsWith('puntuaciones-')) || !shared[0].files[0].name.startsWith('mvp-')) throw new Error(JSON.stringify(shared.map((d) => d.files.map((f) => f.name))));
+      } finally { unstub(); done(); }
+    });
+    await TA('share text: away match puts the rival first and skips a match with no goals', async () => {
       const s = { ...JSON.parse(snapshot()), us: 'Triana', them: 'Gades', home: false, venue: '', date: '2026-10-24', events: [], mvpId: null };
-      const text = whatsappText(s);
+      const text = shareText(s);
       if (!text.startsWith('*Gades 0–0 Triana*\nFuera · ') || text.includes('Goles:')) throw new Error(text);
     });
-    await TA('final: both share buttons call share() inside the tap, and wait when the card is not ready', async () => {
+    await TA('final: share() runs inside the tap, and waits while the files are being built', async () => {
       const done = withFinal(playedFew()), shared = [];
-      const unstub = sheetStubs(() => true, async (data) => { shared.push(data.files[0].name); });
-      const tap = (attr) => $('final').querySelector(`[${attr}]`).click();
+      const unstub = sheetStubs(() => true, async (data) => { shared.push(data.files.length); });
+      const tap = () => $('final').querySelector('[data-final-share]').click();
       try {
-        // Right after the screen opens the cards are still being drawn: nothing is shared and the coach is told to tap again.
-        tap('data-final-mvp-share'); tap('data-final-ratings-share');
-        if (shared.length || !$('final-status').textContent.includes('se está preparando')) throw new Error('not-ready path: ' + shared + ' ' + $('final-status').textContent);
-        await ui.mvpCardReady; await ui.ratingsCardReady;
-        // With the cards drawn, share() has been called by the time click() returns (no await before it).
-        tap('data-final-mvp-share');
-        if (shared.length !== 1 || !shared[0].startsWith('mvp-')) throw new Error('mvp share not synchronous: ' + shared);
-        tap('data-final-ratings-share');
-        if (shared.length !== 2 || !shared[1].startsWith('puntuaciones-')) throw new Error('ratings share not synchronous: ' + shared);
+        // Right after the screen opens the files are still being built: nothing is shared and the coach is told to tap again.
+        tap();
+        if (shared.length || !$('final-status').textContent.includes('se están preparando')) throw new Error('not-ready path: ' + shared + ' ' + $('final-status').textContent);
+        await allReady();
+        // With everything built, share() has been called by the time click() returns (no await before it).
+        tap();
+        if (shared.length !== 1) throw new Error('share not synchronous: ' + shared);
       } finally { unstub(); done(); }
     });
     await TA('final: leaving the match releases both cards and drops a render in flight', async () => {
@@ -3440,7 +3436,7 @@
       const buttons = [...$('final').querySelectorAll('.final-actions button')];
       if (buttons[0] !== $('final').querySelector('[data-nav-leading]') || $('final').querySelectorAll('[data-nav-leading]').length !== 1) throw new Error(`${what}: the footer does not start with the one leading control`);
       if (buttons[0].textContent !== `‹ ${NAV_LABELS.liveMatch}`) throw new Error(`${what}: leading is «${buttons[0].textContent}»`);
-      if (!buttons[buttons.length - 1].matches(lastSelector) || $('final').querySelectorAll('.final-actions .btn.primary, .final-actions .btn.go').length !== (lastSelector === '[data-second-half]' ? 1 : 0)) throw new Error(`${what}: last button`);
+      if (!buttons[buttons.length - 1].matches(lastSelector) || $('final').querySelectorAll('.final-actions .btn.primary, .final-actions .btn.go').length !== (lastSelector === '[data-final-sheet]' ? 0 : 1)) throw new Error(`${what}: last button`);
     };
     await TA('nav: match pages and cards lead with the exit', async () => {
       const snap = snapshot();
@@ -3459,7 +3455,7 @@
         openHalftime(); checkFooter('half-time', '[data-second-half]');
         state.clock = { ...state.clock, period: 2 };
         openHalftime(); checkFooter('half-time, second period', '[data-final-sheet]');
-        openFinal(); checkFooter('final', '[data-final-sheet]');
+        openFinal(); checkFooter('final', '[data-final-share]');
         await ui.mvpCardReady;
       } finally { restore(snap); }
     });
@@ -3527,16 +3523,12 @@
         if (left !== 1 || ui.sheetMode !== 'setup') throw new Error('Escape must run «Atrás», left ' + left);
       } finally { leaveMatch = real; restore(snap); }
     });
-    await TA('nav: Escape while typing in the final card keeps the card and the address', async () => {
+    await TA('nav: Escape leaves the final card', async () => {
       const snap = snapshot();
       try {
-        state.finished = true; openFinal('');
-        const field = $('final-email');
-        field.focus(); field.value = 'coach@club.es';
+        state.finished = true; openFinal();
         pressEscape();
-        if ($('final').hidden || $('final-email').value !== 'coach@club.es' || document.activeElement === field) throw new Error('the card closed, the address was lost, or the field kept focus');
-        pressEscape();
-        if (!$('final').hidden) throw new Error('a second Escape leaves the card');
+        if (!$('final').hidden) throw new Error('Escape kept the card');
         await ui.mvpCardReady;
       } finally { restore(snap); }
     });
@@ -4582,52 +4574,19 @@
       window.__pdfMatch = doc.output('datauristring');
     }).then(() => TA('pdf players', async () => { const { doc } = await buildPdf('players'); __results.push('players pages ' + doc.getNumberOfPages()); window.__pdfPlayers = doc.output('datauristring'); }))
       .then(() => TA('pdf one', async () => { const { filename } = await buildPdf('p8'); __results.push(filename); }))
-      .then(() => TA('final: shareReports still shares through shareFiles', async () => {
+      .then(() => TA('final: the share carries both report PDFs once they are built', async () => {
       const done = withFinal(playedFew()), shared = [];
-      const unstub = sheetStubs((data) => data.files.every((f) => f.type === 'application/pdf'), async (data) => { shared.push(data); });
+      const unstub = sheetStubs(() => true, async (data) => { shared.push(data); });
       try {
-        await ui.reportFilesReady;
+        await allReady();
         $('final').querySelector('[data-final-share]').click();
         for (let i = 0; i < 50 && $('final-status').textContent !== 'Compartido.'; i++) await tick0();
-        if (shared.length !== 1 || shared[0].files.length !== 2 || !/^informe-.+\.pdf$/.test(shared[0].files[0].name) || !shared[0].title.startsWith('Informe')) throw new Error(JSON.stringify(shared.map((d) => d.files.map((f) => f.name))));
+        const pdfs = shared[0] ? shared[0].files.filter((f) => f.type === 'application/pdf') : [];
+        if (shared.length !== 1 || pdfs.map((f) => f.name.split('-')[0]).join() !== 'informe,jugadores') throw new Error(JSON.stringify(shared.map((d) => d.files.map((f) => f.name))));
         if ($('final-status').textContent !== 'Compartido.') throw new Error($('final-status').textContent);
       } finally { unstub(); done(); }
     }));
-  }).then(() => TA('final: e-mail attaches both PDFs through the share sheet, addresses first', async () => {
-    const done = withFinal(playedFew()), shared = [];
-    const unstub = sheetStubs((data) => data.files.every((f) => f.type === 'application/pdf'), async (data) => { shared.push(data); });
-    try {
-      await ui.reportFilesReady;
-      $('final-email').value = 'a@x.es, b@y.com';
-      $('final').querySelector('[data-final-mail]').click();
-      for (let i = 0; i < 50 && $('final-status').textContent !== 'Compartido.'; i++) await tick0();
-      if (shared.length !== 1 || shared[0].files.length !== 2 || shared[0].files.map((f) => f.name.split('-')[0]).join() !== 'informe,jugadores' || !shared[0].files.every((f) => f.type === 'application/pdf')) throw new Error(JSON.stringify(shared.map((d) => d.files.map((f) => f.name))));
-      if (!shared[0].text.startsWith('Para: a@x.es, b@y.com\n') || !shared[0].text.includes(finalTitle())) throw new Error(shared[0].text);
-      if (state.reportEmail !== 'a@x.es, b@y.com') throw new Error(state.reportEmail);
-      if ($('final-status').textContent !== 'Compartido.') throw new Error($('final-status').textContent);
-    } finally { unstub(); done(); }
-  })).then(() => TA('final: e-mail tapped before the PDFs are ready asks to tap again', async () => {
-    const done = withFinal(playedFew()), shared = [];
-    const unstub = sheetStubs(() => true, async (data) => { shared.push(data); });
-    try {
-      $('final-email').value = 'a@x.es';
-      $('final').querySelector('[data-final-mail]').click();
-      await tick0();
-      if (shared.length || !$('final-status').textContent.includes('vuelve a tocar')) throw new Error($('final-status').textContent);
-      await ui.reportFilesReady;
-    } finally { unstub(); done(); }
-  })).then(() => TA('final: e-mail share cancelled says where the addresses are', async () => {
-    const done = withFinal(playedFew());
-    const unstub = sheetStubs(() => true, async () => { const e = new Error('closed'); e.name = 'AbortError'; throw e; });
-    try {
-      await ui.reportFilesReady;
-      $('final-email').value = 'a@x.es';
-      $('final').querySelector('[data-final-mail]').click();
-      for (let i = 0; i < 50 && !$('final-status').textContent.startsWith('Compartir cancelado.'); i++) await tick0();
-      const text = $('final-status').textContent;
-      if (!text.startsWith('Compartir cancelado.') || !text.includes('«Para»')) throw new Error(text);
-    } finally { unstub(); done(); }
-  })).catch((e) => __results.push('FAIL libs ' + e.message)).finally(() => {
+  }).catch((e) => __results.push('FAIL libs ' + e.message)).finally(() => {
     const pre = document.createElement('pre'); pre.id = 'res'; pre.textContent = __results.join('\n'); document.body.appendChild(pre);
     ['__pdfMatch', '__pdfPlayers'].forEach((k) => { if (window[k]) { const t = document.createElement('textarea'); t.id = k; t.textContent = window[k]; document.body.appendChild(t); } });
   });
