@@ -3998,6 +3998,12 @@
       const rounds = cards.map((c) => (c.querySelector('.match-round') ? flatText(c.querySelector('.match-round')) : ''));
       if (rounds.join() !== 'Jornada 3,Jornada 4,') throw new Error(rounds.join());
     }));
+    await TA('mobile: no zoom gestures and taps act at once', async () => {
+      if (getComputedStyle(document.documentElement).touchAction !== 'manipulation') throw new Error(getComputedStyle(document.documentElement).touchAction);
+      const pinch = new Event('gesturestart', { cancelable: true });
+      document.dispatchEvent(pinch);
+      if (!pinch.defaultPrevented) throw new Error('a pinch can zoom on Safari');
+    });
     await TA('splash: the logo over the boot, a tap skips it, none over a resumed match', async () => {
       const gone = () => new Promise((r) => setTimeout(r, SPLASH_FADE_MS + 50));
       dismissSplash(); await gone();

@@ -44,7 +44,7 @@ PAGE_HEAD = """<!doctype html>
 <html lang="es">
 <head>
 <meta charset="utf-8">
-<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="viewport" content="width=device-width,initial-scale=1,minimum-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover">
 <meta name="theme-color" content="{theme}">
 """
 # Only the app installs and works offline; the demo is a plain page that borrows its icon.
