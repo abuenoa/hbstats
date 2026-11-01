@@ -1006,8 +1006,9 @@ body:has(#home:not([hidden])) { overflow: hidden; }
 .att-how .att-badge { padding: 2px var(--space-2); border: 1px solid currentColor; border-radius: var(--radius-full); font-size: .78rem; font-weight: 700; }
 .att-arrow { color: var(--muted); }
 .att-over { color: var(--color-danger-text); font-weight: 700; }
-.callup-kit { display: grid; gap: var(--space-1); margin-bottom: var(--space-3); }
-.callup-kit .field-label { color: var(--muted); font-size: .75rem; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; }
+.callup-kit { display: grid; gap: var(--space-2); margin-bottom: var(--space-3); }
+.kit-row { display: grid; gap: var(--space-1); }
+.kit-row .field-label { color: var(--muted); font-size: .75rem; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; }
 .kit-chip { display: inline-flex; align-items: center; gap: var(--space-2); }
 .kit-swatch { width: 18px; height: 18px; border-radius: 50%; box-shadow: 0 0 0 1px var(--line); }
 .kit-other { cursor: pointer; }
@@ -1438,6 +1439,8 @@ span.att-foot { visibility: hidden; }
     // cut at noteMax characters; changes reach the cloud after syncDelayMs without further taps.
     // trainingDays: the team's weekdays (0 = Sunday), for the date the attendance opens on.
     attendance: { warnPct: 75, excludeFromRate: ['L'], noteMax: 60, syncDelayMs: 2000, trainingDays: [2, 4, 5] },
+    // The convocatoria: the players meet this many minutes before the kickoff unless the coach sets the time.
+    callup: { meetLeadMin: 45 },
     // Rating v5 «goles aportados» (see the rating section): values in goals, shown as points (pointsPerGoal).
     // pOn: league share of on-target shots that go in, by zone (a keeper saving 40% from 6 m is average); onTargetRate:
     // share of shots that reach the goal. possession: goals of an average possession; shortHanded / superiority: the
@@ -5612,178 +5615,219 @@ table { border-collapse: collapse; width: 100%; }
     return canvasPng(canvas, 'The ratings card');
   }
 
-  // The convocatoria for the team's group, in the match-night look: speed stripes and a halftone corner in the team's
-  // accent, the crest, the matchup with when, where and the kit, the called-up players as faces with their names, a
-  // phrase for the group and the app's mark. Portrait like the MVP card, so it fills a phone screen.
+  // The convocatoria for the team's group as a street poster: the club colour under a grunge texture, black brush bars
+  // behind the words, the team and the crest, the match (rival, day, hall, meeting and kickoff times), the players called
+  // up with their faces, the kit, who is left out, what to bring, a phrase for the group and the app's mark. The
+  // textures (cards/) were made with Higgsfield; without them the poster still draws, on flat bars.
   const CALLUP_CARD = {
-    w: 1080, h: 1350, pad: 64, fadeEnd: 0.5, minAccentContrast: 3,
-    stripes: { x: 640, w: 46, gap: 30, count: 4, slant: 110, h: 236, alpha: [0.5, 0.32, 0.2, 0.12] },
-    dots: { x: 860, y: 0, cols: 9, rows: 7, step: 26, r: 6, alpha: 0.22 },
-    crest: { x: 64, y: 48, size: 150, ring: 8, glow: 40 }, titleY: 136, titleSize: 100, titleMinSize: 72, teamY: 190, teamSize: 40,
-    match: { y: 236, h: 296, radius: 28, labelY: 46, labelSize: 24, nameY: 118, nameSize: 52, nameMinSize: 30, vsR: 44, vsSize: 42,
-      chipsY: 160, chipH: 56, chipGap: 14, chipRadius: 16, chipTextSize: 28, chipMinSize: 20, icon: 26 },
-    faces: { top: 560, bottom: 1180, cols: 4, maxR: 56, ring: 6, nameGap: 14, nameSize: 28, nameMinSize: 20, numR: 22, numSize: 24 },
-    court: { cy: 1350, area: 300, nine: 480, width: 6, dash: [26, 20], alpha: 0.12 },
-    phraseY: 1248, phraseSize: 58, phraseMinSize: 36, phraseRule: { w: 90, h: 8, gap: 22 },
-    brand: { y: 1316, logo: 34, size: 24, gap: 12, alpha: 0.85 }
+    w: 1080, h: 1620, pad: 48, stroke: 12, tilt: -0.035, minAccentContrast: 3,
+    textures: { paper: 'cards/callup-texture.webp', brush: 'cards/brush.webp', ball: 'cards/ball.webp' },
+    title: { x: 48, y: 168, size: 150, minSize: 90, w: 640, subY: 246, subSize: 56 },
+    crest: { cx: 880, cy: 160, r: 128, ring: 10 }, ball: { x: 860, y: 268, size: 190 },
+    tag: { y: 300, h: 84, w: 800, icon: 50, size: 42 },
+    info: { y: 412, h: 156, labelSize: 26, valueSize: 34, minSize: 22, icon: 40 },
+    heading: { y: 690, size: 104, icon: 70, brushH: 120, w: 620 },
+    list: { x: 48, w: 620, top: 726, bottom: 1250, colGap: 16, maxRow: 66, face: 0.72, nameScale: 0.52, minNameScale: 0.75 },
+    panel: { x: 684, w: 348, radius: 26, border: 5, headSize: 36 },
+    kit: { y: 712, h: 430, shirt: 130, piece: 96, labelSize: 22 },
+    bring: { y: 1166, h: 300, size: 28, lead: 48, titleSize: 30 },
+    left: { y: 1300, size: 36, rowH: 44, max: 6, headW: 400 },
+    footer: { y: 1488, h: 108, size: 76, minSize: 48, heart: 34 },
+    brand: { y: 1606, logo: 26, size: 20, gap: 10 }
   };
-  const CALLUP_TITLE = 'Convocatoria', CALLUP_VS = 'VS', CALLUP_BRAND = `${APP_NAME} Balonmano`;
+  const CALLUP_TITLE = 'Convocatoria', CALLUP_KEEPER_MARK = ' (P)', CALLUP_BRAND = `${APP_NAME} Balonmano`;
   // An SVG drawn on a canvas loads as an image, which needs the namespace the inline logo leaves out.
   const SVG_NS = 'http://www.w3.org/2000/svg';
   // One phrase per match day, the same every time the image of that day is made.
   const CALLUP_PHRASES = ['¡Vamos {team}!', '¡A por todas!', 'Juntos hasta el final', 'Cada balón cuenta', 'Defensa, corazón y contraataque', 'Hoy se deja todo en la pista'];
   const callupPhrase = (date, teamName) => CALLUP_PHRASES[[...date].reduce((n, c) => n + c.charCodeAt(0), 0) % CALLUP_PHRASES.length].replace('{team}', teamName);
-  // The kit the team plays in: its two colours, white, black or any other colour; the default is the first.
+  const CALLUP_BRING_TITLE = ['Se ruega puntualidad', 'y recordad:'];
+  const CALLUP_BRING = ['Equipación completa', 'Zapatillas de pista', 'Botella de agua'];
+  // The kit, piece by piece: the team's two colours, white, black or any other colour.
   const KIT_WHITE = '#ffffff', KIT_BLACK = '#151515';
-  // [chip label, colour, words on the card].
-  const kitChoices = (t = team) => [['Primera', t.brand, '1ª equipación'], ['Segunda', t.brand2, '2ª equipación'], ['Blanca', KIT_WHITE, 'Equipación blanca'], ['Negra', KIT_BLACK, 'Equipación negra']];
-  const KIT_OTHER = ['Otro color', null, 'Equipación'];
-  const kitOf = (colour, t = team) => kitChoices(t).find(([, c]) => sameName(c, colour)) || KIT_OTHER;
-  const kitName = (colour, t = team) => kitOf(colour, t)[0];
-  // The kickoff as the group reads it: { day: «sábado, 7 nov», time: «12:00» }, the time empty when it is unknown.
-  function callupWhen(date, time) {
-    const day = new Date(`${date}T${time || '12:00'}`);
-    return { day: day.toLocaleDateString('es-ES', { weekday: 'long', day: 'numeric', month: 'short' }), time };
+  const KIT_PIECES = { shirt: 'Camiseta', shorts: 'Pantalón', socks: 'Medias' };
+  const KIT_DEFAULTS = (t = team) => ({ shirt: t.brand, shorts: KIT_BLACK, socks: KIT_BLACK });
+  const kitChoices = (t = team) => [['Primera', t.brand], ['Segunda', t.brand2], ['Blanca', KIT_WHITE], ['Negra', KIT_BLACK]];
+  const kitName = (colour, t = team) => (kitChoices(t).find(([, c]) => sameName(c, colour)) || ['Otro color'])[0];
+  // The meeting time: CONFIG.callup.meetLeadMin before the kickoff unless the coach set another.
+  function meetTime(draft) {
+    if (draft.meet || !draft.time) return draft.meet || '';
+    const [h, m] = draft.time.split(':').map(Number), at = (h * 60 + m - CONFIG.callup.meetLeadMin + 24 * 60) % (24 * 60);
+    return `${pad2(Math.floor(at / 60))}:${pad2(at % 60)}`;
   }
-  // What the card shows: the convocatoria's match (its calendar round, or the rival typed in), the kit and the players, keepers first.
+  // The kickoff as the group reads it: «sábado, 7 nov».
+  const callupDay = (date) => new Date(`${date}T12:00:00`).toLocaleDateString('es-ES', { weekday: 'long', day: 'numeric', month: 'short' });
+  // What the poster shows: the convocatoria's match (its calendar round, or the rival typed in), the kit, the players
+  // called up (keepers first) and the rest of the roster.
   function callupCardData(draft, players, t = team) {
-    const fixture = (home.fixtures || []).find((f) => f.id === draft.fixtureId) || null;
-    const kit = draft.kit || t.brand;
+    const fixture = (home.fixtures || []).find((f) => f.id === draft.fixtureId) || null, called = new Set(players.map((p) => p.id));
+    const face = (p) => ({ num: p.num, pos: p.pos, name: `${p.name}${p.pos === 'POR' ? CALLUP_KEEPER_MARK : ''}`, photo: p.photo || null });
     return {
-      team: t.name, crest: crestSrc(t), brand: t.brand, brand2: t.brand2, brandInk: t.brandInk, logo: `data:image/svg+xml,${encodeURIComponent(appLogoSvg('card-logo-clip').replace('<svg ', `<svg xmlns="${SVG_NS}" `))}`,
-      rival: fixture ? fixtureRivalName(fixture.opponent) : draft.rival, round: fixture ? fixture.round : null,
-      place: fixture ? homeAwayText(fixture.home) : '', when: callupWhen(draft.date, draft.time), venue: (fixture && fixture.venue) || '',
-      kit, kitName: kitName(kit, t), kitText: kitOf(kit, t)[2], phrase: callupPhrase(draft.date, t.name),
-      players: players.slice().sort(benchOrder).map((p) => ({ num: p.num, pos: p.pos, name: p.name, photo: p.photo || null }))
+      team: t.name, club: t.club, crest: crestSrc(t), brand: t.brand, brand2: t.brand2, brandInk: t.brandInk,
+      logo: `data:image/svg+xml,${encodeURIComponent(appLogoSvg('card-logo-clip').replace('<svg ', `<svg xmlns="${SVG_NS}" `))}`,
+      tag: fixture ? [fixture.competition, `Jornada ${fixture.round}`, homeAwayText(fixture.home)].filter(Boolean).join(' · ') : 'Partido',
+      rival: fixture ? fixtureRivalName(fixture.opponent) : draft.rival, day: callupDay(draft.date), venue: (fixture && fixture.venue) || '',
+      meet: meetTime(draft), time: draft.time, kit: { ...KIT_DEFAULTS(t), ...draft.kit }, phrase: callupPhrase(draft.date, t.name),
+      players: players.slice().sort(benchOrder).map(face),
+      left: home.roster.filter((p) => !called.has(p.id)).sort((a, b) => a.num - b.num).map((p) => p.name)
     };
   }
-  // Speed stripes slanting down from the top edge and a halftone corner, in the team's accent.
-  function drawCallupDecor(ctx, accent) {
-    const { stripes: st, dots } = CALLUP_CARD;
+  // Words in white with a black edge, as painted on the poster; shrunk to fit `width`, then cut with an ellipsis.
+  function posterText(ctx, value, x, y, { align = 'left', ink = CARD_PALETTE.ink, size, width, minSize = size, specOf = cardDisplay, stroke = CALLUP_CARD.stroke }) {
+    ctx.textAlign = align;
+    fitFont(ctx, value, width, size, minSize, specOf);
+    const shown = fitText(ctx, value, width);
+    if (stroke) { ctx.lineJoin = 'round'; ctx.lineWidth = stroke; ctx.strokeStyle = CARD_PALETTE.base; ctx.strokeText(shown, x, y); }
+    ctx.fillStyle = ink; ctx.fillText(shown, x, y);
+    return ctx.measureText(shown).width;
+  }
+  // A black brush bar behind words: the brush texture laid twice (multiplied, so its paper disappears), or a flat bar.
+  function brushBar(ctx, brush, x, y, w, h) {
     ctx.save();
-    ctx.fillStyle = accent;
-    st.alpha.slice(0, st.count).forEach((alpha, i) => {
-      const x = st.x + i * (st.w + st.gap);
-      ctx.globalAlpha = alpha;
-      ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x + st.w, 0); ctx.lineTo(x + st.w - st.slant, st.h); ctx.lineTo(x - st.slant, st.h); ctx.closePath(); ctx.fill();
-    });
-    ctx.globalAlpha = dots.alpha;
-    for (let row = 0; row < dots.rows; row++) {
-      for (let col = 0; col < dots.cols; col++) {
-        // The dots shrink away from the corner.
-        const fade = 1 - (row + (dots.cols - 1 - col)) / (dots.rows + dots.cols);
-        ctx.beginPath(); ctx.arc(dots.x + col * dots.step, dots.y + row * dots.step, dots.r * fade, 0, 2 * Math.PI); ctx.fill();
-      }
+    if (brush) {
+      ctx.globalCompositeOperation = 'multiply';
+      ctx.drawImage(brush, x, y, w, h); ctx.drawImage(brush, x, y, w, h);
+    } else {
+      ctx.fillStyle = CARD_PALETTE.base; ctx.beginPath(); ctx.roundRect(x, y, w, h, h / 4); ctx.fill();
     }
     ctx.restore();
   }
-  // The court behind the faces: the 6 m area and the dashed 9 m line, faint, rising from the bottom edge.
-  function drawCallupCourt(ctx) {
-    const { w } = CALLUP_CARD, c = CALLUP_CARD.court;
-    ctx.save();
-    ctx.globalAlpha = c.alpha; ctx.strokeStyle = CARD_PALETTE.ink; ctx.lineWidth = c.width;
-    ctx.beginPath(); ctx.arc(w / 2, c.cy, c.area, Math.PI, 2 * Math.PI); ctx.stroke();
-    ctx.setLineDash(c.dash); ctx.beginPath(); ctx.arc(w / 2, c.cy, c.nine, Math.PI, 2 * Math.PI); ctx.stroke();
-    ctx.restore();
-  }
-  // Small line icons for the chips, `s` px square at (x, y).
+  // Line icons in the accent, `s` px square at (x, y).
   const CALLUP_ICONS = {
-    day(ctx, x, y, s) { ctx.strokeRect(x, y + s * 0.15, s, s * 0.85); ctx.beginPath(); ctx.moveTo(x, y + s * 0.4); ctx.lineTo(x + s, y + s * 0.4); ctx.stroke(); },
+    info(ctx, x, y, s) { const r = s / 2; ctx.beginPath(); ctx.arc(x + r, y + r, r, 0, 2 * Math.PI); ctx.fill(); ctx.fillStyle = CARD_PALETTE.base; ctx.fillRect(x + r - s * 0.07, y + s * 0.42, s * 0.14, s * 0.36); ctx.beginPath(); ctx.arc(x + r, y + s * 0.27, s * 0.08, 0, 2 * Math.PI); ctx.fill(); },
+    rival(ctx, x, y, s) { const r = s / 2; ctx.beginPath(); ctx.arc(x + r, y + r, r, 0, 2 * Math.PI); ctx.stroke(); ctx.beginPath(); ctx.arc(x, y + r, r, -Math.PI / 2, Math.PI / 2); ctx.stroke(); ctx.beginPath(); ctx.arc(x + s, y + r, r, Math.PI / 2, 3 * Math.PI / 2); ctx.stroke(); },
+    day(ctx, x, y, s) { ctx.strokeRect(x, y + s * 0.15, s, s * 0.85); ctx.beginPath(); ctx.moveTo(x, y + s * 0.4); ctx.lineTo(x + s, y + s * 0.4); ctx.moveTo(x + s * 0.3, y); ctx.lineTo(x + s * 0.3, y + s * 0.25); ctx.moveTo(x + s * 0.7, y); ctx.lineTo(x + s * 0.7, y + s * 0.25); ctx.stroke(); },
     time(ctx, x, y, s) { const r = s / 2; ctx.beginPath(); ctx.arc(x + r, y + r, r, 0, 2 * Math.PI); ctx.moveTo(x + r, y + r * 0.45); ctx.lineTo(x + r, y + r); ctx.lineTo(x + r * 1.5, y + r * 1.25); ctx.stroke(); },
     venue(ctx, x, y, s) { const r = s * 0.32; ctx.beginPath(); ctx.arc(x + s / 2, y + r, r, Math.PI, 0); ctx.lineTo(x + s / 2, y + s); ctx.closePath(); ctx.stroke(); },
-    kit(ctx, x, y, s, fill) {
-      ctx.beginPath();
-      ctx.moveTo(x + s * 0.32, y); ctx.lineTo(x, y + s * 0.22); ctx.lineTo(x + s * 0.12, y + s * 0.45); ctx.lineTo(x + s * 0.24, y + s * 0.38); ctx.lineTo(x + s * 0.24, y + s);
-      ctx.lineTo(x + s * 0.76, y + s); ctx.lineTo(x + s * 0.76, y + s * 0.38); ctx.lineTo(x + s * 0.88, y + s * 0.45); ctx.lineTo(x + s, y + s * 0.22); ctx.lineTo(x + s * 0.68, y);
-      ctx.quadraticCurveTo(x + s / 2, y + s * 0.18, x + s * 0.32, y); ctx.closePath();
-      ctx.fillStyle = fill; ctx.fill(); ctx.stroke();
-    }
+    megaphone(ctx, x, y, s) { ctx.beginPath(); ctx.moveTo(x, y + s * 0.35); ctx.lineTo(x + s * 0.3, y + s * 0.35); ctx.lineTo(x + s * 0.9, y + s * 0.05); ctx.lineTo(x + s * 0.9, y + s * 0.95); ctx.lineTo(x + s * 0.3, y + s * 0.65); ctx.lineTo(x, y + s * 0.65); ctx.closePath(); ctx.stroke(); ctx.beginPath(); ctx.moveTo(x + s * 0.2, y + s * 0.65); ctx.lineTo(x + s * 0.32, y + s); ctx.stroke(); },
+    ban(ctx, x, y, s) { const r = s / 2; ctx.beginPath(); ctx.arc(x + r, y + r, r, 0, 2 * Math.PI); ctx.moveTo(x + r * 0.3, y + r * 0.3); ctx.lineTo(x + r * 1.7, y + r * 1.7); ctx.stroke(); },
+    check(ctx, x, y, s) { ctx.beginPath(); ctx.moveTo(x, y + s * 0.55); ctx.lineTo(x + s * 0.38, y + s * 0.9); ctx.lineTo(x + s, y + s * 0.1); ctx.stroke(); },
+    heart(ctx, x, y, s) { ctx.beginPath(); ctx.moveTo(x + s / 2, y + s * 0.9); ctx.bezierCurveTo(x - s * 0.3, y + s * 0.35, x + s * 0.2, y - s * 0.2, x + s / 2, y + s * 0.25); ctx.bezierCurveTo(x + s * 0.8, y - s * 0.2, x + s * 1.3, y + s * 0.35, x + s / 2, y + s * 0.9); ctx.fill(); }
   };
-  // The match: the round and home or away, us against them either side of a «VS» disc, and chips for when, where and the kit.
-  function drawCallupMatch(ctx, text, data, accent) {
-    const C = CALLUP_CARD, m = C.match, P = CARD_PALETTE, { semi } = CARD_WEIGHTS, w = C.w - 2 * C.pad, cx = C.w / 2;
-    ctx.beginPath(); ctx.roundRect(C.pad, m.y, w, m.h, m.radius); ctx.fillStyle = P.tile; ctx.fill();
-    const label = [data.round ? `Jornada ${data.round}` : '', data.place].filter(Boolean).join(' · ');
-    if (label) text(label.toUpperCase(), cx, m.y + m.labelY, 'center', accent, cardBody(semi), m.labelSize, w);
-    const side = w / 2 - m.vsR - C.pad / 2, vy = m.y + m.nameY - m.nameSize * 0.36;
-    text(data.team.toUpperCase(), cx - m.vsR - C.pad / 4, m.y + m.nameY, 'right', P.ink, cardDisplay, m.nameSize, side, m.nameMinSize);
-    text((data.rival || '–').toUpperCase(), cx + m.vsR + C.pad / 4, m.y + m.nameY, 'left', P.ink, cardDisplay, m.nameSize, side, m.nameMinSize);
-    ctx.beginPath(); ctx.arc(cx, vy, m.vsR, 0, 2 * Math.PI); ctx.fillStyle = accent; ctx.fill();
-    text(CALLUP_VS, cx, vy + m.vsSize * 0.36, 'center', P.base, cardDisplay, m.vsSize);
-    // Two rows of chips: when (day and time), then where and the kit.
-    const rows = [[['day', data.when.day], ...(data.when.time ? [['time', data.when.time]] : [])], [...(data.venue ? [['venue', data.venue]] : []), ['kit', data.kitText]]];
-    rows.forEach((chips, r) => {
-      const y = m.y + m.chipsY + r * (m.chipH + m.chipGap), inner = w - 2 * m.chipGap, chipW = (inner - (chips.length - 1) * m.chipGap) / chips.length;
-      chips.forEach(([icon, value], i) => {
-        const x = C.pad + m.chipGap + i * (chipW + m.chipGap), iy = y + (m.chipH - m.icon) / 2;
-        ctx.beginPath(); ctx.roundRect(x, y, chipW, m.chipH, m.chipRadius); ctx.fillStyle = P.tile; ctx.fill();
-        ctx.save(); ctx.strokeStyle = accent; ctx.lineWidth = 3; ctx.lineJoin = 'round';
-        CALLUP_ICONS[icon](ctx, x + m.chipGap, iy, m.icon, data.kit);
-        ctx.restore();
-        const tx = x + m.chipGap * 2 + m.icon;
-        text(value, tx, y + m.chipH / 2 + m.chipTextSize * 0.36, 'left', P.ink, cardBody(semi), m.chipTextSize, chipW - (tx - x) - m.chipGap, m.chipMinSize);
-      });
-    });
-  }
-  // The players: faces in rows of `cols`, each ringed in the kit colour with the dorsal on a badge and the name below.
-  function drawCallupFaces(ctx, text, data, faces, accent) {
-    const C = CALLUP_CARD, f = C.faces, P = CARD_PALETTE, { semi } = CARD_WEIGHTS, rows = Math.max(1, Math.ceil(data.players.length / f.cols));
-    const cellW = (C.w - 2 * C.pad) / f.cols, cellH = (f.bottom - f.top) / rows;
-    const r = Math.min(f.maxR, (cellH - f.nameSize - f.nameGap * 2) / 2, cellW / 2 - f.ring * 2);
-    data.players.forEach((p, i) => {
-      const row = Math.floor(i / f.cols), inRow = Math.min(f.cols, data.players.length - row * f.cols);
-      // A short last row is centred.
-      const cx = C.pad + (C.w - 2 * C.pad - inRow * cellW) / 2 + (i % f.cols + 0.5) * cellW, cy = f.top + row * cellH + f.nameGap + r;
-      ctx.beginPath(); ctx.arc(cx, cy, r + f.ring, 0, 2 * Math.PI); ctx.fillStyle = data.kit; ctx.fill();
-      ctx.lineWidth = 2; ctx.strokeStyle = P.inkSoft; ctx.stroke();
-      drawFace(ctx, text, p, faces[i], cx, cy, r);
-      const bx = cx + r * 0.72, by = cy + r * 0.72;
-      ctx.beginPath(); ctx.arc(bx, by, f.numR, 0, 2 * Math.PI); ctx.fillStyle = accent; ctx.fill();
-      text(String(p.num), bx, by + f.numSize * 0.36, 'center', P.base, cardDisplay, f.numSize, f.numR * 2);
-      text(p.name.toUpperCase(), cx, cy + r + f.ring + f.nameGap + f.nameSize * 0.8, 'center', P.ink, cardDisplay, f.nameSize, cellW - f.nameGap, f.nameMinSize);
-    });
-  }
-  // Draws the convocatoria on `canvas`; `images` are the loaded { crest, logo, faces } (null when missing or broken).
-  function drawCallupCard(canvas, data, images = { crest: null, logo: null, faces: [] }) {
-    const C = CALLUP_CARD, P = CARD_PALETTE, { semi } = CARD_WEIGHTS, ctx = canvas.getContext('2d');
-    const text = cardWriter(ctx, C.w - 2 * C.pad), accent = cardAccent(data, C.minAccentContrast), { crest } = C;
-    canvas.width = C.w; canvas.height = C.h;
-    paintCardBackground(ctx, C.w, C.h, data.brand, C.h * C.fadeEnd);
-    drawCallupDecor(ctx, accent);
-    drawCallupCourt(ctx);
-    const headX = images.crest ? crest.x + crest.size + C.pad / 2 : C.pad, headW = C.w - C.pad - headX;
-    if (images.crest) {
-      const cx = crest.x + crest.size / 2, cy = crest.y + crest.size / 2, r = crest.size / 2;
-      ctx.save();
-      ctx.shadowColor = accent; ctx.shadowBlur = crest.glow;
-      ctx.beginPath(); ctx.arc(cx, cy, r + crest.ring / 2, 0, 2 * Math.PI); ctx.strokeStyle = accent; ctx.lineWidth = crest.ring; ctx.stroke();
-      ctx.restore();
-      inCircle(ctx, cx, cy, r, () => ctx.drawImage(images.crest, crest.x, crest.y, crest.size, crest.size));
-    }
-    text(CALLUP_TITLE.toUpperCase(), headX, C.titleY, 'left', accent, cardDisplay, C.titleSize, headW, C.titleMinSize);
-    text(data.team.toUpperCase(), headX, C.teamY, 'left', data.brandInk, cardDisplay, C.teamSize, headW);
-    drawCallupMatch(ctx, text, data, accent);
-    drawCallupFaces(ctx, text, data, images.faces || [], accent);
-    // The phrase between two short rules, and the app's mark at the foot.
-    const rule = C.phraseRule, phrase = data.phrase.toUpperCase();
-    text(phrase, C.w / 2, C.phraseY, 'center', accent, cardDisplay, C.phraseSize, C.w - 2 * (C.pad + rule.w + rule.gap), C.phraseMinSize);
-    const half = Math.min(ctx.measureText(phrase).width / 2, C.w / 2 - C.pad - rule.w - rule.gap);
-    ctx.fillStyle = accent;
-    [-1, 1].forEach((dir) => ctx.fillRect(C.w / 2 + dir * (half + rule.gap) - (dir < 0 ? rule.w : 0), C.phraseY - C.phraseSize * 0.36 - rule.h / 2, rule.w, rule.h));
-    const b = C.brand;
-    ctx.save(); ctx.globalAlpha = b.alpha;
-    ctx.font = cardBody(semi)(b.size);
-    const brandW = b.logo + b.gap + ctx.measureText(CALLUP_BRAND.toUpperCase()).width, bx = (C.w - brandW) / 2;
-    if (images.logo) ctx.drawImage(images.logo, bx, b.y - b.logo * 0.78, b.logo, b.logo);
-    text(CALLUP_BRAND.toUpperCase(), bx + b.logo + b.gap, b.y, 'left', P.ink, cardBody(semi), b.size);
+  function posterIcon(ctx, name, x, y, s, accent) {
+    ctx.save(); ctx.strokeStyle = accent; ctx.fillStyle = accent; ctx.lineWidth = Math.max(3, s / 10); ctx.lineJoin = 'round'; ctx.lineCap = 'round';
+    CALLUP_ICONS[name](ctx, x, y, s);
     ctx.restore();
   }
+  // The garments in their colours, outlined in black as stickers: a shirt, shorts and a pair of socks.
+  const GARMENTS = {
+    shirt: [[0.32, 0], [0, 0.18], [0.1, 0.42], [0.22, 0.36], [0.22, 1], [0.78, 1], [0.78, 0.36], [0.9, 0.42], [1, 0.18], [0.68, 0], [0.5, 0.12]],
+    shorts: [[0.05, 0], [0.95, 0], [1, 0.8], [0.58, 0.85], [0.5, 0.35], [0.42, 0.85], [0, 0.8]],
+    socks: [[0.05, 0], [0.42, 0], [0.42, 0.7], [0.5, 0.9], [0.4, 1], [0, 1], [0, 0.78], [0.05, 0.7]]
+  };
+  function drawGarment(ctx, piece, x, y, s, colour) {
+    const shape = (dx) => { ctx.beginPath(); GARMENTS[piece].forEach(([px, py], i) => ctx[i ? 'lineTo' : 'moveTo'](x + dx + px * s, y + py * s)); ctx.closePath(); };
+    const draw = (dx) => {
+      shape(dx); ctx.lineJoin = 'round';
+      ctx.lineWidth = 12; ctx.strokeStyle = CARD_PALETTE.ink; ctx.stroke();
+      ctx.lineWidth = 5; ctx.strokeStyle = CARD_PALETTE.base; ctx.stroke();
+      ctx.fillStyle = colour; ctx.fill();
+    };
+    draw(0);
+    if (piece === 'socks') draw(s * 0.52);
+  }
+  // A panel outlined in black on the poster, with its title in the accent after an icon.
+  // `title` is one line or several.
+  function posterPanel(ctx, x, y, w, h, title, icon, accent, size = CALLUP_CARD.panel.headSize) {
+    const P = CALLUP_CARD.panel;
+    ctx.beginPath(); ctx.roundRect(x, y, w, h, P.radius); ctx.lineWidth = P.border; ctx.strokeStyle = CARD_PALETTE.base; ctx.stroke();
+    ctx.fillStyle = 'rgba(0, 0, 0, .18)'; ctx.fill();
+    posterIcon(ctx, icon, x + 20, y + 22, P.headSize, accent);
+    [].concat(title).forEach((line, i) => posterText(ctx, line, x + 30 + P.headSize, y + 22 + size * 0.86 + i * size * 1.15, { ink: accent, size, width: w - 50 - P.headSize, minSize: 20, specOf: cardBody(CARD_WEIGHTS.semi), stroke: 6 }));
+  }
+  // Draws the convocatoria on `canvas`; `images` holds what loaded (null when missing): crest, logo, paper, brush, ball, faces.
+  function drawCallupCard(canvas, data, images = {}) {
+    const C = CALLUP_CARD, P = CARD_PALETTE, ctx = canvas.getContext('2d'), accent = cardAccent(data, C.minAccentContrast);
+    const { semi } = CARD_WEIGHTS, faces = images.faces || [];
+    canvas.width = C.w; canvas.height = C.h;
+    ctx.fillStyle = data.brand; ctx.fillRect(0, 0, C.w, C.h);
+    if (images.paper) { ctx.save(); ctx.globalCompositeOperation = 'multiply'; ctx.drawImage(images.paper, 0, 0, C.w, C.h); ctx.restore(); }
+    // The team, painted big and a little tilted, the club under it; the crest and the ball on the right.
+    const T = C.title;
+    ctx.save(); ctx.translate(T.x, T.y); ctx.rotate(C.tilt);
+    posterText(ctx, data.team.toUpperCase(), 0, 0, { size: T.size, width: T.w, minSize: T.minSize, stroke: C.stroke * 1.6 });
+    posterText(ctx, data.club.toUpperCase(), 0, T.subY - T.y, { ink: accent, size: T.subSize, width: T.w, minSize: 32 });
+    ctx.restore();
+    const K = C.crest;
+    ctx.beginPath(); ctx.arc(K.cx, K.cy, K.r + K.ring, 0, 2 * Math.PI); ctx.fillStyle = P.ink; ctx.fill(); ctx.lineWidth = 6; ctx.strokeStyle = P.base; ctx.stroke();
+    if (images.crest) inCircle(ctx, K.cx, K.cy, K.r, () => ctx.drawImage(images.crest, K.cx - K.r, K.cy - K.r, 2 * K.r, 2 * K.r));
+    if (images.ball) ctx.drawImage(images.ball, C.ball.x, C.ball.y, C.ball.size, C.ball.size);
+    // The competition and round on a brush tag.
+    const G = C.tag;
+    brushBar(ctx, images.brush, C.pad - 16, G.y, G.w, G.h);
+    posterIcon(ctx, 'info', C.pad + 8, G.y + (G.h - G.icon) / 2, G.icon, accent);
+    posterText(ctx, data.tag, C.pad + G.icon + 26, G.y + G.h / 2 + G.size * 0.36, { size: G.size, width: G.w - G.icon - 60, minSize: 28, stroke: 0 });
+    // The match bar: rival, day, hall, meeting and kickoff, split by thin accent rules.
+    const I = C.info, cells = [['rival', 'Rival', data.rival || '–'], ['day', 'Día', data.day], ...(data.venue ? [['venue', 'Pabellón', data.venue]] : []),
+      ['time', data.meet ? `Citación ${data.meet}` : 'Hora', data.time ? `Partido ${data.time}` : 'por confirmar']];
+    brushBar(ctx, images.brush, 8, I.y, C.w - 16, I.h);
+    const cellW = (C.w - 2 * C.pad) / cells.length;
+    cells.forEach(([icon, label, value], i) => {
+      const x = C.pad + i * cellW, textX = x + I.icon + 16, textW = cellW - I.icon - 28;
+      if (i) { ctx.fillStyle = accent; ctx.fillRect(x - 6, I.y + 28, 4, I.h - 56); }
+      posterIcon(ctx, icon, x + 6, I.y + (I.h - I.icon) / 2, I.icon, accent);
+      posterText(ctx, label, textX, I.y + I.h / 2 - 8, { ink: accent, size: I.labelSize, width: textW, minSize: 18, specOf: cardBody(semi), stroke: 0 });
+      posterText(ctx, value, textX, I.y + I.h / 2 + I.valueSize, { size: I.valueSize, width: textW, minSize: I.minSize, stroke: 0 });
+    });
+    // «CONVOCATORIA» and the players called up, two columns, each a face and the name on a brush stroke.
+    const H = C.heading, L = C.list;
+    brushBar(ctx, images.brush, C.pad - 20, H.y - H.brushH * 0.78, H.w + 40, H.brushH);
+    posterIcon(ctx, 'megaphone', C.pad, H.y - H.icon * 0.85, H.icon, accent);
+    posterText(ctx, CALLUP_TITLE.toUpperCase(), C.pad + H.icon + 20, H.y, { size: H.size, width: H.w - H.icon - 20, minSize: 56 });
+    const perColumn = Math.max(1, Math.ceil(data.players.length / 2)), rowH = Math.min(L.maxRow, (L.bottom - L.top) / perColumn);
+    const colW = (L.w - L.colGap) / 2, r = rowH * L.face / 2, size = rowH * L.nameScale;
+    data.players.forEach((p, i) => {
+      const x = L.x + Math.floor(i / perColumn) * (colW + L.colGap), y = L.top + (i % perColumn) * rowH, cy = y + rowH / 2;
+      brushBar(ctx, images.brush, x + r, y + rowH * 0.12, colW - r, rowH * 0.8);
+      ctx.beginPath(); ctx.arc(x + r, cy, r + 3, 0, 2 * Math.PI); ctx.fillStyle = data.kit.shirt; ctx.fill(); ctx.lineWidth = 3; ctx.strokeStyle = P.base; ctx.stroke();
+      drawFace(ctx, cardWriter(ctx, colW), p, faces[i], x + r, cy, r);
+      const label = `${p.num} ${p.name.toUpperCase()}`;
+      posterText(ctx, label, x + 2 * r + 12, cy + size * 0.36, { size, width: colW - 2 * r - 20, minSize: size * L.minNameScale, stroke: 0 });
+    });
+    // The kit, piece by piece, in its colours.
+    const N = C.panel, KT = C.kit;
+    posterPanel(ctx, N.x, KT.y, N.w, KT.h, 'Equipación:', 'megaphone', accent);
+    drawGarment(ctx, 'shirt', N.x + (N.w - KT.shirt) / 2, KT.y + 80, KT.shirt, data.kit.shirt);
+    posterText(ctx, KIT_PIECES.shirt.toUpperCase(), N.x + N.w / 2, KT.y + 80 + KT.shirt + 34, { align: 'center', size: KT.labelSize, width: N.w - 20, stroke: 6 });
+    [['shorts', N.x + 36], ['socks', N.x + N.w - 36 - KT.piece]].forEach(([piece, x]) => {
+      const y = KT.y + KT.h - KT.piece - 46;
+      drawGarment(ctx, piece, x, y, KT.piece * (piece === 'socks' ? 0.9 : 1), data.kit[piece]);
+      posterText(ctx, KIT_PIECES[piece].toUpperCase(), x + KT.piece / 2, y + KT.piece + 32, { align: 'center', size: KT.labelSize, width: N.w / 2 - 12, minSize: 16, stroke: 6 });
+    });
+    // What to bring.
+    const B = C.bring;
+    posterPanel(ctx, N.x, B.y, N.w, B.h, CALLUP_BRING_TITLE, 'megaphone', accent, B.titleSize);
+    CALLUP_BRING.forEach((item, i) => {
+      const y = B.y + 140 + i * B.lead;
+      posterIcon(ctx, 'check', N.x + 24, y - B.size * 0.7, B.size * 0.8, accent);
+      posterText(ctx, item, N.x + 30 + B.size, y, { size: B.size, width: N.w - 44 - B.size, minSize: 20, specOf: cardBody(semi), stroke: 6 });
+    });
+    // Who is left out, in two short columns.
+    if (data.left.length) {
+      const F = C.left, shown = data.left.slice(0, F.max * 2), more = data.left.length - shown.length, half = Math.ceil(shown.length / 2);
+      brushBar(ctx, images.brush, C.pad - 20, F.y - 52, F.headW, 70);
+      posterIcon(ctx, 'ban', C.pad, F.y - 42, 40, accent);
+      posterText(ctx, 'Sin convocar:', C.pad + 54, F.y - 6, { size: F.size + 6, width: F.headW - 80, minSize: 26, stroke: 0 });
+      shown.forEach((name, i) => posterText(ctx, name.toUpperCase(), C.pad + 24 + Math.floor(i / half) * (L.w / 2), F.y + 46 + (i % half) * F.rowH, { size: F.size, width: L.w / 2 - 30, minSize: 22, stroke: 6 }));
+      if (more) posterText(ctx, `y ${more} más`, C.pad + 24, F.y + 46 + half * F.rowH, { ink: accent, size: F.size * 0.8, width: L.w, stroke: 6 });
+    }
+    // The phrase on a brush bar between hearts, and the app's mark at the foot.
+    const R = C.footer;
+    brushBar(ctx, images.brush, 0, R.y, C.w, R.h);
+    const phraseW = posterText(ctx, data.phrase, C.w / 2, R.y + R.h / 2 + R.size * 0.34, { align: 'center', ink: accent, size: R.size, width: C.w - 2 * (C.pad + R.heart * 2), minSize: R.minSize, stroke: 0 });
+    [-1, 1].forEach((dir) => posterIcon(ctx, 'heart', C.w / 2 + dir * (phraseW / 2 + R.heart) - R.heart / 2, R.y + (R.h - R.heart) / 2, R.heart, accent));
+    const M = C.brand;
+    ctx.font = cardBody(semi)(M.size);
+    const markW = M.logo + M.gap + ctx.measureText(CALLUP_BRAND.toUpperCase()).width, mx = C.w - C.pad - markW;
+    if (images.logo) ctx.drawImage(images.logo, mx, M.y - M.logo * 0.8, M.logo, M.logo);
+    posterText(ctx, CALLUP_BRAND.toUpperCase(), mx + M.logo + M.gap, M.y, { size: M.size, width: markW, specOf: cardBody(semi), stroke: 4 });
+  }
   async function callupCardBlob(data) {
-    const { heavy, semi } = CARD_WEIGHTS;
-    await loadCardFonts([cardFont(heavy, CALLUP_CARD.titleSize, 'display'), cardFont(semi, CALLUP_CARD.match.labelSize, 'body')]);
-    const [crest, logo, ...faces] = await loadCardImages([data.crest, data.logo, ...data.players.map((p) => p.photo)]);
+    const { heavy, semi } = CARD_WEIGHTS, X = CALLUP_CARD.textures;
+    await loadCardFonts([cardFont(heavy, CALLUP_CARD.title.size, 'display'), cardFont(semi, CALLUP_CARD.info.labelSize, 'body')]);
+    const [crest, logo, paper, brush, ball, ...faces] = await loadCardImages([data.crest, data.logo, X.paper, X.brush, X.ball, ...data.players.map((p) => p.photo)]);
     const canvas = document.createElement('canvas');
-    drawCallupCard(canvas, data, { crest, logo, faces });
+    drawCallupCard(canvas, data, { crest, logo, paper, brush, ball, faces });
     return canvasPng(canvas, 'The convocatoria card');
   }
 
@@ -8233,18 +8277,18 @@ table { border-collapse: collapse; width: 100%; }
   }
   function fixtureCallupFields(fixture) {
     return fixture
-      ? { fixtureId: fixture.id, rival: fixtureRivalName(fixture.opponent), date: fixtureIso(fixture), time: fixture.kickoff ? timeText(new Date(fixture.kickoff)) : '' }
-      : { fixtureId: null, rival: '', date: todayIso(), time: '' };
+      ? { fixtureId: fixture.id, rival: fixtureRivalName(fixture.opponent), date: fixtureIso(fixture), time: fixture.kickoff ? timeText(new Date(fixture.kickoff)) : '', meet: '' }
+      : { fixtureId: null, rival: '', date: todayIso(), time: '', meet: '' };
   }
   // The convocatoria saved for that match comes back as it was; another match starts from the last squad.
   function callupDraftFor(fixture) {
     const saved = readJson(CALLUP_KEY_PREFIX + team.id);
-    if (saved && fixture && saved.fixtureId === fixture.id) return { ...saved, ids: new Set(saved.ids) };
-    return { ...fixtureCallupFields(fixture), kit: team.brand, ids: lastSquadIds() };
+    if (saved && fixture && saved.fixtureId === fixture.id) return { meet: '', ...saved, kit: { ...KIT_DEFAULTS(), ...(typeof saved.kit === 'object' ? saved.kit : {}) }, ids: new Set(saved.ids) };
+    return { ...fixtureCallupFields(fixture), kit: KIT_DEFAULTS(), ids: lastSquadIds() };
   }
   const callupDraft = () => (home.callupDraft ??= callupDraftFor(openFixtures()[0] || null));
   const calledPlayers = (draft) => home.roster.filter((p) => draft.ids.has(p.id));
-  const callupKey = (draft, players) => JSON.stringify([draft.fixtureId, draft.rival, draft.date, draft.time, draft.kit, players.map((p) => p.id)]);
+  const callupKey = (draft, players) => JSON.stringify([draft.fixtureId, draft.rival, draft.date, draft.time, draft.meet, draft.kit, players.map((p) => p.id)]);
   function callupFaceHtml(p, called) {
     const { code, label } = CALLUP_STATES[called];
     return `<div class="att-cell"><button class="face press" type="button" data-callup-pick="${esc(p.id)}" aria-pressed="${called}" style="--pos:${posOf(p).color}" aria-label="#${p.num} ${esc(p.name)}: ${label}">${discHtml(p)}<span>${esc(p.name)}</span>
@@ -8262,7 +8306,8 @@ table { border-collapse: collapse; width: 100%; }
     return `<section class="sheet-card squad att callup">${attendanceHeadHtml(ATTENDANCE_MODES.CALLUP)}
       <div class="att-bar"><label class="field">Partido<select class="in" id="callup-fixture">${options}</select></label>${rival}
         <label class="field">Fecha<input class="in" type="date" id="callup-date" value="${esc(draft.date)}"></label>
-        <label class="field">Hora<input class="in" type="time" id="callup-time" value="${esc(draft.time)}"></label></div>
+        <label class="field">Hora<input class="in" type="time" id="callup-time" value="${esc(draft.time)}"></label>
+        <label class="field">Citación<input class="in" type="time" id="callup-meet" value="${esc(meetTime(draft))}"></label></div>
       ${callupKitHtml(draft)}
       <div class="att-bar"><div class="att-stats">${attendanceStatHtml(called.code, players.length, [`convocado de ${MAX_ROSTER}`, `convocados de ${MAX_ROSTER}`])}${attendanceStatHtml(left.code, home.roster.length - players.length, ['no convocado', 'no convocados'])}</div></div>
       ${attendanceHowHtml('Toca a cada jugador para convocarlo o quitarlo:', [[left.code, left.label], [called.code, called.label]], '⇄')}
@@ -8271,12 +8316,15 @@ table { border-collapse: collapse; width: 100%; }
       <div class="row-actions"><button class="btn primary press" type="button" data-callup-save${!players.length || over || saved ? ' disabled' : ''}>${saved ? 'Convocatoria guardada' : 'Guardar convocatoria'}</button></div>
       ${home.callupBusy ? '<p class="note">Generando la imagen…</p>' : ''}${image}</section>`;
   }
-  // The kit for the image: the team's two colours, white, black, or any colour from the picker.
+  // The kit for the image, piece by piece: the team's two colours, white, black, or any colour from the picker.
   function callupKitHtml(draft) {
-    const kit = draft.kit || team.brand, known = kitChoices().some(([, c]) => sameName(c, kit));
-    const chips = kitChoices().map(([label, colour]) => `<button class="chip press kit-chip" type="button" data-callup-kit="${esc(colour)}" aria-pressed="${sameName(colour, kit)}"><span class="kit-swatch" style="background:${esc(colour)}"></span>${label}</button>`).join('');
-    return `<div class="callup-kit"><span class="field-label">Equipación</span><div class="chips" role="group" aria-label="Color de la equipación">${chips}
-      <label class="chip kit-chip kit-other${known ? '' : ' active'}"><input type="color" id="callup-kit" value="${esc(HEX_COLOUR.test(kit) ? kit : team.brand)}" aria-label="Otro color de equipación">Otro color</label></div></div>`;
+    const rows = Object.entries(KIT_PIECES).map(([piece, name]) => {
+      const colour = draft.kit[piece], known = kitChoices().some(([, c]) => sameName(c, colour));
+      const chips = kitChoices().map(([label, c]) => `<button class="chip press kit-chip" type="button" data-callup-kit="${piece}" data-colour="${esc(c)}" aria-pressed="${sameName(c, colour)}"><span class="kit-swatch" style="background:${esc(c)}"></span>${label}</button>`).join('');
+      return `<div class="kit-row"><span class="field-label">${name}</span><div class="chips" role="group" aria-label="Color: ${name}">${chips}
+        <label class="chip kit-chip kit-other${known ? '' : ' active'}"><input type="color" data-kit-piece="${piece}" value="${esc(colour)}" aria-label="Otro color: ${name}">Otro</label></div></div>`;
+    }).join('');
+    return `<div class="callup-kit">${rows}</div>`;
   }
   function toggleCallupPick(playerId) {
     const draft = callupDraft();
@@ -8289,8 +8337,12 @@ table { border-collapse: collapse; width: 100%; }
     renderHome();
   }
   function editCallup(field, value) {
-    if (field === 'kit' && !HEX_COLOUR.test(value)) return;
     callupDraft()[field] = field === 'rival' ? value.trim().slice(0, MAX_NAME_LENGTH) : value;
+    renderHome();
+  }
+  function editCallupKit(piece, colour) {
+    if (!KIT_PIECES[piece] || !HEX_COLOUR.test(colour)) return;
+    callupDraft().kit[piece] = colour;
     renderHome();
   }
   async function saveCallup() {
@@ -9076,7 +9128,7 @@ table { border-collapse: collapse; width: 100%; }
     if (b.hasAttribute('data-callup-share')) { shareCallup(); return; }
     if (b.hasAttribute('data-callup-save')) { saveCallup(); return; }
     if (b.dataset.attMode) { switchAttendanceMode(b.dataset.attMode); return; }
-    if (b.dataset.callupKit) { editCallup('kit', b.dataset.callupKit); return; }
+    if (b.dataset.callupKit) { editCallupKit(b.dataset.callupKit, b.dataset.colour); return; }
     if (b.dataset.attNote) { home.attendanceNoteFor = b.dataset.attNote; renderHome(); document.querySelector(`[data-att-note-input="${b.dataset.attNote}"]`).focus(); return; }
     if (b.hasAttribute('data-att-note-save')) { home.attendanceNoteFor = null; renderHome(); return; }
     if (b.dataset.homeView === 'attendance') { showAttendance(); return; }
@@ -9138,7 +9190,8 @@ table { border-collapse: collapse; width: 100%; }
     if (el.dataset.knob) { homeStatus(Number.isFinite(parseKnobText(el.value)) || el.type === 'range' ? '' : KNOB_NUMBER_HINT); setKnobControl(el, home.weightsDraft[el.dataset.knob]); return; }
     if (el.id === 'att-date') { openAttendanceDay(el.value); return; }
     if (el.id === 'callup-fixture') { chooseCallupFixture(el.value); return; }
-    if (['callup-date', 'callup-time', 'callup-rival', 'callup-kit'].includes(el.id)) { editCallup(el.id.slice('callup-'.length), el.value); return; }
+    if (['callup-date', 'callup-time', 'callup-rival', 'callup-meet'].includes(el.id)) { editCallup(el.id.slice('callup-'.length), el.value); return; }
+    if (el.dataset.kitPiece) { editCallupKit(el.dataset.kitPiece, el.value); return; }
     if (el.dataset.tplNum) { editDraftRival(draftRival(el.dataset.tplNum), { num: Number(el.value) }); return; }
     if (el.dataset.tplName) { editDraftRival(draftRival(el.dataset.tplName), { name: el.value.trim().slice(0, MAX_NAME_LENGTH) }); return; }
     if (el.dataset.teamNum) { saveTeamPlayer(rosterPlayer(el.dataset.teamNum), { num: Number(el.value) }); return; }

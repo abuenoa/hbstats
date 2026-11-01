@@ -9,6 +9,7 @@ docs/ gets:
   sw.js                 the service worker, stamped with a content hash and the Supabase library URL
   icons/                copied from assets/icons/ (run tools/make_icons.py first)
   sounds/               copied from assets/sounds/ (the splash sound)
+  cards/                copied from assets/cards/ (textures of the shared images)
   demo/index.html       the public demo: the same app on the sample match in progress, no sign-in, nothing saved
 
 src/app.html stays the single source of the app (it is also publishable alone, which is why it has no
@@ -28,14 +29,14 @@ ROOT = pathlib.Path(__file__).resolve().parent.parent
 SRC = ROOT / "src"
 OUT = ROOT / "docs"
 ICONS = ROOT / "assets" / "icons"
-SOUNDS = ROOT / "assets" / "sounds"
 CLOUD_FILE = ROOT / "config" / "cloud.json"
 CLOUD_BLOCK = re.compile(r"(/\* CLOUD[^\n]*\n[^\n]*\*/\n\s*const CLOUD_CONFIG = ).*?(;\n\s*/\* /CLOUD \*/)", re.S)
 DEMO_BLOCK = re.compile(r"(/\* DEMO[^\n]*\*/\n\s*const DEMO = ).*?(;\n\s*/\* /DEMO \*/)", re.S)
 SUPABASE_JS = re.compile(r"const SUPABASE_JS_URL = '(https://cdn\.jsdelivr\.net/npm/@supabase/supabase-js@\d+\.\d+\.\d+/[^']+)';")
 SUPABASE_URL = re.compile(r"^https://[a-z0-9-]+\.supabase\.co$")
 ICON_FILES = ("favicon-32.png", "icon-192.png", "icon-512.png", "icon-maskable-512.png", "apple-touch-icon.png")
-SOUND_FILES = ("splash.mp3",)
+# Media copied as they are, by folder under assets/ (and under the site).
+MEDIA_FILES = {"sounds": ("splash.mp3",), "cards": ("callup-texture.webp", "brush.webp", "ball.webp")}
 BACKGROUND = "#f4f3f0"
 THEME = "#151515"
 
@@ -157,20 +158,22 @@ def build(out: pathlib.Path = OUT, cloud: dict | None = None, offline: bool = Tr
     if out.exists():
         shutil.rmtree(out)
     (out / "icons").mkdir(parents=True)
-    (out / "sounds").mkdir()
     page = app_page(app, cloud, offline)
-    # The sounds are part of the build: a new one must reach the tablets through a new service worker cache.
+    # The media are part of the build: a new one must reach the tablets through a new service worker cache.
     digest = hashlib.sha256(page.encode("utf-8"))
-    for f in SOUND_FILES:
-        digest.update((SOUNDS / f).read_bytes())
+    for folder, files in MEDIA_FILES.items():
+        for f in files:
+            digest.update((ROOT / "assets" / folder / f).read_bytes())
     build = digest.hexdigest()[:12]
     (out / "index.html").write_text(page, encoding="utf-8")
     (out / "manifest.webmanifest").write_text(manifest(), encoding="utf-8")
     (out / "sw.js").write_text(sw.replace("__BUILD__", build).replace("__SUPABASE_JS__", library.group(1)), encoding="utf-8")
     for f in ICON_FILES:
         shutil.copyfile(ICONS / f, out / "icons" / f)
-    for f in SOUND_FILES:
-        shutil.copyfile(SOUNDS / f, out / "sounds" / f)
+    for folder, files in MEDIA_FILES.items():
+        (out / folder).mkdir()
+        for f in files:
+            shutil.copyfile(ROOT / "assets" / folder / f, out / folder / f)
     (out / "demo").mkdir()
     (out / "demo" / "index.html").write_text(demo_page(app), encoding="utf-8")
     (out / ".nojekyll").write_text("", encoding="utf-8")

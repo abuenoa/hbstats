@@ -4519,11 +4519,13 @@
         const called = document.querySelector(`[data-callup-pick="${home.roster[0].id}"]`);
         if (called.getAttribute('aria-pressed') !== 'true' || flatText(called.querySelector('.att-badge')) !== 'Convocado' || flatText(document.querySelector('.callup .att-stat.att-C')) !== '2 convocados de 16' || flatText(document.querySelector('.callup .att-stat.att-NC')) !== '1 no convocado') throw new Error('pick ' + flatText(called));
         const data = callupCardData(callupDraft(), calledPlayers(callupDraft()));
-        if (data.players.map((p) => p.name).join() !== 'Portero Uno,Lateral Siete' || data.kit !== team.brand || data.kitName !== 'Primera' || !CALLUP_PHRASES.some((x) => data.phrase === x.replace('{team}', team.name)) || data.phrase !== callupPhrase(callupDraft().date, team.name) || data.rival !== 'BALONMANO GADES - ASISA' || data.place !== 'Fuera' || data.venue !== 'Pabellón Centro' || data.round !== 2 || data.when.time !== '18:30') throw new Error(JSON.stringify(data));
-        document.querySelector(`[data-callup-kit="${KIT_BLACK}"]`).click();
-        if (callupDraft().kit !== KIT_BLACK || document.querySelector(`[data-callup-kit="${KIT_BLACK}"]`).getAttribute('aria-pressed') !== 'true' || callupCardData(callupDraft(), calledPlayers(callupDraft())).kitName !== 'Negra') throw new Error('kit chip ' + callupDraft().kit);
-        $('callup-kit').value = '#12ab34'; $('callup-kit').dispatchEvent(new Event('change', { bubbles: true }));
-        if (callupDraft().kit !== '#12ab34' || !document.querySelector('.kit-other.active') || kitName('#12ab34') !== 'Otro color') throw new Error('custom kit');
+        if (data.players.map((p) => p.name).join() !== 'Portero Uno (P),Lateral Siete' || data.left.join() !== 'Pivote Nueve' || data.kit.shirt !== team.brand || data.kit.shorts !== KIT_BLACK || data.phrase !== callupPhrase(callupDraft().date, team.name) || data.rival !== 'BALONMANO GADES - ASISA' || data.tag !== 'Liga · Jornada 2 · Fuera' || data.venue !== 'Pabellón Centro' || data.time !== '18:30' || data.meet !== '17:45') throw new Error(JSON.stringify({ ...data, crest: '', logo: '' }));
+        $('callup-meet').value = '17:30'; $('callup-meet').dispatchEvent(new Event('change', { bubbles: true }));
+        if (meetTime(callupDraft()) !== '17:30' || $('callup-meet').value !== '17:30') throw new Error('meeting time');
+        document.querySelector(`[data-callup-kit="shorts"][data-colour="${KIT_WHITE}"]`).click();
+        if (callupDraft().kit.shorts !== KIT_WHITE || document.querySelector(`[data-callup-kit="shorts"][data-colour="${KIT_WHITE}"]`).getAttribute('aria-pressed') !== 'true' || callupDraft().kit.shirt !== team.brand) throw new Error('kit chip ' + JSON.stringify(callupDraft().kit));
+        const sockPicker = document.querySelector('[data-kit-piece="socks"]'); sockPicker.value = '#12ab34'; sockPicker.dispatchEvent(new Event('change', { bubbles: true }));
+        if (callupDraft().kit.socks !== '#12ab34' || document.querySelectorAll('.kit-other.active').length !== 1 || kitName('#12ab34') !== 'Otro color') throw new Error('custom kit');
         document.querySelector('[data-callup-save]').click();
         for (let i = 0; i < 100 && !document.querySelector('.callup-preview'); i++) await new Promise((r) => setTimeout(r, 20));
         const img = document.querySelector('.callup-preview'), share = document.querySelector('[data-callup-share]');
@@ -4539,7 +4541,7 @@
         $('callup-rival').value = '  CB Este  '; $('callup-rival').dispatchEvent(new Event('change', { bubbles: true }));
         if (callupDraft().rival !== 'CB Este') throw new Error(callupDraft().rival);
         home.callupDraft = null; renderHome();
-        if ($('callup-fixture').value !== 'f2' || document.querySelectorAll('.callup [aria-pressed="true"]').length !== 2) throw new Error('the saved convocatoria does not come back');
+        if ($('callup-fixture').value !== 'f2' || document.querySelectorAll('.callup [data-callup-pick][aria-pressed="true"]').length !== 2) throw new Error('the saved convocatoria does not come back');
       }, { fixtures: [later, next] });
       removeKey(CALLUP_KEY_PREFIX + team.id); removeKey(SQUAD_KEY_PREFIX + team.id); home.callupDraft = null; home.callup = null;
     });
