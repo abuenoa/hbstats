@@ -22,7 +22,8 @@ const SHELL_ASSETS = [
   './icons/icon-512.png',
   './icons/icon-maskable-512.png',
   './icons/apple-touch-icon.png',
-  './icons/favicon-32.png'
+  './icons/favicon-32.png',
+  './sounds/splash.mp3'
 ];
 
 // Must match, character for character, the URLs the page requests.
