@@ -758,6 +758,8 @@ td.zero { color: var(--color-text-tertiary); }
 .splash { position: fixed; inset: 0; z-index: 50; display: grid; place-content: center; justify-items: center; gap: var(--space-4); overflow: hidden;
   background: radial-gradient(circle at 50% 45%, rgba(212, 32, 42, .35), transparent 60%), #0e0e10; color: #ffffff; transition: opacity var(--splash-fade) ease-out; }
 .splash.out { opacity: 0; pointer-events: none; }
+/* Until the sound starts, the dribble waits so that it stays in time with it. */
+.splash.held * { animation-play-state: paused !important; }
 .splash-run { animation: splash-run var(--splash-arrive) linear both; }
 .splash-ball { width: min(40vmin, 220px); aspect-ratio: 1; animation: splash-bounce var(--splash-arrive) both; }
 .splash-ball svg { display: block; width: 100%; height: 100%; animation: splash-spin var(--splash-arrive) cubic-bezier(.2, .6, .3, 1) both; filter: drop-shadow(0 12px 30px rgba(212, 32, 42, .55)); }
@@ -767,7 +769,7 @@ td.zero { color: var(--color-text-tertiary); }
 .splash-tap { display: none; margin: var(--space-4) 0 0; font-family: var(--font-display); font-weight: 700; font-size: 20px; letter-spacing: .2em; text-transform: uppercase; animation: splash-rise .5s calc(var(--splash-arrive) + .3s) var(--ease-out) both, splash-pulse 1.2s calc(var(--splash-arrive) + .8s) ease-in-out infinite; }
 .splash.await-tap { cursor: pointer; }
 .splash.await-tap .splash-tap { display: block; }
-/* A dribble across the court, each bounce lower, landing at --splash-arrive on the whistle of the splash sound. */
+/* A dribble across the court, each bounce lower, landing at --splash-arrive, just before the whistle of the splash sound. */
 @keyframes splash-run { from { transform: translateX(-70vw); } to { transform: none; } }
 @keyframes splash-bounce {
   0% { transform: translateY(-45vh); animation-timing-function: cubic-bezier(.5, 0, 1, .6); }
@@ -8989,10 +8991,12 @@ table { border-collapse: collapse; width: 100%; }
     if (file) pickPhoto(file);
   });
 
-  // ---- Splash: the logo dribbles across a court's sound and lands on the referee's whistle, then the stands cheer ----
+  // ---- Splash: the logo dribbles across a court's sound, the name rises and the app appears on the referee's whistle ----
   // sounds/splash.mp3: steps and a ball on court, the whistle at SPLASH_WHISTLE_S, the crowd fading out by its end.
   const SPLASH_SOUND = 'sounds/splash.mp3';
-  const SPLASH_WHISTLE_S = 2.5, SPLASH_HOLD_MS = 1000, SPLASH_FADE_MS = 350;
+  const SPLASH_WHISTLE_S = 2.5, SPLASH_FADE_MS = 350;
+  // The logo lands this long before the whistle, so the name is seen before the screen changes.
+  const SPLASH_TITLE_S = 0.9;
   // A tap after a silent intro starts the sound just before the whistle.
   const SPLASH_TAP_LEAD_S = 0.1;
   const REDUCED_MOTION_QUERY = '(prefers-reduced-motion: reduce)';
@@ -9003,15 +9007,15 @@ table { border-collapse: collapse; width: 100%; }
     setTimeout(() => el.remove(), SPLASH_FADE_MS);
   }
   // Not over a match that is being resumed, and not for whoever asks the system for less motion. A tap skips it.
-  // Where the browser lets the page sound on its own (an installed app usually) it plays and leaves by itself; where it
-  // forbids that, the splash waits on «Toca para entrar» and the tap starts the whistle and the cheer.
+  // The animation waits for the sound to start, and the screen changes on its whistle. Where the browser forbids sound
+  // before a tap, the animation plays silent and waits on «Toca para entrar»: the tap brings the whistle and the app.
   function showSplash() {
     if (matchMedia(REDUCED_MOTION_QUERY).matches || readJson(CURRENT_MATCH_KEY)) return;
     const el = document.createElement('div'), sound = new Audio(SPLASH_SOUND);
     el.id = 'splash';
-    el.className = 'splash';
+    el.className = 'splash held';
     el.style.setProperty('--splash-fade', `${SPLASH_FADE_MS}ms`);
-    el.style.setProperty('--splash-arrive', `${SPLASH_WHISTLE_S}s`);
+    el.style.setProperty('--splash-arrive', `${SPLASH_WHISTLE_S - SPLASH_TITLE_S}s`);
     el.innerHTML = `<div class="splash-run"><div class="splash-ball">${appLogoSvg('splash-logo-clip')}</div></div><div class="splash-title"><b>HBStats</b><small>Balonmano en directo</small></div>
       <p class="splash-tap">Toca para entrar</p>`;
     el.addEventListener('click', () => {
@@ -9022,11 +9026,15 @@ table { border-collapse: collapse; width: 100%; }
       dismissSplash();
     }, { once: true });
     document.body.append(el);
-    const leave = () => setTimeout(dismissSplash, SPLASH_WHISTLE_S * 1000 + SPLASH_HOLD_MS);
-    sound.play().then(leave, (err) => {
+    const leaveOnWhistle = (elapsed) => setTimeout(dismissSplash, (SPLASH_WHISTLE_S - elapsed) * 1000);
+    sound.play().then(() => {
+      el.classList.remove('held');
+      leaveOnWhistle(sound.currentTime);
+    }, (err) => {
+      el.classList.remove('held');
       if (err.name === 'NotAllowedError') { el.classList.add('await-tap'); return; }
       console.warn(`No splash sound: ${err.message}`);
-      leave();
+      leaveOnWhistle(0);
     });
   }
 
