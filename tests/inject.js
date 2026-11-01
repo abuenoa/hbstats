@@ -4519,13 +4519,15 @@
         const called = document.querySelector(`[data-callup-pick="${home.roster[0].id}"]`);
         if (called.getAttribute('aria-pressed') !== 'true' || flatText(called.querySelector('.att-badge')) !== 'Convocado' || flatText(document.querySelector('.callup .att-stat.att-C')) !== '2 convocados de 16' || flatText(document.querySelector('.callup .att-stat.att-NC')) !== '1 no convocado') throw new Error('pick ' + flatText(called));
         const data = callupCardData(callupDraft(), calledPlayers(callupDraft()));
-        if (data.players.map((p) => p.name).join() !== 'Portero Uno (P),Lateral Siete' || data.left.join() !== 'Pivote Nueve' || data.kit.shirt !== team.brand || data.kit.shorts !== KIT_BLACK || data.phrase !== callupPhrase(callupDraft().date, team.name) || data.rival !== 'BALONMANO GADES - ASISA' || data.tag !== 'Liga · Jornada 2 · Fuera' || data.venue !== 'Pabellón Centro' || data.time !== '18:30' || data.meet !== '17:45') throw new Error(JSON.stringify({ ...data, crest: '', logo: '' }));
+        if (data.players.map((p) => p.name).join() !== 'Portero Uno (P),Lateral Siete' || 'left' in data || data.shirt !== team.brand || data.phrase !== callupPhrase(callupDraft().date, team.name) || data.rival !== 'BALONMANO GADES - ASISA' || data.tag !== 'Liga · Jornada 2 · Fuera' || data.venue !== 'Pabellón Centro' || data.time !== '18:30' || data.meet !== '17:45') throw new Error(JSON.stringify({ ...data, crest: '', logo: '' }));
         $('callup-meet').value = '17:30'; $('callup-meet').dispatchEvent(new Event('change', { bubbles: true }));
         if (meetTime(callupDraft()) !== '17:30' || $('callup-meet').value !== '17:30') throw new Error('meeting time');
-        document.querySelector(`[data-callup-kit="shorts"][data-colour="${KIT_WHITE}"]`).click();
-        if (callupDraft().kit.shorts !== KIT_WHITE || document.querySelector(`[data-callup-kit="shorts"][data-colour="${KIT_WHITE}"]`).getAttribute('aria-pressed') !== 'true' || callupDraft().kit.shirt !== team.brand) throw new Error('kit chip ' + JSON.stringify(callupDraft().kit));
-        const sockPicker = document.querySelector('[data-kit-piece="socks"]'); sockPicker.value = '#12ab34'; sockPicker.dispatchEvent(new Event('change', { bubbles: true }));
-        if (callupDraft().kit.socks !== '#12ab34' || document.querySelectorAll('.kit-other.active').length !== 1 || kitName('#12ab34') !== 'Otro color') throw new Error('custom kit');
+        const chips = [...document.querySelectorAll('[data-callup-shirt]')];
+        if (chips.map((b) => b.textContent.trim()).join() !== 'Primera,Segunda' || document.querySelector('input[type="color"], [data-kit-piece]')) throw new Error('only the first and second shirts');
+        chips[1].click();
+        if (callupDraft().shirt !== team.brand2 || document.querySelectorAll('[data-callup-shirt][aria-pressed="true"]').length !== 1) throw new Error('second shirt');
+        editCallupShirt('#12ab34');
+        if (callupDraft().shirt !== team.brand2) throw new Error('a colour outside the kits was accepted');
         document.querySelector('[data-callup-save]').click();
         for (let i = 0; i < 100 && !document.querySelector('.callup-preview'); i++) await new Promise((r) => setTimeout(r, 20));
         const img = document.querySelector('.callup-preview'), share = document.querySelector('[data-callup-share]');
@@ -4544,6 +4546,24 @@
         if ($('callup-fixture').value !== 'f2' || document.querySelectorAll('.callup [data-callup-pick][aria-pressed="true"]').length !== 2) throw new Error('the saved convocatoria does not come back');
       }, { fixtures: [later, next] });
       removeKey(CALLUP_KEY_PREFIX + team.id); removeKey(SQUAD_KEY_PREFIX + team.id); home.callupDraft = null; home.callup = null;
+    });
+    await TA('convocatoria: a day and time set for a round without them go to the calendar', async () => {
+      const day = weekOf(todayIso())[1], open = fx('f9', 9, day, 'CB Sur');
+      const real = backend.updateFixture, sent = [];
+      await withAttendanceView(async () => {
+        backend.updateFixture = async (id, patch) => { sent.push([id, patch]); return { ...open, ...patch }; };
+        try {
+          home.callupDraft = null; switchAttendanceMode(ATTENDANCE_MODES.CALLUP);
+          if (callupDraft().time !== '') throw new Error('a round without kickoff has no time');
+          if ((await kickoffToCalendar(callupDraft())) !== '' || sent.length) throw new Error('no time, nothing to the calendar');
+          callupDraft().time = '19:00';
+          const words = await kickoffToCalendar(callupDraft());
+          if (sent.length !== 1 || sent[0][0] !== 'f9' || new Date(sent[0][1].kickoff).getTime() !== new Date(`${day}T19:00`).getTime() || !/calendario/.test(words)) throw new Error(JSON.stringify(sent) + words);
+          if (!home.fixtures.find((f) => f.id === 'f9').kickoff) throw new Error('the round on the device was not updated');
+          sent.length = 0;
+          if ((await kickoffToCalendar(callupDraft())) !== '' || sent.length) throw new Error('the same kickoff was sent again');
+        } finally { backend.updateFixture = real; removeKey(CALLUP_KEY_PREFIX + team.id); removeKey(SQUAD_KEY_PREFIX + team.id); home.callupDraft = null; }
+      }, { fixtures: [open] });
     });
     await TA('convocatoria: more than the acta holds cannot be saved', async () => {
       await withAttendanceView(async () => {
