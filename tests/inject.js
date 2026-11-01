@@ -3345,6 +3345,51 @@
         if ((teamAccountsHtml().match(/data-invite-share="\d"/g) || []).length !== 3) throw new Error('one share button per new link');
       } finally { backend = real; Object.assign(home, keep); }
     });
+    await TA('team accounts: the staff list them and take off players, guests and unused invites', async () => {
+      const keep = { roster: home.roster, accounts: home.accounts, view: home.view, armed: home.armed }, real = backend, role = team.role, teamId = team.id;
+      const rows = [
+        { userId: 'me', role: 'coach', playerId: null, email: 'yo@x.es', signedIn: true, isMe: true },
+        { userId: 'own', role: 'owner', playerId: null, email: 'dueno@x.es', signedIn: true, isMe: false },
+        { userId: 'co', role: 'coach', playerId: null, email: 'coach@x.es', signedIn: true, isMe: false },
+        { userId: 'pk', role: 'player', playerId: 'k', email: 'kike@x.es', signedIn: false, isMe: false },
+        { userId: 'gv', role: 'viewer', playerId: null, email: 'guest@x.es', signedIn: true, isMe: false },
+      ];
+      const removed = [];
+      backend = { ...real, listAccounts: async () => rows.map((r) => ({ ...r })), removeAccount: async (t, userId) => {
+        if (userId === 'gv') throw new Error('sin conexión');
+        removed.push(userId);
+      } };
+      Object.assign(home, { roster: [{ id: 'k', num: 3, name: 'Kike', fullName: 'Enrique García', pos: 'PIV' }], accounts: null, view: 'team-edit', armed: null });
+      Object.assign(team, { id: 'acc-team', role: 'coach' });
+      try {
+        accountListHtml();
+        for (let i = 0; i < 3; i++) await tick0();
+        const html = accountListHtml(), buttons = [...html.matchAll(/data-account-remove="(\w+)"/g)].map((m) => m[1]);
+        // A coach takes off the player and the guest, not the owner, another coach or himself.
+        if (buttons.join(' ') !== 'pk gv' || !/#3 Kike/.test(html) || !/Anular invitación/.test(html) || !/sin entrar aún/.test(html)) throw new Error(buttons.join(' ') + html);
+        // Kike never signed in: a fresh link to share, for the same player and e-mail.
+        const invited = [], links = home.inviteLinks;
+        backend.inviteMember = async (t, member, email) => { invited.push(`${member.role}:${member.playerId}:${email}`); return { link: 'https://example.test/new' }; };
+        home.inviteLinks = [];
+        if ((html.match(/data-account-resend="(\w+)"/g) || []).join() !== 'data-account-resend="pk"') throw new Error('resend offered to signed-in accounts');
+        await resendInvite('pk');
+        const fresh = home.inviteLinks.map((l) => l.name).join();
+        home.inviteLinks = links;
+        if (invited.join() !== 'player:k:kike@x.es' || fresh !== 'Kike' || !/Enlace nuevo para Kike/.test($('home-status').textContent)) throw new Error(invited.join() + fresh);
+        // The list reloads after an invite (here no page shows it, so ask for it).
+        if (home.accounts !== null) throw new Error('the list was not refreshed');
+        accountListHtml();
+        for (let i = 0; i < 3; i++) await tick0();
+        await removeAccount('pk');
+        if (removed.length) throw new Error('removed on the first tap');
+        await removeAccount('pk');
+        if (removed.join() !== 'pk' || home.accounts.rows.some((a) => a.userId === 'pk') || !/anulada/.test($('home-status').textContent)) throw new Error($('home-status').textContent);
+        await removeAccount('gv'); await removeAccount('gv');
+        if (!home.accounts.rows.some((a) => a.userId === 'gv') || !/No se pudo quitar: .*sin conexión/.test($('home-status').textContent)) throw new Error($('home-status').textContent);
+        team.role = 'owner';
+        if (![...accountListHtml().matchAll(/data-account-remove="(\w+)"/g)].some((m) => m[1] === 'co')) throw new Error('the owner cannot take off a coach');
+      } finally { backend = real; Object.assign(team, { id: teamId, role }); Object.assign(home, keep); }
+    });
     await TA('nav: Escape on attendance, a main tab, goes back to Mis equipos', async () => withNavHome(async () => {
       showHomeView('attendance');
       pressEscape();
