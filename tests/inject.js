@@ -4013,10 +4013,10 @@
         if (!el.classList.contains('out')) throw new Error('a tap does not skip it');
         await gone();
         if ($('splash')) throw new Error('not removed');
-        // The dribble waits for the sound, then the screen changes on the whistle, counted from where the sound is.
+        // The dribble waits for the sound; the app appears SPLASH_NAME_HOLD_S after the whistle, counted from where the sound is.
         const RealAudio = window.Audio;
         let start;
-        window.Audio = function () { return { currentTime: SPLASH_WHISTLE_S - 0.05, play: () => new Promise((resolve) => { start = resolve; }) }; };
+        window.Audio = function () { return { currentTime: SPLASH_WHISTLE_S + SPLASH_NAME_HOLD_S - 0.05, play: () => new Promise((resolve) => { start = resolve; }) }; };
         try {
           showSplash();
           const synced = $('splash');
@@ -4024,7 +4024,7 @@
           start(); await tick0();
           if (synced.classList.contains('held') || synced.classList.contains('out')) throw new Error('not released on the sound');
           await new Promise((r) => setTimeout(r, 100));
-          if (!synced.classList.contains('out')) throw new Error('the screen does not change on the whistle');
+          if (!synced.classList.contains('out')) throw new Error('the app does not appear after the name');
           await gone();
         } finally { window.Audio = RealAudio; }
         writeJson(CURRENT_MATCH_KEY, 'resumed');

@@ -9111,7 +9111,9 @@ table { border-collapse: collapse; width: 100%; }
   // sounds/splash.mp3: steps and a ball on court, the whistle at SPLASH_WHISTLE_S, the crowd fading out by its end.
   const SPLASH_SOUND = 'sounds/splash.mp3';
   const SPLASH_WHISTLE_S = 2.5, SPLASH_FADE_MS = 350;
-  // The logo lands this long before the whistle: the name rises in that moment and the screen changes on the whistle.
+  // After the whistle the name stays on screen this long before the app appears.
+  const SPLASH_NAME_HOLD_S = 1.5;
+  // The logo lands this long before the whistle, and the name rises in that moment.
   const SPLASH_TITLE_S = 0.3;
   // A tap after a silent intro starts the sound just before the whistle.
   const SPLASH_TAP_LEAD_S = 0.1;
@@ -9123,7 +9125,7 @@ table { border-collapse: collapse; width: 100%; }
     setTimeout(() => el.remove(), SPLASH_FADE_MS);
   }
   // Not over a match that is being resumed, and not for whoever asks the system for less motion. A tap skips it.
-  // The animation waits for the sound to start, and the screen changes on its whistle. Where the browser forbids sound
+  // The animation waits for the sound to start; the app appears a moment after its whistle. Where the browser forbids sound
   // before a tap, the animation plays silent and waits on «Toca para entrar»: the tap brings the whistle and the app.
   function showSplash() {
     if (matchMedia(REDUCED_MOTION_QUERY).matches || readJson(CURRENT_MATCH_KEY)) return;
@@ -9142,15 +9144,15 @@ table { border-collapse: collapse; width: 100%; }
       dismissSplash();
     }, { once: true });
     document.body.append(el);
-    const leaveOnWhistle = (elapsed) => setTimeout(dismissSplash, (SPLASH_WHISTLE_S - elapsed) * 1000);
+    const leaveAfterName = (elapsed) => setTimeout(dismissSplash, (SPLASH_WHISTLE_S + SPLASH_NAME_HOLD_S - elapsed) * 1000);
     sound.play().then(() => {
       el.classList.remove('held');
-      leaveOnWhistle(sound.currentTime);
+      leaveAfterName(sound.currentTime);
     }, (err) => {
       el.classList.remove('held');
       if (err.name === 'NotAllowedError') { el.classList.add('await-tap'); return; }
       console.warn(`No splash sound: ${err.message}`);
-      leaveOnWhistle(0);
+      leaveAfterName(0);
     });
   }
 
