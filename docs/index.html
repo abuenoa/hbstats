@@ -798,7 +798,7 @@ td.zero { color: var(--color-text-tertiary); }
   97% { transform: translateY(-1.5vh); animation-timing-function: cubic-bezier(.5, 0, 1, .6); }
   100% { transform: none; }
 }
-@keyframes splash-spin { from { transform: rotate(-1080deg); } to { transform: none; } }
+@keyframes splash-spin { from { transform: rotate(-720deg); } to { transform: none; } }
 @keyframes splash-pulse { 50% { opacity: .45; } }
 @keyframes splash-rise { from { opacity: 0; transform: translateY(16px); } to { opacity: 1; transform: none; } }
 @media (prefers-reduced-motion: reduce) {
@@ -882,6 +882,10 @@ a:focus-visible, input:focus-visible, select:focus-visible, summary:focus-visibl
 .team-card span { display: grid; min-width: 0; }
 .team-card b { font: var(--type-heading); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .team-card small { color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.team-slot { position: relative; display: grid; }
+.team-slot .team-card { padding-right: calc(var(--target) + var(--space-3)); }
+.fav-star { position: absolute; inset: 0 var(--space-2) 0 auto; margin: auto 0; width: var(--target); height: var(--target); border: 0; border-radius: 50%; background: transparent; color: var(--muted); font-size: 26px; line-height: 1; cursor: pointer; }
+.fav-star[aria-pressed="true"] { color: var(--gold); }
 .team-card.add { justify-content: center; border-style: dashed; border-color: var(--line); box-shadow: none; background: var(--surface); font-weight: 700; }
 .template-edit { display: grid; gap: var(--space-4); }
 .template-pick { margin-block: var(--space-2); }
@@ -6845,14 +6849,29 @@ table { border-collapse: collapse; width: 100%; }
   // A team's colours as custom properties of its card; a value that is not a hex colour falls back to the app's own.
   const teamColoursStyle = (t) => [['--team-brand', t.brand, 'var(--brand)'], ['--team-brand2', t.brand2, 'var(--gold)']]
     .map(([name, value, fallback]) => `${name}:${HEX_COLOUR.test(value) ? value : fallback}`).join(';');
+  // The favourite team opens on entering the app; it is kept per account on this device.
+  const FAVOURITE_KEY_PREFIX = 'hbstats:favourite-team:';
+  const favouriteKey = () => FAVOURITE_KEY_PREFIX + userKey();
+  const favouriteTeam = () => home.teams.find((t) => t.id === readJson(favouriteKey())) || null;
+  function toggleFavourite(id) {
+    if (favouriteTeam()?.id === id) removeKey(favouriteKey());
+    else writeJson(favouriteKey(), id);
+    renderHome();
+  }
   function profileHtml() {
-    const teams = home.teams.map((t) => `<button class="team-card press" type="button" data-open-team="${t.id}" style="${teamColoursStyle(t)}"><img class="crest" src="${esc(crestSrc(t))}" alt=""><span><b>${esc(t.name)}</b><small>${esc(t.club)}</small></span></button>`).join('');
+    const favourite = favouriteTeam();
+    const teams = home.teams.map((t) => {
+      const isFavourite = favourite?.id === t.id;
+      return `<div class="team-slot"><button class="team-card press" type="button" data-open-team="${t.id}" style="${teamColoursStyle(t)}"><img class="crest" src="${esc(crestSrc(t))}" alt=""><span><b>${esc(t.name)}</b><small>${esc(t.club)}</small></span></button>
+        <button class="fav-star press" type="button" data-favourite-team="${t.id}" aria-pressed="${isFavourite}" aria-label="${isFavourite ? 'Dejar de abrir' : 'Abrir siempre'} ${esc(t.name)} al entrar">${isFavourite ? '★' : '☆'}</button></div>`;
+    }).join('');
     return `${statusHtml()}
       ${home.offline ? '<p class="note">Sin conexión: ves la copia guardada en esta tablet.</p>' : ''}
       <div class="card-grid profile-grid">
         <h3 class="grid-title">Mis equipos</h3>
         ${teams}<button class="team-card add press" type="button" data-new-team>+ Nuevo equipo</button>
-      </div>`;
+      </div>
+      <p class="note">${favourite ? `★ ${esc(favourite.name)} se abre al entrar en la app. Toca la estrella para quitarlo o elige otro.` : 'Toca la ☆ de un equipo para que se abra directamente al entrar en la app.'}</p>`;
   }
   // The team's rivals with their dorsals, loaded into the acta of each match with «Cargar plantilla».
   function teamRivalsHtml() {
@@ -6930,12 +6949,13 @@ table { border-collapse: collapse; width: 100%; }
     home.teams = value;
     home.offline = offline;
     if (!home.teams.length) { openNewTeam(); return; }
-    // A reload in the middle of a match goes straight back to it; otherwise the profile opens.
+    // A reload in the middle of a match goes straight back to it; otherwise the favourite team opens, or the profile.
     const resume = readJson(CURRENT_MATCH_KEY);
     const saved = resume && localMatch(resume);
     const playing = saved && home.teams.find((t) => t.id === saved.teamId);
-    if (playing) { await selectTeam(playing); return; }
-    await showProfile();
+    const opening = playing || favouriteTeam();
+    if (opening) { await selectTeam(opening); return; }
+    showProfile();
   }
   function showProfile() {
     home.passwordChange = false;
@@ -8930,6 +8950,7 @@ table { border-collapse: collapse; width: 100%; }
     if (b.hasAttribute('data-fixture-cancel')) { home.fixtureEdit = null; renderHome(); return; }
     if (b.hasAttribute('data-new-team')) { openNewTeam(); return; }
     if (b.hasAttribute('data-cancel-team')) { showProfile(); return; }
+    if (b.dataset.favouriteTeam) { toggleFavourite(b.dataset.favouriteTeam); return; }
     if (b.dataset.openTeam) { const t = home.teams.find((x) => x.id === b.dataset.openTeam); if (t) selectTeam(t); return; }
     if (b.hasAttribute('data-change-password')) { home.passwordChange = true; showHomeView('password'); return; }
     if (b.hasAttribute('data-template-new')) { editTemplate(null); return; }
@@ -8986,7 +9007,7 @@ table { border-collapse: collapse; width: 100%; }
   // ---- Splash: the logo dribbles across a court's sound and lands on the referee's whistle, then the stands cheer ----
   // sounds/splash.mp3: steps and a ball on court, the whistle at SPLASH_WHISTLE_S, the crowd fading out by its end.
   const SPLASH_SOUND = 'sounds/splash.mp3';
-  const SPLASH_WHISTLE_S = 4.2, SPLASH_HOLD_MS = 1200, SPLASH_FADE_MS = 350;
+  const SPLASH_WHISTLE_S = 2.5, SPLASH_HOLD_MS = 1000, SPLASH_FADE_MS = 350;
   // A tap after a silent intro starts the sound just before the whistle.
   const SPLASH_TAP_LEAD_S = 0.1;
   const REDUCED_MOTION_QUERY = '(prefers-reduced-motion: reduce)';
