@@ -777,6 +777,9 @@ td.zero { color: var(--color-text-tertiary); }
 .splash-title { display: grid; justify-items: center; animation: splash-rise .5s 1.35s var(--ease-out) both; }
 .splash-title b { font-family: var(--font-display); font-weight: 800; font-size: clamp(40px, 9vmin, 72px); letter-spacing: .08em; text-transform: uppercase; line-height: 1; }
 .splash-title small { color: #f5c400; font-family: var(--font-display); font-weight: 700; letter-spacing: .3em; text-transform: uppercase; }
+.splash-tap { display: none; margin: var(--space-4) 0 0; font-family: var(--font-display); font-weight: 700; font-size: 20px; letter-spacing: .2em; text-transform: uppercase; animation: splash-rise .5s 1.6s var(--ease-out) both, splash-pulse 1.2s 2.1s ease-in-out infinite; }
+.splash.await-tap { cursor: pointer; }
+.splash.await-tap .splash-tap { display: block; }
 /* The three floor contacts (19%, 58%, 88% of 1.3 s) are the dribble thumps of playSplashSound. */
 @keyframes splash-run { from { transform: translateX(-70vw); } 88%, to { transform: none; } }
 @keyframes splash-bounce {
@@ -789,6 +792,7 @@ td.zero { color: var(--color-text-tertiary); }
   100% { transform: none; }
 }
 @keyframes splash-spin { from { transform: rotate(-540deg); } to { transform: none; } }
+@keyframes splash-pulse { 50% { opacity: .45; } }
 @keyframes splash-rise { from { opacity: 0; transform: translateY(16px); } to { opacity: 1; transform: none; } }
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { animation: none !important; transition: none !important; }
@@ -826,6 +830,8 @@ a:focus-visible, input:focus-visible, select:focus-visible, summary:focus-visibl
 .home-wrap.centred { min-height: calc(100% - 4px); place-items: center; }
 .auth-card { width: min(420px, 100%); box-sizing: border-box; display: grid; gap: var(--space-3); padding: var(--space-6); border-radius: var(--radius-xl); }
 .auth-card.wide { width: min(760px, 100%); }
+.auth-card > form { display: grid; gap: var(--space-3); }
+.auth-card h3 { margin: 0; }
 .auth-card h1 { margin: 0; font: var(--type-title); text-wrap: balance; }
 .auth-brand { display: flex; gap: var(--space-4); align-items: center; }
 .app-mark { flex: none; width: 56px; height: 56px; border-radius: 50%; display: grid; place-items: center; background: var(--brand); color: var(--brand-ink); font-family: var(--font-display); font-weight: 800; font-size: 24px; box-shadow: 0 0 0 4px rgb(var(--brand-2-rgb)); }
@@ -6222,6 +6228,8 @@ table { border-collapse: collapse; width: 100%; }
       async signOut() { check(await client.auth.signOut()); },
       async sendPasswordReset(email) { check(await client.auth.resetPasswordForEmail(email, { redirectTo: `${location.origin}${location.pathname}` })); },
       async setPassword(password) { check(await client.auth.updateUser({ password })); },
+      // The change waits until the link sent to the new address (and, by default, to the old one) is opened.
+      async setEmail(email) { check(await client.auth.updateUser({ email }, { emailRedirectTo: `${location.origin}${location.pathname}` })); },
       // Each team with the signed-in user's role in it (owner, coach or player).
       async listTeams() {
         const { session } = check(await client.auth.getSession());
@@ -6597,14 +6605,16 @@ table { border-collapse: collapse; width: 100%; }
       heading: 'h1',
       actions: `<button class="btn primary press" type="submit" form="${PASSWORD_FORM_ID}">Guardar</button>`,
     }) : '<h1>Elige tu contraseña</h1>';
-    return `<form class="auth-card${change ? ' wide' : ''} glass" data-form="password" id="${PASSWORD_FORM_ID}">
-      ${head}
+    const email = change && home.user ? `<form class="email-change" data-form="email"><h3>Correo</h3>
+        <label class="field">Correo nuevo<input class="in" type="email" name="email" inputmode="email" autocomplete="email" value="${esc(home.user.email)}" required></label>
+        <div class="row-actions"><button class="btn press" type="submit">Cambiar correo</button></div>
+        <p class="note">Te llegará un enlace para confirmarlo; hasta abrirlo sigues entrando con el correo de ahora.</p></form><h3>Contraseña</h3>` : '';
+    return `<div class="auth-card${change ? ' wide' : ''} glass">${head}${email}<form data-form="password" id="${PASSWORD_FORM_ID}">
       <p class="note">Al menos ${MIN_PASSWORD_LENGTH} caracteres. Con ella y tu email entrarás desde cualquier tablet.</p>
       <label class="field">Contraseña nueva<input class="in" type="password" name="password" id="new-password" autocomplete="new-password" minlength="${MIN_PASSWORD_LENGTH}" required></label>
       <label class="field">Repítela<input class="in" type="password" name="repeat" id="new-password-repeat" autocomplete="new-password" minlength="${MIN_PASSWORD_LENGTH}" required></label>
       ${change ? '' : '<div class="row-actions"><button class="btn primary press" type="submit">Guardar contraseña</button></div>'}
-      ${statusHtml()}
-    </form>`;
+      </form>${statusHtml()}</div>`;
   }
   const TEAM_NEW_FORM_ID = 'team-new-form', PASSWORD_FORM_ID = 'password-form';
   function teamFormHtml(t, creating) {
@@ -6816,12 +6826,12 @@ table { border-collapse: collapse; width: 100%; }
   // An installed app (its own window) can be closed from the menu; in a browser tab that is the browser's job.
   const STANDALONE_QUERY = '(display-mode: standalone)';
   function accountMenuHtml() {
-    if (!home.user) return '';
     const exit = matchMedia(STANDALONE_QUERY).matches ? '<button class="btn press" type="button" data-app-exit>Salir de la app</button>' : '';
-    return `<details class="account-menu"><summary class="btn press" aria-label="Cuenta">${ACCOUNT_ICON}</summary>
-      <div class="account-pop glass" role="menu"><p class="account-email">${esc(home.user.email)}</p>
+    const account = home.user ? `<p class="account-email">${esc(home.user.email)}</p>
         <button class="btn press" type="button" data-change-password>Editar cuenta</button>
-        <button class="btn press" type="button" data-sign-out>Cerrar sesión</button>${exit}</div></details>`;
+        <button class="btn press" type="button" data-sign-out>Cerrar sesión</button>` : '<p class="account-email">Sin cuenta: todo se guarda solo en este dispositivo.</p>';
+    return `<details class="account-menu"><summary class="btn press" aria-label="Cuenta">${ACCOUNT_ICON}</summary>
+      <div class="account-pop glass" role="menu">${account}${exit}</div></details>`;
   }
   const profileHeadHtml = (pageBar = '') => `<header class="top-bar glass"><div class="home-head app-bar"><span class="app-mark logo" aria-hidden="true">${appLogoSvg('head-logo-clip')}</span>
       <div class="home-title"><h1>HBStats</h1><small>${home.user ? esc(home.user.email) : 'En este dispositivo'}</small></div><div class="app-end">${accountMenuHtml()}</div></div>${pageBar}</header>`;
@@ -6832,7 +6842,6 @@ table { border-collapse: collapse; width: 100%; }
     const teams = home.teams.map((t) => `<button class="team-card press" type="button" data-open-team="${t.id}" style="${teamColoursStyle(t)}"><img class="crest" src="${esc(crestSrc(t))}" alt=""><span><b>${esc(t.name)}</b><small>${esc(t.club)}</small></span></button>`).join('');
     return `${statusHtml()}
       ${home.offline ? '<p class="note">Sin conexión: ves la copia guardada en esta tablet.</p>' : ''}
-      ${home.user ? '' : '<p class="note">Sin cuenta: todo se guarda solo en esta tablet.</p>'}
       <div class="card-grid profile-grid">
         <h3 class="grid-title">Mis equipos</h3>
         ${teams}<button class="team-card add press" type="button" data-new-team>+ Nuevo equipo</button>
@@ -8816,6 +8825,18 @@ table { border-collapse: collapse; width: 100%; }
       homeStatus(`No se pudo guardar: ${cloudErrorText(err)}.`);
     }
   }
+  async function setEmail(form) {
+    const email = String(new FormData(form).get('email')).trim();
+    if (!EMAIL_PATTERN.test(email)) { homeStatus('Escribe un correo válido.'); return; }
+    if (sameName(email, home.user.email)) { homeStatus('Ese ya es tu correo.'); return; }
+    homeStatus('Enviando…');
+    try {
+      await backend.setEmail(email);
+      homeStatus(`Abre el enlace que te llega a ${email} para confirmar el cambio.`);
+    } catch (err) {
+      homeStatus(`No se pudo cambiar el correo: ${cloudErrorText(err)}.`);
+    }
+  }
   // The system may refuse to close the app from a page: then the coach is told how to leave it.
   const EXIT_CHECK_MS = 300;
   function exitApp() {
@@ -8842,6 +8863,7 @@ table { border-collapse: collapse; width: 100%; }
     const kind = form.dataset.form;
     if (kind === 'login') signIn(form);
     else if (kind === 'password') setPassword(form);
+    else if (kind === 'email') setEmail(form);
     else if (kind === 'team-new') submitTeam(form, true);
     else if (kind === 'team') submitTeam(form, false);
   });
@@ -8954,46 +8976,97 @@ table { border-collapse: collapse; width: 100%; }
     if (file) pickPhoto(file);
   });
 
-  // ---- Splash: the logo dribbles in and a referee's whistle opens the app ----
+  // ---- Splash: the logo dribbles in over the crowd's murmur, the referee whistles and the stands cheer ----
   const SPLASH_MS = 2600, SPLASH_FADE_MS = 350;
-  // Seconds from the start: the ball's three floor contacts (the splash-bounce keyframes) and the whistle after them.
+  // Seconds from the start: the ball's three floor contacts (the splash-bounce keyframes) and the whistle as the name rises.
   const DRIBBLE_HITS = [0.25, 0.75, 1.15];
-  const WHISTLE = { at: 1.5, length: 0.6, tones: [2900, 3150], trillHz: 26, gain: 0.08 };
-  const THUMP = { from: 150, to: 45, length: 0.18, gain: 0.7 };
+  const WHISTLE_AT = 1.35;
+  const BOUNCE = { from: 120, to: 48, length: 0.18, gain: 0.9, fade: 0.8, slapHz: 2200, slapLength: 0.03, floorHz: 420, floorQ: 6 };
+  // A pea whistle: one tone whose pitch the pea rattles (a fast vibrato) plus the breath through it.
+  const WHISTLE = { length: 0.8, pitch: 2950, rattleHz: 48, rattleDepth: 160, gain: 0.1, breath: 0.04 };
+  // The stands: a band-passed noise bed that murmurs, then roars, with voices shouting over it.
+  const CROWD = { murmur: 0.04, roar: 0.3, rise: 0.25, hold: 0.5, tail: 1.4, bands: [500, 1200, 2600], voices: 10, voiceGain: 0.025, voicePitch: [170, 420], voiceVowelHz: 750 };
   const REDUCED_MOTION_QUERY = '(prefers-reduced-motion: reduce)';
-  function thump(ctx, at) {
-    const osc = ctx.createOscillator(), gain = ctx.createGain();
-    osc.frequency.setValueAtTime(THUMP.from, at);
-    osc.frequency.exponentialRampToValueAtTime(THUMP.to, at + THUMP.length);
-    gain.gain.setValueAtTime(THUMP.gain, at);
-    gain.gain.exponentialRampToValueAtTime(0.001, at + THUMP.length);
-    osc.connect(gain).connect(ctx.destination);
-    osc.start(at);
-    osc.stop(at + THUMP.length);
+  function noiseBuffer(ctx, seconds) {
+    const buffer = ctx.createBuffer(1, Math.ceil(seconds * ctx.sampleRate), ctx.sampleRate), data = buffer.getChannelData(0);
+    for (let i = 0; i < data.length; i++) data[i] = Math.random() * 2 - 1;
+    return buffer;
   }
-  // A pea whistle: two close tones trilled by a fast tremolo.
-  function whistle(ctx, at) {
-    const end = at + WHISTLE.length, out = ctx.createGain(), trill = ctx.createOscillator(), depth = ctx.createGain();
-    out.gain.setValueAtTime(0, at);
-    out.gain.linearRampToValueAtTime(WHISTLE.gain, at + 0.03);
-    out.gain.setValueAtTime(WHISTLE.gain, end - 0.08);
-    out.gain.linearRampToValueAtTime(0, end);
-    trill.frequency.value = WHISTLE.trillHz;
-    depth.gain.value = WHISTLE.gain / 2;
-    trill.connect(depth).connect(out.gain);
+  function noiseSource(ctx, seconds) {
+    const src = ctx.createBufferSource();
+    src.buffer = noiseBuffer(ctx, seconds);
+    return src;
+  }
+  function envelope(ctx, points) {
+    const g = ctx.createGain();
+    g.gain.setValueAtTime(points[0][1], points[0][0]);
+    points.slice(1).forEach(([t, v]) => g.gain.linearRampToValueAtTime(v, t));
+    return g;
+  }
+  // The ball on a wooden court: a low thud, the leather's slap and the floor's short ring.
+  function bounce(ctx, at, level) {
+    const end = at + BOUNCE.length, out = ctx.createGain();
+    out.gain.value = level;
     out.connect(ctx.destination);
-    const tones = WHISTLE.tones.map((f) => { const osc = ctx.createOscillator(); osc.frequency.value = f; osc.connect(out); return osc; });
-    [trill, ...tones].forEach((osc) => { osc.start(at); osc.stop(end); });
+    const thud = ctx.createOscillator(), thudGain = ctx.createGain();
+    thud.frequency.setValueAtTime(BOUNCE.from, at);
+    thud.frequency.exponentialRampToValueAtTime(BOUNCE.to, end);
+    thudGain.gain.setValueAtTime(BOUNCE.gain, at);
+    thudGain.gain.exponentialRampToValueAtTime(0.001, end);
+    thud.connect(thudGain).connect(out);
+    const slap = noiseSource(ctx, BOUNCE.length), high = ctx.createBiquadFilter(), ring = ctx.createBiquadFilter();
+    high.type = 'highpass'; high.frequency.value = BOUNCE.slapHz;
+    ring.type = 'bandpass'; ring.frequency.value = BOUNCE.floorHz; ring.Q.value = BOUNCE.floorQ;
+    const slapGain = envelope(ctx, [[at, BOUNCE.gain / 2], [at + BOUNCE.slapLength, 0]]);
+    const ringGain = envelope(ctx, [[at, BOUNCE.gain * 2], [end, 0]]);
+    slap.connect(high).connect(slapGain).connect(out);
+    slap.connect(ring).connect(ringGain).connect(out);
+    thud.start(at); thud.stop(end);
+    slap.start(at); slap.stop(end);
   }
-  // The browser decides whether a page may sound before a tap (an installed app usually may): if not, the splash is silent.
-  function playSplashSound() {
-    const Context = window.AudioContext || window.webkitAudioContext;
-    if (!Context) return;
-    const ctx = new Context();
-    if (ctx.state !== 'running') { ctx.close(); return; }
-    DRIBBLE_HITS.forEach((t) => thump(ctx, ctx.currentTime + t));
-    whistle(ctx, ctx.currentTime + WHISTLE.at);
-    setTimeout(() => ctx.close(), (WHISTLE.at + WHISTLE.length) * 1000 + SPLASH_FADE_MS);
+  function whistle(ctx, at) {
+    const end = at + WHISTLE.length, out = envelope(ctx, [[at, 0], [at + 0.03, WHISTLE.gain], [end - 0.1, WHISTLE.gain], [end, 0]]);
+    out.connect(ctx.destination);
+    const tone = ctx.createOscillator(), rattle = ctx.createOscillator(), depth = ctx.createGain();
+    tone.frequency.value = WHISTLE.pitch;
+    rattle.frequency.value = WHISTLE.rattleHz;
+    depth.gain.value = WHISTLE.rattleDepth;
+    rattle.connect(depth).connect(tone.frequency);
+    tone.connect(out);
+    const breath = noiseSource(ctx, WHISTLE.length), band = ctx.createBiquadFilter(), breathGain = ctx.createGain();
+    band.type = 'bandpass'; band.frequency.value = WHISTLE.pitch; band.Q.value = 4;
+    breathGain.gain.value = WHISTLE.breath / WHISTLE.gain;
+    breath.connect(band).connect(breathGain).connect(out);
+    [tone, rattle, breath].forEach((n) => { n.start(at); n.stop(end); });
+  }
+  // From `from` the stands murmur; at `cheer` they roar and shout, and fade out by the returned time.
+  function crowd(ctx, from, cheer) {
+    const peak = cheer + CROWD.rise, end = peak + CROWD.hold + CROWD.tail;
+    const bed = envelope(ctx, [[from, 0], [from + CROWD.rise, CROWD.murmur], [cheer, CROWD.murmur], [peak, CROWD.roar], [peak + CROWD.hold, CROWD.roar], [end, 0]]);
+    bed.connect(ctx.destination);
+    const noise = noiseSource(ctx, end - from);
+    CROWD.bands.forEach((hz) => { const f = ctx.createBiquadFilter(); f.type = 'bandpass'; f.frequency.value = hz; f.Q.value = 0.8; noise.connect(f).connect(bed); });
+    noise.start(from); noise.stop(end);
+    const [low, high] = CROWD.voicePitch;
+    for (let i = 0; i < CROWD.voices; i++) {
+      const start = cheer + Math.random() * CROWD.hold, length = 0.4 + Math.random() * 0.6, pitch = low + Math.random() * (high - low);
+      const voice = ctx.createOscillator(), vowel = ctx.createBiquadFilter();
+      voice.type = 'sawtooth';
+      voice.frequency.setValueAtTime(pitch, start);
+      voice.frequency.linearRampToValueAtTime(pitch * 1.25, start + length);
+      vowel.type = 'bandpass'; vowel.frequency.value = CROWD.voiceVowelHz; vowel.Q.value = 2;
+      voice.connect(vowel).connect(envelope(ctx, [[start, 0], [start + 0.08, CROWD.voiceGain], [start + length, 0]])).connect(ctx.destination);
+      voice.start(start); voice.stop(start + length);
+    }
+    return end;
+  }
+  // The full intro (the dribble, the whistle and the cheer) or, after a tap, only the whistle and the cheer.
+  function playMatchSound(ctx, withDribble) {
+    const now = ctx.currentTime, whistleAt = now + (withDribble ? WHISTLE_AT : 0.05);
+    if (withDribble) DRIBBLE_HITS.forEach((t, i) => bounce(ctx, now + t, BOUNCE.fade ** i));
+    whistle(ctx, whistleAt);
+    const end = crowd(ctx, now, whistleAt + WHISTLE.length);
+    setTimeout(() => ctx.close(), (end - now) * 1000);
   }
   function dismissSplash() {
     const el = $('splash');
@@ -9002,17 +9075,25 @@ table { border-collapse: collapse; width: 100%; }
     setTimeout(() => el.remove(), SPLASH_FADE_MS);
   }
   // Not over a match that is being resumed, and not for whoever asks the system for less motion. A tap skips it.
+  // Where the browser lets the page sound on its own (an installed app usually) it plays and leaves by itself; elsewhere
+  // it waits for a tap, «Toca para entrar», and that tap starts the whistle and the cheer.
   function showSplash() {
     if (matchMedia(REDUCED_MOTION_QUERY).matches || readJson(CURRENT_MATCH_KEY)) return;
+    const Context = window.AudioContext || window.webkitAudioContext, ctx = Context ? new Context() : null;
+    const sounding = ctx && ctx.state === 'running';
     const el = document.createElement('div');
     el.id = 'splash';
-    el.className = 'splash';
+    el.className = `splash${ctx && !sounding ? ' await-tap' : ''}`;
     el.style.setProperty('--splash-fade', `${SPLASH_FADE_MS}ms`);
-    el.innerHTML = `<div class="splash-run"><div class="splash-ball">${appLogoSvg('splash-logo-clip')}</div></div><div class="splash-title"><b>HBStats</b><small>Balonmano en directo</small></div>`;
-    el.addEventListener('click', dismissSplash);
+    el.innerHTML = `<div class="splash-run"><div class="splash-ball">${appLogoSvg('splash-logo-clip')}</div></div><div class="splash-title"><b>HBStats</b><small>Balonmano en directo</small></div>
+      <p class="splash-tap">Toca para entrar</p>`;
+    el.addEventListener('click', () => {
+      if (ctx && !sounding) ctx.resume().then(() => playMatchSound(ctx, false), (err) => console.warn(`No splash sound: ${err.message}`));
+      dismissSplash();
+    }, { once: true });
     document.body.append(el);
-    playSplashSound();
-    setTimeout(dismissSplash, SPLASH_MS);
+    if (sounding) { playMatchSound(ctx, true); setTimeout(dismissSplash, SPLASH_MS); }
+    else if (!ctx) setTimeout(dismissSplash, SPLASH_MS);
   }
 
   // ===================== Boot =====================
