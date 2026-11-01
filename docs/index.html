@@ -776,7 +776,7 @@ td.zero { color: var(--color-text-tertiary); }
 .splash-run { animation: splash-run var(--splash-arrive) linear both; }
 .splash-ball { width: min(40vmin, 220px); aspect-ratio: 1; animation: splash-bounce var(--splash-arrive) both; }
 .splash-ball svg { display: block; width: 100%; height: 100%; animation: splash-spin var(--splash-arrive) cubic-bezier(.2, .6, .3, 1) both; filter: drop-shadow(0 12px 30px rgba(212, 32, 42, .55)); }
-.splash-title { display: grid; justify-items: center; animation: splash-rise .5s var(--splash-arrive) var(--ease-out) both; }
+.splash-title { display: grid; justify-items: center; animation: splash-rise .25s var(--splash-arrive) var(--ease-out) both; }
 .splash-title b { font-family: var(--font-display); font-weight: 800; font-size: clamp(40px, 9vmin, 72px); letter-spacing: .08em; text-transform: uppercase; line-height: 1; }
 .splash-title small { color: #f5c400; font-family: var(--font-display); font-weight: 700; letter-spacing: .3em; text-transform: uppercase; }
 .splash-tap { display: none; margin: var(--space-4) 0 0; font-family: var(--font-display); font-weight: 700; font-size: 20px; letter-spacing: .2em; text-transform: uppercase; animation: splash-rise .5s calc(var(--splash-arrive) + .3s) var(--ease-out) both, splash-pulse 1.2s calc(var(--splash-arrive) + .8s) ease-in-out infinite; }
@@ -9010,8 +9010,8 @@ table { border-collapse: collapse; width: 100%; }
   // sounds/splash.mp3: steps and a ball on court, the whistle at SPLASH_WHISTLE_S, the crowd fading out by its end.
   const SPLASH_SOUND = 'sounds/splash.mp3';
   const SPLASH_WHISTLE_S = 2.5, SPLASH_FADE_MS = 350;
-  // The logo lands this long before the whistle, so the name is seen before the screen changes.
-  const SPLASH_TITLE_S = 0.9;
+  // The logo lands this long before the whistle: the name rises in that moment and the screen changes on the whistle.
+  const SPLASH_TITLE_S = 0.3;
   // A tap after a silent intro starts the sound just before the whistle.
   const SPLASH_TAP_LEAD_S = 0.1;
   const REDUCED_MOTION_QUERY = '(prefers-reduced-motion: reduce)';
