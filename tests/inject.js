@@ -4446,7 +4446,13 @@
         if (faces.length !== 3 || faces.some((f) => f.disabled) || !faces.every((f) => /Presente/.test(f.textContent))) throw new Error(faces.map((f) => f.textContent).join('|'));
         if (document.querySelectorAll('.squad:not(.callup) h4').length !== 3) throw new Error('not grouped by position');
         if (document.querySelector('[data-att-kind]') || flatText(document.querySelector('.att .att-title')) !== 'Entreno') throw new Error('kind chips or heading');
-        if (!/3 presentes/.test(flatText(document.querySelector('.att-count'))) || /NaN|undefined/.test($('home').textContent)) throw new Error(flatText(document.querySelector('.att-count')));
+        const stats = [...document.querySelectorAll('.att-stats .att-stat')].map(flatText).join('|');
+        if (stats !== '3 presentes|0 faltas|0 justificadas|0 lesionados' || document.querySelectorAll('.att-stat.zero').length !== 3 || /NaN|undefined/.test($('home').textContent)) throw new Error(stats);
+        if (document.querySelector('.callup') || document.querySelector('.att-head [data-att-mode="callup"]').textContent !== 'Convocatoria ›') throw new Error('the training screen shows the convocatoria or lacks its button');
+        document.querySelector('[data-att-mode="callup"]').click();
+        if (!document.querySelector('.callup') || document.querySelector('[data-att]') || flatText(document.querySelector('.att-title')) !== 'Convocatoria') throw new Error('the button does not swap to the convocatoria');
+        document.querySelector('[data-att-mode="training"]').click();
+        if (document.querySelector('.callup') || !document.querySelector('[data-att]')) throw new Error('no way back to the training');
         if (document.querySelector('[data-att-delete]')) throw new Error('delete offered for a session that does not exist');
       });
     });
@@ -4460,7 +4466,7 @@
         document.querySelector(`[data-att="${home.roster[2].id}"]`).click();
         const stored = localSessions();
         if (stored.length !== 1 || !stored[0].dirty || stored[0].date !== nextTrainingDate() || stored[0].marks[id].s !== 'F' || stored[0].marks[home.roster[2].id].s !== 'J') throw new Error(JSON.stringify(stored));
-        if (!/1 presente · 1 falta · 1 justificada/.test(flatText(document.querySelector('.att-count'))) || !/Guardado en la tablet/.test($('home-status').textContent)) throw new Error(flatText(document.querySelector('.att-count')));
+        if ([...document.querySelectorAll('.att-stat')].map(flatText).join('|') !== '1 presente|1 falta|1 justificada|0 lesionados' || !/Guardado en la tablet/.test($('home-status').textContent)) throw new Error(flatText(document.querySelector('.att-count')));
         if (!document.querySelector('[data-att-delete]')) throw new Error('no delete for a saved session');
         await syncAttendance();
         if (localSessions()[0].dirty || (await backend.listSessions('cal-team')).length !== 1 || !/Subido/.test($('home-status').textContent)) throw new Error('not uploaded');
@@ -4504,14 +4510,14 @@
       const later = fx('f3', 3, localIso(new Date(new Date(`${weekOf(today)[1]}T12:00:00`).getTime() + 7 * DAY_MS)), 'BM Nazareno');
       await withAttendanceView(async () => {
         removeKey(CALLUP_KEY_PREFIX + team.id); removeKey(SQUAD_KEY_PREFIX + team.id);
-        home.callupDraft = null; home.callup = null; renderHome();
+        home.callupDraft = null; home.callup = null; switchAttendanceMode(ATTENDANCE_MODES.CALLUP);
         const section = document.querySelector('.callup');
         if (flatText(section.querySelector('.att-title')) !== 'Convocatoria' || $('callup-fixture').value !== 'f2' || $('callup-date').value !== weekOf(today)[1] || $('callup-time').value !== '18:30') throw new Error('next round ' + $('callup-fixture').value + $('callup-date').value + $('callup-time').value);
         const faces = [...section.querySelectorAll('[data-callup-pick]')];
         if (faces.length !== 3 || faces.some((f) => f.getAttribute('aria-pressed') !== 'false' || !/No convocado/.test(f.textContent)) || !section.querySelector('[data-callup-save]').disabled) throw new Error('all start not called up');
         [home.roster[1], home.roster[0]].forEach((p) => document.querySelector(`[data-callup-pick="${p.id}"]`).click());
         const called = document.querySelector(`[data-callup-pick="${home.roster[0].id}"]`);
-        if (called.getAttribute('aria-pressed') !== 'true' || flatText(called.querySelector('.att-badge')) !== 'Convocado' || !/2 convocados de 16/.test(flatText(document.querySelector('.callup .att-count')))) throw new Error('pick ' + flatText(called));
+        if (called.getAttribute('aria-pressed') !== 'true' || flatText(called.querySelector('.att-badge')) !== 'Convocado' || flatText(document.querySelector('.callup .att-stat.att-C')) !== '2 convocados de 16' || flatText(document.querySelector('.callup .att-stat.att-NC')) !== '1 no convocado') throw new Error('pick ' + flatText(called));
         const data = callupCardData(callupDraft(), calledPlayers(callupDraft()));
         if (data.players.map((p) => p.name).join() !== 'PORTERO UNO (P),LATERAL SIETE' || data.rival !== 'BALONMANO GADES - ASISA' || data.place !== 'Fuera' || data.venue !== 'Pabellón Centro' || data.round !== 2 || data.when.time !== '18:30') throw new Error(JSON.stringify(data));
         document.querySelector('[data-callup-save]').click();
@@ -4535,7 +4541,7 @@
     });
     await TA('convocatoria: more than the acta holds cannot be saved', async () => {
       await withAttendanceView(async () => {
-        home.callupDraft = null; renderHome();
+        home.callupDraft = null; switchAttendanceMode(ATTENDANCE_MODES.CALLUP);
         home.roster = [...home.roster, ...Array.from({ length: MAX_ROSTER - 2 }, (_, i) => ({ id: `x${i}`, num: 30 + i, name: `Extra ${i}`, pos: 'LAT' }))];
         callupDraft().ids = new Set(home.roster.map((p) => p.id)); renderHome();
         if (!document.querySelector('[data-callup-save]').disabled || !/Sobran 1/.test(flatText(document.querySelector('.callup')))) throw new Error('17 accepted');
@@ -4581,7 +4587,7 @@
         if (home.view !== 'attendance' || !document.querySelector('[data-att]') || home.attendanceDate !== nextTrainingDate()) throw new Error(home.view);
         const pressed = [...document.querySelectorAll('.app-bar .tabs button')].filter((b) => b.getAttribute('aria-pressed') === 'true').map((b) => b.textContent);
         if (pressed.join() !== 'Asistencia') throw new Error('pressed ' + pressed);
-        if (!document.querySelector('.att-how') || !document.querySelector('.att-how').textContent.includes('toca a quien no esté')) throw new Error('no how-to line');
+        if (!document.querySelector('.att-how') || !document.querySelector('.att-how').textContent.includes('Toca a quien no esté')) throw new Error('no how-to line');
         if (document.querySelector('#home [data-nav-leading]') !== document.querySelector('#home .teams-corner')) throw new Error('leading');
       });
     });

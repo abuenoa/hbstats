@@ -991,7 +991,21 @@ body:has(#home:not([hidden])) { overflow: hidden; }
 /* Attendance: the faces with a status badge that carries a letter and a word, never colour alone */
 .att-bar { display: flex; align-items: end; gap: var(--space-4); flex-wrap: wrap; margin-bottom: var(--space-3); }
 .att-sum { display: grid; gap: var(--space-1); }
-.att-count { margin: 0; font: var(--type-heading); }
+.att-head { display: flex; align-items: center; justify-content: space-between; gap: var(--space-2) var(--space-3); flex-wrap: wrap; margin-bottom: var(--space-3); }
+.att .att-bar .field { min-width: 0; max-width: 100%; }
+.att .att-bar select.in { max-width: 100%; }
+@media (max-width: 600px) { .att-head .att-title { font-size: 1.6rem; } .att-switch { font-size: .9rem; padding-inline: var(--space-3); } }
+.att-head .att-title { margin: 0; min-width: 0; }
+.att-switch { flex: none; white-space: nowrap; font-family: var(--font-display); font-weight: 800; font-size: 1.1rem; letter-spacing: .06em; text-transform: uppercase; }
+.att-stats { display: flex; gap: var(--space-2); flex-wrap: wrap; }
+.att-stat { display: grid; justify-items: center; min-width: 88px; padding: var(--space-2) var(--space-3); border: 1px solid currentColor; border-radius: var(--radius-lg); background: var(--soft); }
+.att-stat b { font-family: var(--font-display); font-weight: 800; font-size: 2rem; line-height: 1; }
+.att-stat span { color: var(--muted); font-size: .72rem; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; }
+.att-stat.zero { opacity: .45; }
+.att-how { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-2); margin: 0 0 var(--space-3); padding: var(--space-2) var(--space-3); border-radius: var(--radius-md); background: var(--soft); color: var(--muted); font-size: .9rem; }
+.att-how .att-badge { padding: 2px var(--space-2); border: 1px solid currentColor; border-radius: var(--radius-full); font-size: .78rem; font-weight: 700; }
+.att-arrow { color: var(--muted); }
+.att-over { color: var(--color-danger-text); font-weight: 700; }
 .att-note-row { display: flex; align-items: end; gap: var(--space-3); margin-bottom: var(--space-3); }
 .att-note-row .field { flex: 1; min-width: 0; }
 .att-note-in { width: 100%; min-width: 0; }
@@ -1458,7 +1472,7 @@ span.att-foot { visibility: hidden; }
   const readOnly = () => team.role === PLAYER_ROLE;
   // The controls that change the team, its matches, calendar or attendance: they leave the page for a player.
   const STAFF_ONLY_SELECTOR = ['[data-new-match]', '[data-player-edit]', '[data-home-view="team-edit"]', '[data-rating-tune]', '[data-fixture-edit]',
-    '[data-calendar-import]', '[data-restart-match]', '[data-delete-match]', '[data-att-delete]', '[data-att-note]', '.callup', '[data-tab="acta"]'].join();
+    '[data-calendar-import]', '[data-restart-match]', '[data-delete-match]', '[data-att-delete]', '[data-att-note]', '.callup', '[data-att-mode]', '[data-tab="acta"]'].join();
   function stripStaffControls(root) {
     if (!readOnly()) return;
     root.querySelectorAll(STAFF_ONLY_SELECTOR).forEach((el) => el.remove());
@@ -6094,7 +6108,7 @@ table { border-collapse: collapse; width: 100%; }
   let currentMatchId = null;
   let syncTimer = null;
   let attendanceSyncTimer = null;
-  const home = { view: 'loading', user: null, teams: [], roster: [], matches: [], season: null, templates: [], template: null, squad: new Set(), leaderMetric: 'goals', playerId: null, playerMatchId: null, playerEdit: false, playerDraft: null, offline: false, error: '', draft: null, crestDraft: undefined, armed: null, passwordChange: false, seasonOffline: false, sessions: null, fixtures: null, teamMatches: [], fixtureEdit: null, squadFixture: null, attendanceDate: null, attendanceNoteFor: null, stateMatches: [], statsSort: null, statsMetric: 'goals', statsPlayer: null, callupDraft: null, callup: null, callupBusy: null, inviteLink: null, weightsDraft: null, ratingCache: null };
+  const home = { view: 'loading', user: null, teams: [], roster: [], matches: [], season: null, templates: [], template: null, squad: new Set(), leaderMetric: 'goals', playerId: null, playerMatchId: null, playerEdit: false, playerDraft: null, offline: false, error: '', draft: null, crestDraft: undefined, armed: null, passwordChange: false, seasonOffline: false, sessions: null, fixtures: null, teamMatches: [], fixtureEdit: null, squadFixture: null, attendanceDate: null, attendanceMode: null, attendanceNoteFor: null, stateMatches: [], statsSort: null, statsMetric: 'goals', statsPlayer: null, callupDraft: null, callup: null, callupBusy: null, inviteLink: null, weightsDraft: null, ratingCache: null };
 
   // ---- Device storage ----
   function readJson(key) {
@@ -8142,11 +8156,19 @@ table { border-collapse: collapse; width: 100%; }
     const stored = storedSession();
     return !stored ? '' : stored.pending ? ATTENDANCE_SAVED_TEXT : ATTENDANCE_UPLOADED_TEXT;
   }
-  function attendanceCountText(statuses) {
-    return Object.entries(ATTENDANCE_COUNT_WORDS)
-      .map(([code, [one, many]]) => [code, statuses.filter((x) => x === code).length, one, many])
-      .filter(([code, n]) => n > 0 || code === 'P').map(([, n, one, many]) => plural(n, one, many)).join(' · ');
+  // Attendance shows one screen at a time: the training (with its trends) or the convocatoria of the match.
+  const ATTENDANCE_MODES = { TRAINING: 'training', CALLUP: 'callup' };
+  const ATTENDANCE_SWITCH = { [ATTENDANCE_MODES.TRAINING]: ['Entreno', 'Convocatoria ›', ATTENDANCE_MODES.CALLUP], [ATTENDANCE_MODES.CALLUP]: ['Convocatoria', '‹ Entreno', ATTENDANCE_MODES.TRAINING] };
+  function attendanceHeadHtml(mode) {
+    const [title, other, target] = ATTENDANCE_SWITCH[mode];
+    return `<div class="att-head"><h2 class="att-title">${title}</h2><button class="btn primary press att-switch" type="button" data-att-mode="${target}">${other}</button></div>`;
   }
+  // A big count per status, in the status colour; a status nobody has is dimmed.
+  const attendanceStatHtml = (code, n, [one, many]) => `<div class="att-stat att-${code}${n ? '' : ' zero'}"><b>${n}</b> <span>${n === 1 ? one : many}</span></div>`;
+  const attendanceStatsHtml = (statuses) => `<div class="att-stats">${Object.entries(ATTENDANCE_COUNT_WORDS)
+    .map(([code, words]) => attendanceStatHtml(code, statuses.filter((x) => x === code).length, words)).join('')}</div>`;
+  // What a tap does: the statuses in the order they follow each other.
+  const attendanceHowHtml = (lead, steps, joint) => `<p class="att-how"><span>${lead}</span>${steps.map(([code, label]) => `<span class="att-badge att-${code}">${label}</span>`).join(`<span class="att-arrow" aria-hidden="true">${joint}</span>`)}</p>`;
   function attendanceFaceHtml(p, session) {
     const code = sessionStatus(session, p.id, null), mark = session.marks[p.id];
     // Every tile has the footer slot, so a note never changes the height of a row; it is empty for P.
@@ -8164,19 +8186,25 @@ table { border-collapse: collapse; width: 100%; }
         <input class="in att-note-in" type="text" maxlength="${CONFIG.attendance.noteMax}" data-att-note-input="${esc(p.id)}" value="${esc(mark.n || '')}"></label>
       <button class="btn primary press" type="button" data-att-note-save>Guardar</button></div>`;
   }
-  function attendanceHtml() {
+  function trainingHtml() {
     const session = currentSession();
-    const counted = attendanceCountText(home.roster.map((p) => sessionStatus(session, p.id, null)));
     const remove = storedSession() ? `<div class="row-actions">${armedButton('att-delete', 'Borrar sesión', 'data-att-delete')}</div>` : '';
-    return `${home.offline ? '<p class="note">Sin conexión: ves la copia guardada en esta tablet.</p>' : ''}
-      <section class="sheet-card squad att"><h2 class="att-title">Entreno</h2>
+    return `<section class="sheet-card squad att">${home.roster.length ? attendanceHeadHtml(ATTENDANCE_MODES.TRAINING) : '<h2 class="att-title">Entreno</h2>'}
         <div class="att-bar"><label class="field">Fecha<input class="in" type="date" id="att-date" value="${esc(home.attendanceDate)}"></label>
-          <div class="att-sum"><p class="att-count">${counted}</p>${statusHtml(attendanceStatusText())}</div></div>
-        <p class="note att-how">Todos cuentan como presentes: toca a quien no esté. Cada toque cambia a ${[...MARK_CODES, 'P'].map((c) => ATTENDANCE[c]).join(' → ')}.</p>
+          ${attendanceStatsHtml(home.roster.map((p) => sessionStatus(session, p.id, null)))}<div class="att-sum">${statusHtml(attendanceStatusText())}</div></div>
+        ${attendanceHowHtml('Todos empiezan presentes. Toca a quien no esté:', ['P', ...MARK_CODES].map((c) => [c, ATTENDANCE[c]]), '→')}
         ${attendanceNoteRowHtml(session)}
         <div class="pos-groups">${positionGroupsHtml((p) => attendanceFaceHtml(p, session)) || '<p class="note">Todavía no hay jugadores.</p>'}</div>${remove}</section>
-      ${home.roster.length ? callupHtml() : ''}
       ${attendanceTrendsHtml()}`;
+  }
+  function attendanceHtml() {
+    const callup = home.attendanceMode === ATTENDANCE_MODES.CALLUP && home.roster.length;
+    return `${home.offline ? '<p class="note">Sin conexión: ves la copia guardada en esta tablet.</p>' : ''}${callup ? callupHtml() : trainingHtml()}`;
+  }
+  function switchAttendanceMode(mode) {
+    home.attendanceMode = mode;
+    renderHome();
+    window.scrollTo(0, 0);
   }
   // ---- Convocatoria: the match (the next of the calendar unless changed), the players called up, then the image ----
   // Kept on this device per team; saving it also makes it the squad of the next new match.
@@ -8216,12 +8244,14 @@ table { border-collapse: collapse; width: 100%; }
     const saved = home.callup && home.callup.key === callupKey(draft, players);
     const image = saved ? `<img class="callup-preview" src="${home.callup.url}" alt="Convocatoria: ${plural(players.length, 'jugador', 'jugadores')}">
         <div class="row-actions"><button class="btn primary press" type="button" data-callup-share>Compartir convocatoria</button></div>` : '';
-    return `<section class="sheet-card squad att callup"><h2 class="att-title">Convocatoria</h2>
+    const { true: called, false: left } = CALLUP_STATES;
+    return `<section class="sheet-card squad att callup">${attendanceHeadHtml(ATTENDANCE_MODES.CALLUP)}
       <div class="att-bar"><label class="field">Partido<select class="in" id="callup-fixture">${options}</select></label>${rival}
         <label class="field">Fecha<input class="in" type="date" id="callup-date" value="${esc(draft.date)}"></label>
-        <label class="field">Hora<input class="in" type="time" id="callup-time" value="${esc(draft.time)}"></label>
-        <p class="att-count">${plural(players.length, 'convocado', 'convocados')} de ${MAX_ROSTER}</p></div>
-      <p class="note">Toca a cada jugador para convocarlo o quitarlo.${over ? ` <b>Sobran ${players.length - MAX_ROSTER}: el acta admite ${MAX_ROSTER}.</b>` : ''}</p>
+        <label class="field">Hora<input class="in" type="time" id="callup-time" value="${esc(draft.time)}"></label></div>
+      <div class="att-bar"><div class="att-stats">${attendanceStatHtml(called.code, players.length, [`convocado de ${MAX_ROSTER}`, `convocados de ${MAX_ROSTER}`])}${attendanceStatHtml(left.code, home.roster.length - players.length, ['no convocado', 'no convocados'])}</div></div>
+      ${attendanceHowHtml('Toca a cada jugador para convocarlo o quitarlo:', [[left.code, left.label], [called.code, called.label]], '⇄')}
+      ${over ? `<p class="note att-over" role="alert">Sobran ${players.length - MAX_ROSTER}: el acta admite ${MAX_ROSTER}.</p>` : ''}
       <div class="pos-groups">${positionGroupsHtml((p) => callupFaceHtml(p, draft.ids.has(p.id)))}</div>
       <div class="row-actions"><button class="btn primary press" type="button" data-callup-save${!players.length || over || saved ? ' disabled' : ''}>${saved ? 'Convocatoria guardada' : 'Guardar convocatoria'}</button></div>
       ${home.callupBusy ? '<p class="note">Generando la imagen…</p>' : ''}${image}</section>`;
@@ -8282,7 +8312,7 @@ table { border-collapse: collapse; width: 100%; }
     }
   }
   async function showAttendance() {
-    Object.assign(home, { attendanceDate: nextTrainingDate(), attendanceNoteFor: null, callupDraft: null });
+    Object.assign(home, { attendanceDate: nextTrainingDate(), attendanceNoteFor: null, callupDraft: null, attendanceMode: ATTENDANCE_MODES.TRAINING });
     showHomeView('attendance');
     try { home.offline = (await loadAttendance()).offline; }
     catch (err) { home.sessions = withLocalSessions([]); home.offline = true; console.warn(`Attendance not available: ${cloudErrorText(err)}`); }
@@ -9022,6 +9052,7 @@ table { border-collapse: collapse; width: 100%; }
     if (b.hasAttribute('data-invite-share')) { shareInviteLink(); return; }
     if (b.hasAttribute('data-callup-share')) { shareCallup(); return; }
     if (b.hasAttribute('data-callup-save')) { saveCallup(); return; }
+    if (b.dataset.attMode) { switchAttendanceMode(b.dataset.attMode); return; }
     if (b.dataset.attNote) { home.attendanceNoteFor = b.dataset.attNote; renderHome(); document.querySelector(`[data-att-note-input="${b.dataset.attNote}"]`).focus(); return; }
     if (b.hasAttribute('data-att-note-save')) { home.attendanceNoteFor = null; renderHome(); return; }
     if (b.dataset.homeView === 'attendance') { showAttendance(); return; }
