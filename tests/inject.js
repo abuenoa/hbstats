@@ -4312,11 +4312,8 @@
     };
     await TA('attendance: tapping cycles Presente, Falta, Justificada, Lesionado', async () => {
       const train = ['P', 'F', 'J', 'L', 'P'], seen = [train[0]];
-      train.slice(1).forEach(() => seen.push(nextStatus(seen[seen.length - 1], false)));
+      train.slice(1).forEach(() => seen.push(nextStatus(seen[seen.length - 1])));
       if (seen.join() !== train.join()) throw new Error(seen.join());
-      const match = ['NC', 'F', 'J', 'L', 'NC'], seenMatch = [match[0]];
-      match.slice(1).forEach(() => seenMatch.push(nextStatus(seenMatch[seenMatch.length - 1], true)));
-      if (seenMatch.join() !== match.join()) throw new Error(seenMatch.join());
       const s0 = emptySession(), s1 = setMark(s0, 'p1', 'F', 'x'.repeat(CONFIG.attendance.noteMax + 5));
       if (s1.marks.p1.s !== 'F' || s1.marks.p1.n.length !== CONFIG.attendance.noteMax || Object.keys(s0.marks).length) throw new Error(JSON.stringify([s0, s1]));
       if (setMark(s1, 'p1', 'J').marks.p1.n !== s1.marks.p1.n) throw new Error('the note was lost on the next tap');
@@ -4438,13 +4435,17 @@
       });
     };
     const badgeOf = (id) => document.querySelector(`[data-att="${id}"] .att-badge`).textContent.replace(/\s+/g, ' ').trim();
-    await TA('attendance view: today by default, faces by position, every one Presente', async () => {
+    await TA('attendance: the next training day is Tuesday, Thursday or Friday', async () => {
+      const days = { '2026-11-02': '2026-11-03', '2026-11-03': '2026-11-03', '2026-11-04': '2026-11-05', '2026-11-06': '2026-11-06', '2026-11-07': '2026-11-10', '2026-12-31': '2026-12-31', '2027-01-02': '2027-01-05' };
+      Object.entries(days).forEach(([from, want]) => { if (nextTrainingDate(from) !== want) throw new Error(`${from} → ${nextTrainingDate(from)}`); });
+    });
+    await TA('attendance view: the next training by default, faces by position, every one Presente', async () => {
       await withAttendanceView(async () => {
         const faces = [...document.querySelectorAll('.squad [data-att]')];
-        if (home.attendanceDate !== todayIso() || home.attendanceKind !== 'ENTRENO' || $('att-date').value !== todayIso()) throw new Error(home.attendanceDate + home.attendanceKind);
+        if (home.attendanceDate !== nextTrainingDate() || $('att-date').value !== nextTrainingDate()) throw new Error(home.attendanceDate);
         if (faces.length !== 3 || faces.some((f) => f.disabled) || !faces.every((f) => /Presente/.test(f.textContent))) throw new Error(faces.map((f) => f.textContent).join('|'));
-        if (document.querySelectorAll('.squad h4').length !== 3) throw new Error('not grouped by position');
-        if (document.querySelector('[data-att-kind="ENTRENO"]').getAttribute('aria-pressed') !== 'true' || document.querySelector('[data-att-kind="PARTIDO"]').getAttribute('aria-pressed') !== 'false') throw new Error('kind chips');
+        if (document.querySelectorAll('.squad:not(.callup) h4').length !== 3) throw new Error('not grouped by position');
+        if (document.querySelector('[data-att-kind]') || flatText(document.querySelector('.att .att-title')) !== 'Entreno') throw new Error('kind chips or heading');
         if (!/3 presentes/.test(flatText(document.querySelector('.att-count'))) || /NaN|undefined/.test($('home').textContent)) throw new Error(flatText(document.querySelector('.att-count')));
         if (document.querySelector('[data-att-delete]')) throw new Error('delete offered for a session that does not exist');
       });
@@ -4458,36 +4459,11 @@
         document.querySelector(`[data-att="${home.roster[2].id}"]`).click();
         document.querySelector(`[data-att="${home.roster[2].id}"]`).click();
         const stored = localSessions();
-        if (stored.length !== 1 || !stored[0].dirty || stored[0].date !== todayIso() || stored[0].marks[id].s !== 'F' || stored[0].marks[home.roster[2].id].s !== 'J') throw new Error(JSON.stringify(stored));
+        if (stored.length !== 1 || !stored[0].dirty || stored[0].date !== nextTrainingDate() || stored[0].marks[id].s !== 'F' || stored[0].marks[home.roster[2].id].s !== 'J') throw new Error(JSON.stringify(stored));
         if (!/1 presente · 1 falta · 1 justificada/.test(flatText(document.querySelector('.att-count'))) || !/Guardado en la tablet/.test($('home-status').textContent)) throw new Error(flatText(document.querySelector('.att-count')));
         if (!document.querySelector('[data-att-delete]')) throw new Error('no delete for a saved session');
         await syncAttendance();
         if (localSessions()[0].dirty || (await backend.listSessions('cal-team')).length !== 1 || !/Subido/.test($('home-status').textContent)) throw new Error('not uploaded');
-      });
-    });
-    await TA('attendance view: on a match day, convocados are locked and others read No convocado', async () => {
-      const day = todayIso(), call = (ids) => ({ id: 'mx', date: day, them: 'Rival', state: { players: ids.map((id) => ({ id })) } });
-      await withAttendanceView(async () => {
-        home.season = home.stateMatches = [call([home.roster[0].id, home.roster[1].id])];
-        home.teamMatches = [{ id: 'mx', date: day, them: 'Rival' }];
-        await showAttendance();
-        const [gk, lat, piv] = home.roster.map((p) => document.querySelector(`[data-att="${p.id}"]`));
-        if (home.attendanceKind !== 'PARTIDO' || !gk.disabled || !lat.disabled || piv.disabled) throw new Error('lock: ' + home.attendanceKind);
-        if (!/Convocado/.test(gk.textContent) || !/No convocado/.test(piv.textContent)) throw new Error(gk.textContent + '|' + piv.textContent);
-        if (!/2 presentes/.test(flatText(document.querySelector('.att-count'))) || /no convocado/i.test(flatText(document.querySelector('.att-count')))) throw new Error('counter ' + flatText(document.querySelector('.att-count')));
-        gk.click();
-        if (localSessions().length) throw new Error('a locked face changed the session');
-        piv.click();
-        if (!/F Falta/.test(badgeOf(home.roster[2].id)) || localSessions()[0].matchId !== 'mx') throw new Error(badgeOf(home.roster[2].id) + JSON.stringify(localSessions()));
-        for (let i = 0; i < 3; i++) document.querySelector(`[data-att="${home.roster[2].id}"]`).click();
-        if (!/No convocado/.test(badgeOf(home.roster[2].id))) throw new Error('did not return to No convocado');
-      });
-    });
-    await TA('attendance view: a fixture kickoff today also makes it a match day', async () => {
-      await withAttendanceView(async () => {
-        home.fixtures = [fx('f1', 1, weekOf(todayIso())[1], 'Rival', { kickoff: new Date().toISOString() })];
-        await showAttendance();
-        if (home.attendanceKind !== 'PARTIDO') throw new Error(home.attendanceKind);
       });
     });
     await TA('attendance view: a note is saved and escaped', async () => {
@@ -4523,42 +4499,48 @@
         if (document.querySelectorAll('.att-foot').length !== 3) throw new Error('every tile needs the footer slot');
       });
     });
-    await TA('convocatoria: picked from the acta, follows the coach and shares one image', async () => {
-      const day = todayIso(), acta = { id: 'mc', date: day, them: 'BM Gades', status: 'setup', state: { players: [{ id: 'x' }], them: 'BM Gades', venue: 'Pabellón Centro', home: false } };
+    await TA('convocatoria: the next round by default, two states, saved as the squad, one image to share', async () => {
+      const today = todayIso(), next = fx('f2', 2, weekOf(today)[1], 'BALONMANO GADES - ASISA', { home: false, venue: 'Pabellón Centro', kickoff: `${weekOf(today)[1]}T18:30:00` });
+      const later = fx('f3', 3, localIso(new Date(new Date(`${weekOf(today)[1]}T12:00:00`).getTime() + 7 * DAY_MS)), 'BM Nazareno');
       await withAttendanceView(async () => {
-        acta.state.players = [home.roster[1], home.roster[0]].map((p) => ({ id: p.id }));
-        home.stateMatches = [acta]; home.teamMatches = [{ id: 'mc', date: day, them: 'BM Gades' }];
-        home.callupPicks = null; home.callup = null;
-        await showAttendance();
-        const picked = () => [...document.querySelectorAll('[data-callup-pick][aria-pressed="true"]')].map((b) => b.dataset.callupPick).sort().join();
-        if (picked() !== [home.roster[0].id, home.roster[1].id].sort().join()) throw new Error('not the acta: ' + picked());
-        const data = callupCardData(day, [home.roster[1], home.roster[0]]);
-        if (data.players.map((p) => p.name).join() !== 'PORTERO UNO (P),LATERAL SIETE' || data.rival !== 'BM Gades' || data.place !== 'Fuera' || data.venue !== 'Pabellón Centro') throw new Error(JSON.stringify(data));
-        document.querySelector(`[data-callup-pick="${home.roster[2].id}"]`).click();
-        if (home.callupPicks.ids.size !== 3 || !/Convocatoria · 3/.test(document.querySelector('.callup h3').textContent)) throw new Error('pick not added');
+        removeKey(CALLUP_KEY_PREFIX + team.id); removeKey(SQUAD_KEY_PREFIX + team.id);
+        home.callupDraft = null; home.callup = null; renderHome();
+        const section = document.querySelector('.callup');
+        if (flatText(section.querySelector('.att-title')) !== 'Convocatoria' || $('callup-fixture').value !== 'f2' || $('callup-date').value !== weekOf(today)[1] || $('callup-time').value !== '18:30') throw new Error('next round ' + $('callup-fixture').value + $('callup-date').value + $('callup-time').value);
+        const faces = [...section.querySelectorAll('[data-callup-pick]')];
+        if (faces.length !== 3 || faces.some((f) => f.getAttribute('aria-pressed') !== 'false' || !/No convocado/.test(f.textContent)) || !section.querySelector('[data-callup-save]').disabled) throw new Error('all start not called up');
+        [home.roster[1], home.roster[0]].forEach((p) => document.querySelector(`[data-callup-pick="${p.id}"]`).click());
+        const called = document.querySelector(`[data-callup-pick="${home.roster[0].id}"]`);
+        if (called.getAttribute('aria-pressed') !== 'true' || flatText(called.querySelector('.att-badge')) !== 'Convocado' || !/2 convocados de 16/.test(flatText(document.querySelector('.callup .att-count')))) throw new Error('pick ' + flatText(called));
+        const data = callupCardData(callupDraft(), calledPlayers(callupDraft()));
+        if (data.players.map((p) => p.name).join() !== 'PORTERO UNO (P),LATERAL SIETE' || data.rival !== 'BALONMANO GADES - ASISA' || data.place !== 'Fuera' || data.venue !== 'Pabellón Centro' || data.round !== 2 || data.when.time !== '18:30') throw new Error(JSON.stringify(data));
+        document.querySelector('[data-callup-save]').click();
         for (let i = 0; i < 100 && !document.querySelector('.callup-preview'); i++) await new Promise((r) => setTimeout(r, 20));
         const img = document.querySelector('.callup-preview'), share = document.querySelector('[data-callup-share]');
-        if (!img || !img.src.startsWith('blob:') || share.disabled) throw new Error('no preview');
+        if (!img || !img.src.startsWith('blob:') || !share || !document.querySelector('[data-callup-save]').disabled) throw new Error('no image after saving');
+        if (readJson(SQUAD_KEY_PREFIX + team.id).slice().sort().join() !== [home.roster[0].id, home.roster[1].id].sort().join() || readJson(CALLUP_KEY_PREFIX + team.id).fixtureId !== 'f2') throw new Error('not kept as the squad');
         const shared = [], unstub = sheetStubs(() => true, async (d) => { shared.push(d); });
         try { share.click(); } finally { unstub(); }
         if (shared.length !== 1 || !/^convocatoria-.+\.png$/.test(shared[0].files[0].name) || shared[0].files[0].type !== 'image/png') throw new Error(JSON.stringify(shared.map((d) => d.files.map((f) => f.name))));
-      });
-      home.callupPicks = null; home.callup = null;
+        document.querySelector(`[data-callup-pick="${home.roster[2].id}"]`).click();
+        if (document.querySelector('.callup-preview') || document.querySelector('[data-callup-save]').disabled) throw new Error('a change must ask to save again');
+        $('callup-fixture').value = ''; $('callup-fixture').dispatchEvent(new Event('change', { bubbles: true }));
+        if (!$('callup-rival') || callupDraft().ids.size !== 3) throw new Error('another match keeps the picks and asks for the rival');
+        $('callup-rival').value = '  CB Este  '; $('callup-rival').dispatchEvent(new Event('change', { bubbles: true }));
+        if (callupDraft().rival !== 'CB Este') throw new Error(callupDraft().rival);
+        home.callupDraft = null; renderHome();
+        if ($('callup-fixture').value !== 'f2' || document.querySelectorAll('.callup [aria-pressed="true"]').length !== 2) throw new Error('the saved convocatoria does not come back');
+      }, { fixtures: [later, next] });
+      removeKey(CALLUP_KEY_PREFIX + team.id); removeKey(SQUAD_KEY_PREFIX + team.id); home.callupDraft = null; home.callup = null;
     });
-    await TA('attendance view: a match still in setup locks its convocados and its id is backfilled', async () => {
-      const day = todayIso();
+    await TA('convocatoria: more than the acta holds cannot be saved', async () => {
       await withAttendanceView(async () => {
-        const setup = { id: 'ms', date: day, them: 'Rival', status: 'setup', state: { players: [{ id: home.roster[0].id }] } };
-        home.stateMatches = [setup]; home.teamMatches = [{ id: 'ms', date: day, them: 'Rival' }];
-        await showAttendance();
-        if (home.attendanceKind !== 'PARTIDO' || !document.querySelector(`[data-att="${home.roster[0].id}"]`).disabled || !/1 presente/.test(flatText(document.querySelector('.att-count')))) throw new Error('setup match not counted');
-        document.querySelector(`[data-att="${home.roster[1].id}"]`).click();
-        if (localSessions()[0].matchId !== 'ms') throw new Error('no match id');
-        home.stateMatches = []; home.sessions = home.sessions.map((x) => ({ ...x, matchId: null }));
-        home.stateMatches = [setup];
-        document.querySelector(`[data-att="${home.roster[1].id}"]`).click();
-        if (localSessions()[0].matchId !== 'ms') throw new Error('match id not backfilled: ' + JSON.stringify(localSessions()));
+        home.callupDraft = null; renderHome();
+        home.roster = [...home.roster, ...Array.from({ length: MAX_ROSTER - 2 }, (_, i) => ({ id: `x${i}`, num: 30 + i, name: `Extra ${i}`, pos: 'LAT' }))];
+        callupDraft().ids = new Set(home.roster.map((p) => p.id)); renderHome();
+        if (!document.querySelector('[data-callup-save]').disabled || !/Sobran 1/.test(flatText(document.querySelector('.callup')))) throw new Error('17 accepted');
       });
+      home.callupDraft = null;
     });
     await TA('attendance view: changing the date opens that day\'s session', async () => {
       await withAttendanceView(async () => {
@@ -4569,12 +4551,12 @@
         if (home.attendanceDate !== '2026-10-01' || !/Presente/.test(badgeOf(id)) || document.querySelector('[data-att-delete]')) throw new Error('the other day shows today\'s marks');
         document.querySelector(`[data-att="${id}"]`).click();
         document.querySelector(`[data-att="${id}"]`).click();
-        $('att-date').value = todayIso();
+        $('att-date').value = nextTrainingDate();
         $('att-date').dispatchEvent(new Event('change', { bubbles: true }));
-        if (!/Falta/.test(badgeOf(id))) throw new Error('today lost its mark');
+        if (!/Falta/.test(badgeOf(id))) throw new Error('the training day lost its mark');
         $('att-date').value = '';
         $('att-date').dispatchEvent(new Event('change', { bubbles: true }));
-        if (home.attendanceDate !== todayIso() || $('att-date').value !== todayIso()) throw new Error('an empty date was accepted');
+        if (home.attendanceDate !== nextTrainingDate() || $('att-date').value !== nextTrainingDate()) throw new Error('an empty date was accepted');
       });
     });
     await TA('attendance view: Borrar sesión is armed, then removes the session', async () => {
@@ -4596,7 +4578,7 @@
         if (tabs.join() !== 'Equipo,Asistencia,Partidos,Estadísticas') throw new Error('tabs ' + tabs);
         document.querySelector('.app-bar [data-home-view="attendance"]').click();
         for (let i = 0; i < 5; i++) await tick0();
-        if (home.view !== 'attendance' || !document.querySelector('[data-att]') || home.attendanceDate !== todayIso()) throw new Error(home.view);
+        if (home.view !== 'attendance' || !document.querySelector('[data-att]') || home.attendanceDate !== nextTrainingDate()) throw new Error(home.view);
         const pressed = [...document.querySelectorAll('.app-bar .tabs button')].filter((b) => b.getAttribute('aria-pressed') === 'true').map((b) => b.textContent);
         if (pressed.join() !== 'Asistencia') throw new Error('pressed ' + pressed);
         if (!document.querySelector('.att-how') || !document.querySelector('.att-how').textContent.includes('toca a quien no esté')) throw new Error('no how-to line');
@@ -4692,9 +4674,7 @@
           home.stateMatches = [{ id: 'foreign', date: day, them: 'Rival', status: 'finished', state: { players: [] } }];
           backend = { ...real, listMatchStates: () => new Promise(() => {}), listPlayers: async () => [], listFixtures: async () => [], listSessions: async () => [] };
           selectTeam(other);
-          if (attendanceMatch(day) !== null || home.stateMatches.length) throw new Error('the old team\'s matches are still there');
-          showAttendance(); home.attendanceKind = 'PARTIDO'; renderHome();
-          if (localSessions('cal-other').some((x) => x.matchId === 'foreign')) throw new Error('foreign match id stored');
+          if (home.stateMatches.length) throw new Error('the old team\'s matches are still there');
         } finally { backend = real; applyTeam(previous); home.stateMatches = []; }
       });
     });
