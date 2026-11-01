@@ -4519,7 +4519,11 @@
         const called = document.querySelector(`[data-callup-pick="${home.roster[0].id}"]`);
         if (called.getAttribute('aria-pressed') !== 'true' || flatText(called.querySelector('.att-badge')) !== 'Convocado' || flatText(document.querySelector('.callup .att-stat.att-C')) !== '2 convocados de 16' || flatText(document.querySelector('.callup .att-stat.att-NC')) !== '1 no convocado') throw new Error('pick ' + flatText(called));
         const data = callupCardData(callupDraft(), calledPlayers(callupDraft()));
-        if (data.players.map((p) => p.name).join() !== 'PORTERO UNO (P),LATERAL SIETE' || data.rival !== 'BALONMANO GADES - ASISA' || data.place !== 'Fuera' || data.venue !== 'Pabellón Centro' || data.round !== 2 || data.when.time !== '18:30') throw new Error(JSON.stringify(data));
+        if (data.players.map((p) => p.name).join() !== 'Portero Uno,Lateral Siete' || data.kit !== team.brand || data.kitName !== 'Primera' || !CALLUP_PHRASES.some((x) => data.phrase === x.replace('{team}', team.name)) || data.phrase !== callupPhrase(callupDraft().date, team.name) || data.rival !== 'BALONMANO GADES - ASISA' || data.place !== 'Fuera' || data.venue !== 'Pabellón Centro' || data.round !== 2 || data.when.time !== '18:30') throw new Error(JSON.stringify(data));
+        document.querySelector(`[data-callup-kit="${KIT_BLACK}"]`).click();
+        if (callupDraft().kit !== KIT_BLACK || document.querySelector(`[data-callup-kit="${KIT_BLACK}"]`).getAttribute('aria-pressed') !== 'true' || callupCardData(callupDraft(), calledPlayers(callupDraft())).kitName !== 'Negra') throw new Error('kit chip ' + callupDraft().kit);
+        $('callup-kit').value = '#12ab34'; $('callup-kit').dispatchEvent(new Event('change', { bubbles: true }));
+        if (callupDraft().kit !== '#12ab34' || !document.querySelector('.kit-other.active') || kitName('#12ab34') !== 'Otro color') throw new Error('custom kit');
         document.querySelector('[data-callup-save]').click();
         for (let i = 0; i < 100 && !document.querySelector('.callup-preview'); i++) await new Promise((r) => setTimeout(r, 20));
         const img = document.querySelector('.callup-preview'), share = document.querySelector('[data-callup-share]');
