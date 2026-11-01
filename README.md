@@ -1,8 +1,10 @@
 <div align="center">
 
-# 🤾 HBStats
+# 🤾 Zona6
 
 **Live handball statistics on a landscape tablet: one screen, finger or stylus, works offline.**
+
+*Formerly HBStats. Zona6 is the 6 m area.*
 
 Draw every shot in one gesture, drag players on and off court, follow both goalkeepers, and get a
 PDF report with key points when the final whistle goes.

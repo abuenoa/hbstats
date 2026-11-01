@@ -1,5 +1,5 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
-  <!-- HBStats app icon: an "HB" monogram on a red handball, panel seams at the edges and a gold rising shot/stat arc. -->
+  <!-- Zona6 app icon: a "Z6" monogram (Zona6, the 6 m area) on a red handball, panel seams at the edges and a gold rising shot/stat arc. -->
   <defs>
     <clipPath id="ball">
       <circle cx="256" cy="256" r="206"/>
@@ -12,11 +12,9 @@
     <path d="M472 298 A236 236 0 0 0 216 478"/>
   </g>
   <g fill="#ffffff">
-    <path d="M118 148 H164 V234 H202 V148 H248 V364 H202 V276 H164 V364 H118 Z"/>
-    <path fill-rule="evenodd" d="M266 148 H344 C378 148 396 170 396 200 C396 222 386 238 370 248 C390 258 402 278 402 306 C402 340 380 364 344 364 H266 Z
-             M312 186 H336 C347 186 352 194 352 204 C352 214 347 222 336 222 H312 Z
-             M312 268 H340 C352 268 358 278 358 292 C358 316 352 326 340 326 H312 Z"/>
+    <path d="M116 148 H252 V190 L170 322 H252 V364 H112 V322 L194 190 H116 Z"/>
+    <path fill-rule="evenodd" d="M272 220 C272 172 300 148 342 148 H378 V190 H344 C326 190 318 200 318 218 V228 H350 C386 228 404 252 404 288 V312 C404 344 384 364 350 364 H326 C292 364 272 344 272 310 Z M318 270 H344 C354 270 358 276 358 286 V312 C358 320 354 326 344 326 H332 C322 326 318 320 318 312 Z"/>
   </g>
-  <path d="M112 342 Q236 226 404 252" fill="none" stroke="#d4202a" stroke-width="40" stroke-linecap="round"/>
-  <path d="M112 342 Q236 226 404 252" fill="none" stroke="#f5c400" stroke-width="22" stroke-linecap="round"/>
+  <path d="M124 398 Q258 430 400 372" fill="none" stroke="#d4202a" stroke-width="36" stroke-linecap="round"/>
+  <path d="M124 398 Q258 430 400 372" fill="none" stroke="#f5c400" stroke-width="20" stroke-linecap="round"/>
 </svg>

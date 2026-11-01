@@ -6,7 +6,7 @@
 <meta name="theme-color" content="#151515">
 <link rel="icon" href="../icons/favicon-32.png" sizes="32x32">
 <style>:root{color-scheme:light;box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}body{margin:0;font:14px system-ui,-apple-system,"Segoe UI",Roboto,sans-serif}img{max-width:100%}[hidden]{display:none!important}</style>
-<title>HBStats · Demo</title>
+<title>Zona6 · Demo</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@600;700;800&display=swap">
@@ -1349,7 +1349,7 @@ span.att-foot { visibility: hidden; }
 <div class="pop" id="pop" role="dialog" aria-modal="false" hidden></div>
 <div class="sheet" id="sheet" role="dialog" aria-label="Estadísticas del partido" hidden></div>
 <div class="final" id="final" role="dialog" aria-modal="true" aria-label="Resumen final" hidden></div>
-<div class="home" id="home" role="dialog" aria-label="HBStats" hidden></div>
+<div class="home" id="home" role="dialog" aria-label="Zona6" hidden></div>
 <input type="file" id="roster-file" accept=".json,application/json" hidden>
 <input type="file" id="crest-file" accept="image/png,image/jpeg,image/webp" hidden>
 <input type="file" id="photo-file" accept="image/png,image/jpeg,image/webp" hidden>
@@ -1476,7 +1476,8 @@ span.att-foot { visibility: hidden; }
   }
   // AGPL-3.0: anyone using the app gets a link to its source code.
   const SOURCE_URL = 'https://github.com/abuenoa/hbstats';
-  const sourceNoteHtml = () => `<p class="note">HBStats es software libre (AGPL-3.0): <a href="${SOURCE_URL}" target="_blank" rel="noopener">código fuente y contribuciones</a>.</p>`;
+  const APP_NAME = 'Zona6';
+  const sourceNoteHtml = () => `<p class="note">${APP_NAME} es software libre (AGPL-3.0): <a href="${SOURCE_URL}" target="_blank" rel="noopener">código fuente y contribuciones</a>.</p>`;
   const PHASES = { DEF: 'Defensa', ATK: 'Ataque' };
   const DEFAULT_PHASE = 'DEF';
   const THEME_KEY = 'hbstats-directo:theme';
@@ -4583,7 +4584,7 @@ span.att-foot { visibility: hidden; }
     const ours = side === 'us';
     let data;
     try { data = JSON.parse(text); } catch (err) { throw new Error('el archivo no es una plantilla (JSON no válido)'); }
-    if (!data || data.format !== ROSTER_FORMAT || !Array.isArray(data.players)) throw new Error('el archivo no es una plantilla de HBStats');
+    if (!data || data.format !== ROSTER_FORMAT || !Array.isArray(data.players)) throw new Error(`el archivo no es una plantilla de ${APP_NAME}`);
     if (!data.players.length || data.players.length > maxPlayers) throw new Error(`debe tener entre 1 y ${maxPlayers} jugadores`);
     const seen = new Set();
     const players = data.players.map((x, i) => {
@@ -5137,7 +5138,7 @@ span.att-foot { visibility: hidden; }
     const [first, second] = sidesInOrder(s, sc), [htFirst, htSecond] = sidesInOrder(s, ht);
     const header = (title) => `<header><div><div class="ttl">${title}</div><div class="meta">${esc([matchDateText(), matchPlaceText(s)].filter(Boolean).join(' · '))}</div></div>
       <div class="score"><span class="tm">${esc(first.name)}</span><span class="big" style="color:${C[first.side]}">${first.goals}</span><span class="dash">–</span><span class="big" style="color:${C[second.side]}">${second.goals}</span><span class="tm">${esc(second.name)}</span><span class="htx">Descanso ${htFirst.goals}–${htSecond.goals}</span></div></header>`;
-    const page = (n, title, body) => `<div class="page">${header(title)}<main>${body}</main><footer><span>HBStats · ${esc(first.name)} – ${esc(second.name)}</span><span>${n} / ${REPORT_PAGES}</span></footer></div>`;
+    const page = (n, title, body) => `<div class="page">${header(title)}<main>${body}</main><footer><span>${APP_NAME} · ${esc(first.name)} – ${esc(second.name)}</span><span>${n} / ${REPORT_PAGES}</span></footer></div>`;
     const pages = [
       page(1, 'Informe del partido', `<div class="kpis">${kpis}</div>
         <div class="row"><div class="col grow">
@@ -6628,7 +6629,7 @@ table { border-collapse: collapse; width: 100%; }
     PDF_RGB.brand = hexToRgb(t.brand);
     PDF_RGB.brand2 = hexToRgb(t.brand2);
     $('bar-crest').src = crestSrc(t);
-    document.title = `${t.name} · HBStats`;
+    document.title = `${t.name} · ${APP_NAME}`;
   }
   const IMAGE_FILE_TYPE = /^image\/(png|jpeg|webp)$/;
   const IMAGE_QUALITY = 0.85, JPEG_BACKDROP = '#fff';
@@ -6675,12 +6676,12 @@ table { border-collapse: collapse; width: 100%; }
 
   function loginHtml() {
     return `<form class="auth-card glass" data-form="login">
-      <div class="auth-brand"><span class="app-mark" aria-hidden="true">HB</span><div><h1>HBStats</h1><p class="note">Estadísticas de balonmano en directo</p></div></div>
+      <div class="auth-brand"><span class="app-mark logo" aria-hidden="true">${appLogoSvg('login-logo-clip')}</span><div><h1>${APP_NAME}</h1><p class="note">Estadísticas de balonmano en directo</p></div></div>
       <label class="field">Email<input class="in" type="email" name="email" id="login-email" autocomplete="username" required></label>
       <label class="field">Contraseña<input class="in" type="password" name="password" id="login-password" autocomplete="current-password" required></label>
       <button class="btn primary press" type="submit">Entrar</button>
       <button class="link" type="button" data-forgot>He olvidado mi contraseña</button>
-      <p class="note">El acceso es por invitación: pídela a quien gestiona HBStats en tu club.</p>
+      <p class="note">El acceso es por invitación: pídela a quien gestiona ${APP_NAME} en tu club.</p>
       ${statusHtml()}
     </form>`;
   }
@@ -6837,9 +6838,9 @@ table { border-collapse: collapse; width: 100%; }
     }
   }
   async function shareInviteLink() {
-    const { url } = home.inviteLink, text = `Entra en HBStats con ${team.name}:`;
+    const { url } = home.inviteLink, text = `Entra en ${APP_NAME} con ${team.name}:`;
     try {
-      if (navigator.share) { await navigator.share({ title: 'HBStats', text, url }); return; }
+      if (navigator.share) { await navigator.share({ title: APP_NAME, text, url }); return; }
       window.open(`${WHATSAPP_URL}${encodeURIComponent(`${text} ${url}`)}`, '_blank', 'noopener');
     } catch (err) {
       if (err && err.name !== 'AbortError') homeStatus(`No se pudo compartir: ${err.message}.`);
@@ -6908,7 +6909,7 @@ table { border-collapse: collapse; width: 100%; }
 
   // ---- Profile: the first screen after signing in (teams; the account in the corner menu) ----
   // The app's mark (assets/icon.svg); each copy on the page needs its own clip id.
-  const appLogoSvg = (clipId) => `<svg viewBox="0 0 512 512" aria-hidden="true"> <defs> <clipPath id="${clipId}"> <circle cx="256" cy="256" r="206"/> </clipPath> </defs> <circle cx="256" cy="256" r="248" fill="#151515"/> <circle cx="256" cy="256" r="206" fill="#d4202a"/> <g clip-path="url(#${clipId})" fill="none" stroke="#151515" stroke-width="16" stroke-linecap="round"> <path d="M40 214 A236 236 0 0 0 296 34"/> <path d="M472 298 A236 236 0 0 0 216 478"/> </g> <g fill="#ffffff"> <path d="M118 148 H164 V234 H202 V148 H248 V364 H202 V276 H164 V364 H118 Z"/> <path fill-rule="evenodd" d="M266 148 H344 C378 148 396 170 396 200 C396 222 386 238 370 248 C390 258 402 278 402 306 C402 340 380 364 344 364 H266 Z M312 186 H336 C347 186 352 194 352 204 C352 214 347 222 336 222 H312 Z M312 268 H340 C352 268 358 278 358 292 C358 316 352 326 340 326 H312 Z"/> </g> <path d="M112 342 Q236 226 404 252" fill="none" stroke="#d4202a" stroke-width="40" stroke-linecap="round"/> <path d="M112 342 Q236 226 404 252" fill="none" stroke="#f5c400" stroke-width="22" stroke-linecap="round"/> </svg>`;
+  const appLogoSvg = (clipId) => `<svg viewBox="0 0 512 512" aria-hidden="true"> <defs> <clipPath id="${clipId}"> <circle cx="256" cy="256" r="206"/> </clipPath> </defs> <circle cx="256" cy="256" r="248" fill="#151515"/> <circle cx="256" cy="256" r="206" fill="#d4202a"/> <g clip-path="url(#${clipId})" fill="none" stroke="#151515" stroke-width="16" stroke-linecap="round"> <path d="M40 214 A236 236 0 0 0 296 34"/> <path d="M472 298 A236 236 0 0 0 216 478"/> </g> <g fill="#ffffff"> <path d="M116 148 H252 V190 L170 322 H252 V364 H112 V322 L194 190 H116 Z"/> <path fill-rule="evenodd" d="M272 220 C272 172 300 148 342 148 H378 V190 H344 C326 190 318 200 318 218 V228 H350 C386 228 404 252 404 288 V312 C404 344 384 364 350 364 H326 C292 364 272 344 272 310 Z M318 270 H344 C354 270 358 276 358 286 V312 C358 320 354 326 344 326 H332 C322 326 318 320 318 312 Z"/> </g> <path d="M124 398 Q258 430 400 372" fill="none" stroke="#d4202a" stroke-width="36" stroke-linecap="round"/> <path d="M124 398 Q258 430 400 372" fill="none" stroke="#f5c400" stroke-width="20" stroke-linecap="round"/> </svg>`;
   const ACCOUNT_ICON = '<svg viewBox="0 0 24 24" width="24" height="24" aria-hidden="true" fill="currentColor"><circle cx="12" cy="8" r="4.2"/><path d="M3.5 21c.6-4.6 4-7.2 8.5-7.2s7.9 2.6 8.5 7.2z"/></svg>';
   // An installed app (its own window) can be closed from the menu; in a browser tab that is the browser's job.
   const STANDALONE_QUERY = '(display-mode: standalone)';
@@ -6921,7 +6922,7 @@ table { border-collapse: collapse; width: 100%; }
       <div class="account-pop glass" role="menu">${account}${exit}</div></details>`;
   }
   const profileHeadHtml = (pageBar = '') => `<header class="top-bar glass"><div class="home-head app-bar"><span class="app-mark logo" aria-hidden="true">${appLogoSvg('head-logo-clip')}</span>
-      <div class="home-title"><h1>HBStats</h1><small>${home.user ? esc(home.user.email) : 'En este dispositivo'}</small></div><div class="app-end">${accountMenuHtml()}</div></div>${pageBar}</header>`;
+      <div class="home-title"><h1>${APP_NAME}</h1><small>${home.user ? esc(home.user.email) : 'En este dispositivo'}</small></div><div class="app-end">${accountMenuHtml()}</div></div>${pageBar}</header>`;
   // A team's colours as custom properties of its card; a value that is not a hex colour falls back to the app's own.
   const teamColoursStyle = (t) => [['--team-brand', t.brand, 'var(--brand)'], ['--team-brand2', t.brand2, 'var(--gold)']]
     .map(([name, value, fallback]) => `${name}:${HEX_COLOUR.test(value) ? value : fallback}`).join(';');
@@ -6973,7 +6974,7 @@ table { border-collapse: collapse; width: 100%; }
     const v = home.view;
     let body;
     if (v === 'loading') body = '<p class="note">Cargando…</p>';
-    else if (v === 'error') body = `<div class="auth-card glass"><h1>HBStats</h1><p>${esc(home.error)}</p><button class="btn primary press" type="button" data-retry>Reintentar</button></div>`;
+    else if (v === 'error') body = `<div class="auth-card glass"><h1>${APP_NAME}</h1><p>${esc(home.error)}</p><button class="btn primary press" type="button" data-retry>Reintentar</button></div>`;
     else if (v === 'login') body = loginHtml();
     else if (v === 'password') body = passwordHtml();
     else if (v === 'team-new') {
@@ -7016,7 +7017,7 @@ table { border-collapse: collapse; width: 100%; }
       }
       await loadTeams();
     } catch (err) {
-      home.error = `No se pudo abrir HBStats: ${cloudErrorText(err)}. La primera vez hace falta conexión.`;
+      home.error = `No se pudo abrir ${APP_NAME}: ${cloudErrorText(err)}. La primera vez hace falta conexión.`;
       showHomeView('error');
     }
   }
@@ -7110,7 +7111,7 @@ table { border-collapse: collapse; width: 100%; }
   function parseCalendar(text) {
     let data;
     try { data = JSON.parse(text); } catch (err) { throw new Error('el archivo no es JSON'); }
-    if (!data || data.format !== CALENDAR_FORMAT || !Array.isArray(data.fixtures)) throw new Error('el archivo no es un calendario de HBStats');
+    if (!data || data.format !== CALENDAR_FORMAT || !Array.isArray(data.fixtures)) throw new Error(`el archivo no es un calendario de ${APP_NAME}`);
     const season = typeof data.season === 'string' ? data.season.trim() : '';
     if (season.length < SEASON_LENGTH_RANGE[0] || season.length > SEASON_LENGTH_RANGE[1]) throw new Error('falta la temporada (por ejemplo 2026/2027)');
     const seen = new Set();
@@ -8691,7 +8692,7 @@ table { border-collapse: collapse; width: 100%; }
   }
   // The public demo: a match in progress to play with; «Entrar» leads to the real app.
   function openDemo() {
-    applyTeam({ ...DEFAULT_TEAM, club: 'HBStats', name: 'Demo' });
+    applyTeam({ ...DEFAULT_TEAM, club: APP_NAME, name: 'Demo' });
     $('btn-home').textContent = 'Entrar';
     $('btn-home').removeAttribute('aria-label');
     openSample();
@@ -9141,7 +9142,7 @@ table { border-collapse: collapse; width: 100%; }
     el.className = 'splash held';
     el.style.setProperty('--splash-fade', `${SPLASH_FADE_MS}ms`);
     el.style.setProperty('--splash-arrive', `${SPLASH_WHISTLE_S - SPLASH_TITLE_S}s`);
-    el.innerHTML = `<div class="splash-run"><div class="splash-ball">${appLogoSvg('splash-logo-clip')}</div></div><div class="splash-title"><b>HBStats</b><small>Balonmano en directo</small></div>
+    el.innerHTML = `<div class="splash-run"><div class="splash-ball">${appLogoSvg('splash-logo-clip')}</div></div><div class="splash-title"><b>${APP_NAME}</b><small>Balonmano en directo</small></div>
       <p class="splash-tap">Toca para entrar</p>`;
     el.addEventListener('click', () => {
       if (el.classList.contains('await-tap')) {

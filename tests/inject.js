@@ -4007,7 +4007,7 @@
         removeKey(CURRENT_MATCH_KEY);
         showSplash();
         const el = $('splash');
-        if (!el || !el.querySelector('.splash-ball svg') || !flatText(el).includes('HBStats')) throw new Error('no splash');
+        if (!el || !el.querySelector('.splash-ball svg') || !flatText(el).includes(APP_NAME)) throw new Error('no splash');
         if (!el.querySelector('.splash-tap')) throw new Error('no tap prompt');
         el.click();
         if (!el.classList.contains('out')) throw new Error('a tap does not skip it');
