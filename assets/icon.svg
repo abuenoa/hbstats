@@ -1,8 +1,22 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
-  <!-- HBStats app icon: a handball court's 6 m area and goal, with the shot line the app is built around. -->
+  <!-- HBStats app icon: an "HB" monogram on a red handball, panel seams at the edges and a gold rising shot/stat arc. -->
+  <defs>
+    <clipPath id="ball">
+      <circle cx="256" cy="256" r="206"/>
+    </clipPath>
+  </defs>
   <circle cx="256" cy="256" r="248" fill="#151515"/>
-  <path d="M96 150 A160 160 0 0 0 416 150" fill="none" stroke="#f5c400" stroke-width="22"/>
-  <rect x="196" y="112" width="120" height="38" rx="6" fill="none" stroke="#ffffff" stroke-width="16"/>
-  <path d="M168 404 L248 152" fill="none" stroke="#d4202a" stroke-width="24" stroke-linecap="round"/>
-  <circle cx="168" cy="404" r="34" fill="#ffffff"/>
+  <circle cx="256" cy="256" r="206" fill="#d4202a"/>
+  <g clip-path="url(#ball)" fill="none" stroke="#151515" stroke-width="16" stroke-linecap="round">
+    <path d="M40 214 A236 236 0 0 0 296 34"/>
+    <path d="M472 298 A236 236 0 0 0 216 478"/>
+  </g>
+  <g fill="#ffffff">
+    <path d="M118 148 H164 V234 H202 V148 H248 V364 H202 V276 H164 V364 H118 Z"/>
+    <path fill-rule="evenodd" d="M266 148 H344 C378 148 396 170 396 200 C396 222 386 238 370 248 C390 258 402 278 402 306 C402 340 380 364 344 364 H266 Z
+             M312 186 H336 C347 186 352 194 352 204 C352 214 347 222 336 222 H312 Z
+             M312 268 H340 C352 268 358 278 358 292 C358 316 352 326 340 326 H312 Z"/>
+  </g>
+  <path d="M112 342 Q236 226 404 252" fill="none" stroke="#d4202a" stroke-width="40" stroke-linecap="round"/>
+  <path d="M112 342 Q236 226 404 252" fill="none" stroke="#f5c400" stroke-width="22" stroke-linecap="round"/>
 </svg>
