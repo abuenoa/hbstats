@@ -49,7 +49,7 @@ PAGE_HEAD = """<!doctype html>
 # Only the app installs and works offline; the demo is a plain page that borrows its icon.
 INSTALL_HEAD = """<meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-capable" content="yes">
-<meta name="apple-mobile-web-app-title" content="HBStats">
+<meta name="apple-mobile-web-app-title" content="Zona6">
 <link rel="manifest" href="manifest.webmanifest">
 <link rel="icon" href="icons/favicon-32.png" sizes="32x32">
 <link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
@@ -119,14 +119,14 @@ def app_page(app: str, cloud: dict | None, offline: bool = True) -> str:
 
 def demo_page(app: str) -> str:
     head, body = split_head(set_block(set_block(app, CLOUD_BLOCK, None, "CLOUD"), DEMO_BLOCK, True, "DEMO"))
-    head = re.sub(r"<title>.*?</title>", "<title>HBStats · Demo</title>", head, count=1)
+    head = re.sub(r"<title>.*?</title>", "<title>Zona6 · Demo</title>", head, count=1)
     return f"{PAGE_HEAD.format(theme=THEME)}{DEMO_HEAD}{RESET_STYLE}{head}\n</head>\n<body>{body}\n</body>\n</html>\n"
 
 
 def manifest() -> str:
     return json.dumps({
-        "name": "HBStats",
-        "short_name": "HBStats",
+        "name": "Zona6",
+        "short_name": "Zona6",
         "description": "Estadísticas de balonmano en directo para tablet",
         "id": "./", "start_url": "./", "scope": "./",
         "display": "fullscreen", "display_override": ["fullscreen", "standalone"],
