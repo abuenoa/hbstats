@@ -2,7 +2,7 @@
 <html lang="es">
 <head>
 <meta charset="utf-8">
-<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="viewport" content="width=device-width,initial-scale=1,minimum-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover">
 <meta name="theme-color" content="#151515">
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-capable" content="yes">
@@ -186,6 +186,8 @@
 .num { font-variant-numeric: tabular-nums; }
 
 html, body { height: 100%; }
+/* An app, not a page: the screen keeps the device's scale (no pinch or double-tap zoom) and a tap acts at once. */
+html { touch-action: manipulation; -webkit-text-size-adjust: 100%; text-size-adjust: 100%; }
 body {
   margin: 0;
   background:
@@ -9267,6 +9269,8 @@ table { border-collapse: collapse; width: 100%; }
   }
 
   // ===================== Boot =====================
+  // Safari ignores the viewport's zoom lock; its pinch gestures are stopped here.
+  ['gesturestart', 'gesturechange'].forEach((type) => document.addEventListener(type, (ev) => ev.preventDefault()));
   window.addEventListener('pagehide', save);
   document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'hidden') save(); });
   initTheme();
