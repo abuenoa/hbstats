@@ -3376,19 +3376,22 @@
         const fresh = home.inviteLinks.map((l) => l.name).join();
         home.inviteLinks = links;
         if (invited.join() !== 'player:k:kike@x.es' || fresh !== 'Kike' || !/Enlace nuevo para Kike/.test($('home-status').textContent)) throw new Error(invited.join() + fresh);
-        // The list reloads after an invite (here no page shows it, so ask for it).
-        if (home.accounts !== null) throw new Error('the list was not refreshed');
-        accountListHtml();
-        for (let i = 0; i < 3; i++) await tick0();
-        await removeAccount('pk');
-        if (removed.length) throw new Error('removed on the first tap');
-        await removeAccount('pk');
-        if (removed.join() !== 'pk' || home.accounts.rows.some((a) => a.userId === 'pk') || !/anulada/.test($('home-status').textContent)) throw new Error($('home-status').textContent);
-        await removeAccount('gv'); await removeAccount('gv');
-        if (!home.accounts.rows.some((a) => a.userId === 'gv') || !/No se pudo quitar: .*sin conexión/.test($('home-status').textContent)) throw new Error($('home-status').textContent);
+        if (home.accounts !== null) throw new Error('the list was not refreshed after the invite');
+        // Taps on the page itself, as the coach does: arm, then confirm.
+        backend.needsLogin = true;
+        const settle = async () => { for (let i = 0; i < 5; i++) await tick0(); };
+        const tap = async (userId) => { $('home').querySelector(`[data-account-remove="${userId}"]`).click(); await settle(); };
+        showHomeView('team-edit');
+        await settle();
+        await tap('pk');
+        if (removed.length || !/¿Seguro/.test($('home').querySelector('[data-account-remove="pk"]').textContent)) throw new Error('the first tap did not arm');
+        await tap('pk');
+        if (removed.join() !== 'pk' || $('home').querySelector('[data-account-remove="pk"]') || !/anulada/.test($('home-status').textContent)) throw new Error(`removed ${removed} · ${$('home-status').textContent}`);
+        await tap('gv'); await tap('gv');
+        if (!$('home').querySelector('[data-account-remove="gv"]') || !/No se pudo quitar: .*sin conexión/.test($('home-status').textContent)) throw new Error($('home-status').textContent);
         team.role = 'owner';
         if (![...accountListHtml().matchAll(/data-account-remove="(\w+)"/g)].some((m) => m[1] === 'co')) throw new Error('the owner cannot take off a coach');
-      } finally { backend = real; Object.assign(team, { id: teamId, role }); Object.assign(home, keep); }
+      } finally { backend = real; Object.assign(team, { id: teamId, role }); Object.assign(home, keep); renderHome(); }
     });
     await TA('nav: Escape on attendance, a main tab, goes back to Mis equipos', async () => withNavHome(async () => {
       showHomeView('attendance');
