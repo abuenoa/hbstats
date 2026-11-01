@@ -3301,6 +3301,50 @@
       showHomeView('team');
       if (!document.querySelector('[data-new-match]')) throw new Error('the staff lost their controls');
     }));
+    await TA('guest account: reads the team like a player, changes nothing', async () => withNavHome(async () => {
+      const role = team.role;
+      team.role = VIEWER_ROLE;
+      try {
+        if (!readOnly()) throw new Error('a guest can write');
+        for (const view of ['team', 'matches', 'attendance']) {
+          showHomeView(view);
+          const left = $('home').querySelectorAll(STAFF_ONLY_SELECTOR).length;
+          if (left) throw new Error(`${view}: ${left} staff controls`);
+        }
+      } finally { team.role = role; }
+    }));
+    await TA('invite list: each e-mail goes to the player named before it, then all are invited', async () => {
+      const keep = { roster: home.roster, inviteLinks: home.inviteLinks, invitePlan: home.invitePlan, inviteList: home.inviteList }, real = backend;
+      home.roster = [
+        { id: 'k', num: 3, name: 'Kike', fullName: 'Enrique García Abadía', pos: 'PIV' },
+        { id: 'j', num: 14, name: 'Jenrri', fullName: 'José Enrique Muñoz Galloso', pos: 'EXT' },
+        { id: 'r7', num: 7, name: 'Raulito', fullName: 'Raúl Gallego de la Sacristina', pos: 'EXT' },
+        { id: 'r82', num: 82, name: 'Raúl', fullName: 'Raúl Araque Partido', pos: 'CEN' },
+        { id: 'ja', num: 12, name: 'Jose', fullName: 'José Arias Rivas', pos: 'POR' },
+        { id: 'aa', num: 27, name: 'Adri', fullName: 'Adrián Arias Rivas', pos: 'PIV' },
+        { id: 'm', num: 28, name: 'Marcos', fullName: 'Marcos Carraco', pos: 'CEN' },
+      ];
+      try {
+        // As pasted from WhatsApp: a title, bullets, the e-mail on the same line or the next, a typo in a surname.
+        home.invitePlan = invitePlanOf('*Plantilla 2026*\n- Enrique García kike@x.es\n- Raúl Gallego \nraul@x.es\n   • Marcos Carrasco\nMarcos@X.es\n• José Arias Rivas \njose@x.es\n- Jose Enrique Muñoz\njenri@x.es\n- Arias Rivas ar@x.es\n- Nadie Conocido nadie@x.es');
+        const got = home.invitePlan.map((r) => `${r.email}:${r.player ? r.player.id : '-'}`).join(' ');
+        if (got !== 'kike@x.es:k raul@x.es:r7 marcos@x.es:m jose@x.es:ja jenri@x.es:j ar@x.es:- nadie@x.es:-') throw new Error(got);
+        if (!/Invitar a 5 jugadores/.test(invitePlanHtml())) throw new Error('the button does not count the matched players');
+        const calls = [];
+        backend = { ...real, inviteMember: async (teamId, member, email) => {
+          calls.push(`${member.role}:${member.playerId}`);
+          if (email === 'raul@x.es') throw new Error('este jugador ya tiene cuenta');
+          return { link: email === 'jose@x.es' ? null : `https://example.test/${member.playerId}` };
+        } };
+        home.inviteLinks = [];
+        await inviteList();
+        if (calls.join(' ') !== 'player:k player:r7 player:m player:ja player:j') throw new Error(calls.join(' '));
+        if (home.inviteLinks.map((l) => l.name).join(' ') !== 'Kike Marcos Jenrri' || home.invitePlan !== null) throw new Error(JSON.stringify(home.inviteLinks));
+        const status = $('home-status').textContent;
+        if (!/4 jugadores invitados/.test(status) || !/3 enlaces/.test(status) || !/1 ya tenía cuenta/.test(status) || !/Raulito/.test(status)) throw new Error(status);
+        if ((teamAccountsHtml().match(/data-invite-share="\d"/g) || []).length !== 3) throw new Error('one share button per new link');
+      } finally { backend = real; Object.assign(home, keep); }
+    });
     await TA('nav: Escape on attendance, a main tab, goes back to Mis equipos', async () => withNavHome(async () => {
       showHomeView('attendance');
       pressEscape();

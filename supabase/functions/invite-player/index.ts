@@ -1,13 +1,13 @@
 // HBStats — Copyright (C) 2026 Antonio Bueno Antón. SPDX-License-Identifier: AGPL-3.0-or-later
-// Gives someone an account in a team: a coach (full access) or a roster player (read-only). Only the team's staff
-// (owner or coach) may call it.
-// An e-mail without an account gets an invite link (returned for the coach to share: no e-mail is sent); an existing
-// account is linked at once and no link is needed.
+// Gives someone an account in a team: a coach (full access), a roster player or a guest (both read-only). Only the
+// team's staff (owner or coach) may call it.
+// An e-mail without a confirmed account gets an invite link (returned for the coach to share: no e-mail is sent), also
+// again when an earlier link expired unused; a confirmed account is linked at once and no link is needed.
 import { createClient } from "jsr:@supabase/supabase-js@2";
 
 const APP_URL = "https://abuenoa.github.io/hbstats/";
 const STAFF_ROLES = ["owner", "coach"];
-const INVITED_ROLES = ["coach", "player"];
+const INVITED_ROLES = ["coach", "player", "viewer"];
 const CORS = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
@@ -39,21 +39,29 @@ Deno.serve(async (req) => {
     const { data: player, error: playerError } = await admin.from("players").select("id").eq("id", playerId).eq("team_id", teamId).maybeSingle();
     if (playerError) return reply(500, { error: playerError.message });
     if (!player) return reply(404, { error: "el jugador no es de este equipo" });
-    const { data: taken } = await admin.from("team_members").select("user_id").eq("player_id", playerId).maybeSingle();
-    if (taken) return reply(409, { error: "este jugador ya tiene cuenta" });
   }
 
   const { data: existing, error: lookupError } = await admin.rpc("user_id_by_email", { p_email: email });
   if (lookupError) return reply(500, { error: lookupError.message });
   let userId = existing as string | null, link: string | null = null;
+  if (userId) {
+    const { data: account, error: accountError } = await admin.auth.admin.getUserById(userId);
+    if (accountError) return reply(500, { error: accountError.message });
+    if (!account.user.email_confirmed_at) userId = null;
+  }
   if (!userId) {
     const { data, error } = await admin.auth.admin.generateLink({ type: "invite", email, options: { redirectTo: APP_URL } });
     if (error) return reply(500, { error: error.message });
     userId = data.user.id;
     link = data.properties.action_link;
   }
+  if (isPlayer) {
+    const { data: taken } = await admin.from("team_members").select("user_id").eq("player_id", playerId).maybeSingle();
+    if (taken && taken.user_id !== userId) return reply(409, { error: "este jugador ya tiene cuenta" });
+  }
   const { data: member } = await admin.from("team_members").select("role").eq("team_id", teamId).eq("user_id", userId).maybeSingle();
-  if (member) return reply(409, { error: "ese correo ya es del equipo" });
+  // Someone invited before who never used the link gets a fresh one; a member who signed in is already in.
+  if (member) return link ? reply(200, { link }) : reply(409, { error: "ese correo ya es del equipo" });
   const { error: linkError } = await admin.from("team_members").insert({ team_id: teamId, user_id: userId, role, player_id: isPlayer ? playerId : null });
   if (linkError) return reply(500, { error: linkError.message });
   return reply(200, { link });

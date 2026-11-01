@@ -362,3 +362,11 @@ create policy rival_templates_read on public.rival_templates for select to authe
 drop policy if exists rival_templates_write on public.rival_templates;
 create policy rival_templates_write on public.rival_templates for all to authenticated
   using (private.is_team_staff(team_id)) with check (private.is_team_staff(team_id));
+
+-- A guest (role 'viewer') reads the team like a player but is nobody on the roster: another club's coach shown the
+-- team as an example. The staff can take a guest's account off the team as they do a player's.
+alter table public.team_members drop constraint if exists team_members_role_check;
+alter table public.team_members add constraint team_members_role_check check (role in ('owner', 'coach', 'player', 'viewer'));
+drop policy if exists members_remove_player on public.team_members;
+create policy members_remove_player on public.team_members for delete to authenticated
+  using (role in ('player', 'viewer') and private.is_team_staff(team_id));
