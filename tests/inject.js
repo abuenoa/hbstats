@@ -4007,6 +4007,7 @@
         showSplash();
         const el = $('splash');
         if (!el || !el.querySelector('.splash-ball svg') || !flatText(el).includes('HBStats')) throw new Error('no splash');
+        if (!el.querySelector('.splash-tap')) throw new Error('no tap prompt');
         el.click();
         if (!el.classList.contains('out')) throw new Error('a tap does not skip it');
         await gone();
@@ -4022,7 +4023,8 @@
       showHomeView('profile');
       const grid = document.querySelector('.card-grid');
       const teamCards = [...grid.querySelectorAll('[data-open-team]')];
-      if (teamCards.length !== 2 || !grid.querySelector('[data-new-team]') || $('home').querySelector('[data-template-edit], [data-sign-out], .account-menu') || !$('home').textContent.includes('Sin cuenta')) throw new Error('grid content');
+      const deviceMenu = $('home').querySelector('.app-end .account-menu');
+      if (teamCards.length !== 2 || !grid.querySelector('[data-new-team]') || $('home').querySelector('[data-template-edit], [data-sign-out], [data-change-password]') || !deviceMenu || !deviceMenu.textContent.includes('Sin cuenta')) throw new Error('grid content');
       const brandOf = (c) => c.style.getPropertyValue('--team-brand').trim();
       if (brandOf(teamCards[0]) !== '#112233' || teamCards[0].style.getPropertyValue('--team-brand2').trim() !== '#aabbcc') throw new Error('brand colours ' + brandOf(teamCards[0]));
       if (brandOf(teamCards[1]) !== 'var(--brand)') throw new Error('an invalid colour reaches the style: ' + brandOf(teamCards[1]));
@@ -4036,6 +4038,19 @@
       if (menu.open) throw new Error('a tap outside leaves the menu open');
       showHomeView('team-edit');
       if (!$('home').querySelector('.team-rivals [data-template-edit="pt"]')) throw new Error('rivals not in Editar equipo');
+    }));
+    await TA('account: Editar cuenta changes the e-mail (validated) and the password', async () => withHomeView(async () => {
+      const keep = { user: home.user, setEmail: backend.setEmail }, sent = [];
+      try {
+        home.user = { email: 'coach@example.com' }; backend.setEmail = async (e) => { sent.push(e); };
+        showHomeView('profile'); document.querySelector('[data-change-password]').click();
+        const form = $('home').querySelector('[data-form="email"]'), field = form.querySelector('[name="email"]');
+        if (home.view !== 'password' || field.value !== 'coach@example.com' || !$('home').querySelector('[data-form="password"]')) throw new Error('account page');
+        const submit = async (value) => { field.value = value; form.dispatchEvent(new Event('submit', { bubbles: true, cancelable: true })); for (let i = 0; i < 3; i++) await tick0(); };
+        await submit('nope'); if (sent.length || !$('home-status').textContent.includes('válido')) throw new Error('invalid e-mail sent');
+        await submit('COACH@example.com'); if (sent.length || !$('home-status').textContent.includes('Ese ya')) throw new Error('same e-mail sent');
+        await submit(' new@example.com '); if (sent.join() !== 'new@example.com' || !$('home-status').textContent.includes('new@example.com')) throw new Error('not sent ' + sent);
+      } finally { home.user = keep.user; backend.setEmail = keep.setEmail; home.passwordChange = false; }
     }));
     // Layout (M5.4): no horizontal overflow in any home page or sheet tab, at the window the suite runs in (the matrix probe covers 1024).
     const overflowing = (root) => {
