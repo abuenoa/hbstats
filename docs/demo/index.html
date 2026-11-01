@@ -6944,7 +6944,6 @@ table { border-collapse: collapse; width: 100%; }
     homeStatus(`Enlace nuevo para ${player ? player.name : account.email}: compártelo.`);
   }
   async function removeAccount(userId) {
-    if (!confirmTap(`account-${userId}`)) return;
     const account = home.accounts.rows.find((a) => a.userId === userId);
     homeStatus('Quitando…');
     try {
@@ -9243,6 +9242,7 @@ table { border-collapse: collapse; width: 100%; }
     if (b.dataset.teamDel) { if (confirmTap(`retire-${b.dataset.teamDel}`)) retireTeamPlayer(rosterPlayer(b.dataset.teamDel)); return; }
     if (b.hasAttribute('data-delete-team')) { if (confirmTap('delete-team')) deleteTeam(); return; }
     if (b.dataset.templateDel) { if (confirmTap(`template-${b.dataset.templateDel}`)) deleteTemplate(b.dataset.templateDel); return; }
+    if (b.dataset.accountRemove) { if (confirmTap(`account-${b.dataset.accountRemove}`)) removeAccount(b.dataset.accountRemove); return; }
     if (b.hasAttribute('data-att-delete')) { if (confirmTap('att-delete')) deleteAttendanceSession(); return; }
     if (b.hasAttribute('data-legacy-drop')) { if (confirmTap('legacy-drop')) { const l = legacyMatch(); if (l) removeKey(l.key); renderHome(); } return; }
     if (armedBefore) { home.armed = null; renderHome(); }
@@ -9257,7 +9257,6 @@ table { border-collapse: collapse; width: 100%; }
     if (b.hasAttribute('data-invite-list-check')) { checkInviteList(); return; }
     if (b.hasAttribute('data-invite-list')) { inviteList(); return; }
     if (b.hasAttribute('data-account-resend')) { resendInvite(b.dataset.accountResend); return; }
-    if (b.hasAttribute('data-account-remove')) { removeAccount(b.dataset.accountRemove); return; }
     if (b.hasAttribute('data-callup-share')) { shareCallup(); return; }
     if (b.hasAttribute('data-callup-save')) { saveCallup(); return; }
     if (b.dataset.attMode) { switchAttendanceMode(b.dataset.attMode); return; }
