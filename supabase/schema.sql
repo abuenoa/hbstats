@@ -69,7 +69,6 @@ create table if not exists public.rival_templates (
   -- [{num, name, pos}]: the app validates each dorsal; the database only bounds the size (a rival's season squad, up to 30).
   players jsonb not null check (jsonb_typeof(players) = 'array' and jsonb_array_length(players) between 1 and 30)
 );
-create unique index if not exists rival_templates_user_name on public.rival_templates (user_id, lower(name));
 -- Databases created when the bound was 16 get the season-squad bound too.
 alter table public.rival_templates drop constraint if exists rival_templates_players_check;
 alter table public.rival_templates add constraint rival_templates_players_check
@@ -193,10 +192,6 @@ begin
 end $$;
 drop trigger if exists matches_only_through_save_match on public.matches;
 create trigger matches_only_through_save_match before update on public.matches for each row execute function public.matches_only_through_save_match();
-
-drop policy if exists rival_templates_own on public.rival_templates;
-create policy rival_templates_own on public.rival_templates for all to authenticated
-  using (user_id = (select auth.uid())) with check (user_id = (select auth.uid()));
 
 drop function if exists public.is_team_member(uuid);
 
@@ -345,3 +340,25 @@ language sql stable security definer set search_path = auth, public as $$
 $$;
 revoke all on function public.user_id_by_email(text) from public, anon, authenticated;
 grant execute on function public.user_id_by_email(text) to service_role;
+
+-- Rival templates belong to a team (its league's rivals), shared by its staff and read by its players. A template
+-- saved before goes to its author's team that played that rival, else to the author's team with most matches.
+alter table public.rival_templates add column if not exists team_id uuid references public.teams (id) on delete cascade;
+update public.rival_templates t set team_id = (
+  select m.team_id from public.team_members m
+  where m.user_id = t.user_id and m.role in ('owner', 'coach')
+  order by exists (select 1 from public.matches x where x.team_id = m.team_id and lower(x.state ->> 'them') = lower(t.name)) desc,
+    (select count(*) from public.matches x where x.team_id = m.team_id) desc, m.team_id
+  limit 1)
+where t.team_id is null;
+-- An author without a team has nowhere to keep the template.
+delete from public.rival_templates where team_id is null;
+alter table public.rival_templates alter column team_id set not null;
+drop index if exists public.rival_templates_user_name;
+create unique index if not exists rival_templates_team_name on public.rival_templates (team_id, lower(name));
+drop policy if exists rival_templates_own on public.rival_templates;
+drop policy if exists rival_templates_read on public.rival_templates;
+create policy rival_templates_read on public.rival_templates for select to authenticated using (private.is_team_member(team_id));
+drop policy if exists rival_templates_write on public.rival_templates;
+create policy rival_templates_write on public.rival_templates for all to authenticated
+  using (private.is_team_staff(team_id)) with check (private.is_team_staff(team_id));
