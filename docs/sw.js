@@ -9,7 +9,7 @@
  * tools/build_site.py stamps BUILD (a hash of the page, so every release replaces the old shell cache) and
  * SUPABASE_JS (the library URL the page loads).
  */
-const BUILD = '8e933ed5bb0b';
+const BUILD = 'ff6a622bbf9e';
 const SHELL_PREFIX = 'hbstats-app-shell-';
 const SHELL_CACHE = `${SHELL_PREFIX}${BUILD}`;
 const RUNTIME_CACHE = 'hbstats-app-cdn-v1';
@@ -23,7 +23,10 @@ const SHELL_ASSETS = [
   './icons/icon-maskable-512.png',
   './icons/apple-touch-icon.png',
   './icons/favicon-32.png',
-  './sounds/splash.mp3'
+  './sounds/splash.mp3',
+  './cards/callup-texture.webp',
+  './cards/brush.webp',
+  './cards/ball.webp'
 ];
 
 // Must match, character for character, the URLs the page requests.
