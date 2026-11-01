@@ -370,3 +370,38 @@ alter table public.team_members add constraint team_members_role_check check (ro
 drop policy if exists members_remove_player on public.team_members;
 create policy members_remove_player on public.team_members for delete to authenticated
   using (role in ('player', 'viewer') and private.is_team_staff(team_id));
+
+-- The staff see who has an account in their team (e-mails live in auth.users, out of the API's reach) and take one off.
+-- The staff remove players and guests, only the owner removes a coach, and nobody removes the owner. An invite never
+-- used is cancelled whole: an unconfirmed account left in no team is deleted, so its link stops working.
+create or replace function public.team_accounts(p_team uuid)
+returns table (user_id uuid, role text, player_id uuid, email text, signed_in boolean, is_me boolean)
+language plpgsql stable security definer set search_path = public, auth as $$
+begin
+  if not private.is_team_staff(p_team) then raise exception 'solo los entrenadores ven las cuentas' using errcode = '42501'; end if;
+  return query
+    select m.user_id, m.role, m.player_id, u.email::text, u.email_confirmed_at is not null, m.user_id = auth.uid()
+    from team_members m join auth.users u on u.id = m.user_id
+    where m.team_id = p_team order by m.role, u.email;
+end;
+$$;
+revoke all on function public.team_accounts(uuid) from public, anon;
+grant execute on function public.team_accounts(uuid) to authenticated;
+
+create or replace function public.remove_team_account(p_team uuid, p_user uuid) returns void
+language plpgsql security definer set search_path = public, auth as $$
+declare
+  member_role text;
+begin
+  select role into member_role from team_members where team_id = p_team and user_id = p_user;
+  if member_role is null then raise exception 'esa cuenta ya no es del equipo' using errcode = 'P0002'; end if;
+  if member_role = 'owner' or not (private.is_team_owner(p_team) or (member_role in ('player', 'viewer') and private.is_team_staff(p_team))) then
+    raise exception 'no puedes quitar esa cuenta' using errcode = '42501';
+  end if;
+  delete from team_members where team_id = p_team and user_id = p_user;
+  delete from auth.users u where u.id = p_user and u.email_confirmed_at is null
+    and not exists (select 1 from team_members m where m.user_id = p_user);
+end;
+$$;
+revoke all on function public.remove_team_account(uuid, uuid) from public, anon;
+grant execute on function public.remove_team_account(uuid, uuid) to authenticated;
