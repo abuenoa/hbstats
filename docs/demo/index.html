@@ -762,6 +762,29 @@ td.zero { color: var(--color-text-tertiary); }
   .bench-player { padding-block: 4px 3px; }
   .bench-player .disc { width: 34px; height: 34px; font-size: 16px; }
 }
+/* ---------- Splash: the logo dribbles in, the name rises and a whistle opens the app (skipped with reduced motion) ---------- */
+.splash { position: fixed; inset: 0; z-index: 50; display: grid; place-content: center; justify-items: center; gap: var(--space-4); overflow: hidden;
+  background: radial-gradient(circle at 50% 45%, rgba(212, 32, 42, .35), transparent 60%), #0e0e10; color: #ffffff; transition: opacity var(--splash-fade) ease-out; }
+.splash.out { opacity: 0; pointer-events: none; }
+.splash-run { animation: splash-run 1.3s linear both; }
+.splash-ball { width: min(40vmin, 220px); aspect-ratio: 1; animation: splash-bounce 1.3s both; }
+.splash-ball svg { display: block; width: 100%; height: 100%; animation: splash-spin 1.3s cubic-bezier(.2, .6, .3, 1) both; filter: drop-shadow(0 12px 30px rgba(212, 32, 42, .55)); }
+.splash-title { display: grid; justify-items: center; animation: splash-rise .5s 1.35s var(--ease-out) both; }
+.splash-title b { font-family: var(--font-display); font-weight: 800; font-size: clamp(40px, 9vmin, 72px); letter-spacing: .08em; text-transform: uppercase; line-height: 1; }
+.splash-title small { color: #f5c400; font-family: var(--font-display); font-weight: 700; letter-spacing: .3em; text-transform: uppercase; }
+/* The three floor contacts (19%, 58%, 88% of 1.3 s) are the dribble thumps of playSplashSound. */
+@keyframes splash-run { from { transform: translateX(-70vw); } 88%, to { transform: none; } }
+@keyframes splash-bounce {
+  0% { transform: translateY(-45vh); animation-timing-function: cubic-bezier(.5, 0, 1, .6); }
+  19% { transform: scale(1.12, .88); animation-timing-function: cubic-bezier(0, .4, .5, 1); }
+  38% { transform: translateY(-22vh); animation-timing-function: cubic-bezier(.5, 0, 1, .6); }
+  58% { transform: scale(1.08, .92); animation-timing-function: cubic-bezier(0, .4, .5, 1); }
+  73% { transform: translateY(-9vh); animation-timing-function: cubic-bezier(.5, 0, 1, .6); }
+  88% { transform: scale(1.05, .95); }
+  100% { transform: none; }
+}
+@keyframes splash-spin { from { transform: rotate(-540deg); } to { transform: none; } }
+@keyframes splash-rise { from { opacity: 0; transform: translateY(16px); } to { opacity: 1; transform: none; } }
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { animation: none !important; transition: none !important; }
 }
@@ -808,10 +831,18 @@ a:focus-visible, input:focus-visible, select:focus-visible, summary:focus-visibl
 .home-head { display: flex; align-items: center; gap: var(--space-4); flex-wrap: wrap; }
 .teams-corner { flex: none; width: var(--target); }
 .app-end { margin-left: auto; display: flex; align-items: center; gap: var(--space-2); }
+.account-menu { position: relative; }
+.account-menu > summary { list-style: none; width: var(--target); padding: 0; display: grid; place-items: center; }
+.account-menu > summary::-webkit-details-marker { display: none; }
+.account-pop { position: absolute; right: 0; top: calc(100% + var(--space-2)); z-index: 3; min-width: 220px; display: grid; gap: var(--space-2); padding: var(--space-3); border-radius: var(--radius-lg); }
+.account-pop .btn { justify-content: flex-start; }
+.account-email { margin: 0; color: var(--muted); overflow-wrap: anywhere; }
 /* Sticks flush with the top of the screen: the offset cancels the gutter of .home, so nothing scrolls past above the bar. */
 .top-bar { padding: var(--space-2) var(--space-4); border-radius: var(--radius-lg); position: sticky; top: calc(var(--home-gutter) * -1); z-index: 2; display: grid; gap: var(--space-2); }
 .top-bar .home-crest, .top-bar .app-mark { width: var(--target); height: var(--target); }
 .top-bar .app-mark { font-size: 20px; }
+.app-mark.logo { background: none; box-shadow: none; }
+.app-mark.logo svg { width: 100%; height: 100%; }
 .page-bar { display: flex; align-items: center; gap: var(--space-3); min-width: 0; min-height: var(--target); }
 .page-bar .btn { flex: none; }
 .page-title { flex: 1 1 auto; min-width: 0; margin: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font: var(--type-title); }
@@ -4142,7 +4173,7 @@ span.att-foot { visibility: hidden; }
   function templatePickHtml() {
     if (!ui.templatePick) return '';
     const chips = home.templates.map((t) => `<button class="btn press" type="button" data-template-load="${t.id}">${esc(t.name)} · ${plural(t.players.length, 'dorsal', 'dorsales')}</button>`).join('');
-    return `<div class="row-actions template-pick">${chips || '<span class="note">Aún no tienes plantillas: guarda esta o créalas en tu perfil.</span>'}</div>`;
+    return `<div class="row-actions template-pick">${chips || '<span class="note">Aún no tienes plantillas: guarda esta o créalas en Editar equipo.</span>'}</div>`;
   }
   function sheetActaHtml() {
     const players = state.players.slice().sort((a, b) => a.num - b.num);
@@ -4404,7 +4435,7 @@ span.att-foot { visibility: hidden; }
     const attr = `data-${prefix}-new-pos`;
     document.querySelectorAll(`[${attr}]`).forEach((b) => b.setAttribute('aria-pressed', String(b.getAttribute(attr) === `new:${ui.rivalNewPos}`)));
   }
-  // Rival templates live in the coach's profile: «Guardar plantilla» keeps this rival and its dorsals there,
+  // Rival templates live in the team: «Guardar plantilla» keeps this rival and its dorsals there,
   // «Cargar plantilla» brings a saved one into the acta.
   async function saveRivalTemplate() {
     if (!backend) { sheetStatus('rival-status', 'Entra con tu cuenta para guardar plantillas.'); return; }
@@ -4414,7 +4445,7 @@ span.att-foot { visibility: hidden; }
       await loadTemplates();
       const same = templateByName(state.them);
       await storeTemplate({ id: same ? same.id : null, name: state.them, players: templatePlayers(state.rivals) });
-      sheetStatus('rival-status', `Plantilla «${state.them}» ${same ? 'actualizada' : 'guardada'} en tu perfil.`);
+      sheetStatus('rival-status', `Plantilla «${state.them}» ${same ? 'actualizada' : 'guardada'} en el equipo.`);
     } catch (err) {
       sheetStatus('rival-status', `No se pudo guardar: ${cloudErrorText(err)}.`);
     }
@@ -4422,10 +4453,10 @@ span.att-foot { visibility: hidden; }
   const RIVAL_LOCKED_TEXT = 'Ya hay jugadas con dorsal rival: empieza otro partido desde «Partidos» para cargar otra plantilla.';
   async function toggleTemplatePick() {
     if (ui.templatePick) { ui.templatePick = false; renderSheet(); return; }
-    if (!backend) { sheetStatus('rival-status', 'Entra con tu cuenta para usar tus plantillas.'); return; }
+    if (!backend) { sheetStatus('rival-status', 'Entra con tu cuenta para usar las plantillas.'); return; }
     if (state.rivals.some(rivalLock)) { sheetStatus('rival-status', RIVAL_LOCKED_TEXT); return; }
     try { await loadTemplates(); }
-    catch (err) { sheetStatus('rival-status', `No se pudieron leer tus plantillas: ${cloudErrorText(err)}.`); return; }
+    catch (err) { sheetStatus('rival-status', `No se pudieron leer las plantillas: ${cloudErrorText(err)}.`); return; }
     ui.templatePick = true;
     renderSheet();
   }
@@ -6018,7 +6049,7 @@ table { border-collapse: collapse; width: 100%; }
     [/invalid login credentials/i, 'email o contraseña incorrectos'],
     [/email not confirmed/i, 'falta aceptar la invitación del email'],
     [/failed to fetch|networkerror|load failed/i, 'sin conexión'],
-    [/rival_templates_user_name/i, 'ya tienes una plantilla con ese nombre'],
+    [/rival_templates_team_name/i, 'el equipo ya tiene una plantilla con ese nombre'],
     [/players_team_num_active|duplicate key/i, 'ese dorsal ya está en la plantilla'],
     [/password should be at least/i, `la contraseña necesita al menos ${MIN_PASSWORD_LENGTH} caracteres`],
     [/same password/i, 'la contraseña nueva tiene que ser distinta de la anterior'],
@@ -6136,18 +6167,20 @@ table { border-collapse: collapse; width: 100%; }
         db.players = db.players.filter((p) => p.teamId !== id);
         db.fixtures = db.fixtures.filter((f) => f.teamId !== id);
         db.sessions = db.sessions.filter((x) => x.teamId !== id);
+        db.templates = db.templates.filter((x) => x.teamId !== id);
         Object.keys(db.matches).filter((k) => db.matches[k].teamId === id).forEach((k) => { delete db.matches[k]; });
         write(db);
       },
-      async listTemplates() { return read().templates.slice().sort(byTemplateName); },
-      async saveTemplate(t) {
+      async listTemplates(teamId) { return read().templates.filter((x) => x.teamId === teamId).map(({ teamId: _, ...t }) => t).sort(byTemplateName); },
+      async saveTemplate(teamId, t) {
         const db = read();
-        if (db.templates.some((x) => x.id !== t.id && sameName(x.name, t.name))) throw new Error('rival_templates_user_name');
+        if (db.templates.some((x) => x.teamId === teamId && x.id !== t.id && sameName(x.name, t.name))) throw new Error('rival_templates_team_name');
         let row = t.id && db.templates.find((x) => x.id === t.id);
-        if (!row) { row = { id: newUuid() }; db.templates.push(row); }
+        if (!row) { row = { id: newUuid(), teamId }; db.templates.push(row); }
         Object.assign(row, { name: t.name, players: t.players });
         write(db);
-        return { ...row };
+        const { teamId: _, ...saved } = row;
+        return saved;
       },
       async deleteTemplate(id) {
         const db = read();
@@ -6252,10 +6285,10 @@ table { border-collapse: collapse; width: 100%; }
       async deleteTeam(id) {
         if (!check(await client.from('teams').delete().eq('id', id).select('id')).length) throw new Error('solo quien creó el equipo puede borrarlo');
       },
-      // Rival templates belong to the signed-in coach (the table fills in user_id).
-      async listTemplates() { return check(await client.from('rival_templates').select('id,name,players').order('name')); },
-      async saveTemplate(t) {
-        const row = { name: t.name, players: t.players };
+      // Rival templates belong to a team (the table fills in user_id, their author).
+      async listTemplates(teamId) { return check(await client.from('rival_templates').select('id,name,players').eq('team_id', teamId).order('name')); },
+      async saveTemplate(teamId, t) {
+        const row = { team_id: teamId, name: t.name, players: t.players };
         const query = t.id ? client.from('rival_templates').update(row).eq('id', t.id) : client.from('rival_templates').insert(row);
         return check(await query.select('id,name,players').single());
       },
@@ -6278,20 +6311,20 @@ table { border-collapse: collapse; width: 100%; }
   }
   const userKey = () => (home.user ? home.user.email : 'device');
 
-  // ---- Rival templates (the coach's profile) ----
+  // ---- Rival templates (the team's rivals, kept in Editar equipo) ----
   const sameName = (a, b) => a.toLowerCase() === b.toLowerCase();
   const byTemplateName = (a, b) => a.name.localeCompare(b.name, 'es');
   const templateByName = (name) => home.templates.find((t) => sameName(t.name, name));
-  const templatesKey = () => `templates:${userKey()}`;
+  const templatesKey = () => `templates:${team.id}`;
   // What a template keeps of each rival: dorsal, name and position (both optional), in dorsal order.
   const templatePlayers = (list) => list.slice().sort((a, b) => a.num - b.num).map(({ num, name, pos }) => ({ num, name: name || '', pos: pos || null }));
   async function loadTemplates() {
-    const { value, offline } = await cachedRead(templatesKey(), () => backend.listTemplates());
+    const { value, offline } = await cachedRead(templatesKey(), () => backend.listTemplates(team.id));
     home.templates = value;
     return offline;
   }
   async function storeTemplate(t) {
-    const saved = await backend.saveTemplate(t);
+    const saved = await backend.saveTemplate(team.id, t);
     home.templates = [...home.templates.filter((x) => x.id !== saved.id), saved].sort(byTemplateName);
     writeJson(CACHE_KEY_PREFIX + templatesKey(), home.templates);
     return saved;
@@ -6555,7 +6588,7 @@ table { border-collapse: collapse; width: 100%; }
     const change = home.passwordChange;
     const head = change ? pageBarHtml({
       leading: cancelButtonHtml('data-home-view="profile"'),
-      title: 'Elige tu contraseña',
+      title: 'Editar cuenta',
       heading: 'h1',
       actions: `<button class="btn primary press" type="submit" form="${PASSWORD_FORM_ID}">Guardar</button>`,
     }) : '<h1>Elige tu contraseña</h1>';
@@ -6666,6 +6699,7 @@ table { border-collapse: collapse; width: 100%; }
       ${armedButton('delete-team', 'Borrar equipo', 'data-delete-team')}</div>`;
     return `${calendarRowHtml()}
       <div class="team-layout"><section class="sheet-card"><h3>Equipo</h3>${teamFormHtml(team, false)}${remove}</section><section class="sheet-card">${teamRosterHtml()}</section></div>
+      ${teamRivalsHtml()}
       ${backend.needsLogin ? teamAccountsHtml() : ''}`;
   }
   // ---- Player accounts: the coach invites a roster player by e-mail and shares the sign-in link by WhatsApp or mail ----
@@ -6755,6 +6789,11 @@ table { border-collapse: collapse; width: 100%; }
       return { leading, title: `${player.name} · ${match.them}`, actions: `<button class="btn primary press" type="button" data-player-match-open="${match.id}">Abrir el partido</button>` };
     },
     'team-edit': () => ({ leading: backToTeam(), title: 'Editar equipo' }),
+    template: () => ({
+      leading: cancelButtonHtml('data-home-view="team-edit"'),
+      title: home.template.id ? 'Editar plantilla' : 'Nueva plantilla',
+      actions: '<button class="btn primary press" type="button" data-template-store>Guardar</button>',
+    }),
     attendance: () => ({ title: 'Asistencia' }),
     squad: () => ({ leading: cancelButtonHtml(`data-home-view="matches"`), title: 'Convocatoria', actions: `<button class="btn go play press" type="button" data-squad-next ${squadReady() ? '' : 'disabled'}>Siguiente ›</button>` }),
     'rating-tune': () => ({
@@ -6763,34 +6802,45 @@ table { border-collapse: collapse; width: 100%; }
       actions: `<button class="btn press" type="button" data-tune="reset">Restablecer</button><button class="btn primary press" type="button" id="tune-save" data-tune="save"${tuneDirty() ? '' : ' disabled'}>Guardar</button>`,
     }),
   };
-  const HOME_VIEWS = { team: teamPageHtml, player: playerPageHtml, 'player-match': playerMatchHtml, 'team-edit': teamEditHtml, matches: matchesHtml, stats: teamStatsHtml, squad: squadHtml, attendance: attendanceHtml, 'rating-tune': ratingTuneHtml };
+  const HOME_VIEWS = { team: teamPageHtml, player: playerPageHtml, 'player-match': playerMatchHtml, 'team-edit': teamEditHtml, template: templateHtml, matches: matchesHtml, stats: teamStatsHtml, squad: squadHtml, attendance: attendanceHtml, 'rating-tune': ratingTuneHtml };
 
-  // ---- Profile: the first screen after signing in (teams, rival templates, account) ----
-  const profileHeadHtml = (pageBar = '') => `<header class="top-bar glass"><div class="home-head app-bar"><span class="app-mark" aria-hidden="true">HB</span>
-      <div class="home-title"><h1>HBStats</h1><small>${home.user ? esc(home.user.email) : 'En este dispositivo'}</small></div></div>${pageBar}</header>`;
+  // ---- Profile: the first screen after signing in (teams; the account in the corner menu) ----
+  // The app's mark (assets/icon.svg); each copy on the page needs its own clip id.
+  const appLogoSvg = (clipId) => `<svg viewBox="0 0 512 512" aria-hidden="true"> <defs> <clipPath id="${clipId}"> <circle cx="256" cy="256" r="206"/> </clipPath> </defs> <circle cx="256" cy="256" r="248" fill="#151515"/> <circle cx="256" cy="256" r="206" fill="#d4202a"/> <g clip-path="url(#${clipId})" fill="none" stroke="#151515" stroke-width="16" stroke-linecap="round"> <path d="M40 214 A236 236 0 0 0 296 34"/> <path d="M472 298 A236 236 0 0 0 216 478"/> </g> <g fill="#ffffff"> <path d="M118 148 H164 V234 H202 V148 H248 V364 H202 V276 H164 V364 H118 Z"/> <path fill-rule="evenodd" d="M266 148 H344 C378 148 396 170 396 200 C396 222 386 238 370 248 C390 258 402 278 402 306 C402 340 380 364 344 364 H266 Z M312 186 H336 C347 186 352 194 352 204 C352 214 347 222 336 222 H312 Z M312 268 H340 C352 268 358 278 358 292 C358 316 352 326 340 326 H312 Z"/> </g> <path d="M112 342 Q236 226 404 252" fill="none" stroke="#d4202a" stroke-width="40" stroke-linecap="round"/> <path d="M112 342 Q236 226 404 252" fill="none" stroke="#f5c400" stroke-width="22" stroke-linecap="round"/> </svg>`;
+  const ACCOUNT_ICON = '<svg viewBox="0 0 24 24" width="24" height="24" aria-hidden="true" fill="currentColor"><circle cx="12" cy="8" r="4.2"/><path d="M3.5 21c.6-4.6 4-7.2 8.5-7.2s7.9 2.6 8.5 7.2z"/></svg>';
+  // An installed app (its own window) can be closed from the menu; in a browser tab that is the browser's job.
+  const STANDALONE_QUERY = '(display-mode: standalone)';
+  function accountMenuHtml() {
+    if (!home.user) return '';
+    const exit = matchMedia(STANDALONE_QUERY).matches ? '<button class="btn press" type="button" data-app-exit>Salir de la app</button>' : '';
+    return `<details class="account-menu"><summary class="btn press" aria-label="Cuenta">${ACCOUNT_ICON}</summary>
+      <div class="account-pop glass" role="menu"><p class="account-email">${esc(home.user.email)}</p>
+        <button class="btn press" type="button" data-change-password>Editar cuenta</button>
+        <button class="btn press" type="button" data-sign-out>Cerrar sesión</button>${exit}</div></details>`;
+  }
+  const profileHeadHtml = (pageBar = '') => `<header class="top-bar glass"><div class="home-head app-bar"><span class="app-mark logo" aria-hidden="true">${appLogoSvg('head-logo-clip')}</span>
+      <div class="home-title"><h1>HBStats</h1><small>${home.user ? esc(home.user.email) : 'En este dispositivo'}</small></div><div class="app-end">${accountMenuHtml()}</div></div>${pageBar}</header>`;
   // A team's colours as custom properties of its card; a value that is not a hex colour falls back to the app's own.
   const teamColoursStyle = (t) => [['--team-brand', t.brand, 'var(--brand)'], ['--team-brand2', t.brand2, 'var(--gold)']]
     .map(([name, value, fallback]) => `${name}:${HEX_COLOUR.test(value) ? value : fallback}`).join(';');
   function profileHtml() {
     const teams = home.teams.map((t) => `<button class="team-card press" type="button" data-open-team="${t.id}" style="${teamColoursStyle(t)}"><img class="crest" src="${esc(crestSrc(t))}" alt=""><span><b>${esc(t.name)}</b><small>${esc(t.club)}</small></span></button>`).join('');
-    const rows = home.templates.map((t) => `<tr><td style="text-align:left"><b>${esc(t.name)}</b></td><td>${plural(t.players.length, 'dorsal', 'dorsales')}</td>
-        <td><div class="row-actions"><button class="btn press" type="button" data-template-edit="${t.id}">Editar</button><button class="btn press" type="button" data-template-export="${t.id}">Exportar</button>${armedButton(`template-${t.id}`, 'Borrar', `data-template-del="${t.id}" aria-label="Borrar la plantilla ${esc(t.name)}"`)}</div></td></tr>`).join('');
-    const account = home.user
-      ? `<p>${esc(home.user.email)}</p><div class="row-actions"><button class="btn press" type="button" data-change-password>Cambiar contraseña</button><button class="btn press" type="button" data-sign-out>Salir</button></div>`
-      : '<p class="note">Sin cuenta: todo se guarda solo en esta tablet.</p>';
     return `${statusHtml()}
       ${home.offline ? '<p class="note">Sin conexión: ves la copia guardada en esta tablet.</p>' : ''}
+      ${home.user ? '' : '<p class="note">Sin cuenta: todo se guarda solo en esta tablet.</p>'}
       <div class="card-grid profile-grid">
         <h3 class="grid-title">Mis equipos</h3>
         ${teams}<button class="team-card add press" type="button" data-new-team>+ Nuevo equipo</button>
-        <h3 class="grid-title">Plantillas de rivales</h3>
-        <section class="sheet-card span-all">
-          <div class="row-actions"><button class="btn primary press" type="button" data-template-new>+ Nueva plantilla</button><button class="btn press" type="button" data-roster-import="template">Importar archivo</button></div>
-          ${rows ? `<div class="table-wrap"><table><thead><tr><th style="text-align:left">Rival</th><th>Dorsales</th><th></th></tr></thead><tbody>${rows}</tbody></table></div>`
-            : '<p class="note">Guarda aquí a los rivales con sus dorsales y cárgalos en el acta de cada partido con «Cargar plantilla».</p>'}</section>
-        <h3 class="grid-title">Cuenta</h3>
-        <section class="sheet-card">${account}</section>
       </div>`;
+  }
+  // The team's rivals with their dorsals, loaded into the acta of each match with «Cargar plantilla».
+  function teamRivalsHtml() {
+    const rows = home.templates.map((t) => `<tr><td style="text-align:left"><b>${esc(t.name)}</b></td><td>${plural(t.players.length, 'dorsal', 'dorsales')}</td>
+        <td><div class="row-actions"><button class="btn press" type="button" data-template-edit="${t.id}">Editar</button><button class="btn press" type="button" data-template-export="${t.id}">Exportar</button>${armedButton(`template-${t.id}`, 'Borrar', `data-template-del="${t.id}" aria-label="Borrar la plantilla ${esc(t.name)}"`)}</div></td></tr>`).join('');
+    return `<section class="sheet-card team-rivals"><h3>Plantillas de rivales</h3>
+      <div class="row-actions"><button class="btn primary press" type="button" data-template-new>+ Nueva plantilla</button><button class="btn press" type="button" data-roster-import="template">Importar archivo</button></div>
+      ${rows ? `<div class="table-wrap"><table><thead><tr><th style="text-align:left">Rival</th><th>Dorsales</th><th></th></tr></thead><tbody>${rows}</tbody></table></div>`
+        : '<p class="note">Guarda aquí a los rivales de la liga con sus dorsales y cárgalos en el acta de cada partido con «Cargar plantilla».</p>'}</section>`;
   }
   function templateHtml() {
     const t = home.template;
@@ -6802,14 +6852,7 @@ table { border-collapse: collapse; width: 100%; }
       ${t.players.length ? rivalTableHtml(t.players, 'tpl', () => false) : '<p class="note">Añade los dorsales del rival; nombre y puesto son opcionales.</p>'}
     </section>`;
   }
-  const PROFILE_VIEWS = { profile: profileHtml, template: templateHtml };
-  const PROFILE_BARS = {
-    template: () => ({
-      leading: cancelButtonHtml('data-home-view="profile"'),
-      title: home.template.id ? 'Editar plantilla' : 'Nueva plantilla',
-      actions: '<button class="btn primary press" type="button" data-template-store>Guardar</button>',
-    }),
-  };
+  const PROFILE_VIEWS = { profile: profileHtml };
   function renderHome() {
     const v = home.view;
     let body;
@@ -6826,7 +6869,7 @@ table { border-collapse: collapse; width: 100%; }
       });
       body = `<div class="auth-card wide glass">${bar}<p class="note">Nombre, colores y escudo. Después añadirás la plantilla.</p>${teamFormHtml(home.draft, true)}</div>`;
     }
-    else if (PROFILE_VIEWS[v]) body = `${profileHeadHtml(PROFILE_BARS[v] ? pageBarHtml(PROFILE_BARS[v]()) : '')}<main class="home-body">${PROFILE_VIEWS[v]()}</main>`;
+    else if (PROFILE_VIEWS[v]) body = `${profileHeadHtml()}<main class="home-body">${PROFILE_VIEWS[v]()}</main>`;
     else {
       // The page first: a bar may read state its view sets up (the tuning draft).
       const page = HOME_VIEWS[v](), bar = HOME_BARS[v](), mainTab = !bar.leading && !bar.title;
@@ -6873,16 +6916,10 @@ table { border-collapse: collapse; width: 100%; }
     if (playing) { await selectTeam(playing); return; }
     await showProfile();
   }
-  async function showProfile() {
+  function showProfile() {
     home.passwordChange = false;
     home.template = null;
     showHomeView('profile');
-    let problem = '';
-    try { if (await loadTemplates()) home.offline = true; }
-    catch (err) { home.templates = []; problem = `No se pudieron leer tus plantillas: ${cloudErrorText(err)}.`; }
-    if (home.view !== 'profile') return;
-    renderHome();
-    if (problem) homeStatus(problem);
   }
   async function selectTeam(t) {
     applyTeam(t);
@@ -6897,6 +6934,8 @@ table { border-collapse: collapse; width: 100%; }
     catch (err) { home.roster = []; console.warn(`Roster not available: ${cloudErrorText(err)}`); }
     try { await loadFixtures(); }
     catch (err) { home.fixtures = []; console.warn(`Calendar not available: ${cloudErrorText(err)}`); }
+    try { await loadTemplates(); }
+    catch (err) { home.templates = []; console.warn(`Rival templates not available: ${cloudErrorText(err)}`); }
     // A reload in the middle of a match goes straight back to it.
     const resume = readJson(CURRENT_MATCH_KEY);
     const saved = resume && localMatch(resume);
@@ -8692,7 +8731,7 @@ table { border-collapse: collapse; width: 100%; }
       homeStatus(`No se pudo guardar: ${cloudErrorText(err)}.`);
       return;
     }
-    await showProfile();
+    showHomeView('team-edit');
     homeStatus(`Plantilla «${name}» guardada.`);
   }
   async function deleteTemplate(id) {
@@ -8772,6 +8811,12 @@ table { border-collapse: collapse; width: 100%; }
       homeStatus(`No se pudo guardar: ${cloudErrorText(err)}.`);
     }
   }
+  // The system may refuse to close the app from a page: then the coach is told how to leave it.
+  const EXIT_CHECK_MS = 300;
+  function exitApp() {
+    window.close();
+    setTimeout(() => homeStatus('Para salir, usa el botón de inicio o el de atrás del dispositivo.'), EXIT_CHECK_MS);
+  }
   // Signing out leaves nothing of the team on the tablet, so it waits until every match is uploaded.
   async function signOut() {
     await Promise.all([syncMatches(), syncAttendance()]);
@@ -8798,6 +8843,8 @@ table { border-collapse: collapse; width: 100%; }
   $('home').addEventListener('click', (ev) => {
     const rowLink = ev.target.closest('[data-player-match]');
     if (rowLink) { showPlayerMatch(rowLink.dataset.playerMatch); return; }
+    const menu = $('home').querySelector('.account-menu[open]');
+    if (menu && !menu.contains(ev.target)) menu.open = false;
     const b = ev.target.closest('button');
     if (!b || b.type === 'submit') return;
     if (home.view === 'rating-tune' && !b.hasAttribute('data-tune') && tuneDirty() && !confirmTap(TUNE_LEAVE_ARM)) return;
@@ -8813,6 +8860,7 @@ table { border-collapse: collapse; width: 100%; }
     if (b.hasAttribute('data-retry')) { startHome(); return; }
     if (b.hasAttribute('data-forgot')) { sendPasswordReset(); return; }
     if (b.hasAttribute('data-sign-out')) { signOut(); return; }
+    if (b.hasAttribute('data-app-exit')) { exitApp(); return; }
     if (b.dataset.att) { tapAttendance(b.dataset.att); return; }
     if (b.dataset.callupPick) { toggleCallupPick(b.dataset.callupPick); return; }
     if (b.hasAttribute('data-invite')) { inviteMember(); return; }
@@ -8901,6 +8949,67 @@ table { border-collapse: collapse; width: 100%; }
     if (file) pickPhoto(file);
   });
 
+  // ---- Splash: the logo dribbles in and a referee's whistle opens the app ----
+  const SPLASH_MS = 2600, SPLASH_FADE_MS = 350;
+  // Seconds from the start: the ball's three floor contacts (the splash-bounce keyframes) and the whistle after them.
+  const DRIBBLE_HITS = [0.25, 0.75, 1.15];
+  const WHISTLE = { at: 1.5, length: 0.6, tones: [2900, 3150], trillHz: 26, gain: 0.08 };
+  const THUMP = { from: 150, to: 45, length: 0.18, gain: 0.7 };
+  const REDUCED_MOTION_QUERY = '(prefers-reduced-motion: reduce)';
+  function thump(ctx, at) {
+    const osc = ctx.createOscillator(), gain = ctx.createGain();
+    osc.frequency.setValueAtTime(THUMP.from, at);
+    osc.frequency.exponentialRampToValueAtTime(THUMP.to, at + THUMP.length);
+    gain.gain.setValueAtTime(THUMP.gain, at);
+    gain.gain.exponentialRampToValueAtTime(0.001, at + THUMP.length);
+    osc.connect(gain).connect(ctx.destination);
+    osc.start(at);
+    osc.stop(at + THUMP.length);
+  }
+  // A pea whistle: two close tones trilled by a fast tremolo.
+  function whistle(ctx, at) {
+    const end = at + WHISTLE.length, out = ctx.createGain(), trill = ctx.createOscillator(), depth = ctx.createGain();
+    out.gain.setValueAtTime(0, at);
+    out.gain.linearRampToValueAtTime(WHISTLE.gain, at + 0.03);
+    out.gain.setValueAtTime(WHISTLE.gain, end - 0.08);
+    out.gain.linearRampToValueAtTime(0, end);
+    trill.frequency.value = WHISTLE.trillHz;
+    depth.gain.value = WHISTLE.gain / 2;
+    trill.connect(depth).connect(out.gain);
+    out.connect(ctx.destination);
+    const tones = WHISTLE.tones.map((f) => { const osc = ctx.createOscillator(); osc.frequency.value = f; osc.connect(out); return osc; });
+    [trill, ...tones].forEach((osc) => { osc.start(at); osc.stop(end); });
+  }
+  // The browser decides whether a page may sound before a tap (an installed app usually may): if not, the splash is silent.
+  function playSplashSound() {
+    const Context = window.AudioContext || window.webkitAudioContext;
+    if (!Context) return;
+    const ctx = new Context();
+    if (ctx.state !== 'running') { ctx.close(); return; }
+    DRIBBLE_HITS.forEach((t) => thump(ctx, ctx.currentTime + t));
+    whistle(ctx, ctx.currentTime + WHISTLE.at);
+    setTimeout(() => ctx.close(), (WHISTLE.at + WHISTLE.length) * 1000 + SPLASH_FADE_MS);
+  }
+  function dismissSplash() {
+    const el = $('splash');
+    if (!el || el.classList.contains('out')) return;
+    el.classList.add('out');
+    setTimeout(() => el.remove(), SPLASH_FADE_MS);
+  }
+  // Not over a match that is being resumed, and not for whoever asks the system for less motion. A tap skips it.
+  function showSplash() {
+    if (matchMedia(REDUCED_MOTION_QUERY).matches || readJson(CURRENT_MATCH_KEY)) return;
+    const el = document.createElement('div');
+    el.id = 'splash';
+    el.className = 'splash';
+    el.style.setProperty('--splash-fade', `${SPLASH_FADE_MS}ms`);
+    el.innerHTML = `<div class="splash-run"><div class="splash-ball">${appLogoSvg('splash-logo-clip')}</div></div><div class="splash-title"><b>HBStats</b><small>Balonmano en directo</small></div>`;
+    el.addEventListener('click', dismissSplash);
+    document.body.append(el);
+    playSplashSound();
+    setTimeout(dismissSplash, SPLASH_MS);
+  }
+
   // ===================== Boot =====================
   window.addEventListener('pagehide', save);
   document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'hidden') save(); });
@@ -8911,7 +9020,7 @@ table { border-collapse: collapse; width: 100%; }
   applyTeam(DEFAULT_TEAM);
   renderAll();
   if (DEMO) openDemo();
-  else startHome();
+  else { showSplash(); startHome(); }
   setInterval(tick, CONFIG.tickMs);
 })();
 </script>
