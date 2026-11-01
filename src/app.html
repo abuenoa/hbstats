@@ -1007,13 +1007,9 @@ body:has(#home:not([hidden])) { overflow: hidden; }
 .att-arrow { color: var(--muted); }
 .att-over { color: var(--color-danger-text); font-weight: 700; }
 .callup-kit { display: grid; gap: var(--space-2); margin-bottom: var(--space-3); }
-.kit-row { display: grid; gap: var(--space-1); }
-.kit-row .field-label { color: var(--muted); font-size: .75rem; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; }
+.callup-kit .field-label { color: var(--muted); font-size: .75rem; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; }
 .kit-chip { display: inline-flex; align-items: center; gap: var(--space-2); }
 .kit-swatch { width: 18px; height: 18px; border-radius: 50%; box-shadow: 0 0 0 1px var(--line); }
-.kit-other { cursor: pointer; }
-.kit-other.active { background: var(--fg); color: var(--bg); border-color: var(--fg); }
-.kit-other input { width: 22px; height: 22px; padding: 0; border: 0; background: none; }
 .att-note-row { display: flex; align-items: end; gap: var(--space-3); margin-bottom: var(--space-3); }
 .att-note-row .field { flex: 1; min-width: 0; }
 .att-note-in { width: 100%; min-width: 0; }
@@ -5617,38 +5613,36 @@ table { border-collapse: collapse; width: 100%; }
 
   // The convocatoria for the team's group as a street poster: the club colour under a grunge texture, black brush bars
   // behind the words, the team and the crest, the match (rival, day, hall, meeting and kickoff times), the players called
-  // up with their faces, the kit, who is left out, what to bring, a phrase for the group and the app's mark. The
-  // textures (cards/) were made with Higgsfield; without them the poster still draws, on flat bars.
+  // up with their faces, the kit, what to bring, a phrase for the group and the app's mark. The textures (cards/) were
+  // made with Higgsfield; without them the poster still draws, on flat bars.
   const CALLUP_CARD = {
-    w: 1080, h: 1620, pad: 48, stroke: 12, tilt: -0.035, minAccentContrast: 3,
+    // shade darkens the club colour and paperAlpha softens the texture, so the poster stays calm behind the names.
+    w: 1080, h: 1620, pad: 48, stroke: 12, tilt: -0.035, minAccentContrast: 3, shade: 0.28, paperAlpha: 0.45,
     textures: { paper: 'cards/callup-texture.webp', brush: 'cards/brush.webp', ball: 'cards/ball.webp' },
     title: { x: 48, y: 168, size: 150, minSize: 90, w: 640, subY: 246, subSize: 56 },
     crest: { cx: 880, cy: 160, r: 128, ring: 10 }, ball: { x: 860, y: 268, size: 190 },
     tag: { y: 300, h: 84, w: 800, icon: 50, size: 42 },
     info: { y: 412, h: 156, labelSize: 26, valueSize: 34, minSize: 22, icon: 40 },
-    heading: { y: 690, size: 104, icon: 70, brushH: 120, w: 620 },
-    list: { x: 48, w: 620, top: 726, bottom: 1250, colGap: 16, maxRow: 66, face: 0.72, nameScale: 0.52, minNameScale: 0.75 },
-    panel: { x: 684, w: 348, radius: 26, border: 5, headSize: 36 },
-    kit: { y: 712, h: 430, shirt: 130, piece: 96, labelSize: 22 },
-    bring: { y: 1166, h: 300, size: 28, lead: 48, titleSize: 30 },
-    left: { y: 1300, size: 36, rowH: 44, max: 6, headW: 400 },
-    footer: { y: 1488, h: 108, size: 76, minSize: 48, heart: 34 },
+    heading: { y: 690, size: 104, icon: 70, brushH: 120, w: 660 },
+    list: { x: 40, w: 700, top: 724, bottom: 1464, colGap: 14, maxRow: 96, face: 0.86, nameScale: 0.42, minNameScale: 0.6 },
+    panel: { x: 760, w: 280, radius: 26, border: 5, headSize: 30 },
+    kit: { y: 640, h: 330, shirt: 96, piece: 76, labelSize: 20 },
+    bring: { y: 1000, h: 300, size: 26, lead: 46, titleSize: 26 },
+    footer: { y: 1488, h: 108, size: 76, minSize: 36, heart: 34 },
     brand: { y: 1606, logo: 26, size: 20, gap: 10 }
   };
   const CALLUP_TITLE = 'Convocatoria', CALLUP_KEEPER_MARK = ' (P)', CALLUP_BRAND = `${APP_NAME} Balonmano`;
   // An SVG drawn on a canvas loads as an image, which needs the namespace the inline logo leaves out.
   const SVG_NS = 'http://www.w3.org/2000/svg';
   // One phrase per match day, the same every time the image of that day is made.
-  const CALLUP_PHRASES = ['¡Vamos {team}!', '¡A por todas!', 'Juntos hasta el final', 'Cada balón cuenta', 'Defensa, corazón y contraataque', 'Hoy se deja todo en la pista'];
+  const CALLUP_PHRASES = ['¡Vamos {team}!', '¡A por todas!', 'Guerreros hasta el último segundo', 'Cada balón cuenta', 'Defensa, corazón y contraataque', 'Hoy se deja todo en la pista'];
   const callupPhrase = (date, teamName) => CALLUP_PHRASES[[...date].reduce((n, c) => n + c.charCodeAt(0), 0) % CALLUP_PHRASES.length].replace('{team}', teamName);
   const CALLUP_BRING_TITLE = ['Se ruega puntualidad', 'y recordad:'];
-  const CALLUP_BRING = ['Equipación completa', 'Zapatillas de pista', 'Botella de agua'];
-  // The kit, piece by piece: the team's two colours, white, black or any other colour.
-  const KIT_WHITE = '#ffffff', KIT_BLACK = '#151515';
-  const KIT_PIECES = { shirt: 'Camiseta', shorts: 'Pantalón', socks: 'Medias' };
-  const KIT_DEFAULTS = (t = team) => ({ shirt: t.brand, shorts: KIT_BLACK, socks: KIT_BLACK });
-  const kitChoices = (t = team) => [['Primera', t.brand], ['Segunda', t.brand2], ['Blanca', KIT_WHITE], ['Negra', KIT_BLACK]];
-  const kitName = (colour, t = team) => (kitChoices(t).find(([, c]) => sameName(c, colour)) || ['Otro color'])[0];
+  const CALLUP_BRING = ['Equipación completa', 'Zapatillas de pista', 'Bolsa de balones'];
+  // The kit: the shirt in the team's first or second colour; the shorts are always black.
+  const SHORTS_COLOUR = '#151515';
+  const shirtChoices = (t = team) => [['Primera', t.brand], ['Segunda', t.brand2]];
+  const shirtOf = (draft, t = team) => (shirtChoices(t).some(([, c]) => sameName(c, draft.shirt || '')) ? draft.shirt : t.brand);
   // The meeting time: CONFIG.callup.meetLeadMin before the kickoff unless the coach set another.
   function meetTime(draft) {
     if (draft.meet || !draft.time) return draft.meet || '';
@@ -5658,18 +5652,17 @@ table { border-collapse: collapse; width: 100%; }
   // The kickoff as the group reads it: «sábado, 7 nov».
   const callupDay = (date) => new Date(`${date}T12:00:00`).toLocaleDateString('es-ES', { weekday: 'long', day: 'numeric', month: 'short' });
   // What the poster shows: the convocatoria's match (its calendar round, or the rival typed in), the kit, the players
-  // called up (keepers first) and the rest of the roster.
+  // called up (keepers first).
   function callupCardData(draft, players, t = team) {
-    const fixture = (home.fixtures || []).find((f) => f.id === draft.fixtureId) || null, called = new Set(players.map((p) => p.id));
+    const fixture = (home.fixtures || []).find((f) => f.id === draft.fixtureId) || null;
     const face = (p) => ({ num: p.num, pos: p.pos, name: `${p.name}${p.pos === 'POR' ? CALLUP_KEEPER_MARK : ''}`, photo: p.photo || null });
     return {
       team: t.name, club: t.club, crest: crestSrc(t), brand: t.brand, brand2: t.brand2, brandInk: t.brandInk,
       logo: `data:image/svg+xml,${encodeURIComponent(appLogoSvg('card-logo-clip').replace('<svg ', `<svg xmlns="${SVG_NS}" `))}`,
       tag: fixture ? [fixture.competition, `Jornada ${fixture.round}`, homeAwayText(fixture.home)].filter(Boolean).join(' · ') : 'Partido',
       rival: fixture ? fixtureRivalName(fixture.opponent) : draft.rival, day: callupDay(draft.date), venue: (fixture && fixture.venue) || '',
-      meet: meetTime(draft), time: draft.time, kit: { ...KIT_DEFAULTS(t), ...draft.kit }, phrase: callupPhrase(draft.date, t.name),
-      players: players.slice().sort(benchOrder).map(face),
-      left: home.roster.filter((p) => !called.has(p.id)).sort((a, b) => a.num - b.num).map((p) => p.name)
+      meet: meetTime(draft), time: draft.time, shirt: shirtOf(draft, t), phrase: callupPhrase(draft.date, t.name),
+      players: players.slice().sort(benchOrder).map(face)
     };
   }
   // Words in white with a black edge, as painted on the poster; shrunk to fit `width`, then cut with an ellipsis.
@@ -5700,7 +5693,6 @@ table { border-collapse: collapse; width: 100%; }
     time(ctx, x, y, s) { const r = s / 2; ctx.beginPath(); ctx.arc(x + r, y + r, r, 0, 2 * Math.PI); ctx.moveTo(x + r, y + r * 0.45); ctx.lineTo(x + r, y + r); ctx.lineTo(x + r * 1.5, y + r * 1.25); ctx.stroke(); },
     venue(ctx, x, y, s) { const r = s * 0.32; ctx.beginPath(); ctx.arc(x + s / 2, y + r, r, Math.PI, 0); ctx.lineTo(x + s / 2, y + s); ctx.closePath(); ctx.stroke(); },
     megaphone(ctx, x, y, s) { ctx.beginPath(); ctx.moveTo(x, y + s * 0.35); ctx.lineTo(x + s * 0.3, y + s * 0.35); ctx.lineTo(x + s * 0.9, y + s * 0.05); ctx.lineTo(x + s * 0.9, y + s * 0.95); ctx.lineTo(x + s * 0.3, y + s * 0.65); ctx.lineTo(x, y + s * 0.65); ctx.closePath(); ctx.stroke(); ctx.beginPath(); ctx.moveTo(x + s * 0.2, y + s * 0.65); ctx.lineTo(x + s * 0.32, y + s); ctx.stroke(); },
-    ban(ctx, x, y, s) { const r = s / 2; ctx.beginPath(); ctx.arc(x + r, y + r, r, 0, 2 * Math.PI); ctx.moveTo(x + r * 0.3, y + r * 0.3); ctx.lineTo(x + r * 1.7, y + r * 1.7); ctx.stroke(); },
     check(ctx, x, y, s) { ctx.beginPath(); ctx.moveTo(x, y + s * 0.55); ctx.lineTo(x + s * 0.38, y + s * 0.9); ctx.lineTo(x + s, y + s * 0.1); ctx.stroke(); },
     heart(ctx, x, y, s) { ctx.beginPath(); ctx.moveTo(x + s / 2, y + s * 0.9); ctx.bezierCurveTo(x - s * 0.3, y + s * 0.35, x + s * 0.2, y - s * 0.2, x + s / 2, y + s * 0.25); ctx.bezierCurveTo(x + s * 0.8, y - s * 0.2, x + s * 1.3, y + s * 0.35, x + s / 2, y + s * 0.9); ctx.fill(); }
   };
@@ -5709,22 +5701,17 @@ table { border-collapse: collapse; width: 100%; }
     CALLUP_ICONS[name](ctx, x, y, s);
     ctx.restore();
   }
-  // The garments in their colours, outlined in black as stickers: a shirt, shorts and a pair of socks.
+  // The garments in their colours, outlined in black as stickers: a shirt and shorts.
   const GARMENTS = {
     shirt: [[0.32, 0], [0, 0.18], [0.1, 0.42], [0.22, 0.36], [0.22, 1], [0.78, 1], [0.78, 0.36], [0.9, 0.42], [1, 0.18], [0.68, 0], [0.5, 0.12]],
-    shorts: [[0.05, 0], [0.95, 0], [1, 0.8], [0.58, 0.85], [0.5, 0.35], [0.42, 0.85], [0, 0.8]],
-    socks: [[0.05, 0], [0.42, 0], [0.42, 0.7], [0.5, 0.9], [0.4, 1], [0, 1], [0, 0.78], [0.05, 0.7]]
+    shorts: [[0.05, 0], [0.95, 0], [1, 0.8], [0.58, 0.85], [0.5, 0.35], [0.42, 0.85], [0, 0.8]]
   };
   function drawGarment(ctx, piece, x, y, s, colour) {
-    const shape = (dx) => { ctx.beginPath(); GARMENTS[piece].forEach(([px, py], i) => ctx[i ? 'lineTo' : 'moveTo'](x + dx + px * s, y + py * s)); ctx.closePath(); };
-    const draw = (dx) => {
-      shape(dx); ctx.lineJoin = 'round';
-      ctx.lineWidth = 12; ctx.strokeStyle = CARD_PALETTE.ink; ctx.stroke();
-      ctx.lineWidth = 5; ctx.strokeStyle = CARD_PALETTE.base; ctx.stroke();
-      ctx.fillStyle = colour; ctx.fill();
-    };
-    draw(0);
-    if (piece === 'socks') draw(s * 0.52);
+    ctx.beginPath(); GARMENTS[piece].forEach(([px, py], i) => ctx[i ? 'lineTo' : 'moveTo'](x + px * s, y + py * s)); ctx.closePath();
+    ctx.lineJoin = 'round';
+    ctx.lineWidth = 12; ctx.strokeStyle = CARD_PALETTE.ink; ctx.stroke();
+    ctx.lineWidth = 5; ctx.strokeStyle = CARD_PALETTE.base; ctx.stroke();
+    ctx.fillStyle = colour; ctx.fill();
   }
   // A panel outlined in black on the poster, with its title in the accent after an icon.
   // `title` is one line or several.
@@ -5733,7 +5720,7 @@ table { border-collapse: collapse; width: 100%; }
     ctx.beginPath(); ctx.roundRect(x, y, w, h, P.radius); ctx.lineWidth = P.border; ctx.strokeStyle = CARD_PALETTE.base; ctx.stroke();
     ctx.fillStyle = 'rgba(0, 0, 0, .18)'; ctx.fill();
     posterIcon(ctx, icon, x + 20, y + 22, P.headSize, accent);
-    [].concat(title).forEach((line, i) => posterText(ctx, line, x + 30 + P.headSize, y + 22 + size * 0.86 + i * size * 1.15, { ink: accent, size, width: w - 50 - P.headSize, minSize: 20, specOf: cardBody(CARD_WEIGHTS.semi), stroke: 6 }));
+    [].concat(title).forEach((line, i) => posterText(ctx, line, x + 30 + P.headSize, y + 22 + size * 0.86 + i * size * 1.15, { ink: accent, size, width: w - 50 - P.headSize, minSize: 16, specOf: cardBody(CARD_WEIGHTS.semi), stroke: 6 }));
   }
   // Draws the convocatoria on `canvas`; `images` holds what loaded (null when missing): crest, logo, paper, brush, ball, faces.
   function drawCallupCard(canvas, data, images = {}) {
@@ -5741,7 +5728,8 @@ table { border-collapse: collapse; width: 100%; }
     const { semi } = CARD_WEIGHTS, faces = images.faces || [];
     canvas.width = C.w; canvas.height = C.h;
     ctx.fillStyle = data.brand; ctx.fillRect(0, 0, C.w, C.h);
-    if (images.paper) { ctx.save(); ctx.globalCompositeOperation = 'multiply'; ctx.drawImage(images.paper, 0, 0, C.w, C.h); ctx.restore(); }
+    ctx.fillStyle = `rgba(0, 0, 0, ${C.shade})`; ctx.fillRect(0, 0, C.w, C.h);
+    if (images.paper) { ctx.save(); ctx.globalCompositeOperation = 'multiply'; ctx.globalAlpha = C.paperAlpha; ctx.drawImage(images.paper, 0, 0, C.w, C.h); ctx.restore(); }
     // The team, painted big and a little tilted, the club under it; the crest and the ball on the right.
     const T = C.title;
     ctx.save(); ctx.translate(T.x, T.y); ctx.rotate(C.tilt);
@@ -5779,38 +5767,26 @@ table { border-collapse: collapse; width: 100%; }
     data.players.forEach((p, i) => {
       const x = L.x + Math.floor(i / perColumn) * (colW + L.colGap), y = L.top + (i % perColumn) * rowH, cy = y + rowH / 2;
       brushBar(ctx, images.brush, x + r, y + rowH * 0.12, colW - r, rowH * 0.8);
-      ctx.beginPath(); ctx.arc(x + r, cy, r + 3, 0, 2 * Math.PI); ctx.fillStyle = data.kit.shirt; ctx.fill(); ctx.lineWidth = 3; ctx.strokeStyle = P.base; ctx.stroke();
+      ctx.beginPath(); ctx.arc(x + r, cy, r + 3, 0, 2 * Math.PI); ctx.fillStyle = data.shirt; ctx.fill(); ctx.lineWidth = 3; ctx.strokeStyle = P.base; ctx.stroke();
       drawFace(ctx, cardWriter(ctx, colW), p, faces[i], x + r, cy, r);
       const label = `${p.num} ${p.name.toUpperCase()}`;
       posterText(ctx, label, x + 2 * r + 12, cy + size * 0.36, { size, width: colW - 2 * r - 20, minSize: size * L.minNameScale, stroke: 0 });
     });
-    // The kit, piece by piece, in its colours.
-    const N = C.panel, KT = C.kit;
+    // The kit: the shirt in its colour over the black shorts.
+    const N = C.panel, KT = C.kit, shirtY = KT.y + 74, shortsY = shirtY + KT.shirt + 44;
     posterPanel(ctx, N.x, KT.y, N.w, KT.h, 'Equipación:', 'megaphone', accent);
-    drawGarment(ctx, 'shirt', N.x + (N.w - KT.shirt) / 2, KT.y + 80, KT.shirt, data.kit.shirt);
-    posterText(ctx, KIT_PIECES.shirt.toUpperCase(), N.x + N.w / 2, KT.y + 80 + KT.shirt + 34, { align: 'center', size: KT.labelSize, width: N.w - 20, stroke: 6 });
-    [['shorts', N.x + 36], ['socks', N.x + N.w - 36 - KT.piece]].forEach(([piece, x]) => {
-      const y = KT.y + KT.h - KT.piece - 46;
-      drawGarment(ctx, piece, x, y, KT.piece * (piece === 'socks' ? 0.9 : 1), data.kit[piece]);
-      posterText(ctx, KIT_PIECES[piece].toUpperCase(), x + KT.piece / 2, y + KT.piece + 32, { align: 'center', size: KT.labelSize, width: N.w / 2 - 12, minSize: 16, stroke: 6 });
-    });
+    drawGarment(ctx, 'shirt', N.x + (N.w - KT.shirt) / 2, shirtY, KT.shirt, data.shirt);
+    posterText(ctx, 'CAMISETA', N.x + N.w / 2, shirtY + KT.shirt + 30, { align: 'center', size: KT.labelSize, width: N.w - 20, stroke: 6 });
+    drawGarment(ctx, 'shorts', N.x + (N.w - KT.piece) / 2, shortsY, KT.piece, SHORTS_COLOUR);
+    posterText(ctx, 'PANTALÓN NEGRO', N.x + N.w / 2, shortsY + KT.piece * 0.85 + 30, { align: 'center', size: KT.labelSize, width: N.w - 20, minSize: 16, stroke: 6 });
     // What to bring.
     const B = C.bring;
     posterPanel(ctx, N.x, B.y, N.w, B.h, CALLUP_BRING_TITLE, 'megaphone', accent, B.titleSize);
     CALLUP_BRING.forEach((item, i) => {
       const y = B.y + 140 + i * B.lead;
       posterIcon(ctx, 'check', N.x + 24, y - B.size * 0.7, B.size * 0.8, accent);
-      posterText(ctx, item, N.x + 30 + B.size, y, { size: B.size, width: N.w - 44 - B.size, minSize: 20, specOf: cardBody(semi), stroke: 6 });
+      posterText(ctx, item, N.x + 30 + B.size, y, { size: B.size, width: N.w - 44 - B.size, minSize: 16, specOf: cardBody(semi), stroke: 6 });
     });
-    // Who is left out, in two short columns.
-    if (data.left.length) {
-      const F = C.left, shown = data.left.slice(0, F.max * 2), more = data.left.length - shown.length, half = Math.ceil(shown.length / 2);
-      brushBar(ctx, images.brush, C.pad - 20, F.y - 52, F.headW, 70);
-      posterIcon(ctx, 'ban', C.pad, F.y - 42, 40, accent);
-      posterText(ctx, 'Sin convocar:', C.pad + 54, F.y - 6, { size: F.size + 6, width: F.headW - 80, minSize: 26, stroke: 0 });
-      shown.forEach((name, i) => posterText(ctx, name.toUpperCase(), C.pad + 24 + Math.floor(i / half) * (L.w / 2), F.y + 46 + (i % half) * F.rowH, { size: F.size, width: L.w / 2 - 30, minSize: 22, stroke: 6 }));
-      if (more) posterText(ctx, `y ${more} más`, C.pad + 24, F.y + 46 + half * F.rowH, { ink: accent, size: F.size * 0.8, width: L.w, stroke: 6 });
-    }
     // The phrase on a brush bar between hearts, and the app's mark at the foot.
     const R = C.footer;
     brushBar(ctx, images.brush, 0, R.y, C.w, R.h);
@@ -8283,12 +8259,12 @@ table { border-collapse: collapse; width: 100%; }
   // The convocatoria saved for that match comes back as it was; another match starts from the last squad.
   function callupDraftFor(fixture) {
     const saved = readJson(CALLUP_KEY_PREFIX + team.id);
-    if (saved && fixture && saved.fixtureId === fixture.id) return { meet: '', ...saved, kit: { ...KIT_DEFAULTS(), ...(typeof saved.kit === 'object' ? saved.kit : {}) }, ids: new Set(saved.ids) };
-    return { ...fixtureCallupFields(fixture), kit: KIT_DEFAULTS(), ids: lastSquadIds() };
+    if (saved && fixture && saved.fixtureId === fixture.id) return { meet: '', ...saved, shirt: shirtOf(saved), ids: new Set(saved.ids) };
+    return { ...fixtureCallupFields(fixture), shirt: team.brand, ids: lastSquadIds() };
   }
   const callupDraft = () => (home.callupDraft ??= callupDraftFor(openFixtures()[0] || null));
   const calledPlayers = (draft) => home.roster.filter((p) => draft.ids.has(p.id));
-  const callupKey = (draft, players) => JSON.stringify([draft.fixtureId, draft.rival, draft.date, draft.time, draft.meet, draft.kit, players.map((p) => p.id)]);
+  const callupKey = (draft, players) => JSON.stringify([draft.fixtureId, draft.rival, draft.date, draft.time, draft.meet, draft.shirt, players.map((p) => p.id)]);
   function callupFaceHtml(p, called) {
     const { code, label } = CALLUP_STATES[called];
     return `<div class="att-cell"><button class="face press" type="button" data-callup-pick="${esc(p.id)}" aria-pressed="${called}" style="--pos:${posOf(p).color}" aria-label="#${p.num} ${esc(p.name)}: ${label}">${discHtml(p)}<span>${esc(p.name)}</span>
@@ -8316,15 +8292,11 @@ table { border-collapse: collapse; width: 100%; }
       <div class="row-actions"><button class="btn primary press" type="button" data-callup-save${!players.length || over || saved ? ' disabled' : ''}>${saved ? 'Convocatoria guardada' : 'Guardar convocatoria'}</button></div>
       ${home.callupBusy ? '<p class="note">Generando la imagen…</p>' : ''}${image}</section>`;
   }
-  // The kit for the image, piece by piece: the team's two colours, white, black, or any colour from the picker.
+  // The shirt for the image: the first or the second kit (the shorts are always black).
   function callupKitHtml(draft) {
-    const rows = Object.entries(KIT_PIECES).map(([piece, name]) => {
-      const colour = draft.kit[piece], known = kitChoices().some(([, c]) => sameName(c, colour));
-      const chips = kitChoices().map(([label, c]) => `<button class="chip press kit-chip" type="button" data-callup-kit="${piece}" data-colour="${esc(c)}" aria-pressed="${sameName(c, colour)}"><span class="kit-swatch" style="background:${esc(c)}"></span>${label}</button>`).join('');
-      return `<div class="kit-row"><span class="field-label">${name}</span><div class="chips" role="group" aria-label="Color: ${name}">${chips}
-        <label class="chip kit-chip kit-other${known ? '' : ' active'}"><input type="color" data-kit-piece="${piece}" value="${esc(colour)}" aria-label="Otro color: ${name}">Otro</label></div></div>`;
-    }).join('');
-    return `<div class="callup-kit">${rows}</div>`;
+    const shirt = shirtOf(draft);
+    const chips = shirtChoices().map(([label, c]) => `<button class="chip press kit-chip" type="button" data-callup-shirt="${esc(c)}" aria-pressed="${sameName(c, shirt)}"><span class="kit-swatch" style="background:${esc(c)}"></span>${label}</button>`).join('');
+    return `<div class="callup-kit"><span class="field-label">Camiseta</span><div class="chips" role="group" aria-label="Camiseta">${chips}</div></div>`;
   }
   function toggleCallupPick(playerId) {
     const draft = callupDraft();
@@ -8340,9 +8312,9 @@ table { border-collapse: collapse; width: 100%; }
     callupDraft()[field] = field === 'rival' ? value.trim().slice(0, MAX_NAME_LENGTH) : value;
     renderHome();
   }
-  function editCallupKit(piece, colour) {
-    if (!KIT_PIECES[piece] || !HEX_COLOUR.test(colour)) return;
-    callupDraft().kit[piece] = colour;
+  function editCallupShirt(colour) {
+    if (!shirtChoices().some(([, c]) => sameName(c, colour))) return;
+    callupDraft().shirt = colour;
     renderHome();
   }
   async function saveCallup() {
@@ -8350,7 +8322,23 @@ table { border-collapse: collapse; width: 100%; }
     if (!players.length || players.length > MAX_ROSTER) return;
     writeJson(CALLUP_KEY_PREFIX + team.id, { ...draft, ids: [...draft.ids] });
     writeJson(SQUAD_KEY_PREFIX + team.id, players.map((p) => p.id));
-    if (await renderCallupCard(draft, players)) homeStatus('Convocatoria guardada: compártela con el equipo.');
+    const calendar = await kickoffToCalendar(draft);
+    if (await renderCallupCard(draft, players)) homeStatus(`Convocatoria guardada${calendar}: compártela con el equipo.`);
+  }
+  // A day and time set here for a calendar round without them (or with others) go to the calendar too; returns the
+  // words for the status line.
+  async function kickoffToCalendar(draft) {
+    const fixture = (home.fixtures || []).find((f) => f.id === draft.fixtureId);
+    if (!fixture || !draft.time) return '';
+    const kickoff = new Date(`${draft.date}T${draft.time}`).toISOString();
+    if (fixture.kickoff && new Date(fixture.kickoff).getTime() === new Date(kickoff).getTime()) return '';
+    try {
+      storeFixture(await backend.updateFixture(fixture.id, { kickoff }));
+      return ' y apuntada en el calendario';
+    } catch (err) {
+      console.warn(`Kickoff not saved to the calendar: ${cloudErrorText(err)}`);
+      return ` (el calendario no se actualizó: ${cloudErrorText(err)})`;
+    }
   }
   // Builds the image of the convocatoria saved; true once it is on the page.
   async function renderCallupCard(draft, players) {
@@ -9128,7 +9116,7 @@ table { border-collapse: collapse; width: 100%; }
     if (b.hasAttribute('data-callup-share')) { shareCallup(); return; }
     if (b.hasAttribute('data-callup-save')) { saveCallup(); return; }
     if (b.dataset.attMode) { switchAttendanceMode(b.dataset.attMode); return; }
-    if (b.dataset.callupKit) { editCallupKit(b.dataset.callupKit, b.dataset.colour); return; }
+    if (b.dataset.callupShirt) { editCallupShirt(b.dataset.callupShirt); return; }
     if (b.dataset.attNote) { home.attendanceNoteFor = b.dataset.attNote; renderHome(); document.querySelector(`[data-att-note-input="${b.dataset.attNote}"]`).focus(); return; }
     if (b.hasAttribute('data-att-note-save')) { home.attendanceNoteFor = null; renderHome(); return; }
     if (b.dataset.homeView === 'attendance') { showAttendance(); return; }
@@ -9191,7 +9179,6 @@ table { border-collapse: collapse; width: 100%; }
     if (el.id === 'att-date') { openAttendanceDay(el.value); return; }
     if (el.id === 'callup-fixture') { chooseCallupFixture(el.value); return; }
     if (['callup-date', 'callup-time', 'callup-rival', 'callup-meet'].includes(el.id)) { editCallup(el.id.slice('callup-'.length), el.value); return; }
-    if (el.dataset.kitPiece) { editCallupKit(el.dataset.kitPiece, el.value); return; }
     if (el.dataset.tplNum) { editDraftRival(draftRival(el.dataset.tplNum), { num: Number(el.value) }); return; }
     if (el.dataset.tplName) { editDraftRival(draftRival(el.dataset.tplName), { name: el.value.trim().slice(0, MAX_NAME_LENGTH) }); return; }
     if (el.dataset.teamNum) { saveTeamPlayer(rosterPlayer(el.dataset.teamNum), { num: Number(el.value) }); return; }
