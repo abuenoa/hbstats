@@ -847,6 +847,10 @@ a:focus-visible, input:focus-visible, select:focus-visible, summary:focus-visibl
 .auth-brand { display: flex; gap: var(--space-4); align-items: center; }
 .app-mark { flex: none; width: 56px; height: 56px; border-radius: 50%; display: grid; place-items: center; background: var(--brand); color: var(--brand-ink); font-family: var(--font-display); font-weight: 800; font-size: 24px; box-shadow: 0 0 0 4px rgb(var(--brand-2-rgb)); }
 .field { display: grid; gap: var(--space-1); font: var(--type-caption); font-weight: 700; color: var(--muted); text-transform: uppercase; letter-spacing: .06em; }
+.team-accounts textarea { resize: vertical; font: var(--type-body); text-transform: none; letter-spacing: normal; -webkit-user-select: text; user-select: text; }
+.invite-plan, .invite-links { list-style: none; margin: var(--space-2) 0; padding: 0; display: grid; gap: var(--space-1); }
+.invite-plan li { display: block; }
+.invite-links li { display: flex; align-items: center; justify-content: space-between; gap: var(--space-2); }
 .link { justify-self: start; display: inline-flex; align-items: center; min-height: var(--target); border: 0; background: none; padding: 0; color: var(--fg); text-decoration: underline; font: var(--type-body); cursor: pointer; }
 .home-status:empty { display: none; }
 .home-status { font: var(--type-body); color: var(--fg); }
@@ -1490,9 +1494,9 @@ span.att-foot { visibility: hidden; }
   // The team the app wears (name, colours, crest): the signed-in coach's team once the home screen loads it.
   const DEFAULT_TEAM = { id: null, club: 'Mi club', name: 'Mi equipo', brand: '#d4202a', brand2: '#f5c400', brandInk: '#ffffff', crest: null };
   let team = DEFAULT_TEAM;
-  // A player's account reads everything of the team and changes nothing; the database refuses their writes too.
-  const PLAYER_ROLE = 'player', STAFF_ROLE = 'owner';
-  const readOnly = () => team.role === PLAYER_ROLE;
+  // A player's or a guest's account reads everything of the team and changes nothing; the database refuses their writes too.
+  const PLAYER_ROLE = 'player', VIEWER_ROLE = 'viewer', STAFF_ROLE = 'owner';
+  const readOnly = () => team.role === PLAYER_ROLE || team.role === VIEWER_ROLE;
   // The controls that change the team, its matches, calendar or attendance: they leave the page for a player.
   const STAFF_ONLY_SELECTOR = ['[data-new-match]', '[data-player-edit]', '[data-home-view="team-edit"]', '[data-rating-tune]', '[data-fixture-edit]',
     '[data-calendar-import]', '[data-restart-match]', '[data-delete-match]', '[data-att-delete]', '[data-att-note]', '.callup', '[data-att-mode]', '[data-tab="acta"]'].join();
@@ -6159,7 +6163,7 @@ table { border-collapse: collapse; width: 100%; }
   let currentMatchId = null;
   let syncTimer = null;
   let attendanceSyncTimer = null;
-  const home = { view: 'loading', user: null, teams: [], roster: [], matches: [], season: null, templates: [], template: null, squad: new Set(), leaderMetric: 'goals', playerId: null, playerMatchId: null, playerEdit: false, playerDraft: null, offline: false, error: '', draft: null, crestDraft: undefined, armed: null, passwordChange: false, seasonOffline: false, sessions: null, fixtures: null, teamMatches: [], fixtureEdit: null, squadFixture: null, attendanceDate: null, attendanceMode: null, attendanceNoteFor: null, stateMatches: [], statsSort: null, statsMetric: 'goals', statsPlayer: null, callupDraft: null, callup: null, callupBusy: null, inviteLink: null, weightsDraft: null, ratingCache: null };
+  const home = { view: 'loading', user: null, teams: [], roster: [], matches: [], season: null, templates: [], template: null, squad: new Set(), leaderMetric: 'goals', playerId: null, playerMatchId: null, playerEdit: false, playerDraft: null, offline: false, error: '', draft: null, crestDraft: undefined, armed: null, passwordChange: false, seasonOffline: false, sessions: null, fixtures: null, teamMatches: [], fixtureEdit: null, squadFixture: null, attendanceDate: null, attendanceMode: null, attendanceNoteFor: null, stateMatches: [], statsSort: null, statsMetric: 'goals', statsPlayer: null, callupDraft: null, callup: null, callupBusy: null, inviteLinks: [], inviteList: '', invitePlan: null, weightsDraft: null, ratingCache: null };
 
   // ---- Device storage ----
   function readJson(key) {
@@ -6864,36 +6868,96 @@ table { border-collapse: collapse; width: 100%; }
   // Without a share sheet the link goes to WhatsApp, the coaches' channel with the players.
   const WHATSAPP_URL = 'https://wa.me/?text=';
   const EMAIL_PATTERN = /^[^\s@,;]+@[^\s@,;]+\.[^\s@,;]+$/;
-  // The first choice of the invite: a coach, with the same full access as the owner; the others are roster players.
+  // The first choices of the invite: a coach, with the same full access as the owner, and a guest who only looks (another
+  // club's coach shown the team, say); the others are roster players.
   const COACH_INVITE = 'coach';
+  // A pasted list (a WhatsApp message, say) holds each player's name and then his e-mail.
+  const LISTED_EMAIL = /[^\s@,;:<>()]+@[^\s@,;:<>()]+\.[^\s@,;:<>().]+/g;
+  // Shorter words («de», «la») tell nobody apart.
+  const MIN_NAME_WORD = 3;
+  const nameWords = (s) => new Set(normalName(s).split(' ').filter((w) => w.length >= MIN_NAME_WORD));
+  // The roster player a pasted name means: the one sharing most words with his full or court name, if nobody ties him.
+  function playerNamed(text) {
+    const words = nameWords(text);
+    const [best, next] = home.roster.map((p) => ({ p, shared: [...nameWords(`${p.fullName || ''} ${p.name}`)].filter((w) => words.has(w)).length }))
+      .sort((a, b) => b.shared - a.shared);
+    return best && best.shared > 0 && (!next || next.shared < best.shared) ? best.p : null;
+  }
+  // Each e-mail of the list with the player named before it (since the previous e-mail), or null.
+  function invitePlanOf(text) {
+    let from = 0;
+    return [...text.matchAll(LISTED_EMAIL)].map((m) => {
+      const named = text.slice(from, m.index);
+      from = m.index + m[0].length;
+      return { email: m[0].toLowerCase(), player: playerNamed(named) };
+    });
+  }
+  function invitePlanHtml() {
+    if (!home.invitePlan) return '';
+    const ready = home.invitePlan.filter((row) => row.player).length;
+    const rows = home.invitePlan.map(({ email, player }) => `<li>${player ? `<b>#${player.num} ${esc(player.name)}</b>` : '<b>Sin jugador</b> (invítalo arriba)'} · ${esc(email)}</li>`).join('');
+    return `<ul class="invite-plan">${rows}</ul>
+      <div class="row-actions"><button class="btn primary press" type="button" data-invite-list ${ready ? '' : 'disabled'}>Invitar a ${plural(ready, 'jugador', 'jugadores')}</button></div>`;
+  }
   function teamAccountsHtml() {
-    const options = [`<option value="${COACH_INVITE}">Entrenador · acceso total</option>`,
+    const options = [`<option value="${COACH_INVITE}">Entrenador · acceso total</option>`, `<option value="${VIEWER_ROLE}">Invitado · solo ver</option>`,
       ...home.roster.slice().sort(benchOrder).map((p) => `<option value="${esc(p.id)}">Jugador · #${p.num} ${esc(p.name)}</option>`)].join('');
-    const link = home.inviteLink ? `<p class="note">Enlace para ${esc(home.inviteLink.name)}: ábrelo una vez para entrar y poner su contraseña.</p>
-      <div class="row-actions"><button class="btn primary press" type="button" data-invite-share>Compartir enlace</button></div>` : '';
+    const links = home.inviteLinks.length ? `<p class="note">Comparte a cada uno su enlace: lo abre una vez para entrar y poner su contraseña.</p>
+      <ul class="invite-links">${home.inviteLinks.map(({ name }, i) => `<li><b>${esc(name)}</b><button class="btn primary press" type="button" data-invite-share="${i}">Compartir enlace</button></li>`).join('')}</ul>` : '';
     return `<section class="sheet-card team-accounts"><h3>Cuentas del equipo</h3>
-      <p class="note">Un entrenador puede hacer lo mismo que tú. Un jugador ve los partidos, las estadísticas y la asistencia de todo el equipo, sin poder cambiar nada.</p>
+      <p class="note">Un entrenador puede hacer lo mismo que tú. Un jugador o un invitado ve los partidos, las estadísticas y la asistencia de todo el equipo, sin poder cambiar nada.</p>
       <div class="row-actions"><label class="field">Cuenta para<select class="in" id="invite-who">${options}</select></label>
         <label class="field">Correo<input class="in" id="invite-email" type="email" inputmode="email" autocomplete="off" placeholder="nombre@correo.es"></label>
-        <button class="btn press" type="button" data-invite>Invitar</button></div>${link}</section>`;
+        <button class="btn press" type="button" data-invite>Invitar</button></div>
+      <label class="field">Varios jugadores a la vez: pega la lista, con el nombre y luego el correo de cada uno<textarea class="in" id="invite-list" rows="4">${esc(home.inviteList)}</textarea></label>
+      <div class="row-actions"><button class="btn press" type="button" data-invite-list-check>Revisar lista</button></div>${invitePlanHtml()}${links}</section>`;
+  }
+  // Links the account and keeps the sign-in link to share, if it is a new one; returns whether it is.
+  async function inviteAccount(member, email, name) {
+    const { link } = await backend.inviteMember(team.id, member, email);
+    if (link) home.inviteLinks.push({ name, url: link });
+    return Boolean(link);
   }
   async function inviteMember() {
-    const who = $('invite-who').value, email = $('invite-email').value.trim(), coach = who === COACH_INVITE, player = coach ? null : rosterPlayer(who);
-    if (!coach && !player) return;
+    const who = $('invite-who').value, email = $('invite-email').value.trim(), player = rosterPlayer(who);
+    if (who !== COACH_INVITE && who !== VIEWER_ROLE && !player) return;
     if (!EMAIL_PATTERN.test(email)) { homeStatus('Escribe un correo válido.'); return; }
-    const name = coach ? email : player.name;
+    const name = player ? player.name : email;
     homeStatus('Invitando…');
     try {
-      const result = await backend.inviteMember(team.id, coach ? { role: COACH_INVITE } : { role: PLAYER_ROLE, playerId: player.id }, email);
-      home.inviteLink = result.link ? { name, url: result.link } : null;
+      const fresh = await inviteAccount(player ? { role: PLAYER_ROLE, playerId: player.id } : { role: who }, email, name);
       renderHome();
-      homeStatus(result.link ? `Cuenta nueva para ${name}: comparte el enlace.` : `${name} ya tenía cuenta: ya ve el equipo al entrar.`);
+      homeStatus(fresh ? `Cuenta nueva para ${name}: comparte el enlace.` : `${name} ya tenía cuenta: ya ve el equipo al entrar.`);
     } catch (err) {
       homeStatus(`No se pudo invitar: ${cloudErrorText(err)}.`);
     }
   }
-  async function shareInviteLink() {
-    const { url } = home.inviteLink, text = `Entra en ${APP_NAME} con ${team.name}:`;
+  function checkInviteList() {
+    home.inviteList = $('invite-list').value;
+    home.invitePlan = invitePlanOf(home.inviteList);
+    renderHome();
+    homeStatus(home.invitePlan.length ? 'Revisa a quién va cada correo antes de invitar.' : 'La lista no tiene ningún correo.');
+  }
+  // One at a time, so a failure names its player and the others still go.
+  async function inviteList() {
+    const rows = home.invitePlan.filter((row) => row.player), failed = [];
+    let linked = 0;
+    for (const [i, { email, player }] of rows.entries()) {
+      homeStatus(`Invitando ${i + 1} de ${rows.length}…`);
+      try {
+        if (!(await inviteAccount({ role: PLAYER_ROLE, playerId: player.id }, email, player.name))) linked += 1;
+      } catch (err) {
+        failed.push(`${player.name} (${cloudErrorText(err)})`);
+      }
+    }
+    Object.assign(home, { invitePlan: null, inviteList: '' });
+    renderHome();
+    const done = rows.length - failed.length, shares = done - linked;
+    homeStatus([plural(done, 'jugador invitado', 'jugadores invitados'), shares ? `${plural(shares, 'enlace', 'enlaces')} para compartir` : '',
+      linked ? `${linked} ${linked === 1 ? 'ya tenía' : 'ya tenían'} cuenta` : '', failed.length ? `no se pudo con ${failed.join(', ')}` : ''].filter(Boolean).join(' · ') + '.');
+  }
+  async function shareInviteLink(index) {
+    const { url } = home.inviteLinks[index], text = `Entra en ${APP_NAME} con ${team.name}:`;
     try {
       if (navigator.share) { await navigator.share({ title: APP_NAME, text, url }); return; }
       window.open(`${WHATSAPP_URL}${encodeURIComponent(`${text} ${url}`)}`, '_blank', 'noopener');
@@ -9129,7 +9193,9 @@ table { border-collapse: collapse; width: 100%; }
     if (b.dataset.att) { tapAttendance(b.dataset.att); return; }
     if (b.dataset.callupPick) { toggleCallupPick(b.dataset.callupPick); return; }
     if (b.hasAttribute('data-invite')) { inviteMember(); return; }
-    if (b.hasAttribute('data-invite-share')) { shareInviteLink(); return; }
+    if (b.hasAttribute('data-invite-share')) { shareInviteLink(Number(b.dataset.inviteShare)); return; }
+    if (b.hasAttribute('data-invite-list-check')) { checkInviteList(); return; }
+    if (b.hasAttribute('data-invite-list')) { inviteList(); return; }
     if (b.hasAttribute('data-callup-share')) { shareCallup(); return; }
     if (b.hasAttribute('data-callup-save')) { saveCallup(); return; }
     if (b.dataset.attMode) { switchAttendanceMode(b.dataset.attMode); return; }
