@@ -6929,24 +6929,26 @@ table { border-collapse: collapse; width: 100%; }
     const rows = home.accounts.rows.map((a) => {
       const player = a.playerId && rosterPlayer(a.playerId);
       const who = player ? `#${player.num} ${esc(player.name)} · ${esc(a.email)}` : esc(a.email);
-      const resend = !a.signedIn && a.role !== STAFF_ROLE ? `<button class="btn primary press" type="button" data-account-resend="${a.userId}">Nuevo enlace</button>` : '';
+      const resend = !a.signedIn && a.role !== STAFF_ROLE ? `<button class="btn primary press" type="button" data-account-resend="${a.userId}">Reenviar correo</button>
+        <button class="btn press" type="button" data-account-link="${a.userId}">Enlace</button>` : '';
       const remove = removableAccount(a) ? armedButton(`account-${a.userId}`, a.signedIn ? 'Quitar' : 'Anular invitación', `data-account-remove="${a.userId}" aria-label="Quitar la cuenta de ${esc(a.email)}"`) : '';
       return `<li><span><b>${ACCOUNT_ROLES[a.role]}</b> · ${who}${a.signedIn ? '' : ' · <i>sin entrar aún</i>'}</span><span class="row-actions">${resend}${remove}</span></li>`;
     }).join('');
     return `<h4>Con acceso</h4><ul class="account-list">${rows}</ul>`;
   }
-  // Someone who never used their link (or lost it) gets a fresh one to share; the old one stops working.
-  async function resendInvite(userId) {
+  // Someone who never used their invite (or lost it) gets a fresh one, by e-mail or as a link to share; the old one stops working.
+  async function resendInvite(userId, delivery) {
     const account = home.accounts.rows.find((a) => a.userId === userId), player = account.playerId && rosterPlayer(account.playerId);
-    homeStatus('Creando un enlace nuevo…');
+    const name = player ? player.name : account.email;
+    homeStatus(delivery === INVITE_BY_EMAIL ? 'Enviando el correo…' : 'Creando un enlace nuevo…');
     try {
-      await inviteAccount(player ? { role: PLAYER_ROLE, playerId: player.id } : { role: account.role }, account.email, player ? player.name : account.email);
+      await inviteAccount(player ? { role: PLAYER_ROLE, playerId: player.id } : { role: account.role }, account.email, name, delivery);
     } catch (err) {
-      homeStatus(`No se pudo crear el enlace: ${cloudErrorText(err)}.`);
+      homeStatus(`No se pudo invitar: ${cloudErrorText(err)}.`);
       return;
     }
     renderHome();
-    homeStatus(`Enlace nuevo para ${player ? player.name : account.email}: compártelo.`);
+    homeStatus(delivery === INVITE_BY_EMAIL ? `Correo enviado a ${account.email}.` : `Enlace nuevo para ${name}: compártelo.`);
   }
   async function removeAccount(userId) {
     const account = home.accounts.rows.find((a) => a.userId === userId);
@@ -6968,19 +6970,22 @@ table { border-collapse: collapse; width: 100%; }
     const links = home.inviteLinks.length ? `<p class="note">Comparte a cada uno su enlace: lo abre una vez para entrar y poner su contraseña.</p>
       <ul class="invite-links">${home.inviteLinks.map(({ name }, i) => `<li><b>${esc(name)}</b><button class="btn primary press" type="button" data-invite-share="${i}">Compartir enlace</button></li>`).join('')}</ul>` : '';
     return `<section class="sheet-card team-accounts"><h3>Cuentas del equipo</h3>
-      <p class="note">Un entrenador puede hacer lo mismo que tú. Un jugador o un invitado ve los partidos, las estadísticas y la asistencia de todo el equipo, sin poder cambiar nada.</p>
+      <p class="note">Un entrenador puede hacer lo mismo que tú. Un jugador o un invitado ve los partidos, las estadísticas y la asistencia de todo el equipo, sin poder cambiar nada. Cada uno recibe un correo para entrar y poner su contraseña; si no le llega, pulsa «Enlace» junto a su nombre y compártelo por WhatsApp.</p>
       <div class="row-actions"><label class="field">Cuenta para<select class="in" id="invite-who">${options}</select></label>
         <label class="field">Correo<input class="in" id="invite-email" type="email" inputmode="email" autocomplete="off" placeholder="nombre@correo.es"></label>
         <button class="btn press" type="button" data-invite>Invitar</button></div>
       <label class="field">Varios jugadores a la vez: pega la lista, con el nombre y luego el correo de cada uno<textarea class="in" id="invite-list" rows="4">${esc(home.inviteList)}</textarea></label>
       <div class="row-actions"><button class="btn press" type="button" data-invite-list-check>Revisar lista</button></div>${invitePlanHtml()}${links}${accountListHtml()}</section>`;
   }
-  // Links the account and keeps the sign-in link to share, if it is a new one; returns whether it is.
-  async function inviteAccount(member, email, name) {
-    const { link } = await backend.inviteMember(team.id, member, email);
+  // How an invite reaches someone: an e-mail from the server, or a sign-in link the coach shares.
+  const INVITE_BY_EMAIL = 'email', INVITE_BY_LINK = 'link';
+  // Links the account and keeps the sign-in link to share, if one came; returns whether an invite went out (an
+  // account already in use is linked without one).
+  async function inviteAccount(member, email, name, delivery = INVITE_BY_EMAIL) {
+    const { link, sent } = await backend.inviteMember(team.id, { ...member, delivery }, email);
     home.accounts = null;
     if (link) home.inviteLinks.push({ name, url: link });
-    return Boolean(link);
+    return Boolean(link || sent);
   }
   async function inviteMember() {
     const who = $('invite-who').value, email = $('invite-email').value.trim(), player = rosterPlayer(who);
@@ -6991,7 +6996,7 @@ table { border-collapse: collapse; width: 100%; }
     try {
       const fresh = await inviteAccount(player ? { role: PLAYER_ROLE, playerId: player.id } : { role: who }, email, name);
       renderHome();
-      homeStatus(fresh ? `Cuenta nueva para ${name}: comparte el enlace.` : `${name} ya tenía cuenta: ya ve el equipo al entrar.`);
+      homeStatus(fresh ? `Correo de invitación enviado a ${email}.` : `${name} ya tenía cuenta: ya ve el equipo al entrar.`);
     } catch (err) {
       homeStatus(`No se pudo invitar: ${cloudErrorText(err)}.`);
     }
@@ -7016,8 +7021,8 @@ table { border-collapse: collapse; width: 100%; }
     }
     Object.assign(home, { invitePlan: null, inviteList: '' });
     renderHome();
-    const done = rows.length - failed.length, shares = done - linked;
-    homeStatus([plural(done, 'jugador invitado', 'jugadores invitados'), shares ? `${plural(shares, 'enlace', 'enlaces')} para compartir` : '',
+    const done = rows.length - failed.length, mailed = done - linked;
+    homeStatus([plural(done, 'jugador invitado', 'jugadores invitados'), mailed ? `${plural(mailed, 'correo enviado', 'correos enviados')}` : '',
       linked ? `${linked} ${linked === 1 ? 'ya tenía' : 'ya tenían'} cuenta` : '', failed.length ? `no se pudo con ${failed.join(', ')}` : ''].filter(Boolean).join(' · ') + '.');
   }
   async function shareInviteLink(index) {
@@ -9261,7 +9266,8 @@ table { border-collapse: collapse; width: 100%; }
     if (b.hasAttribute('data-invite-share')) { shareInviteLink(Number(b.dataset.inviteShare)); return; }
     if (b.hasAttribute('data-invite-list-check')) { checkInviteList(); return; }
     if (b.hasAttribute('data-invite-list')) { inviteList(); return; }
-    if (b.hasAttribute('data-account-resend')) { resendInvite(b.dataset.accountResend); return; }
+    if (b.hasAttribute('data-account-resend')) { resendInvite(b.dataset.accountResend, INVITE_BY_EMAIL); return; }
+    if (b.hasAttribute('data-account-link')) { resendInvite(b.dataset.accountLink, INVITE_BY_LINK); return; }
     if (b.hasAttribute('data-callup-share')) { shareCallup(); return; }
     if (b.hasAttribute('data-callup-save')) { saveCallup(); return; }
     if (b.dataset.attMode) { switchAttendanceMode(b.dataset.attMode); return; }
