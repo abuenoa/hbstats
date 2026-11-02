@@ -1206,11 +1206,16 @@
     const labels = statTiles().map((t) => labelText(t));
     if (labels.join('|') !== SUMMARY_KPI_LABELS.join('|')) throw new Error(labels.join('|'));
     if ($('sheet').querySelectorAll('.zone-map svg').length !== 2 || $('sheet').querySelectorAll('.goal-chart svg').length !== 2) throw new Error('maps and goal grids');
-    const strip = [...$('sheet').querySelectorAll('[data-pdf-pick]')];
+    const strip = [...$('sheet').querySelectorAll('[data-sheet-open-player]')];
     if (strip.length !== state.players.length || !strip[0].querySelector('.rating-chip')) throw new Error('player strip');
+    // A player tapped in the summary opens their own tab of the match, from its top.
+    $('sheet').scrollTop = 200;
     strip[0].click();
-    if (ui.sheetTab !== 'reports' || !$('sheet').querySelector(`[data-pdf="${strip[0].dataset.pdfPick}"]`)) throw new Error('the card opens the player PDF list');
-    if (document.activeElement !== $('sheet').querySelector(`[data-pdf="${strip[0].dataset.pdfPick}"]`)) throw new Error('the player PDF button is not focused');
+    if (ui.sheetTab !== 'player' || ui.sheetPlayer !== strip[0].dataset.sheetOpenPlayer || $('sheet').scrollTop !== 0) throw new Error(`the card opens ${ui.sheetTab} ${ui.sheetPlayer}, scroll ${$('sheet').scrollTop}`);
+    document.querySelector('#sheet [data-tab="stats"]').click();
+    const named = $('sheet').querySelector('.stats-table [data-sheet-open-player]');
+    named.click();
+    if (ui.sheetTab !== 'player' || ui.sheetPlayer !== named.dataset.sheetOpenPlayer) throw new Error('a name in the stats table does not open the player');
     openFinal(); document.querySelector('[data-final-sheet]').click();
     if (ui.sheetTab !== 'summary' || $('sheet').hidden || !$('final').hidden) throw new Error('«Ver estadísticas» must open the summary');
   }));
@@ -3205,6 +3210,35 @@
     const pageBarOf = () => document.querySelector('#home .page-bar');
     const leadingOf = () => document.querySelectorAll('#home [data-nav-leading]');
     const pressEscape = () => document.dispatchEvent(new KeyboardEvent('keydown', { key: ESCAPE_KEY, bubbles: true }));
+    await TA('nav: a player name in the team stats opens their page, scrolled to the top', async () => withNavHome(async () => {
+      showHomeView('stats');
+      const name = $('home').querySelector('.stats-table [data-player], table [data-player]');
+      if (!name) throw new Error('no player link in the stats table');
+      $('home').scrollTop = 300;
+      name.click();
+      if (home.view !== 'player' || home.playerId !== name.dataset.player || $('home').scrollTop !== 0) throw new Error(`${home.view} ${home.playerId} scroll ${$('home').scrollTop}`);
+    }));
+    await TA('a player-only account: its one team opens, no team switch and no new team', async () => withNavHome(async () => {
+      const keepTeams = home.teams, keepTeam = team, real = backend;
+      const mine = { ...team, role: PLAYER_ROLE };
+      try {
+        home.teams = [mine];
+        backend = { ...real, listTeams: async () => [mine] };
+        showHomeView('profile');
+        await loadTeams();
+        for (let i = 0; i < 5; i++) await tick0();
+        if (home.view === 'profile' || team.id !== mine.id) throw new Error(`opened ${home.view}`);
+        if ($('home').querySelector('.teams-corner') || !$('home').querySelector('.app-bar .account-menu')) throw new Error('a single-team player still sees «Mis equipos»');
+        showHomeView('profile');
+        if ($('home').querySelector('[data-new-team]')) throw new Error('a player can create a team');
+        home.teams = [mine, { ...mine, id: 'other-team', name: 'Otro' }];
+        showHomeView('team');
+        if (!$('home').querySelector('.teams-corner')) throw new Error('a player of two teams cannot switch');
+        home.teams = [{ ...mine, role: STAFF_ROLE }];
+        showHomeView('profile');
+        if (!$('home').querySelector('[data-new-team]')) throw new Error('the staff lost «Nuevo equipo»');
+      } finally { backend = real; home.teams = keepTeams; applyTeam(keepTeam); }
+    }));
     await TA('nav: every management view has one leading control', async () => withNavHome(async () => {
       for (const [view, open] of Object.entries(NAV_VIEW_OPENERS)) {
         open();
@@ -3292,6 +3326,7 @@
         if (![...document.querySelectorAll('[data-att]')].every((b) => b.disabled)) throw new Error('attendance faces still tap');
         enterMatch('viewer-x', JSON.parse(snap), false);
         if ($('sheet').hidden || ui.sheetTab !== 'summary' || document.querySelector('#sheet [data-tab="acta"]') || localStorage.getItem(CURRENT_MATCH_KEY) === JSON.stringify('viewer-x')) throw new Error('not a read-only view');
+        if (!document.querySelector('.app').inert) throw new Error('the live screen behind a player\'s Hoja can still be reached');
         state.them = 'Cambiado'; save();
         if (localMatch('viewer-x')?.dirty) throw new Error('a player view was saved for upload');
         document.querySelector('#sheet [data-close-sheet]').click();
@@ -3302,6 +3337,7 @@
         if (current === null) removeKey(CURRENT_MATCH_KEY); else localStorage.setItem(CURRENT_MATCH_KEY, current);
         currentMatchId = keepId; restore(snap);
       }
+      if (STAFF_ONLY_SELECTOR.split(',').filter((sel) => /legacy/.test(sel)).length !== 2) throw new Error('the old-version match banner is open to players');
       showHomeView('team');
       if (!document.querySelector('[data-new-match]')) throw new Error('the staff lost their controls');
     }));

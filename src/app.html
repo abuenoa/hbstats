@@ -806,6 +806,7 @@ td.zero { color: var(--color-text-tertiary); }
   .home .row-link:hover { background: var(--color-bg-subtle); }
   .home .team-card:hover, .home .face:hover { box-shadow: var(--ring-hover); }
   .home .leader:hover, .home .cal-result:hover { background: var(--color-bg-subtle); }
+  .who-link:hover { text-decoration: underline; }
 }
 /* Pages outside the live screen: position colours deep enough for white dorsals, and the green, chip and link sizes the probe asks for */
 .home, #sheet, #final { --ext: #0f766e; --lat: #7c3aed; --cen: #cc1d72; --piv: var(--crown-deep); --por: var(--color-keeper); }
@@ -846,6 +847,7 @@ a:focus-visible, input:focus-visible, select:focus-visible, summary:focus-visibl
 .team-accounts { display: grid; gap: var(--space-3); }
 .team-accounts > :is(h3, p) { margin: 0; }
 .account-status { font-weight: 700; }
+.who-link { display: inline-flex; align-items: center; gap: var(--space-2); min-height: var(--target); padding: 0; border: 0; background: none; color: inherit; font: inherit; font-weight: 700; text-align: left; cursor: pointer; }
 .account-status:empty { display: none; }
 .invite-links li { display: flex; align-items: center; justify-content: space-between; gap: var(--space-2); }
 .link { justify-self: start; display: inline-flex; align-items: center; min-height: var(--target); border: 0; background: none; padding: 0; color: var(--fg); text-decoration: underline; font: var(--type-body); cursor: pointer; }
@@ -932,7 +934,7 @@ body:has(#home:not([hidden])) { overflow: hidden; }
   .home .app-bar .tabs { grid-row: 2; grid-column: 1 / -1; flex-wrap: nowrap; overflow-x: auto; }
   .home .app-bar .tabs button { flex: none; }
   .home .app-bar .app-end { display: contents; }
-  .home .app-bar .teams-corner { grid-row: 1; grid-column: 3; }
+  .home .app-bar :is(.teams-corner, .account-menu) { grid-row: 1; grid-column: 3; }
   .home .app-bar .app-actions { grid-row: 3; grid-column: 1 / -1; }
   .account-list li { grid-template-columns: minmax(0, 1fr); }
   .account-list .row-actions { justify-content: flex-start; }
@@ -1251,7 +1253,11 @@ span.att-foot { visibility: hidden; }
 .who-cell .disc { flex: none; }
 @media (max-width: 700px) { .stats-page, .split-pair { grid-template-columns: minmax(0, 1fr); } }
 @media (max-width: 1100px) { .team-page { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); } .squad { grid-column: 1 / -1; } }
-@media (max-width: 900px) { .calendar-card .cal-row { grid-template-columns: 40px minmax(0, 1fr) auto; } .cal-date { grid-column: 2; } .cal-who { grid-column: 1 / -1; } }
+@media (max-width: 900px) {
+  .calendar-card .cal-row { grid-template-columns: auto minmax(0, 1fr) auto; grid-template-areas: "round date date" "who who who" "venue state edit"; }
+  .calendar-card .cal-round { grid-area: round; } .calendar-card .cal-date { grid-area: date; } .calendar-card .cal-who { grid-area: who; }
+  .calendar-card .venue-badge { grid-area: venue; } .calendar-card .cal-state { grid-area: state; } .calendar-card [data-fixture-edit] { grid-area: edit; }
+}
 @media (max-width: 700px) { .team-page { grid-template-columns: minmax(0, 1fr); } }
 @media (max-width: 900px) { .team-layout { grid-template-columns: minmax(0, 1fr); } }
 @media (prefers-reduced-transparency: reduce) {
@@ -1494,9 +1500,12 @@ span.att-foot { visibility: hidden; }
   // A player's or a guest's account reads everything of the team and changes nothing; the database refuses their writes too.
   const PLAYER_ROLE = 'player', VIEWER_ROLE = 'viewer', STAFF_ROLE = 'owner';
   const readOnly = () => team.role === PLAYER_ROLE || team.role === VIEWER_ROLE;
+  // An account that is only ever a player creates no teams, and with a single team it has no other team to go to.
+  const playerOnly = () => home.teams.length > 0 && home.teams.every((t) => t.role === PLAYER_ROLE);
+  const soleTeam = () => (home.teams.length === 1 ? home.teams[0] : null);
   // The controls that change the team, its matches, calendar or attendance: they leave the page for a player.
   const STAFF_ONLY_SELECTOR = ['[data-new-match]', '[data-player-edit]', '[data-home-view="team-edit"]', '[data-rating-tune]', '[data-fixture-edit]',
-    '[data-calendar-import]', '[data-restart-match]', '[data-delete-match]', '[data-att-delete]', '[data-att-note]', '.callup', '[data-att-mode]', '[data-tab="acta"]'].join();
+    '[data-calendar-import]', '[data-restart-match]', '[data-delete-match]', '[data-att-delete]', '[data-att-note]', '.callup', '[data-att-mode]', '[data-tab="acta"]', '[data-legacy-import]', '[data-legacy-drop]'].join();
   function stripStaffControls(root) {
     if (!readOnly()) return;
     root.querySelectorAll(STAFF_ONLY_SELECTOR).forEach((el) => el.remove());
@@ -4093,7 +4102,7 @@ span.att-foot { visibility: hidden; }
   function sheetStatsHtml() {
     const rows = fieldPlayers().map((p) => {
       const [num, name, ...rest] = playerRow(p, state);
-      return `<tr><td>${num}</td><td class="name"><span style="background:${posOf(p).color}"></span>${esc(name)}</td>${rest.map(td).join('')}</tr>`;
+      return `<tr><td>${num}</td><td class="name"><button class="who-link press" type="button" data-sheet-open-player="${esc(p.id)}" aria-label="Ver el partido de ${esc(name)}"><span style="background:${posOf(p).color}"></span>${esc(name)}</button></td>${rest.map(td).join('')}</tr>`;
     }).join('');
     const checks = scoreCheckRows();
     return `${figuresHtml(teamFigures())}
@@ -4355,7 +4364,7 @@ span.att-foot { visibility: hidden; }
   function summaryPlayerHtml(p, ratings) {
     const { made, tried } = outcomeOf(state, p), court = courtFiguresOf(state, p.id), keeper = p.pos === 'POR';
     const kpi = (value, label) => `<span class="rating-kpi"><b>${value}</b><small>${label}</small></span>`;
-    return `<button class="player-card press" type="button" data-pdf-pick="${esc(p.id)}" aria-label="${esc(p.name)}, informe en PDF">
+    return `<button class="player-card press" type="button" data-sheet-open-player="${esc(p.id)}" aria-label="Ver el partido de ${esc(p.name)}">
       <span class="head">${discHtml(p)}<b>${esc(p.name)}</b>${ratingChipHtml(ratingValue(ratings, p))}</span>
       <span class="figures">${kpi(minutesText(court.seconds), 'Min')}${kpi(plusMinusText(court.plusMinus), '+/−')}${kpi(`${made}/${tried}`, keeper ? 'Paradas' : 'Goles')}</span></button>`;
   }
@@ -4374,12 +4383,11 @@ span.att-foot { visibility: hidden; }
       <section class="sheet-card"><h3>Jugadores</h3><div class="player-strip">${players}</div></section>`;
   }
   // The strip's card leads to that player's PDF in the list of the «Informes PDF» tab.
-  function openPdfPick(playerId) {
-    ui.sheetTab = 'reports';
+  // A player tapped in the summary or the stats table: their own tab of this match, from its top.
+  function showSheetPlayer(playerId) {
+    Object.assign(ui, { sheetTab: 'player', sheetPlayer: playerId });
     renderSheet();
-    const row = document.querySelector(`#sheet [data-pdf="${CSS.escape(playerId)}"]`);
-    row?.scrollIntoView({ block: 'center' });
-    row?.focus({ preventScroll: true });
+    $('sheet').scrollTop = 0;
   }
   const SHEET_RENDERERS = { summary: sheetSummaryHtml, stats: sheetStatsHtml, player: sheetPlayerHtml, analysis: sheetAnalysisHtml, gk: sheetGkHtml, acta: sheetActaHtml, reports: sheetReportsHtml };
   // The Hoja's way out names where it leads: the player's match view, the summary it came from, or the live screen.
@@ -6090,8 +6098,8 @@ table { border-collapse: collapse; width: 100%; }
     if (b.hasAttribute('data-close-sheet')) { closeSheet(); return; }
     if (b.hasAttribute('data-start-match')) { startMatch(); return; }
     if (b.hasAttribute('data-go-home')) { leaveMatch(); return; }
-    if (b.dataset.tab) { ui.sheetTab = b.dataset.tab; renderSheet(); return; }
-    if (b.dataset.pdfPick) { openPdfPick(b.dataset.pdfPick); return; }
+    if (b.dataset.tab) { const moved = ui.sheetTab !== b.dataset.tab; ui.sheetTab = b.dataset.tab; renderSheet(); if (moved) $('sheet').scrollTop = 0; return; }
+    if (b.dataset.sheetOpenPlayer) { showSheetPlayer(b.dataset.sheetOpenPlayer); return; }
     if (b.dataset.sheetPlayer) { ui.sheetPlayer = b.dataset.sheetPlayer; renderSheet(); return; }
     if (b.dataset.sheetGoal) { ui.sheetGoal = b.dataset.sheetGoal; ui.sheetShooter = null; renderSheet(); return; }
     if (b.dataset.sheetGk != null) { ui.sheetGk = b.dataset.sheetGk || null; ui.sheetShooter = null; renderSheet(); return; }
@@ -6791,7 +6799,8 @@ table { border-collapse: collapse; width: 100%; }
       <img class="crest home-crest" src="${esc(crestSrc(team))}" alt="">
       <div class="home-title"><h1>${esc(team.name)}</h1><small>${esc(team.club)}</small></div>
       <div class="tabs" role="group" aria-label="Secciones">${tab('team', 'Equipo')}${tab('attendance', 'Asistencia')}${tab('matches', 'Partidos')}${tab('stats', 'Estadísticas')}</div>
-      <div class="app-end">${actions ? `<div class="page-actions app-actions">${actions}</div>` : ''}<button class="btn icon teams-corner press" type="button" data-home-view="profile"${leadsBack ? ' data-nav-leading' : ''} aria-label="${NAV_LABELS.teams}" title="${NAV_LABELS.teams}">${TEAMS_ICON}</button></div>
+      <div class="app-end">${actions ? `<div class="page-actions app-actions">${actions}</div>` : ''}${playerOnly() && soleTeam() ? accountMenuHtml()
+        : `<button class="btn icon teams-corner press" type="button" data-home-view="profile"${leadsBack ? ' data-nav-leading' : ''} aria-label="${NAV_LABELS.teams}" title="${NAV_LABELS.teams}">${TEAMS_ICON}</button>`}</div>
     </div>`;
   }
   // A match left on this tablet by the per-club release (same site), if any.
@@ -7166,7 +7175,7 @@ table { border-collapse: collapse; width: 100%; }
       ${home.offline ? '<p class="note">Sin conexión: ves la copia guardada en esta tablet.</p>' : ''}
       <div class="card-grid profile-grid">
         <h3 class="grid-title">Mis equipos</h3>
-        ${teams}<button class="team-card add press" type="button" data-new-team>+ Nuevo equipo</button>
+        ${teams}${playerOnly() ? '' : '<button class="team-card add press" type="button" data-new-team>+ Nuevo equipo</button>'}
       </div>
       <p class="note">${favourite ? `★ ${esc(favourite.name)} se abre al entrar en la app. Toca la estrella para quitarlo o elige otro.` : 'Toca la ☆ de un equipo para que se abra directamente al entrar en la app.'}</p>`;
   }
@@ -7219,9 +7228,12 @@ table { border-collapse: collapse; width: 100%; }
     $('home').hidden = false;
   }
   function showHomeView(view) {
+    const moved = home.view !== view;
     home.view = view;
     home.armed = null;
     renderHome();
+    // A new screen starts at its top, not where the last one was scrolled to.
+    if (moved) $('home').scrollTop = 0;
     // Only a screen with a way out has a back to map: the profile, the sign-in and the loading screens leave it to the browser.
     if ($('home').querySelector('[data-nav-leading]')) armBackGuard();
   }
@@ -7251,7 +7263,7 @@ table { border-collapse: collapse; width: 100%; }
     const resume = readJson(CURRENT_MATCH_KEY);
     const saved = resume && localMatch(resume);
     const playing = saved && home.teams.find((t) => t.id === saved.teamId);
-    const opening = playing || favouriteTeam();
+    const opening = playing || favouriteTeam() || (playerOnly() && soleTeam());
     if (opening) { await selectTeam(opening); return; }
     showProfile();
   }
@@ -8235,7 +8247,7 @@ table { border-collapse: collapse; width: 100%; }
   function playersCardHtml(matches) {
     const sort = home.statsSort || STATS_DEFAULT_SORT, rows = sortedPlayerRows(seasonPlayerTable(matches, home.roster), sort);
     const head = STATS_COLUMNS.map(([key, label]) => `<th${key === 'player' ? ' class="who"' : ''} aria-sort="${sort.key === key ? (sort.dir > 0 ? 'ascending' : 'descending') : 'none'}"><button class="sort-btn press" type="button" data-sort="${key}">${label}</button></th>`).join('');
-    const body = rows.map((r) => `<tr data-player-row="${esc(r.player.id)}"><td class="who"><span class="who-cell">${discHtml(r.player)}${esc(r.player.name)}</span></td><td data-col="played">${r.played}</td>
+    const body = rows.map((r) => `<tr data-player-row="${esc(r.player.id)}"><td class="who"><button class="who-cell who-link press" type="button" data-player="${esc(r.player.id)}" aria-label="Ver a ${esc(r.player.name)}">${discHtml(r.player)}${esc(r.player.name)}</button></td><td data-col="played">${r.played}</td>
       <td data-col="seconds">${minutesText(r.seconds)}</td><td data-col="plusMinus">${plusMinusText(r.plusMinus)}</td><td data-col="rating">${r.rating == null ? '–' : ratingChipHtml(r.rating)}</td>
       <td data-col="goals">${r.goals}/${r.shots}</td><td data-col="shooting">${pctText(r.shooting)}</td><td data-col="assists">${r.assists}</td><td data-col="recoveries">${r.recoveries}</td><td data-col="turnovers">${r.turnovers}</td></tr>`).join('');
     return `<section class="sheet-card wide stats-players"><h3>Jugadores</h3><div class="table-wrap"><table><thead><tr>${head}</tr></thead><tbody>${body}</tbody></table></div></section>`;
@@ -8739,6 +8751,7 @@ table { border-collapse: collapse; width: 100%; }
     if (!rosterPlayer(id)) { showTeamPage(); return; }
     Object.assign(home, { playerId: id, playerEdit: false, playerDraft: null });
     showHomeView('player');
+    $('home').scrollTop = 0;
   }
   // One match of one player: where the shots came from and where they went (a goalkeeper: the rival shots faced).
   const RESULT_LABEL = { G: 'Victoria', E: 'Empate', P: 'Derrota' };
@@ -8828,6 +8841,8 @@ table { border-collapse: collapse; width: 100%; }
     hideFinal();
     renderAll();
     armBackGuard();
+    // A player's Hoja sits over a live screen they cannot touch: no taps and no tab stops reach it.
+    document.querySelector('.app').inert = readOnly();
     if (readOnly() || summary) openMatchViewer(sheetPlayer);
     else if (!state.setupDone) openSetup();
     else if (sheetPlayer) openSheetPlayer(sheetPlayer);
@@ -8975,7 +8990,7 @@ table { border-collapse: collapse; width: 100%; }
   }
   async function importLegacyMatch() {
     const legacy = legacyMatch();
-    if (!legacy) return;
+    if (!legacy || readOnly()) return;
     const id = newUuid();
     storeLocalMatch(id, restoreState(legacy.state), true);
     home.season = null;
@@ -9288,7 +9303,7 @@ table { border-collapse: collapse; width: 100%; }
     if (b.dataset.templateDel) { if (confirmTap(`template-${b.dataset.templateDel}`)) deleteTemplate(b.dataset.templateDel); return; }
     if (b.dataset.accountRemove) { if (confirmTap(`account-${b.dataset.accountRemove}`)) removeAccount(b.dataset.accountRemove); return; }
     if (b.hasAttribute('data-att-delete')) { if (confirmTap('att-delete')) deleteAttendanceSession(); return; }
-    if (b.hasAttribute('data-legacy-drop')) { if (confirmTap('legacy-drop')) { const l = legacyMatch(); if (l) removeKey(l.key); renderHome(); } return; }
+    if (b.hasAttribute('data-legacy-drop') && !readOnly()) { if (confirmTap('legacy-drop')) { const l = legacyMatch(); if (l) removeKey(l.key); renderHome(); } return; }
     if (armedBefore) { home.armed = null; renderHome(); }
     if (b.hasAttribute('data-retry')) { startHome(); return; }
     if (b.hasAttribute('data-forgot')) { sendPasswordReset(); return; }
@@ -9333,7 +9348,7 @@ table { border-collapse: collapse; width: 100%; }
     if (b.dataset.fixtureEdit) { home.fixtureEdit = { id: b.dataset.fixtureEdit, at: b.dataset.fixtureAt }; renderHome(); $('fx-date').focus(); return; }
     if (b.dataset.fixtureSave) { saveFixtureEdit(b.dataset.fixtureSave); return; }
     if (b.hasAttribute('data-fixture-cancel')) { home.fixtureEdit = null; renderHome(); return; }
-    if (b.hasAttribute('data-new-team')) { openNewTeam(); return; }
+    if (b.hasAttribute('data-new-team') && !playerOnly()) { openNewTeam(); return; }
     if (b.hasAttribute('data-cancel-team')) { showProfile(); return; }
     if (b.dataset.favouriteTeam) { toggleFavourite(b.dataset.favouriteTeam); return; }
     if (b.dataset.openTeam) { const t = home.teams.find((x) => x.id === b.dataset.openTeam); if (t) selectTeam(t); return; }
