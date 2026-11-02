@@ -10,7 +10,7 @@ Draw every shot in one gesture, drag players on and off court, follow both goalk
 PDF report with key points when the final whistle goes.
 
 [![CI](https://github.com/abuenoa/hbstats/actions/workflows/ci.yml/badge.svg)](https://github.com/abuenoa/hbstats/actions/workflows/ci.yml)
-[![License: AGPL v3](https://img.shields.io/badge/license-AGPL--3.0-blue.svg)](LICENSE)
+![License: proprietary](https://img.shields.io/badge/license-all%20rights%20reserved-lightgrey.svg)
 ![PWA](https://img.shields.io/badge/PWA-installable%20%C2%B7%20offline-5A0FC8)
 ![No build step](https://img.shields.io/badge/runtime%20deps-0-success)
 [![PRs welcome](https://img.shields.io/badge/PRs-welcome-brightgreen.svg)](CONTRIBUTING.md)
@@ -39,7 +39,7 @@ PDF report with key points when the final whistle goes.
 - [For clubs](#for-clubs)
 - [Development](#development)
 - [Roadmap](#roadmap)
-- [Contributing](#contributing)
+- [Feedback](#feedback)
 - [Licence](#licence)
 - [🇪🇸 En español](#-en-español)
 
@@ -237,27 +237,21 @@ PDF is generated).
 
 Have an idea? [Suggest it](https://github.com/abuenoa/hbstats/issues/new?template=feature_request.yml), in Spanish or English.
 
-## Contributing
+## Feedback
 
-Issues and pull requests are welcome, in Spanish or English. Read [CONTRIBUTING.md](CONTRIBUTING.md) and
-the [code of conduct](CODE_OF_CONDUCT.md). Pull requests are accepted under the
-[Contributor License Agreement](CLA.md), and CI must pass (tests and an up-to-date `docs/`).
-
-Coaches who do not code help just as much: try it in a match and
+Bug reports and ideas are welcome, in Spanish or English: try it in a match and
 [tell us what got in the way](https://github.com/abuenoa/hbstats/issues/new?template=bug_report.yml).
+Zona6 is proprietary software, so code contributions are not accepted (see [CONTRIBUTING.md](CONTRIBUTING.md)).
 
 ## Licence
 
-Copyright (C) 2026 Antonio Bueno Antón.
+Copyright (C) 2026 Antonio Bueno Antón. **All rights reserved.**
 
-Zona6 is free software under the [GNU Affero General Public License v3.0 or later](LICENSE): you may use, study,
-modify and share it, and anyone who offers a modified version to users over a network must publish its source
-under the same licence. The app links to this repository so every user can get the source.
+Zona6 is proprietary software. The source code is visible here for reference only: no licence is granted to
+use, copy, modify or distribute it without written permission. See [LICENSE](LICENSE). Versions published up to
+2 November 2026 were released under the AGPL-3.0; copies obtained under it keep that licence.
 
-This is the open edition. A commercial edition with premium features may be offered separately by the copyright
-holder; contributions can be included in both under the CLA.
-
-**Club crests and names are not covered by the licence.** Crests and names that teams upload to their accounts
+**Club crests and names belong to their clubs.** Crests and names that teams upload to their accounts
 belong to their clubs; do not reuse them without the club's permission.
 
 ## 🇪🇸 En español

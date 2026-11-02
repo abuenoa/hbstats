@@ -1,4 +1,4 @@
-# Zona6 — Copyright (C) 2026 Antonio Bueno Antón. SPDX-License-Identifier: AGPL-3.0-or-later
+# Zona6 — Copyright (C) 2026 Antonio Bueno Antón. All rights reserved.
 """Locate and run a headless Chrome for the test and icon scripts (no browser automation library needed)."""
 import glob
 import os

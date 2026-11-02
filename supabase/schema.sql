@@ -1,4 +1,4 @@
--- Zona6 — Copyright (C) 2026 Antonio Bueno Antón. SPDX-License-Identifier: AGPL-3.0-or-later
+-- Zona6 — Copyright (C) 2026 Antonio Bueno Antón. All rights reserved.
 -- Database for Zona6 accounts. Run it in the Supabase SQL editor; it is safe to run again after changes.
 --
 -- Each signed-in coach belongs to one or more teams (team_members). A team has its look (names, colours, crest),

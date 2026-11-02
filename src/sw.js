@@ -1,4 +1,4 @@
-/* Zona6 — Copyright (C) 2026 Antonio Bueno Antón. SPDX-License-Identifier: AGPL-3.0-or-later */
+/* Zona6 — Copyright (C) 2026 Antonio Bueno Antón. All rights reserved. */
 /* Zona6 service worker: the app keeps working without a connection (sports halls often have none).
  * - The app page itself: network first, so a new version arrives as soon as there is coverage; cached copy otherwise.
  *   Other pages under the same folder (the demo) are left to the network so they never replace the app's copy.
