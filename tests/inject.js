@@ -360,7 +360,15 @@
   T('red card to goalkeeper switches to spare', () => { const gk = state.gkId; addSanction(gk, 'D'); if (state.gkId === gk) throw new Error('same gk'); undo(); state.gkId = gk; commit(); });
   T('map colours: our GK red/blue/grey, theirs green/blue/grey', () => { const g = MAP_VIEWS.GK.colors, u = MAP_VIEWS.US.colors; if (g.GOL !== 'var(--red)' || g.PARADA !== 'var(--parada)' || g.FALLO !== 'var(--fallo)') throw new Error('GK'); if (u.GOL !== 'var(--gol)' || u.PARADA !== 'var(--parada)' || u.FALLO !== 'var(--fallo)') throw new Error('US'); });
   T('team selector: same layout for both teams', () => { const labels = () => [...$('live').querySelectorAll('.kpi span, .fact span, .zone b')].map((e) => e.textContent).join('|'); document.querySelector('#team-seg [data-source="US"]').click(); const a = labels(); const usShots = $('live').querySelector('.kpi small').textContent; document.querySelector('#team-seg [data-source="GK"]').click(); const b = labels(); if (a !== b) throw new Error(a + ' vs ' + b); const s = liveStats(); if (s.them.shots !== rivalShots().length || s.us.shots !== ourShots().length) throw new Error('counts'); if (!usShots.endsWith('/' + s.us.shots)) throw new Error('us kpi ' + usShots); });
-  T('rival ratings read from our side', () => { if (rateSide(90, 'shooting', false) !== 'r-bad' || rateSide(90, 'shooting', true) !== 'r-good') throw new Error('invert'); });
+  T('rival ratings read from our side', () => { if (rateSide(90, 'shooting', false) !== 'r-bad' || rateSide(90, 'shooting', true) !== 'r-top' || rateSide(65, 'shooting', false) !== 'r-bad' || rateSide(40, 'shooting', false) !== 'r-good' || rateSide(55, 'shooting', false) !== 'r-warn') throw new Error('invert'); });
+  T('rate: four tones, excellent blue to poor red, either way round', () => {
+    const tones = (key, values) => values.map((v) => rate(v, key)).join();
+    if (tones('shooting', [70, 69, 60, 59, 50, 49]) !== 'r-top,r-good,r-good,r-warn,r-warn,r-bad') throw new Error(tones('shooting', [70, 69, 60, 59, 50, 49]));
+    if (tones('turnovers', [8, 9, 12, 13, 19, 20]) !== 'r-top,r-good,r-good,r-warn,r-warn,r-bad') throw new Error(tones('turnovers', [8, 9, 12, 13, 19, 20]));
+    if (rate(null, 'gk') !== 'r-none' || ratioTone(0, 0, 'gk') !== '' || ratioTone(4, 10, 'gk') !== 'r-top' || ratioTone(4, 10, 'gk', false) !== 'r-bad') throw new Error('ratios');
+    if (plusMinusTone(2) !== 'r-good' || plusMinusTone(-1) !== 'r-bad' || plusMinusTone(0) !== '' || plusMinusTone(null) !== '') throw new Error('plus-minus');
+    Object.entries(CONFIG.targets).forEach(([key, [top, good, poor, dir]]) => { if (dir === 'lower' ? !(top < good && good < poor) : !(top > good && good > poor)) throw new Error(`targets out of order: ${key}`); });
+  });
   T('rival 2 min split from rival side', () => { const s = liveStats(); const [ug, tg] = s.us.superiority.split('–'); const [tg2, ug2] = s.them.inferiority.split('–'); if (ug !== ug2 || tg !== tg2) throw new Error(s.us.superiority + ' ' + s.them.inferiority); });
   T('no 5 min popups; 5 min score derived from goals', () => { checkTimers(); if (state.alerts.some((a) => a.kind === 'checkpoint')) throw new Error('popup'); const rows = scoreCheckRows(); if (rows.length !== Math.floor(absSeconds() / 300)) throw new Error('rows ' + rows.length); const until = 300; const s5 = score(state.events.filter((e) => e.abs <= until)); if (rows[0][1] !== `${s5.us}–${s5.them}`) throw new Error(rows[0][1]); });
   const rivalDraw = (target) => openShotPop({ type: 'rivalShot', origin: m(0, 8), target }, { x: 10, y: 10 });
@@ -375,6 +383,29 @@
   T('parseRoster rival: dorsals only', () => { const r = parseRoster(JSON.stringify({ format: 'hbstats-plantilla', team: 'BM Sur', players: [{ num: 4 }, { num: 7, name: 'Pérez' }] }), 'them'); if (r.players.length !== 2 || r.team !== 'BM Sur' || r.players[1].name !== 'Pérez' || r.players[0].pos) throw new Error('bad'); throws(() => parseRoster(JSON.stringify({ format: 'hbstats-plantilla', players: [{ num: 4 }, { num: 4 }] }), 'them'), /repetido/); });
   T('goal shooters table with Sin dorsal row last', () => { addEvent('RIVAL_SHOT', { gkId: state.gkId, rivalId: null, origin: m(0, 8), target: { x: 500, y: 120 }, zone: '9M', result: 'GOL', contra: false }); const rows = goalShooterRows(rivalShots(), 'GK'); if (rows.at(-1)[1] !== 'Sin dorsal') throw new Error('no unknown row'); const total = rows.reduce((t, r) => t + r[2], 0); if (total !== rivalShots().length) throw new Error('total'); undo(); ui.sheetTab = 'gk'; renderSheet(); if (!$('sheet').textContent.includes('Lanzadores de')) throw new Error('sheet'); });
   T('shooter ranking: most goals first, then shots, unknown last', () => { addEvent('RIVAL_SHOT', { gkId: state.gkId, rivalId: null, origin: m(0, 8), target: { x: 500, y: 120 }, zone: '9M', result: 'GOL', contra: false }); addEvent('RIVAL_SHOT', { gkId: state.gkId, rivalId: null, origin: m(0, 8), target: { x: 500, y: 120 }, zone: '9M', result: 'GOL', contra: false }); const r = shooterRanking(rivalShots()); undo(); undo(); if (r.at(-1).shooter !== null || r.at(-1).goals !== 2) throw new Error('unknown not last despite most goals'); const known = r.slice(0, -1); if (!known.every((x, i) => i === 0 || known[i - 1].goals > x.goals || (known[i - 1].goals === x.goals && known[i - 1].list.length >= x.list.length))) throw new Error('order ' + JSON.stringify(known.map((x) => [x.shooter.num, x.goals, x.list.length]))); if (known[0].shooter.num !== 9) throw new Error('top rival should be #9 Lolo'); });
+  // Every rate, made/tried and +/− in the match statistics carries a tone; only counts, and the share of shots from 6 m
+  // (neither good nor bad by itself), stay plain.
+  T('match sheet: every rate, ratio and +/− is coloured', () => {
+    const RATED = /^(\d+%|\d+\/[1-9]\d*|[+−]\d+)$/, NEUTRAL = ['Desde 6 m'];
+    const TONES = ['r-top', 'r-good', 'r-warn', 'r-bad'];
+    const unrated = (scope, where) => [...$(scope).querySelectorAll('.sum strong, .stat-tile strong, .rating-kpi b, .kpi-tile strong, td')]
+      .filter((el) => RATED.test(el.textContent.trim()) && !TONES.some((t) => el.classList.contains(t)))
+      .filter((el) => !NEUTRAL.includes(el.closest('.sum')?.querySelector('span')?.textContent))
+      .map((el) => `${where}: ${el.textContent.trim()} (${(el.closest('.sum, .stat-tile, .kpi-tile, tr')?.textContent || '').replace(/\s+/g, ' ').trim().slice(0, 40)})`);
+    const keep = { tab: ui.sheetTab, goal: ui.sheetGoal, player: ui.sheetPlayer };
+    const missing = [];
+    try {
+      [['summary'], ['stats'], ['analysis'], ['gk', 'GK'], ['gk', 'US'], ...state.players.map((p) => ['player', null, p.id])].forEach(([tab, goal, player]) => {
+        Object.assign(ui, { sheetTab: tab, sheetGoal: goal || ui.sheetGoal, sheetPlayer: player || null });
+        renderSheet();
+        missing.push(...unrated('sheet', `${tab}${goal ? ` ${goal}` : ''}${player ? ` ${playerById(player).name}` : ''}`));
+      });
+      openFinal();
+      $('final').querySelector('details.more').open = true;
+      missing.push(...unrated('final', 'final'));
+    } finally { Object.assign(ui, { sheetTab: keep.tab, sheetGoal: keep.goal, sheetPlayer: keep.player }); $('final').hidden = true; renderSheet(); }
+    if (missing.length) throw new Error(missing.join(' · '));
+  });
   T('our shots without a player are listed as Sin jugador', () => { addEvent('SHOT', { playerId: null, origin: m(0, 8), target: { x: 500, y: 120 }, from: '9M', zone: '9M', result: 'FUERA' }); const rows = goalShooterRows(ourShots(), 'US'); undo(); if (rows.at(-1)[1] !== 'Sin jugador') throw new Error(rows.at(-1)[1]); });
   T('sheet rival goal: map shows our dorsals and a shooter can be focused', () => { ui.sheetTab = 'gk'; ui.sheetGoal = 'GK'; renderSheet(); document.querySelector('[data-sheet-goal="US"]').click(); const dorsals = [...document.querySelectorAll('.shot-map .map-dorsal')].map((t) => t.textContent).sort(); const drawn = (list) => list.filter((e) => ['PARADA', 'GOL'].includes(groupOf(e.result))); const expected = drawn(ourShots()).map((e) => shooterOf(e)).filter(Boolean).map((p) => String(p.num)).sort(); if (dorsals.join() !== expected.join() || !dorsals.length) throw new Error(dorsals.join() + ' vs ' + expected.join()); if (document.querySelector('[data-sheet-gk]')) throw new Error('keeper chips on rival goal'); const first = document.querySelector('[data-sheet-shooter]'); const id = first.dataset.sheetShooter; first.click(); if (ui.sheetShooter !== id) throw new Error('focus'); const faded = document.querySelectorAll('.shot-map g[opacity]').length; if (faded !== drawn(ourShots()).filter((e) => shooterKey(e) !== id).length) throw new Error('faded ' + faded); document.querySelector(`[data-sheet-shooter="${id}"]`).click(); if (ui.sheetShooter !== null) throw new Error('toggle off'); document.querySelector('[data-sheet-goal="GK"]').click(); if (!document.querySelector('[data-sheet-gk]') || document.querySelectorAll('.shot-map .map-dorsal').length !== drawn(rivalShots()).filter((e) => shooterOf(e)).length) throw new Error('our goal'); });
   T('live court is drawn from the shared court markup', () => { if (!$('court-floor').querySelector('clipPath#court-clip') || !$('goal-frame').querySelector('path') || !$('goal-net').querySelector('line')) throw new Error('court'); });
@@ -1285,7 +1316,10 @@
         const near = tiles[1], saves = tiles[4];
         if (near.querySelector('.us strong').textContent !== '67%' || !near.querySelector('.us small').textContent.endsWith('2/3') || !near.querySelector('.them small').textContent.endsWith('1/4')) throw new Error(near.textContent);
         if (saves.querySelector('.us strong').textContent !== '67%' || !saves.querySelector('.us small').textContent.endsWith('2/3') || !saves.querySelector('.them small').textContent.endsWith('1/3')) throw new Error(saves.textContent);
-        if (near.querySelector('.us strong').className !== 'r-good') throw new Error('tone ' + near.querySelector('.us strong').className);
+        // 67% from 6 m is regular for us; the rival's 25% is good news for us.
+        if (near.querySelector('.us strong').className !== 'r-warn' || near.querySelector('.them strong').className !== 'r-good') throw new Error('tone ' + near.querySelector('.us strong').className + ' / ' + near.querySelector('.them strong').className);
+        const unrated = tiles.filter((t) => [...t.querySelectorAll('strong')].some((v) => !v.className && v.textContent !== '–' && v.textContent !== '0'));
+        if (unrated.length) throw new Error('figures without a tone: ' + unrated.map((t) => labelText(t)).join('|'));
       });
     } finally { restore(snap); }
   });
@@ -1293,10 +1327,14 @@
     const snap = snapshot();
     try {
       state.events = distanceEvents(); state.history = [];
-      const rows = Object.fromEntries(finalRows().map((r) => [r[0], r.slice(1)]));
+      const rows = Object.fromEntries(finalRows().map((r) => [r[0], r.slice(1, 3)])), tones = Object.fromEntries(finalRows().map((r) => [r[0], r[3]]));
       if (rows['% de tiro 6 m'].join('|') !== '2/3 · 67%|1/4 · 25%' || rows['% de tiro 9 m+'].join('|') !== '1/3 · 33%|1/3 · 33%') throw new Error(JSON.stringify(rows));
       if (rows['% paradas 6 m'].join('|') !== '2/3 · 67%|1/3 · 33%' || rows['% paradas 9 m+'].join('|') !== '1/2 · 50%|1/2 · 50%') throw new Error(JSON.stringify(rows));
       if (!rows['% de tiro'] || !rows['Paradas del portero']) throw new Error('overall rows');
+      if (tones['% de tiro 6 m'].join() !== 'r-warn,r-good' || tones['% paradas 6 m'].join() !== 'r-top,r-bad' || tones['Lanzamientos'] || tones['Máximo goleador']) throw new Error(JSON.stringify(tones));
+      openFinal();
+      const detail = [...$('final').querySelectorAll('details.more tbody tr')].find((tr) => tr.cells[0].textContent === '% de tiro 6 m');
+      if (detail.cells[1].className !== 'r-warn' || detail.cells[2].className !== 'r-good') throw new Error('detail table not toned');
     } finally { restore(snap); }
   });
   T('halftime: shows failed shots 6 m and 9 m and the top turnovers', () => {
@@ -2363,7 +2401,7 @@
       if (shotZone(lost) !== ZONE_UNKNOWN || shotZone({ kind: 'RIVAL_SHOT', zone: '9M', contra: false, result: 'GOL' }) !== ZONE_UNKNOWN) throw new Error('zone ' + shotZone(lost));
       const rates = zoneRates([lost], (e) => e.result === 'GOL');
       if (rates.size !== 1 || JSON.stringify(rates.get(ZONE_UNKNOWN)) !== '{"ok":1,"n":1}') throw new Error(JSON.stringify([...rates]));
-      const svg = zoneMapSvg([lost], () => true, { GOL: 'x', PARADA: 'x', FALLO: 'x' });
+      const svg = zoneMapSvg([lost], () => true, { GOL: 'x', PARADA: 'x', FALLO: 'x' }, onTarget, FIELD_TARGETS);
       if (/class="zone-(pct|n|dot)"/.test(svg) || /NaN|undefined/.test(svg)) throw new Error('the map drew a shot without origin');
     });
     T('zones: rates count shots on target unless told to count every shot', () => {
@@ -2417,10 +2455,10 @@
       const enough = seasonRow(newId('f'), { players: [...seasonPlayers, second], events: [seasonShot('sp3', 'GOL'), seasonShot('sp3', 'FALLO'), seasonShot('sp3', 'FALLO'), seasonShot('sp2', 'GOL')] });
       if (teamBest([enough], [...seasonPlayers, second]).field.pct !== 1 / 3) throw new Error('a one-shot 100% beat the qualified players');
     });
-    T('radar: rate colour runs red to amber to green over the theme tokens', () => {
-      const [low, mid, high] = [rateColour(0), rateColour(0.5), rateColour(1)];
-      if (!low.startsWith('color-mix(in srgb') || !low.includes('var(--act-bad)') || !mid.includes('var(--dos)') || !high.includes('var(--act-good)')) throw new Error([low, mid, high].join(' | '));
-      if (rateColour(-3) !== low || rateColour(7) !== high) throw new Error('not clamped');
+    T('charts: a rate is filled with the band colour of its tone against the target', () => {
+      const fills = [9, 6, 5, 4].map((ok) => rateColour({ ok, n: 10 }, 'shooting'));
+      if (fills.join() !== 'var(--rating-top),var(--rating-good),var(--rating-mid),var(--rating-bad)') throw new Error(fills.join());
+      if (rateColour({ ok: 4, n: 10 }, 'gk') !== 'var(--rating-top)') throw new Error('keeper target');
     });
     const chartAxes = (label) => ['act-good', 'act-good', 'act-def', 'act-bad', 'act-rule'].map((group, i) => ({ key: `k${i}`, label: i ? `Eje ${i}` : label, value: i, text: `${i},5`, fraction: i / 4, group }));
     const countOf = (svg, re) => (svg.match(re) || []).length;
@@ -2438,20 +2476,20 @@
     T('charts: zone map labels only zones with shots and skips 7 m and counters', () => {
       const colours = { GOL: 'var(--c-gol)', PARADA: 'var(--c-parada)', FALLO: 'var(--c-fallo)' };
       const list = [chartShot(), chartShot({ result: 'PARADA' }), chartShot({ origin: m(-5, 6), result: 'GOL' }), chartShot({ from: '7M', zone: '7M', origin: m(0, 7) }), chartShot({ zone: 'CONTRA' }), chartShot({ origin: m(6, 10), result: 'FUERA' })];
-      const svg = zoneMapSvg(list, (e) => e.result === 'GOL', colours);
+      const svg = zoneMapSvg(list, (e) => e.result === 'GOL', colours, onTarget, FIELD_TARGETS);
       if (countOf(svg, /class="zone-pct"/g) !== 2 || countOf(svg, /class="zone-n"/g) !== 2) throw new Error('labels ' + countOf(svg, /class="zone-pct"/g));
       if (!svg.includes('>50%<') || !svg.includes('>1/2<') || !svg.includes('>100%<') || !svg.includes('>1/1<')) throw new Error('rates');
       if (countOf(svg, /class="zone-dot"/g) !== 4 || !svg.includes('fill="var(--c-gol)"') || !svg.includes('fill="var(--c-fallo)"')) throw new Error('dots');
       if (countOf(svg, /class="lane-divider"[^>]*stroke="var\(--[\w-]+\)"[^>]*stroke-dasharray/g) !== LANES.length - 1) throw new Error('lane dividers');
       LANES.forEach((l) => { if (!svg.includes(`>${l.label}<`)) throw new Error(`lane ${l.label}`); });
       if (!svg.includes('>6 m<') || /NaN/.test(svg)) throw new Error('court');
-      const again = zoneMapSvg([], () => true, colours), ids = [...(svg + again).matchAll(/ id="([^"]+)"/g)].map((x) => x[1]);
+      const again = zoneMapSvg([], () => true, colours, onTarget, FIELD_TARGETS), ids = [...(svg + again).matchAll(/ id="([^"]+)"/g)].map((x) => x[1]);
       if (new Set(ids).size !== ids.length) throw new Error('shared ids ' + ids.join());
       if (again.includes('zone-pct')) throw new Error('labels without shots');
     });
     T('charts: zone map draws each lane on the side its shots came from', () => {
       const colours = { GOL: 'x', PARADA: 'x', FALLO: 'x' };
-      const labelX = (origin) => +zoneMapSvg([chartShot({ origin })], () => true, colours).match(/class="zone-pct" x="(-?[\d.]+)"/)[1];
+      const labelX = (origin) => +zoneMapSvg([chartShot({ origin })], () => true, colours, onTarget, FIELD_TARGETS).match(/class="zone-pct" x="(-?[\d.]+)"/)[1];
       const wingL = m(-8, 3), wingR = m(8, 3), latL = m(-5, 6), latR = m(5, 6);
       if (laneOf(wingL) !== 'EXT_I' || laneOf(wingR) !== 'EXT_D') throw new Error('lane premise');
       if (!(labelX(wingL) < CENTER_X && labelX(latL) < CENTER_X && labelX(wingR) > CENTER_X && labelX(latR) > CENTER_X)) throw new Error('map mirrored against the lane keys');
@@ -2461,7 +2499,7 @@
       // The 6 m and 9 m lines are the points 6 and 9 m from the goal-line segment between the posts.
       const lineDistance = (x, y) => Math.hypot(Math.max(CENTER_X - POST_HALF_M * UNITS_PER_M - x, 0, x - CENTER_X - POST_HALF_M * UNITS_PER_M), y - GOAL_LINE_Y);
       [m(-8, 3), m(-5, 6), m(0, 8), m(5, 6), m(8, 3)].forEach((origin) => {
-        const svg = zoneMapSvg([chartShot({ origin })], () => true, colours), [, x, y] = svg.match(/class="zone-pct" x="(-?[\d.]+)" y="(-?[\d.]+)"/);
+        const svg = zoneMapSvg([chartShot({ origin })], () => true, colours, onTarget, FIELD_TARGETS), [, x, y] = svg.match(/class="zone-pct" x="(-?[\d.]+)" y="(-?[\d.]+)"/);
         const d = lineDistance(+x, +y + LABEL_MIDDLE);
         if (d - SIX_M_PX < CLEARANCE || NINE_M_PX - d < CLEARANCE) throw new Error(`${laneOf(origin)} label ${Math.round(d)} px from the goal, lines at ${SIX_M_PX} and ${NINE_M_PX}`);
       });
@@ -2470,7 +2508,7 @@
       const colours = { GOL: 'x', PARADA: 'x', FALLO: 'x' };
       [m(-9.4, 5), m(9.4, 5)].forEach((origin) => {
         if (shotZone(chartShot({ origin })) !== `${laneOf(origin)}:far` || !laneOf(origin).startsWith('EXT')) throw new Error('premise ' + shotZone(chartShot({ origin })));
-        const svg = zoneMapSvg([chartShot({ origin })], () => true, colours), [, x, y] = svg.match(/class="zone-pct" x="(-?[\d.]+)" y="(-?[\d.]+)"/);
+        const svg = zoneMapSvg([chartShot({ origin })], () => true, colours, onTarget, FIELD_TARGETS), [, x, y] = svg.match(/class="zone-pct" x="(-?[\d.]+)" y="(-?[\d.]+)"/);
         if (+y <= nineMetreY(+x)) throw new Error(`label at y ${y} is inside the 9 m line (${Math.round(nineMetreY(+x))}) at x ${x}`);
       });
     });
@@ -2484,7 +2522,8 @@
     });
     T('charts: goal grid shows rates for cells with shots', () => {
       const list = [chartShot({ target: gf(0.1, 0.1) }), chartShot({ target: gf(0.1, 0.1), result: 'PARADA' }), chartShot({ target: gf(0.9, 0.9) }), chartShot({ target: gf(0.5, 0.5), result: 'FUERA' })];
-      const svg = goalRateSvg(list, (e) => e.result === 'GOL');
+      const svg = goalRateSvg(list, (e) => e.result === 'GOL', 'shooting');
+      if (countOf(svg, /class="goal-bar"[^>]*fill="var\(--rating-mid\)"/g) !== 1 || countOf(svg, /class="goal-bar"[^>]*fill="var\(--rating-top\)"/g) !== 1) throw new Error('cells not toned by the target');
       if (countOf(svg, /class="goal-pct"/g) !== 2 || !svg.includes('>50%<') || !svg.includes('>1/2<') || !svg.includes('>100%<') || !svg.includes('>1/1<')) throw new Error('labels');
       if (countOf(svg, /class="goal-cell"/g) !== GOAL_GRID * GOAL_GRID || /NaN/.test(svg)) throw new Error('cells');
     });
