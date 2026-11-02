@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-# Zona6 — Copyright (C) 2026 Antonio Bueno Antón. SPDX-License-Identifier: AGPL-3.0-or-later
+# Zona6 — Copyright (C) 2026 Antonio Bueno Antón. All rights reserved.
 """Print the SQL that loads a calendar file ("zona6-calendario") into public.fixtures.
 
 Usage: python3 tools/calendar_sql.py FILE TEAM_ID

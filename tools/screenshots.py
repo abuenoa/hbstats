@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-# Zona6 — Copyright (C) 2026 Antonio Bueno Antón. SPDX-License-Identifier: AGPL-3.0-or-later
+# Zona6 — Copyright (C) 2026 Antonio Bueno Antón. All rights reserved.
 """Capture the README screenshots from the built page with the sample match.
 
 Each scene is a snippet spliced into the end of the app's own scope (like the test suite) that puts the app in one

@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-# Zona6 — Copyright (C) 2026 Antonio Bueno Antón. SPDX-License-Identifier: AGPL-3.0-or-later
+# Zona6 — Copyright (C) 2026 Antonio Bueno Antón. All rights reserved.
 """Render the app icons from assets/icon.svg with headless Chrome into assets/icons/.
 
 "any" icons are the round mark on a transparent background; the maskable and Apple icons put it on a dark square,

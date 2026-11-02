@@ -1,4 +1,4 @@
-/* Zona6 — Copyright (C) 2026 Antonio Bueno Antón. SPDX-License-Identifier: AGPL-3.0-or-later */
+/* Zona6 — Copyright (C) 2026 Antonio Bueno Antón. All rights reserved. */
 /* Zona6 service worker: the app keeps working without a connection (sports halls often have none).
  * - The app page itself: network first, so a new version arrives as soon as there is coverage; cached copy otherwise.
  *   Other pages under the same folder (the demo) are left to the network so they never replace the app's copy.
@@ -9,7 +9,7 @@
  * tools/build_site.py stamps BUILD (a hash of the page, so every release replaces the old shell cache) and
  * SUPABASE_JS (the library URL the page loads).
  */
-const BUILD = 'd045b580164e';
+const BUILD = '65bdfb64e041';
 const SHELL_PREFIX = 'hbstats-app-shell-';
 const SHELL_CACHE = `${SHELL_PREFIX}${BUILD}`;
 const RUNTIME_CACHE = 'hbstats-app-cdn-v1';

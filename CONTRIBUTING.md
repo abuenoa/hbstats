@@ -6,9 +6,8 @@ come before everything else. Puedes escribir issues y pull requests en español.
 ## Before you start
 
 - **Ideas and bugs:** open an issue first (templates under *New issue*), so we agree on the approach before code.
-- **Licence:** contributions are accepted under the [Contributor License Agreement](CLA.md). In short: you keep
-  your copyright, and the project can ship your contribution in the AGPL edition and in a future commercial edition.
-  You accept it by ticking the box in the pull request template.
+- **Licence:** Zona6 is proprietary software (all rights reserved, see [LICENSE](LICENSE)). Code contributions
+  from outside the project are not accepted; bug reports and ideas through issues are.
 - **Conduct:** see [CODE_OF_CONDUCT.md](CODE_OF_CONDUCT.md).
 
 ## Set-up

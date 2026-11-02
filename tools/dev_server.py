@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-# Zona6 — Copyright (C) 2026 Antonio Bueno Antón. SPDX-License-Identifier: AGPL-3.0-or-later
+# Zona6 — Copyright (C) 2026 Antonio Bueno Antón. All rights reserved.
 """Serve a development build of the app and rebuild it whenever src/ or assets/icons/ change.
 
 The development build has no accounts (teams and matches stay in the browser) and no service worker, so a reload

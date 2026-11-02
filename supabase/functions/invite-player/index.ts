@@ -1,4 +1,4 @@
-// Zona6 — Copyright (C) 2026 Antonio Bueno Antón. SPDX-License-Identifier: AGPL-3.0-or-later
+// Zona6 — Copyright (C) 2026 Antonio Bueno Antón. All rights reserved.
 // Gives someone an account in a team: a coach (full access), a roster player or a guest (both read-only). Only the
 // team's staff (owner or coach) may call it.
 // An e-mail without a confirmed account gets an invite: by default an e-mail sent through the project's SMTP, or with

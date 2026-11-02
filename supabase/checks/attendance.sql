@@ -1,4 +1,4 @@
--- Zona6 — Copyright (C) 2026 Antonio Bueno Antón. SPDX-License-Identifier: AGPL-3.0-or-later
+-- Zona6 — Copyright (C) 2026 Antonio Bueno Antón. All rights reserved.
 -- Checks for public.attendance_sessions and its row level security. Run it after schema.sql (SQL editor or
 -- execute_sql). It builds its own throwaway users, teams and matches inside one transaction and rolls everything
 -- back, so it leaves no trace. Every check raises an exception when it fails and a NOTICE «PASS …» when it holds.
