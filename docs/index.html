@@ -6792,7 +6792,7 @@ table { border-collapse: collapse; width: 100%; }
   // The way to «Mis equipos» sits in the bar's corner, away from the page's own way back; on a main tab, which has no way
   // back of its own, it is also what Escape and the system back press.
   const TEAMS_ICON = '<svg viewBox="0 0 24 24" width="22" height="22" aria-hidden="true" fill="currentColor"><rect x="3" y="3" width="8" height="8" rx="1.5"/><rect x="13" y="3" width="8" height="8" rx="1.5"/><rect x="3" y="13" width="8" height="8" rx="1.5"/><rect x="13" y="13" width="8" height="8" rx="1.5"/></svg>';
-  // `actions`: those of a main tab, level with the corner (a main tab has no page bar of its own).
+  // `actions`: the page's own, level with the corner.
   function appBarHtml(leadsBack, actions = '') {
     const tab = (view, label) => `<button class="press" type="button" data-home-view="${view}" aria-pressed="${home.view === view || (view === 'matches' && home.view === 'squad') || (view === 'team' && ['team-edit', 'player', 'player-match', 'rating-tune'].includes(home.view))}">${label}</button>`;
     return `<div class="home-head app-bar">
@@ -6840,7 +6840,7 @@ table { border-collapse: collapse; width: 100%; }
       <div class="match-top">${chip}<span class="match-who"><b class="match-rival">${esc(m.them)}</b><small>${where}</small></span>
         <strong class="match-score${finished ? ` res-${result}` : ''}">${setup ? '–' : `${m.scoreUs}–${m.scoreThem}`}</strong></div>
       ${meta ? `<div class="match-meta">${meta}</div>` : ''}
-      <div class="match-foot"><div class="row-actions"><button class="btn primary press" type="button" data-open-match="${m.id}">${finished || readOnly() ? 'Ver' : 'Seguir'}</button>${setup ? '' : armedButton(`restart-${m.id}`, 'Reiniciar', `data-restart-match="${m.id}" aria-label="Reiniciar el partido contra ${esc(m.them)}"`)}${armedButton(`delete-${m.id}`, 'Borrar', `data-delete-match="${m.id}" aria-label="Borrar el partido contra ${esc(m.them)}"`)}</div>${face}</div></article>`;
+      <div class="match-foot"><div class="row-actions"><button class="btn primary press" type="button" data-open-match="${m.id}">${finished || readOnly() ? 'Ver' : 'Seguir'}</button>${setup || readOnly() ? '' : `<button class="btn press" type="button" data-match-stats="${m.id}">Estadísticas</button>`}${setup ? '' : armedButton(`restart-${m.id}`, 'Reiniciar', `data-restart-match="${m.id}" aria-label="Reiniciar el partido contra ${esc(m.them)}"`)}${armedButton(`delete-${m.id}`, 'Borrar', `data-delete-match="${m.id}" aria-label="Borrar el partido contra ${esc(m.them)}"`)}</div>${face}</div></article>`;
   }
   function matchesHtml() {
     const rounds = matchRounds();
@@ -6929,24 +6929,26 @@ table { border-collapse: collapse; width: 100%; }
     const rows = home.accounts.rows.map((a) => {
       const player = a.playerId && rosterPlayer(a.playerId);
       const who = player ? `#${player.num} ${esc(player.name)} · ${esc(a.email)}` : esc(a.email);
-      const resend = !a.signedIn && a.role !== STAFF_ROLE ? `<button class="btn primary press" type="button" data-account-resend="${a.userId}">Nuevo enlace</button>` : '';
+      const resend = !a.signedIn && a.role !== STAFF_ROLE ? `<button class="btn primary press" type="button" data-account-resend="${a.userId}">Reenviar correo</button>
+        <button class="btn press" type="button" data-account-link="${a.userId}">Enlace</button>` : '';
       const remove = removableAccount(a) ? armedButton(`account-${a.userId}`, a.signedIn ? 'Quitar' : 'Anular invitación', `data-account-remove="${a.userId}" aria-label="Quitar la cuenta de ${esc(a.email)}"`) : '';
       return `<li><span><b>${ACCOUNT_ROLES[a.role]}</b> · ${who}${a.signedIn ? '' : ' · <i>sin entrar aún</i>'}</span><span class="row-actions">${resend}${remove}</span></li>`;
     }).join('');
     return `<h4>Con acceso</h4><ul class="account-list">${rows}</ul>`;
   }
-  // Someone who never used their link (or lost it) gets a fresh one to share; the old one stops working.
-  async function resendInvite(userId) {
+  // Someone who never used their invite (or lost it) gets a fresh one, by e-mail or as a link to share; the old one stops working.
+  async function resendInvite(userId, delivery) {
     const account = home.accounts.rows.find((a) => a.userId === userId), player = account.playerId && rosterPlayer(account.playerId);
-    homeStatus('Creando un enlace nuevo…');
+    const name = player ? player.name : account.email;
+    homeStatus(delivery === INVITE_BY_EMAIL ? 'Enviando el correo…' : 'Creando un enlace nuevo…');
     try {
-      await inviteAccount(player ? { role: PLAYER_ROLE, playerId: player.id } : { role: account.role }, account.email, player ? player.name : account.email);
+      await inviteAccount(player ? { role: PLAYER_ROLE, playerId: player.id } : { role: account.role }, account.email, name, delivery);
     } catch (err) {
-      homeStatus(`No se pudo crear el enlace: ${cloudErrorText(err)}.`);
+      homeStatus(`No se pudo invitar: ${cloudErrorText(err)}.`);
       return;
     }
     renderHome();
-    homeStatus(`Enlace nuevo para ${player ? player.name : account.email}: compártelo.`);
+    homeStatus(delivery === INVITE_BY_EMAIL ? `Correo enviado a ${account.email}.` : `Enlace nuevo para ${name}: compártelo.`);
   }
   async function removeAccount(userId) {
     const account = home.accounts.rows.find((a) => a.userId === userId);
@@ -6968,19 +6970,22 @@ table { border-collapse: collapse; width: 100%; }
     const links = home.inviteLinks.length ? `<p class="note">Comparte a cada uno su enlace: lo abre una vez para entrar y poner su contraseña.</p>
       <ul class="invite-links">${home.inviteLinks.map(({ name }, i) => `<li><b>${esc(name)}</b><button class="btn primary press" type="button" data-invite-share="${i}">Compartir enlace</button></li>`).join('')}</ul>` : '';
     return `<section class="sheet-card team-accounts"><h3>Cuentas del equipo</h3>
-      <p class="note">Un entrenador puede hacer lo mismo que tú. Un jugador o un invitado ve los partidos, las estadísticas y la asistencia de todo el equipo, sin poder cambiar nada.</p>
+      <p class="note">Un entrenador puede hacer lo mismo que tú. Un jugador o un invitado ve los partidos, las estadísticas y la asistencia de todo el equipo, sin poder cambiar nada. Cada uno recibe un correo para entrar y poner su contraseña; si no le llega, pulsa «Enlace» junto a su nombre y compártelo por WhatsApp.</p>
       <div class="row-actions"><label class="field">Cuenta para<select class="in" id="invite-who">${options}</select></label>
         <label class="field">Correo<input class="in" id="invite-email" type="email" inputmode="email" autocomplete="off" placeholder="nombre@correo.es"></label>
         <button class="btn press" type="button" data-invite>Invitar</button></div>
       <label class="field">Varios jugadores a la vez: pega la lista, con el nombre y luego el correo de cada uno<textarea class="in" id="invite-list" rows="4">${esc(home.inviteList)}</textarea></label>
       <div class="row-actions"><button class="btn press" type="button" data-invite-list-check>Revisar lista</button></div>${invitePlanHtml()}${links}${accountListHtml()}</section>`;
   }
-  // Links the account and keeps the sign-in link to share, if it is a new one; returns whether it is.
-  async function inviteAccount(member, email, name) {
-    const { link } = await backend.inviteMember(team.id, member, email);
+  // How an invite reaches someone: an e-mail from the server, or a sign-in link the coach shares.
+  const INVITE_BY_EMAIL = 'email', INVITE_BY_LINK = 'link';
+  // Links the account and keeps the sign-in link to share, if one came; returns whether an invite went out (an
+  // account already in use is linked without one).
+  async function inviteAccount(member, email, name, delivery = INVITE_BY_EMAIL) {
+    const { link, sent } = await backend.inviteMember(team.id, { ...member, delivery }, email);
     home.accounts = null;
     if (link) home.inviteLinks.push({ name, url: link });
-    return Boolean(link);
+    return Boolean(link || sent);
   }
   async function inviteMember() {
     const who = $('invite-who').value, email = $('invite-email').value.trim(), player = rosterPlayer(who);
@@ -6991,7 +6996,7 @@ table { border-collapse: collapse; width: 100%; }
     try {
       const fresh = await inviteAccount(player ? { role: PLAYER_ROLE, playerId: player.id } : { role: who }, email, name);
       renderHome();
-      homeStatus(fresh ? `Cuenta nueva para ${name}: comparte el enlace.` : `${name} ya tenía cuenta: ya ve el equipo al entrar.`);
+      homeStatus(fresh ? `Correo de invitación enviado a ${email}.` : `${name} ya tenía cuenta: ya ve el equipo al entrar.`);
     } catch (err) {
       homeStatus(`No se pudo invitar: ${cloudErrorText(err)}.`);
     }
@@ -7016,8 +7021,8 @@ table { border-collapse: collapse; width: 100%; }
     }
     Object.assign(home, { invitePlan: null, inviteList: '' });
     renderHome();
-    const done = rows.length - failed.length, shares = done - linked;
-    homeStatus([plural(done, 'jugador invitado', 'jugadores invitados'), shares ? `${plural(shares, 'enlace', 'enlaces')} para compartir` : '',
+    const done = rows.length - failed.length, mailed = done - linked;
+    homeStatus([plural(done, 'jugador invitado', 'jugadores invitados'), mailed ? `${plural(mailed, 'correo enviado', 'correos enviados')}` : '',
       linked ? `${linked} ${linked === 1 ? 'ya tenía' : 'ya tenían'} cuenta` : '', failed.length ? `no se pudo con ${failed.join(', ')}` : ''].filter(Boolean).join(' · ') + '.');
   }
   async function shareInviteLink(index) {
@@ -7055,7 +7060,8 @@ table { border-collapse: collapse; width: 100%; }
   }
   const NEW_MATCH_BUTTON = '<button class="btn go press" type="button" data-new-match>+ Nuevo partido</button>';
   const backToTeam = () => backButtonHtml(NAV_LABELS.team, 'data-home-view="team"');
-  // The page bar of each team view: where it leads, what it is called and what it can do. A player or match that is gone, or
+  // The page bar of each team view: where it leads, what it is called and what it can do. A page's actions sit level
+  // with the «Mis equipos» corner; an edit task (`task`, led by «Cancelar») keeps them in its own bar, ending in its primary. A player or match that is gone, or
   // a season still loading, leaves the leading control alone: the view itself shows the note or moves on.
   const HOME_BARS = {
     team: () => ({ actions: `<button class="btn press" type="button" data-home-view="team-edit">Editar equipo</button>${NEW_MATCH_BUTTON}` }),
@@ -7076,13 +7082,15 @@ table { border-collapse: collapse; width: 100%; }
     },
     'team-edit': () => ({ leading: backToTeam(), title: 'Editar equipo' }),
     template: () => ({
+      task: true,
       leading: cancelButtonHtml('data-home-view="team-edit"'),
       title: home.template.id ? 'Editar plantilla' : 'Nueva plantilla',
       actions: '<button class="btn primary press" type="button" data-template-store>Guardar</button>',
     }),
     attendance: () => ({ title: 'Asistencia' }),
-    squad: () => ({ leading: cancelButtonHtml(`data-home-view="matches"`), title: 'Convocatoria', actions: `<button class="btn go play press" type="button" data-squad-next ${squadReady() ? '' : 'disabled'}>Siguiente ›</button>` }),
+    squad: () => ({ task: true, leading: cancelButtonHtml(`data-home-view="matches"`), title: 'Convocatoria', actions: `<button class="btn go play press" type="button" data-squad-next ${squadReady() ? '' : 'disabled'}>Siguiente ›</button>` }),
     'rating-tune': () => ({
+      task: true,
       leading: cancelButtonHtml('data-home-view="team"', TUNE_LEAVE_ARM),
       title: 'Ajustar puntuación',
       actions: `<button class="btn press" type="button" data-tune="reset">Restablecer</button><button class="btn primary press" type="button" id="tune-save" data-tune="save"${tuneDirty() ? '' : ' disabled'}>Guardar</button>`,
@@ -7173,7 +7181,8 @@ table { border-collapse: collapse; width: 100%; }
     else {
       // The page first: a bar may read state its view sets up (the tuning draft).
       const page = HOME_VIEWS[v](), bar = HOME_BARS[v](), mainTab = !bar.leading && !bar.title;
-      body = `<header class="top-bar glass">${appBarHtml(!bar.leading, mainTab ? bar.actions : '')}${mainTab ? '' : pageBarHtml(bar)}</header><main class="home-body">${page}</main>`;
+      const own = bar.task ? bar : { ...bar, actions: '' };
+      body = `<header class="top-bar glass">${appBarHtml(!bar.leading, bar.task ? '' : bar.actions)}${mainTab ? '' : pageBarHtml(own)}</header><main class="home-body">${page}</main>`;
     }
     $('home').innerHTML = `<div class="home-wrap${AUTH_VIEWS.includes(v) ? ' centred' : ''}">${body}</div>`;
     stripStaffControls($('home'));
@@ -8773,7 +8782,8 @@ table { border-collapse: collapse; width: 100%; }
     renderHome();
     homeStatus('Ficha guardada.');
   }
-  function enterMatch(id, saved, dirty, { sheetPlayer, version } = {}) {
+  // `summary`: straight to the match's statistics, as a player's view opens, then back to the list.
+  function enterMatch(id, saved, dirty, { sheetPlayer, version, summary } = {}) {
     currentMatchId = id;
     home.season = null;
     if (!readOnly()) writeJson(CURRENT_MATCH_KEY, id);
@@ -8789,7 +8799,7 @@ table { border-collapse: collapse; width: 100%; }
     hideFinal();
     renderAll();
     armBackGuard();
-    if (readOnly()) openMatchViewer(sheetPlayer);
+    if (readOnly() || summary) openMatchViewer(sheetPlayer);
     else if (!state.setupDone) openSetup();
     else if (sheetPlayer) openSheetPlayer(sheetPlayer);
     else if (state.finished) openFinal();
@@ -9261,7 +9271,8 @@ table { border-collapse: collapse; width: 100%; }
     if (b.hasAttribute('data-invite-share')) { shareInviteLink(Number(b.dataset.inviteShare)); return; }
     if (b.hasAttribute('data-invite-list-check')) { checkInviteList(); return; }
     if (b.hasAttribute('data-invite-list')) { inviteList(); return; }
-    if (b.hasAttribute('data-account-resend')) { resendInvite(b.dataset.accountResend); return; }
+    if (b.hasAttribute('data-account-resend')) { resendInvite(b.dataset.accountResend, INVITE_BY_EMAIL); return; }
+    if (b.hasAttribute('data-account-link')) { resendInvite(b.dataset.accountLink, INVITE_BY_LINK); return; }
     if (b.hasAttribute('data-callup-share')) { shareCallup(); return; }
     if (b.hasAttribute('data-callup-save')) { saveCallup(); return; }
     if (b.dataset.attMode) { switchAttendanceMode(b.dataset.attMode); return; }
@@ -9308,6 +9319,7 @@ table { border-collapse: collapse; width: 100%; }
     if (b.dataset.tplDel) { home.template.players = home.template.players.filter((r) => r.id !== b.dataset.tplDel); renderHome(); return; }
     if (b.hasAttribute('data-sample')) { openSample(); return; }
     if (b.dataset.openMatch) { openMatch(b.dataset.openMatch); return; }
+    if (b.dataset.matchStats) { openMatch(b.dataset.matchStats, { summary: true }); return; }
     if (b.hasAttribute('data-legacy-import')) { importLegacyMatch(); return; }
     if (b.dataset.squad) { const id = b.dataset.squad; if (!home.squad.delete(id)) home.squad.add(id); renderHome(); return; }
     if (b.hasAttribute('data-squad-all')) { home.squad = new Set(home.roster.slice().sort(byPosition).slice(0, MAX_ROSTER).map((p) => p.id)); renderHome(); return; }

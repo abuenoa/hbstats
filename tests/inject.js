@@ -3239,11 +3239,12 @@
         if (home.view !== parent) throw new Error(`${view}: back landed on ${home.view}, not ${parent}`);
       }
     }));
-    await TA('nav: one primary per bar, last; a main tab keeps its actions level with the corner', async () => withNavHome(async () => {
+    await TA('nav: one primary per bar, last; every page keeps its actions level with the corner', async () => withNavHome(async () => {
       const primaries = { team: 1, matches: 1, stats: 0, player: 0, 'player-match': 1, 'team-edit': 0, attendance: 0 };
       for (const [view, open] of Object.entries(NAV_VIEW_OPENERS)) {
         open();
-        const actions = NAV_MAIN_TABS.includes(view) && !NAV_TITLED[view] ? document.querySelector('#home .app-actions') : pageBarOf()?.querySelector('.page-actions');
+        const actions = document.querySelector('#home .app-actions');
+        if (pageBarOf()?.querySelector('.page-actions > *')) throw new Error(`${view}: actions left in the page bar`);
         const found = actions ? actions.querySelectorAll('.btn.primary, .btn.go') : [];
         if (found.length !== primaries[view]) throw new Error(`${view}: ${found.length} primary buttons`);
         if (found.length && actions.lastElementChild !== found[0]) throw new Error(`${view}: the primary is not last`);
@@ -3253,6 +3254,9 @@
       const corner = document.querySelector('#home .teams-corner').getBoundingClientRect(), add = document.querySelector('#home .app-actions [data-new-match]').getBoundingClientRect();
       if (Math.abs((corner.top + corner.bottom) / 2 - (add.top + add.bottom) / 2) > NAV_BAR_TOLERANCE_PX || !document.querySelector('#home .app-actions [data-home-view="team-edit"]')) throw new Error('team actions not level with the corner');
       if (getComputedStyle(document.querySelector('#home .teams-corner')).backgroundColor !== 'rgb(212, 32, 42)') throw new Error('the way back is not red');
+      NAV_VIEW_OPENERS.player();
+      const edit = document.querySelector('#home .app-actions [data-player-edit]').getBoundingClientRect(), playerCorner = document.querySelector('#home .teams-corner').getBoundingClientRect();
+      if (Math.abs((playerCorner.top + playerCorner.bottom) / 2 - (edit.top + edit.bottom) / 2) > NAV_BAR_TOLERANCE_PX) throw new Error('«Editar ficha» not level with the corner');
     }));
     await TA('nav: sub-views have a title', async () => withNavHome(async () => {
       for (const [view, title] of Object.entries(NAV_TITLED)) {
@@ -3301,6 +3305,27 @@
       showHomeView('team');
       if (!document.querySelector('[data-new-match]')) throw new Error('the staff lost their controls');
     }));
+    await TA('match list: «Estadísticas» opens the summary and comes back to the list', async () => withNavHome(async () => {
+      const keepId = currentMatchId, snap = snapshot(), current = localStorage.getItem(CURRENT_MATCH_KEY);
+      try {
+        showHomeView('matches');
+        if (!$('home').querySelector('[data-match-stats]')) throw new Error('no «Estadísticas» on a played match');
+        enterMatch('stats-x', JSON.parse(snap), false, { summary: true });
+        if ($('sheet').hidden || ui.sheetTab !== 'summary') throw new Error(`not on the summary: ${ui.sheetTab}`);
+        document.querySelector('#sheet [data-close-sheet]').click();
+        for (let i = 0; i < 5; i++) await tick0();
+        if (!$('sheet').hidden || currentMatchId !== null || home.view !== 'matches') throw new Error(`back: ${home.view}`);
+        const role = team.role;
+        team.role = PLAYER_ROLE;
+        showHomeView('matches');
+        team.role = role;
+        if ($('home').querySelector('[data-match-stats]')) throw new Error('a player already opens the summary with «Ver»');
+      } finally {
+        removeKey(MATCH_KEY_PREFIX + 'stats-x');
+        if (current === null) removeKey(CURRENT_MATCH_KEY); else localStorage.setItem(CURRENT_MATCH_KEY, current);
+        currentMatchId = keepId; restore(snap);
+      }
+    }));
     await TA('guest account: reads the team like a player, changes nothing', async () => withNavHome(async () => {
       const role = team.role;
       team.role = VIEWER_ROLE;
@@ -3332,17 +3357,17 @@
         if (!/Invitar a 5 jugadores/.test(invitePlanHtml())) throw new Error('the button does not count the matched players');
         const calls = [];
         backend = { ...real, inviteMember: async (teamId, member, email) => {
-          calls.push(`${member.role}:${member.playerId}`);
+          calls.push(`${member.role}:${member.playerId}:${member.delivery}`);
           if (email === 'raul@x.es') throw new Error('este jugador ya tiene cuenta');
-          return { link: email === 'jose@x.es' ? null : `https://example.test/${member.playerId}` };
+          return { link: null, sent: email !== 'jose@x.es' };
         } };
         home.inviteLinks = [];
         await inviteList();
-        if (calls.join(' ') !== 'player:k player:r7 player:m player:ja player:j') throw new Error(calls.join(' '));
-        if (home.inviteLinks.map((l) => l.name).join(' ') !== 'Kike Marcos Jenrri' || home.invitePlan !== null) throw new Error(JSON.stringify(home.inviteLinks));
+        // The list goes by e-mail: nothing is left to share by hand.
+        if (calls.join(' ') !== 'player:k:email player:r7:email player:m:email player:ja:email player:j:email') throw new Error(calls.join(' '));
+        if (home.inviteLinks.length || home.invitePlan !== null) throw new Error(JSON.stringify(home.inviteLinks));
         const status = $('home-status').textContent;
-        if (!/4 jugadores invitados/.test(status) || !/3 enlaces/.test(status) || !/1 ya tenía cuenta/.test(status) || !/Raulito/.test(status)) throw new Error(status);
-        if ((teamAccountsHtml().match(/data-invite-share="\d"/g) || []).length !== 3) throw new Error('one share button per new link');
+        if (!/4 jugadores invitados/.test(status) || !/3 correos enviados/.test(status) || !/1 ya tenía cuenta/.test(status) || !/Raulito/.test(status)) throw new Error(status);
       } finally { backend = real; Object.assign(home, keep); }
     });
     await TA('team accounts: the staff list them and take off players, guests and unused invites', async () => {
@@ -3369,13 +3394,20 @@
         if (buttons.join(' ') !== 'pk gv' || !/#3 Kike/.test(html) || !/Anular invitación/.test(html) || !/sin entrar aún/.test(html)) throw new Error(buttons.join(' ') + html);
         // Kike never signed in: a fresh link to share, for the same player and e-mail.
         const invited = [], links = home.inviteLinks;
-        backend.inviteMember = async (t, member, email) => { invited.push(`${member.role}:${member.playerId}:${email}`); return { link: 'https://example.test/new' }; };
+        backend.inviteMember = async (t, member, email) => {
+          invited.push(`${member.role}:${member.playerId}:${email}:${member.delivery}`);
+          return member.delivery === INVITE_BY_LINK ? { link: 'https://example.test/new', sent: false } : { link: null, sent: true };
+        };
         home.inviteLinks = [];
         if ((html.match(/data-account-resend="(\w+)"/g) || []).join() !== 'data-account-resend="pk"') throw new Error('resend offered to signed-in accounts');
-        await resendInvite('pk');
+        await resendInvite('pk', INVITE_BY_EMAIL);
+        if (!/Correo enviado a kike@x.es/.test($('home-status').textContent) || home.inviteLinks.length) throw new Error($('home-status').textContent);
+        accountListHtml();
+        for (let i = 0; i < 3; i++) await tick0();
+        await resendInvite('pk', INVITE_BY_LINK);
         const fresh = home.inviteLinks.map((l) => l.name).join();
         home.inviteLinks = links;
-        if (invited.join() !== 'player:k:kike@x.es' || fresh !== 'Kike' || !/Enlace nuevo para Kike/.test($('home-status').textContent)) throw new Error(invited.join() + fresh);
+        if (invited.join() !== 'player:k:kike@x.es:email,player:k:kike@x.es:link' || fresh !== 'Kike' || !/Enlace nuevo para Kike/.test($('home-status').textContent)) throw new Error(invited.join() + fresh);
         if (home.accounts !== null) throw new Error('the list was not refreshed after the invite');
         // Taps on the page itself, as the coach does: arm, then confirm.
         backend.needsLogin = true;
