@@ -3456,6 +3456,18 @@
         home.inviteLinks = links;
         if (invited.join() !== 'player:k:kike@x.es:email,player:k:kike@x.es:link' || fresh !== 'Kike' || !/Enlace nuevo para Kike/.test(home.accountStatus)) throw new Error(invited.join() + fresh);
         if (home.accounts !== null) throw new Error('the list was not refreshed after the invite');
+        // Kike has entered since the list came: the server refuses, and the stale row is asked again.
+        accountListHtml();
+        for (let i = 0; i < 3; i++) await tick0();
+        backend.inviteMember = async () => { throw new Error('ese correo ya es del equipo'); };
+        await resendInvite('pk', INVITE_BY_EMAIL);
+        if (home.accounts !== null || !/ya es del equipo/.test(home.accountStatus)) throw new Error('a refused resend kept the stale list');
+        // Opening «Editar equipo» again asks who has entered meanwhile.
+        accountListHtml();
+        for (let i = 0; i < 3; i++) await tick0();
+        showHomeView('team');
+        showHomeView('team-edit');
+        if (home.accounts?.rows) throw new Error('the accounts card reused the old list');
         // Taps on the page itself, as the coach does: arm, then confirm.
         backend.needsLogin = true;
         const settle = async () => { for (let i = 0; i < 5; i++) await tick0(); };

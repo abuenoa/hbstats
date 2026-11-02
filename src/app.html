@@ -6989,6 +6989,8 @@ table { border-collapse: collapse; width: 100%; }
         await inviteAccount(member, account.email, name, delivery);
         accountStatus(delivery === INVITE_BY_EMAIL ? `Correo enviado a ${account.email}.` : `Enlace nuevo para ${name}: compártelo.`);
       } catch (err) {
+        // The row may be out of date (the player has entered since): the list is asked again.
+        home.accounts = null;
         accountStatus(`No se pudo invitar a ${account.email}: ${cloudErrorText(err)}.`);
       }
     });
@@ -7241,6 +7243,8 @@ table { border-collapse: collapse; width: 100%; }
     const moved = home.view !== view;
     home.view = view;
     home.armed = null;
+    // Who has entered changes while the coach is away: the accounts card always asks again.
+    if (moved && view === 'team-edit') home.accounts = null;
     renderHome();
     // A new screen starts at its top, not where the last one was scrolled to.
     if (moved) $('home').scrollTop = 0;
