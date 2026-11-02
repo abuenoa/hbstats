@@ -863,6 +863,9 @@ a:focus-visible, input:focus-visible, select:focus-visible, summary:focus-visibl
 .home-status { font: var(--type-body); color: var(--fg); }
 .home-head { display: flex; align-items: center; gap: var(--space-4); flex-wrap: wrap; }
 .teams-corner { flex: none; width: var(--target); }
+.app-corner { display: flex; align-items: center; gap: var(--space-2); }
+.my-stats { flex: none; gap: var(--space-2); }
+.my-stats[aria-pressed="true"] { border-color: var(--gold); }
 .app-end { margin-left: auto; display: flex; align-items: center; gap: var(--space-2); }
 .account-menu { position: relative; }
 .account-menu > summary { list-style: none; width: var(--target); padding: 0; display: grid; place-items: center; }
@@ -886,7 +889,7 @@ a:focus-visible, input:focus-visible, select:focus-visible, summary:focus-visibl
 .home-crest { width: 52px; height: 52px; }
 .home-title { min-width: 0; }
 .home-title h1 { margin: 0; font: var(--type-title); text-transform: uppercase; letter-spacing: .02em; }
-.home-title small { color: var(--muted); }
+.home-title small { display: block; color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .card-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: var(--space-3); }
 .grid-title, .span-all { grid-column: 1 / -1; }
 .grid-title { margin: var(--space-2) 0 calc(var(--space-1) * -1); font: var(--type-caption); font-weight: 700; letter-spacing: .1em; text-transform: uppercase; color: var(--muted); }
@@ -942,7 +945,8 @@ body:has(#home:not([hidden])) { overflow: hidden; }
   .home .app-bar .tabs { grid-row: 2; grid-column: 1 / -1; flex-wrap: nowrap; overflow-x: auto; }
   .home .app-bar .tabs button { flex: none; }
   .home .app-bar .app-end { display: contents; }
-  .home .app-bar :is(.teams-corner, .account-menu) { grid-row: 1; grid-column: 3; }
+  .home .app-bar .app-corner { grid-row: 1; grid-column: 3; }
+  .my-stats-label { display: none; }
   .home .app-bar .app-actions { grid-row: 3; grid-column: 1 / -1; }
   .account-list li { grid-template-columns: minmax(0, 1fr); }
   .account-list .row-actions { justify-content: flex-start; }
@@ -6369,7 +6373,8 @@ table { border-collapse: collapse; width: 100%; }
     const client = window.supabase.createClient(config.url, config.anonKey, { auth: { persistSession: true, autoRefreshToken: true, detectSessionInUrl: true } });
     const check = (result) => { if (result.error) throw new Error(result.error.message); return result.data; };
     // A team the user creates or edits is theirs to run, so its role is the owner's unless listTeams says otherwise.
-    const toTeam = (r, role = STAFF_ROLE) => ({ id: r.id, club: r.club, name: r.name, brand: r.brand, brand2: r.brand2, brandInk: r.brand_ink, crest: r.crest, ratingWeights: r.rating_weights, role });
+    // `playerId`: the roster player a player's account is, in that team.
+    const toTeam = (r, role = STAFF_ROLE, playerId = null) => ({ id: r.id, club: r.club, name: r.name, brand: r.brand, brand2: r.brand2, brandInk: r.brand_ink, crest: r.crest, ratingWeights: r.rating_weights, role, playerId });
     const teamRow = (t) => ({ club: t.club, name: t.name, brand: t.brand, brand2: t.brand2, brand_ink: t.brandInk, crest: t.crest,
       ...(t.ratingWeights === undefined ? {} : { rating_weights: t.ratingWeights }) });
     const PLAYER_COLUMNS = 'id,num,name,pos,full_name,photo';
@@ -6393,9 +6398,9 @@ table { border-collapse: collapse; width: 100%; }
       // Each team with the signed-in user's role in it (owner, coach or player).
       async listTeams() {
         const { session } = check(await client.auth.getSession());
-        const [rows, roles] = await Promise.all([client.from('teams').select('*').order('created_at'), client.from('team_members').select('team_id, role').eq('user_id', session.user.id)]);
-        const roleOf = new Map(check(roles).map((m) => [m.team_id, m.role]));
-        return check(rows).map((r) => toTeam(r, roleOf.get(r.id)));
+        const [rows, roles] = await Promise.all([client.from('teams').select('*').order('created_at'), client.from('team_members').select('team_id, role, player_id').eq('user_id', session.user.id)]);
+        const memberOf = new Map(check(roles).map((m) => [m.team_id, m]));
+        return check(rows).map((r) => toTeam(r, memberOf.get(r.id)?.role, memberOf.get(r.id)?.player_id ?? null));
       },
       // An account for a coach or a roster player (`member` is { role, playerId }): the invite-player function links it and
       // returns the sign-in link to share.
@@ -6802,6 +6807,11 @@ table { border-collapse: collapse; width: 100%; }
   // The way to «Mis equipos» sits in the bar's corner, away from the page's own way back; on a main tab, which has no way
   // back of its own, it is also what Escape and the system back press.
   const TEAMS_ICON = '<svg viewBox="0 0 24 24" width="22" height="22" aria-hidden="true" fill="currentColor"><rect x="3" y="3" width="8" height="8" rx="1.5"/><rect x="13" y="3" width="8" height="8" rx="1.5"/><rect x="3" y="13" width="8" height="8" rx="1.5"/><rect x="13" y="13" width="8" height="8" rx="1.5"/></svg>';
+  // A player's account goes to its own season in one tap, as tapping themselves anywhere would.
+  function myStatsButtonHtml() {
+    const me = team.role === PLAYER_ROLE && team.playerId && rosterPlayer(team.playerId);
+    return me ? `<button class="btn my-stats press" type="button" data-player="${esc(me.id)}" aria-label="Mis estadísticas" aria-pressed="${home.view === 'player' && home.playerId === me.id}">${discHtml(me)}<span class="my-stats-label">Mis estadísticas</span></button>` : '';
+  }
   // `actions`: the page's own, level with the corner.
   function appBarHtml(leadsBack, actions = '') {
     const tab = (view, label) => `<button class="press" type="button" data-home-view="${view}" aria-pressed="${home.view === view || (view === 'matches' && home.view === 'squad') || (view === 'team' && ['team-edit', 'player', 'player-match', 'rating-tune'].includes(home.view))}">${label}</button>`;
@@ -6809,8 +6819,8 @@ table { border-collapse: collapse; width: 100%; }
       <img class="crest home-crest" src="${esc(crestSrc(team))}" alt="">
       <div class="home-title"><h1>${esc(team.name)}</h1><small>${esc(team.club)}</small></div>
       <div class="tabs" role="group" aria-label="Secciones">${tab('team', 'Equipo')}${tab('attendance', 'Asistencia')}${tab('matches', 'Partidos')}${tab('stats', 'Estadísticas')}</div>
-      <div class="app-end">${actions ? `<div class="page-actions app-actions">${actions}</div>` : ''}${playerOnly() && soleTeam() ? accountMenuHtml()
-        : `<button class="btn icon teams-corner press" type="button" data-home-view="profile"${leadsBack ? ' data-nav-leading' : ''} aria-label="${NAV_LABELS.teams}" title="${NAV_LABELS.teams}">${TEAMS_ICON}</button>`}</div>
+      <div class="app-end">${actions ? `<div class="page-actions app-actions">${actions}</div>` : ''}<div class="app-corner">${myStatsButtonHtml()}${playerOnly() && soleTeam() ? accountMenuHtml()
+        : `<button class="btn icon teams-corner press" type="button" data-home-view="profile"${leadsBack ? ' data-nav-leading' : ''} aria-label="${NAV_LABELS.teams}" title="${NAV_LABELS.teams}">${TEAMS_ICON}</button>`}</div></div>
     </div>`;
   }
   // A match left on this tablet by the per-club release (same site), if any.
