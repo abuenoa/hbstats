@@ -6777,7 +6777,7 @@ table { border-collapse: collapse; width: 100%; }
   // The way to «Mis equipos» sits in the bar's corner, away from the page's own way back; on a main tab, which has no way
   // back of its own, it is also what Escape and the system back press.
   const TEAMS_ICON = '<svg viewBox="0 0 24 24" width="22" height="22" aria-hidden="true" fill="currentColor"><rect x="3" y="3" width="8" height="8" rx="1.5"/><rect x="13" y="3" width="8" height="8" rx="1.5"/><rect x="3" y="13" width="8" height="8" rx="1.5"/><rect x="13" y="13" width="8" height="8" rx="1.5"/></svg>';
-  // `actions`: those of a main tab, level with the corner (a main tab has no page bar of its own).
+  // `actions`: the page's own, level with the corner.
   function appBarHtml(leadsBack, actions = '') {
     const tab = (view, label) => `<button class="press" type="button" data-home-view="${view}" aria-pressed="${home.view === view || (view === 'matches' && home.view === 'squad') || (view === 'team' && ['team-edit', 'player', 'player-match', 'rating-tune'].includes(home.view))}">${label}</button>`;
     return `<div class="home-head app-bar">
@@ -6825,7 +6825,7 @@ table { border-collapse: collapse; width: 100%; }
       <div class="match-top">${chip}<span class="match-who"><b class="match-rival">${esc(m.them)}</b><small>${where}</small></span>
         <strong class="match-score${finished ? ` res-${result}` : ''}">${setup ? '–' : `${m.scoreUs}–${m.scoreThem}`}</strong></div>
       ${meta ? `<div class="match-meta">${meta}</div>` : ''}
-      <div class="match-foot"><div class="row-actions"><button class="btn primary press" type="button" data-open-match="${m.id}">${finished || readOnly() ? 'Ver' : 'Seguir'}</button>${setup ? '' : armedButton(`restart-${m.id}`, 'Reiniciar', `data-restart-match="${m.id}" aria-label="Reiniciar el partido contra ${esc(m.them)}"`)}${armedButton(`delete-${m.id}`, 'Borrar', `data-delete-match="${m.id}" aria-label="Borrar el partido contra ${esc(m.them)}"`)}</div>${face}</div></article>`;
+      <div class="match-foot"><div class="row-actions"><button class="btn primary press" type="button" data-open-match="${m.id}">${finished || readOnly() ? 'Ver' : 'Seguir'}</button>${setup || readOnly() ? '' : `<button class="btn press" type="button" data-match-stats="${m.id}">Estadísticas</button>`}${setup ? '' : armedButton(`restart-${m.id}`, 'Reiniciar', `data-restart-match="${m.id}" aria-label="Reiniciar el partido contra ${esc(m.them)}"`)}${armedButton(`delete-${m.id}`, 'Borrar', `data-delete-match="${m.id}" aria-label="Borrar el partido contra ${esc(m.them)}"`)}</div>${face}</div></article>`;
   }
   function matchesHtml() {
     const rounds = matchRounds();
@@ -7045,7 +7045,8 @@ table { border-collapse: collapse; width: 100%; }
   }
   const NEW_MATCH_BUTTON = '<button class="btn go press" type="button" data-new-match>+ Nuevo partido</button>';
   const backToTeam = () => backButtonHtml(NAV_LABELS.team, 'data-home-view="team"');
-  // The page bar of each team view: where it leads, what it is called and what it can do. A player or match that is gone, or
+  // The page bar of each team view: where it leads, what it is called and what it can do. A page's actions sit level
+  // with the «Mis equipos» corner; an edit task (`task`, led by «Cancelar») keeps them in its own bar, ending in its primary. A player or match that is gone, or
   // a season still loading, leaves the leading control alone: the view itself shows the note or moves on.
   const HOME_BARS = {
     team: () => ({ actions: `<button class="btn press" type="button" data-home-view="team-edit">Editar equipo</button>${NEW_MATCH_BUTTON}` }),
@@ -7066,13 +7067,15 @@ table { border-collapse: collapse; width: 100%; }
     },
     'team-edit': () => ({ leading: backToTeam(), title: 'Editar equipo' }),
     template: () => ({
+      task: true,
       leading: cancelButtonHtml('data-home-view="team-edit"'),
       title: home.template.id ? 'Editar plantilla' : 'Nueva plantilla',
       actions: '<button class="btn primary press" type="button" data-template-store>Guardar</button>',
     }),
     attendance: () => ({ title: 'Asistencia' }),
-    squad: () => ({ leading: cancelButtonHtml(`data-home-view="matches"`), title: 'Convocatoria', actions: `<button class="btn go play press" type="button" data-squad-next ${squadReady() ? '' : 'disabled'}>Siguiente ›</button>` }),
+    squad: () => ({ task: true, leading: cancelButtonHtml(`data-home-view="matches"`), title: 'Convocatoria', actions: `<button class="btn go play press" type="button" data-squad-next ${squadReady() ? '' : 'disabled'}>Siguiente ›</button>` }),
     'rating-tune': () => ({
+      task: true,
       leading: cancelButtonHtml('data-home-view="team"', TUNE_LEAVE_ARM),
       title: 'Ajustar puntuación',
       actions: `<button class="btn press" type="button" data-tune="reset">Restablecer</button><button class="btn primary press" type="button" id="tune-save" data-tune="save"${tuneDirty() ? '' : ' disabled'}>Guardar</button>`,
@@ -7163,7 +7166,8 @@ table { border-collapse: collapse; width: 100%; }
     else {
       // The page first: a bar may read state its view sets up (the tuning draft).
       const page = HOME_VIEWS[v](), bar = HOME_BARS[v](), mainTab = !bar.leading && !bar.title;
-      body = `<header class="top-bar glass">${appBarHtml(!bar.leading, mainTab ? bar.actions : '')}${mainTab ? '' : pageBarHtml(bar)}</header><main class="home-body">${page}</main>`;
+      const own = bar.task ? bar : { ...bar, actions: '' };
+      body = `<header class="top-bar glass">${appBarHtml(!bar.leading, bar.task ? '' : bar.actions)}${mainTab ? '' : pageBarHtml(own)}</header><main class="home-body">${page}</main>`;
     }
     $('home').innerHTML = `<div class="home-wrap${AUTH_VIEWS.includes(v) ? ' centred' : ''}">${body}</div>`;
     stripStaffControls($('home'));
@@ -8763,7 +8767,8 @@ table { border-collapse: collapse; width: 100%; }
     renderHome();
     homeStatus('Ficha guardada.');
   }
-  function enterMatch(id, saved, dirty, { sheetPlayer, version } = {}) {
+  // `summary`: straight to the match's statistics, as a player's view opens, then back to the list.
+  function enterMatch(id, saved, dirty, { sheetPlayer, version, summary } = {}) {
     currentMatchId = id;
     home.season = null;
     if (!readOnly()) writeJson(CURRENT_MATCH_KEY, id);
@@ -8779,7 +8784,7 @@ table { border-collapse: collapse; width: 100%; }
     hideFinal();
     renderAll();
     armBackGuard();
-    if (readOnly()) openMatchViewer(sheetPlayer);
+    if (readOnly() || summary) openMatchViewer(sheetPlayer);
     else if (!state.setupDone) openSetup();
     else if (sheetPlayer) openSheetPlayer(sheetPlayer);
     else if (state.finished) openFinal();
@@ -9299,6 +9304,7 @@ table { border-collapse: collapse; width: 100%; }
     if (b.dataset.tplDel) { home.template.players = home.template.players.filter((r) => r.id !== b.dataset.tplDel); renderHome(); return; }
     if (b.hasAttribute('data-sample')) { openSample(); return; }
     if (b.dataset.openMatch) { openMatch(b.dataset.openMatch); return; }
+    if (b.dataset.matchStats) { openMatch(b.dataset.matchStats, { summary: true }); return; }
     if (b.hasAttribute('data-legacy-import')) { importLegacyMatch(); return; }
     if (b.dataset.squad) { const id = b.dataset.squad; if (!home.squad.delete(id)) home.squad.add(id); renderHome(); return; }
     if (b.hasAttribute('data-squad-all')) { home.squad = new Set(home.roster.slice().sort(byPosition).slice(0, MAX_ROSTER).map((p) => p.id)); renderHome(); return; }
