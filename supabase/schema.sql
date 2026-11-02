@@ -113,6 +113,11 @@ begin
   if auth.uid() is null then
     raise exception 'Not signed in' using errcode = '42501';
   end if;
+  -- An account that is only a player somewhere (never staff) does not create teams.
+  if exists (select 1 from team_members where user_id = auth.uid())
+     and not exists (select 1 from team_members where user_id = auth.uid() and role <> 'player') then
+    raise exception 'un jugador no puede crear equipos' using errcode = '42501';
+  end if;
   insert into teams (club, name, brand, brand2, brand_ink, crest)
     values (p_club, p_name, p_brand, p_brand2, p_brand_ink, p_crest)
     returning * into created;
