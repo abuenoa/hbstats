@@ -3332,17 +3332,17 @@
         if (!/Invitar a 5 jugadores/.test(invitePlanHtml())) throw new Error('the button does not count the matched players');
         const calls = [];
         backend = { ...real, inviteMember: async (teamId, member, email) => {
-          calls.push(`${member.role}:${member.playerId}`);
+          calls.push(`${member.role}:${member.playerId}:${member.delivery}`);
           if (email === 'raul@x.es') throw new Error('este jugador ya tiene cuenta');
-          return { link: email === 'jose@x.es' ? null : `https://example.test/${member.playerId}` };
+          return { link: null, sent: email !== 'jose@x.es' };
         } };
         home.inviteLinks = [];
         await inviteList();
-        if (calls.join(' ') !== 'player:k player:r7 player:m player:ja player:j') throw new Error(calls.join(' '));
-        if (home.inviteLinks.map((l) => l.name).join(' ') !== 'Kike Marcos Jenrri' || home.invitePlan !== null) throw new Error(JSON.stringify(home.inviteLinks));
+        // The list goes by e-mail: nothing is left to share by hand.
+        if (calls.join(' ') !== 'player:k:email player:r7:email player:m:email player:ja:email player:j:email') throw new Error(calls.join(' '));
+        if (home.inviteLinks.length || home.invitePlan !== null) throw new Error(JSON.stringify(home.inviteLinks));
         const status = $('home-status').textContent;
-        if (!/4 jugadores invitados/.test(status) || !/3 enlaces/.test(status) || !/1 ya tenía cuenta/.test(status) || !/Raulito/.test(status)) throw new Error(status);
-        if ((teamAccountsHtml().match(/data-invite-share="\d"/g) || []).length !== 3) throw new Error('one share button per new link');
+        if (!/4 jugadores invitados/.test(status) || !/3 correos enviados/.test(status) || !/1 ya tenía cuenta/.test(status) || !/Raulito/.test(status)) throw new Error(status);
       } finally { backend = real; Object.assign(home, keep); }
     });
     await TA('team accounts: the staff list them and take off players, guests and unused invites', async () => {
@@ -3369,13 +3369,20 @@
         if (buttons.join(' ') !== 'pk gv' || !/#3 Kike/.test(html) || !/Anular invitación/.test(html) || !/sin entrar aún/.test(html)) throw new Error(buttons.join(' ') + html);
         // Kike never signed in: a fresh link to share, for the same player and e-mail.
         const invited = [], links = home.inviteLinks;
-        backend.inviteMember = async (t, member, email) => { invited.push(`${member.role}:${member.playerId}:${email}`); return { link: 'https://example.test/new' }; };
+        backend.inviteMember = async (t, member, email) => {
+          invited.push(`${member.role}:${member.playerId}:${email}:${member.delivery}`);
+          return member.delivery === INVITE_BY_LINK ? { link: 'https://example.test/new', sent: false } : { link: null, sent: true };
+        };
         home.inviteLinks = [];
         if ((html.match(/data-account-resend="(\w+)"/g) || []).join() !== 'data-account-resend="pk"') throw new Error('resend offered to signed-in accounts');
-        await resendInvite('pk');
+        await resendInvite('pk', INVITE_BY_EMAIL);
+        if (!/Correo enviado a kike@x.es/.test($('home-status').textContent) || home.inviteLinks.length) throw new Error($('home-status').textContent);
+        accountListHtml();
+        for (let i = 0; i < 3; i++) await tick0();
+        await resendInvite('pk', INVITE_BY_LINK);
         const fresh = home.inviteLinks.map((l) => l.name).join();
         home.inviteLinks = links;
-        if (invited.join() !== 'player:k:kike@x.es' || fresh !== 'Kike' || !/Enlace nuevo para Kike/.test($('home-status').textContent)) throw new Error(invited.join() + fresh);
+        if (invited.join() !== 'player:k:kike@x.es:email,player:k:kike@x.es:link' || fresh !== 'Kike' || !/Enlace nuevo para Kike/.test($('home-status').textContent)) throw new Error(invited.join() + fresh);
         if (home.accounts !== null) throw new Error('the list was not refreshed after the invite');
         // Taps on the page itself, as the coach does: arm, then confirm.
         backend.needsLogin = true;

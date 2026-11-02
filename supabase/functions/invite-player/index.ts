@@ -1,13 +1,15 @@
 // HBStats — Copyright (C) 2026 Antonio Bueno Antón. SPDX-License-Identifier: AGPL-3.0-or-later
 // Gives someone an account in a team: a coach (full access), a roster player or a guest (both read-only). Only the
 // team's staff (owner or coach) may call it.
-// An e-mail without a confirmed account gets an invite link (returned for the coach to share: no e-mail is sent), also
-// again when an earlier link expired unused; a confirmed account is linked at once and no link is needed.
+// An e-mail without a confirmed account gets an invite: by default an e-mail sent through the project's SMTP, or with
+// delivery "link" the sign-in link returned for the coach to share. It is sent again when an earlier invite went unused;
+// a confirmed account is linked at once and needs neither.
 import { createClient } from "jsr:@supabase/supabase-js@2";
 
 const APP_URL = "https://abuenoa.github.io/hbstats/";
 const STAFF_ROLES = ["owner", "coach"];
 const INVITED_ROLES = ["coach", "player", "viewer"];
+const DELIVERIES = ["email", "link"];
 const CORS = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
@@ -25,9 +27,9 @@ Deno.serve(async (req) => {
 
   const { data: { user } } = await caller.auth.getUser();
   if (!user) return reply(401, { error: "inicia sesión de nuevo" });
-  const { teamId, role = "player", playerId = null, email } = await req.json().catch(() => ({}));
+  const { teamId, role = "player", playerId = null, email, delivery = "email" } = await req.json().catch(() => ({}));
   const isPlayer = role === "player";
-  if (typeof teamId !== "string" || !INVITED_ROLES.includes(role) || (isPlayer && typeof playerId !== "string") || typeof email !== "string" || !email.includes("@")) {
+  if (typeof teamId !== "string" || !INVITED_ROLES.includes(role) || !DELIVERIES.includes(delivery) || (isPlayer && typeof playerId !== "string") || typeof email !== "string" || !email.includes("@")) {
     return reply(400, { error: "faltan el jugador o el correo" });
   }
 
@@ -43,13 +45,18 @@ Deno.serve(async (req) => {
 
   const { data: existing, error: lookupError } = await admin.rpc("user_id_by_email", { p_email: email });
   if (lookupError) return reply(500, { error: lookupError.message });
-  let userId = existing as string | null, link: string | null = null;
+  let userId = existing as string | null, link: string | null = null, sent = false;
   if (userId) {
     const { data: account, error: accountError } = await admin.auth.admin.getUserById(userId);
     if (accountError) return reply(500, { error: accountError.message });
     if (!account.user.email_confirmed_at) userId = null;
   }
-  if (!userId) {
+  if (!userId && delivery === "email") {
+    const { data, error } = await admin.auth.admin.inviteUserByEmail(email, { redirectTo: APP_URL });
+    if (error) return reply(500, { error: `no se pudo enviar el correo: ${error.message}` });
+    userId = data.user.id;
+    sent = true;
+  } else if (!userId) {
     const { data, error } = await admin.auth.admin.generateLink({ type: "invite", email, options: { redirectTo: APP_URL } });
     if (error) return reply(500, { error: error.message });
     userId = data.user.id;
@@ -60,9 +67,9 @@ Deno.serve(async (req) => {
     if (taken && taken.user_id !== userId) return reply(409, { error: "este jugador ya tiene cuenta" });
   }
   const { data: member } = await admin.from("team_members").select("role").eq("team_id", teamId).eq("user_id", userId).maybeSingle();
-  // Someone invited before who never used the link gets a fresh one; a member who signed in is already in.
-  if (member) return link ? reply(200, { link }) : reply(409, { error: "ese correo ya es del equipo" });
+  // Someone invited before who never used the invite gets a fresh one; a member who signed in is already in.
+  if (member) return link || sent ? reply(200, { link, sent }) : reply(409, { error: "ese correo ya es del equipo" });
   const { error: linkError } = await admin.from("team_members").insert({ team_id: teamId, user_id: userId, role, player_id: isPlayer ? playerId : null });
   if (linkError) return reply(500, { error: linkError.message });
-  return reply(200, { link });
+  return reply(200, { link, sent });
 });
