@@ -3220,7 +3220,7 @@
     }));
     await TA('a player-only account: its one team opens, no team switch and no new team', async () => withNavHome(async () => {
       const keepTeams = home.teams, keepTeam = team, real = backend;
-      const mine = { ...team, role: PLAYER_ROLE };
+      const mine = { ...team, role: PLAYER_ROLE, playerId: cardField.id };
       try {
         home.teams = [mine];
         backend = { ...real, listTeams: async () => [mine] };
@@ -3229,12 +3229,23 @@
         for (let i = 0; i < 5; i++) await tick0();
         if (home.view === 'profile' || team.id !== mine.id) throw new Error(`opened ${home.view}`);
         if ($('home').querySelector('.teams-corner') || !$('home').querySelector('.app-bar .account-menu')) throw new Error('a single-team player still sees «Mis equipos»');
+        // Top right, «Mis estadísticas» opens their own season, as tapping themselves does.
+        // (opening the team loads its own roster: the account is one of those players)
+        home.roster = [cardField, cardKeeper];
+        showHomeView('stats');
+        const mineButton = $('home').querySelector('.app-bar .my-stats');
+        if (!mineButton) throw new Error('no «Mis estadísticas» for a player');
+        mineButton.click();
+        if (home.view !== 'player' || home.playerId !== cardField.id) throw new Error(`«Mis estadísticas» opened ${home.view} ${home.playerId}`);
         showHomeView('profile');
         if ($('home').querySelector('[data-new-team]')) throw new Error('a player can create a team');
         home.teams = [mine, { ...mine, id: 'other-team', name: 'Otro' }];
         showHomeView('team');
         if (!$('home').querySelector('.teams-corner')) throw new Error('a player of two teams cannot switch');
         home.teams = [{ ...mine, role: STAFF_ROLE }];
+        applyTeam({ ...mine, role: STAFF_ROLE });
+        showHomeView('team');
+        if ($('home').querySelector('.my-stats')) throw new Error('the staff got «Mis estadísticas»');
         showHomeView('profile');
         if (!$('home').querySelector('[data-new-team]')) throw new Error('the staff lost «Nuevo equipo»');
       } finally { backend = real; home.teams = keepTeams; applyTeam(keepTeam); }
