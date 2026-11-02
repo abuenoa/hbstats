@@ -1,6 +1,6 @@
-# Contributing to HBStats
+# Contributing to Zona6
 
-Thanks for helping. HBStats is used live, during matches, by coaches on tablets: speed, clarity and reliability
+Thanks for helping. Zona6 is used live, during matches, by coaches on tablets: speed, clarity and reliability
 come before everything else. Puedes escribir issues y pull requests en español.
 
 ## Before you start

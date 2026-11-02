@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-# HBStats — Copyright (C) 2026 Antonio Bueno Antón. SPDX-License-Identifier: AGPL-3.0-or-later
+# Zona6 — Copyright (C) 2026 Antonio Bueno Antón. SPDX-License-Identifier: AGPL-3.0-or-later
 """Build the published site in docs/: one installable app for every team, at the site root.
 
 docs/ gets:

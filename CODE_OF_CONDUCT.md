@@ -1,6 +1,6 @@
 # Code of Conduct
 
-HBStats is built by coaches, players and developers who share a sport. We want participation to be respectful
+Zona6 is built by coaches, players and developers who share a sport. We want participation to be respectful
 and welcoming for everyone, regardless of age, body, disability, ethnicity, gender identity and expression,
 experience, nationality, appearance, religion or sexual orientation.
 
