@@ -45,31 +45,47 @@ Deno.serve(async (req) => {
 
   const { data: existing, error: lookupError } = await admin.rpc("user_id_by_email", { p_email: email });
   if (lookupError) return reply(500, { error: lookupError.message });
-  let userId = existing as string | null, link: string | null = null, sent = false;
+  let userId = existing as string | null, confirmed = false;
   if (userId) {
     const { data: account, error: accountError } = await admin.auth.admin.getUserById(userId);
     if (accountError) return reply(500, { error: accountError.message });
-    if (!account.user.email_confirmed_at) userId = null;
+    confirmed = Boolean(account.user.email_confirmed_at);
   }
-  if (!userId && delivery === "email") {
+  // Every check before anything is sent, so nobody gets an invite to a team they cannot join.
+  const { data: member, error: memberError } = userId
+    ? await admin.from("team_members").select("role, player_id").eq("team_id", teamId).eq("user_id", userId).maybeSingle()
+    : { data: null, error: null };
+  if (memberError) return reply(500, { error: memberError.message });
+  if (member && member.role === "owner") return reply(409, { error: "ese correo es el del dueño del equipo" });
+  if (member && confirmed) return reply(409, { error: "ese correo ya es del equipo" });
+  if (isPlayer) {
+    const { data: taken, error: takenError } = await admin.from("team_members").select("user_id").eq("player_id", playerId).maybeSingle();
+    if (takenError) return reply(500, { error: takenError.message });
+    if (taken && taken.user_id !== userId) return reply(409, { error: "este jugador ya tiene cuenta" });
+  }
+
+  let link: string | null = null, sent = false;
+  const created = !userId;
+  if (!confirmed && delivery === "email") {
     const { data, error } = await admin.auth.admin.inviteUserByEmail(email, { redirectTo: APP_URL });
-    if (error) return reply(500, { error: `no se pudo enviar el correo: ${error.message}` });
+    if (error) return reply(error.status ?? 500, { error: `no se pudo enviar el correo: ${error.message}` });
     userId = data.user.id;
     sent = true;
-  } else if (!userId) {
+  } else if (!confirmed) {
     const { data, error } = await admin.auth.admin.generateLink({ type: "invite", email, options: { redirectTo: APP_URL } });
-    if (error) return reply(500, { error: error.message });
+    if (error) return reply(error.status ?? 500, { error: error.message });
     userId = data.user.id;
     link = data.properties.action_link;
   }
-  if (isPlayer) {
-    const { data: taken } = await admin.from("team_members").select("user_id").eq("player_id", playerId).maybeSingle();
-    if (taken && taken.user_id !== userId) return reply(409, { error: "este jugador ya tiene cuenta" });
+  // A pending invite asked again for another role or player takes the new one.
+  const row = { role, player_id: isPlayer ? playerId : null };
+  const { error: saveError } = member
+    ? await admin.from("team_members").update(row).eq("team_id", teamId).eq("user_id", userId)
+    : await admin.from("team_members").insert({ team_id: teamId, user_id: userId, ...row });
+  if (saveError) {
+    // An account made for this invite and left in no team would hold a working link to nothing.
+    if (created) await admin.auth.admin.deleteUser(userId!);
+    return reply(500, { error: saveError.message });
   }
-  const { data: member } = await admin.from("team_members").select("role").eq("team_id", teamId).eq("user_id", userId).maybeSingle();
-  // Someone invited before who never used the invite gets a fresh one; a member who signed in is already in.
-  if (member) return link || sent ? reply(200, { link, sent }) : reply(409, { error: "ese correo ya es del equipo" });
-  const { error: linkError } = await admin.from("team_members").insert({ team_id: teamId, user_id: userId, role, player_id: isPlayer ? playerId : null });
-  if (linkError) return reply(500, { error: linkError.message });
   return reply(200, { link, sent });
 });
