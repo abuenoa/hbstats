@@ -838,7 +838,13 @@ a:focus-visible, input:focus-visible, select:focus-visible, summary:focus-visibl
 .invite-plan, .invite-links { list-style: none; margin: var(--space-2) 0; padding: 0; display: grid; gap: var(--space-1); }
 .invite-plan li { display: block; }
 .account-list { list-style: none; margin: var(--space-2) 0; padding: 0; display: grid; gap: var(--space-1); }
-.account-list li { display: flex; align-items: center; justify-content: space-between; gap: var(--space-2); overflow-wrap: anywhere; }
+.account-list li { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: center; gap: var(--space-2); padding-block: var(--space-2); border-top: 1px solid var(--line); }
+.account-who { display: grid; min-width: 0; overflow-wrap: anywhere; }
+.account-who small { color: var(--muted); }
+.account-list .row-actions { justify-content: flex-end; }
+.account-list .btn { white-space: nowrap; }
+.team-accounts { display: grid; gap: var(--space-3); }
+.team-accounts > :is(h3, p) { margin: 0; }
 .invite-links li { display: flex; align-items: center; justify-content: space-between; gap: var(--space-2); }
 .link { justify-self: start; display: inline-flex; align-items: center; min-height: var(--target); border: 0; background: none; padding: 0; color: var(--fg); text-decoration: underline; font: var(--type-body); cursor: pointer; }
 .home-status:empty { display: none; }
@@ -926,6 +932,8 @@ body:has(#home:not([hidden])) { overflow: hidden; }
   .home .app-bar .app-end { display: contents; }
   .home .app-bar .teams-corner { grid-row: 1; grid-column: 3; }
   .home .app-bar .app-actions { grid-row: 3; grid-column: 1 / -1; }
+  .account-list li { grid-template-columns: minmax(0, 1fr); }
+  .account-list .row-actions { justify-content: flex-start; }
   .home .app-bar .tabs button { padding-inline: var(--space-3); font-size: .9rem; }
   .next-body .next-what { flex: 1 1 100%; }
   .next-body .next-rival { overflow-wrap: normal; }
@@ -6913,11 +6921,11 @@ table { border-collapse: collapse; width: 100%; }
     if (!home.accounts.rows) return '<p class="note">Cargando las cuentas…</p>';
     const rows = home.accounts.rows.map((a) => {
       const player = a.playerId && rosterPlayer(a.playerId);
-      const who = player ? `#${player.num} ${esc(player.name)} · ${esc(a.email)}` : esc(a.email);
+      const who = player ? ` · #${player.num} ${esc(player.name)}` : '';
       const resend = !a.signedIn && a.role !== STAFF_ROLE ? `<button class="btn primary press" type="button" data-account-resend="${a.userId}">Reenviar correo</button>
         <button class="btn press" type="button" data-account-link="${a.userId}">Enlace</button>` : '';
       const remove = removableAccount(a) ? armedButton(`account-${a.userId}`, a.signedIn ? 'Quitar' : 'Anular invitación', `data-account-remove="${a.userId}" aria-label="Quitar la cuenta de ${esc(a.email)}"`) : '';
-      return `<li><span><b>${ACCOUNT_ROLES[a.role]}</b> · ${who}${a.signedIn ? '' : ' · <i>sin entrar aún</i>'}</span><span class="row-actions">${resend}${remove}</span></li>`;
+      return `<li><div class="account-who"><b>${ACCOUNT_ROLES[a.role]}${who}</b><small>${esc(a.email)} · ${a.signedIn ? 'activa' : '<i>sin entrar aún</i>'}</small></div><div class="row-actions">${resend}${remove}</div></li>`;
     }).join('');
     return `<h4>Con acceso</h4><ul class="account-list">${rows}</ul>`;
   }
