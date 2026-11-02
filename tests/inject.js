@@ -1,4 +1,4 @@
-  // HBStats — Copyright (C) 2026 Antonio Bueno Antón. SPDX-License-Identifier: AGPL-3.0-or-later
+  // Zona6 — Copyright (C) 2026 Antonio Bueno Antón. SPDX-License-Identifier: AGPL-3.0-or-later
   window.__results = [];
   // The app now opens on a fresh match to prepare; the suite runs on the sample match.
   state = sampleState(); ui.sheetMode = 'sheet'; $('sheet').hidden = true; $('final').hidden = true; $('home').hidden = true; commit();
@@ -3965,6 +3965,13 @@
       if (c.team !== 'Triana' || c.season !== '2026/2027' || c.competition !== 'Liga' || c.fixtures.length !== 3) throw new Error(JSON.stringify(c));
       if (c.fixtures.map((f) => f.round).join() !== '1,2,3' || c.fixtures.map((f) => f.home).join() !== 'true,false,true') throw new Error(JSON.stringify(c.fixtures));
       if (c.fixtures.map((f) => f.weekend).join() !== '2026-10-18,2026-10-25,2026-11-08' || c.fixtures[2].opponent !== 'BM Nazareno') throw new Error(JSON.stringify(c.fixtures));
+    });
+    await TA('files from before the rename to Zona6 still load; new ones carry the Zona6 format', async () => {
+      if (CALENDAR_FORMAT !== 'zona6-calendario' || ROSTER_FORMAT !== 'zona6-plantilla') throw new Error(`${CALENDAR_FORMAT} ${ROSTER_FORMAT}`);
+      if (parseCalendar(calFile({ format: 'hbstats-calendario' })).fixtures.length !== 3) throw new Error('an hbstats-calendario file no longer loads');
+      const roster = (format) => parseRoster(JSON.stringify({ format, players: [{ num: 1, name: 'A', pos: 'POR' }] }));
+      if (roster('zona6-plantilla').players.length !== 1 || roster('hbstats-plantilla').players.length !== 1) throw new Error('a roster file does not load');
+      throws(() => roster('otra-plantilla'), /plantilla/);
     });
     await TA('calendar: refuses a wrong format, a repeated round and a bad date', async () => {
       throws(() => parseCalendar('{nope'), /no es JSON/);

@@ -1,5 +1,5 @@
--- HBStats — Copyright (C) 2026 Antonio Bueno Antón. SPDX-License-Identifier: AGPL-3.0-or-later
--- Database for HBStats accounts. Run it in the Supabase SQL editor; it is safe to run again after changes.
+-- Zona6 — Copyright (C) 2026 Antonio Bueno Antón. SPDX-License-Identifier: AGPL-3.0-or-later
+-- Database for Zona6 accounts. Run it in the Supabase SQL editor; it is safe to run again after changes.
 --
 -- Each signed-in coach belongs to one or more teams (team_members). A team has its look (names, colours, crest),
 -- its roster (players) and its matches, each match stored whole as the app's own state (JSON) plus a few columns
@@ -186,7 +186,7 @@ create or replace function public.matches_only_through_save_match() returns trig
 language plpgsql set search_path = public as $$
 begin
   if auth.uid() is not null and current_setting('hbstats.save_match', true) is distinct from 'on' then
-    raise exception 'HBStats desactualizada: recarga la app para guardar este partido' using errcode = '42501';
+    raise exception 'Zona6 desactualizada: recarga la app para guardar este partido' using errcode = '42501';
   end if;
   return new;
 end $$;

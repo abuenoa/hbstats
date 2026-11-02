@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
-# HBStats — Copyright (C) 2026 Antonio Bueno Antón. SPDX-License-Identifier: AGPL-3.0-or-later
-"""Print the SQL that loads a calendar file ("hbstats-calendario") into public.fixtures.
+# Zona6 — Copyright (C) 2026 Antonio Bueno Antón. SPDX-License-Identifier: AGPL-3.0-or-later
+"""Print the SQL that loads a calendar file ("zona6-calendario") into public.fixtures.
 
 Usage: python3 tools/calendar_sql.py FILE TEAM_ID
 
@@ -12,7 +12,9 @@ import json
 import sys
 import uuid
 
-FORMAT = "hbstats-calendario"
+# Files written before the rename to Zona6 carry the old format name and still load.
+FORMAT = "zona6-calendario"
+FORMATS = (FORMAT, "hbstats-calendario")
 ROUND_RANGE = (1, 60)
 SEASON_LENGTH = (4, 9)
 COMPETITION_MAX = 120
@@ -57,7 +59,7 @@ def parse_fixture(raw, index):
 
 
 def parse_calendar(data):
-    if not isinstance(data, dict) or data.get("format") != FORMAT:
+    if not isinstance(data, dict) or data.get("format") not in FORMATS:
         raise CalendarError(f"not a calendar file: «format» must be «{FORMAT}»")
     season = text_field(data, "season", "calendar", *SEASON_LENGTH)
     competition = text_field(data, "competition", "calendar", 0, COMPETITION_MAX)

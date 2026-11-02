@@ -23,7 +23,7 @@ PDF report with key points when the final whistle goes.
 
 <br>
 
-<img src=".github/readme/defence.png" alt="HBStats during a match: court with players, rival shots drawn on our goal, score and clock at the top, live stats on the right" width="100%">
+<img src=".github/readme/defence.png" alt="Zona6 during a match: court with players, rival shots drawn on our goal, score and clock at the top, live stats on the right" width="100%">
 
 <sub>Defence view of the sample match: every rival shot on our goalkeeper, saves in blue, goals in red, misses in grey.</sub>
 
@@ -32,7 +32,7 @@ PDF report with key points when the final whistle goes.
 <details>
 <summary><b>Table of contents</b></summary>
 
-- [Why HBStats](#why-hbstats)
+- [Why Zona6](#why-zona6)
 - [Features](#features)
 - [A match, step by step](#a-match-step-by-step)
 - [Install it on a tablet](#install-it-on-a-tablet)
@@ -45,10 +45,10 @@ PDF report with key points when the final whistle goes.
 
 </details>
 
-## Why HBStats
+## Why Zona6
 
 Handball is fast. Paper templates and button-heavy apps make the person on the bench look down
-while the game goes on. HBStats is built around **one gesture per action** on a court that is
+while the game goes on. Zona6 is built around **one gesture per action** on a court that is
 always visible:
 
 - 🎯 **Draw the shot**: from where it was taken to where it went in the goal, in one stroke.
@@ -250,7 +250,7 @@ Coaches who do not code help just as much: try it in a match and
 
 Copyright (C) 2026 Antonio Bueno Antón.
 
-HBStats is free software under the [GNU Affero General Public License v3.0 or later](LICENSE): you may use, study,
+Zona6 is free software under the [GNU Affero General Public License v3.0 or later](LICENSE): you may use, study,
 modify and share it, and anyone who offers a modified version to users over a network must publish its source
 under the same licence. The app links to this repository so every user can get the source.
 
@@ -262,7 +262,7 @@ belong to their clubs; do not reuse them without the club's permission.
 
 ## 🇪🇸 En español
 
-**HBStats** es una app para apuntar las estadísticas de un partido de balonmano en directo, con la tablet
+**Zona6** es una app para apuntar las estadísticas de un partido de balonmano en directo, con la tablet
 en horizontal y con el dedo o un lápiz. Todo cabe en una pantalla: la pista con tus jugadores, el marcador
 y el reloj, y las estadísticas en vivo.
 

@@ -1,6 +1,6 @@
 # Accounts with Supabase
 
-HBStats signs coaches in and keeps teams, rosters and matches in a [Supabase](https://supabase.com) project.
+Zona6 signs coaches in and keeps teams, rosters and matches in a [Supabase](https://supabase.com) project.
 The app stays a static site on GitHub Pages: it talks to Supabase from the browser with the project's public
 *anon* key, and row level security (in `schema.sql`) limits every coach to the teams they belong to.
 
@@ -27,7 +27,7 @@ also how the tests and previews run).
 
 ## Invite a coach
 
-**Authentication → Users → Invite user** with the coach's email. The email link opens HBStats, which asks the
+**Authentication → Users → Invite user** with the coach's email. The email link opens Zona6, which asks the
 coach to choose a password, then to create their team (name, colours, crest) and its roster.
 
 To add a second coach to an existing team, invite them, then in the **SQL Editor**:

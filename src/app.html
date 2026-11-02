@@ -3,7 +3,7 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@600;700;800&display=swap">
 <style>
-/* HBStats — Copyright (C) 2026 Antonio Bueno Antón. SPDX-License-Identifier: AGPL-3.0-or-later. Source: https://github.com/abuenoa/hbstats */
+/* Zona6 — Copyright (C) 2026 Antonio Bueno Antón. SPDX-License-Identifier: AGPL-3.0-or-later. Source: https://github.com/abuenoa/hbstats */
 /* Layout: one landscape screen — glass scoreboard / [bench | court + floating alerts | goalkeeper, lines, live stats] / glass action strip.
    Triana BM Vivero colours (red, black, gold). Light by default, dark on demand. Shot results share three colours everywhere. */
 :root {
@@ -3877,7 +3877,8 @@ span.att-foot { visibility: hidden; }
   const MAX_FULL_NAME_LENGTH = 80;
   const MAX_PHOTO_LENGTH = 60000;
   const DORSAL_RANGE = [1, 99];
-  const ROSTER_FORMAT = 'hbstats-plantilla';
+  // Files written before the rename to Zona6 carry the old format names and still load.
+  const ROSTER_FORMAT = 'zona6-plantilla', ROSTER_FORMATS = [ROSTER_FORMAT, 'hbstats-plantilla'];
   const MAX_VENUE_LENGTH = 40;
   const PLAYER_HEAD = ['Nº', 'Jugador', 'Min', '+/−', '6 m', '9 m', '+11 m', 'Contra', '7 m', 'T. bloq.', 'Bloc.', 'Recup.', 'Pase gol', 'Pérdida', 'Prov. 7 m', 'Falta', '7 m com.', 'F. táctico', 'A', "2'", 'D', 'Az'];
   const SHOT_ZONE_HEAD = ['Zona', 'Lanz.', 'Goles', 'Parados', 'Fallados', '% gol'];
@@ -4612,7 +4613,7 @@ span.att-foot { visibility: hidden; }
     const ours = side === 'us';
     let data;
     try { data = JSON.parse(text); } catch (err) { throw new Error('el archivo no es una plantilla (JSON no válido)'); }
-    if (!data || data.format !== ROSTER_FORMAT || !Array.isArray(data.players)) throw new Error(`el archivo no es una plantilla de ${APP_NAME}`);
+    if (!data || !ROSTER_FORMATS.includes(data.format) || !Array.isArray(data.players)) throw new Error(`el archivo no es una plantilla de ${APP_NAME}`);
     if (!data.players.length || data.players.length > maxPlayers) throw new Error(`debe tener entre 1 y ${maxPlayers} jugadores`);
     const seen = new Set();
     const players = data.players.map((x, i) => {
@@ -7072,7 +7073,7 @@ table { border-collapse: collapse; width: 100%; }
     return `<section class="sheet-card"><h3>Calendario</h3>
       <div class="row-actions"><b>${latest ? `${plural(count, 'jornada', 'jornadas')} · ${esc(latest)}` : 'Sin calendario'}</b>
         <button class="btn press" type="button" data-calendar-import>Importar calendario</button></div>
-      <p class="note">Archivo del calendario de la federación (hbstats-calendario). Al importarlo de nuevo se conservan la hora y el lugar ya anotados.</p></section>`;
+      <p class="note">Archivo del calendario de la federación (zona6-calendario). Al importarlo de nuevo se conservan la hora y el lugar ya anotados.</p></section>`;
   }
   const squadReady = () => home.squad.size > 0 && home.squad.size <= MAX_ROSTER && home.roster.some((p) => home.squad.has(p.id) && p.pos === 'POR');
   function squadFixtureNote() {
@@ -7321,7 +7322,7 @@ table { border-collapse: collapse; width: 100%; }
   }
 
   // ---- Calendar: the federation's fixtures, and the matches played against them ----
-  const CALENDAR_FORMAT = 'hbstats-calendario';
+  const CALENDAR_FORMAT = 'zona6-calendario', CALENDAR_FORMATS = [CALENDAR_FORMAT, 'hbstats-calendario'];
   const CALENDAR_FILE_SIDE = 'calendar'; // which import the shared file picker serves
   const MAX_FIXTURE_ROUND = 60, MAX_OPPONENT_LENGTH = 60, MAX_COMPETITION_LENGTH = 120;
   const SEASON_LENGTH_RANGE = [4, 9];
@@ -7335,7 +7336,7 @@ table { border-collapse: collapse; width: 100%; }
   function parseCalendar(text) {
     let data;
     try { data = JSON.parse(text); } catch (err) { throw new Error('el archivo no es JSON'); }
-    if (!data || data.format !== CALENDAR_FORMAT || !Array.isArray(data.fixtures)) throw new Error(`el archivo no es un calendario de ${APP_NAME}`);
+    if (!data || !CALENDAR_FORMATS.includes(data.format) || !Array.isArray(data.fixtures)) throw new Error(`el archivo no es un calendario de ${APP_NAME}`);
     const season = typeof data.season === 'string' ? data.season.trim() : '';
     if (season.length < SEASON_LENGTH_RANGE[0] || season.length > SEASON_LENGTH_RANGE[1]) throw new Error('falta la temporada (por ejemplo 2026/2027)');
     const seen = new Set();

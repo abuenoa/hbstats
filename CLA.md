@@ -1,7 +1,7 @@
-# HBStats Individual Contributor License Agreement
+# Zona6 Individual Contributor License Agreement
 
-Thank you for contributing to HBStats ("the Project"), maintained by Antonio Bueno Antón ("the Maintainer").
-HBStats is published under the GNU Affero General Public License v3.0 or later (AGPL-3.0). The Maintainer also
+Thank you for contributing to Zona6 ("the Project"), maintained by Antonio Bueno Antón ("the Maintainer").
+Zona6 is published under the GNU Affero General Public License v3.0 or later (AGPL-3.0). The Maintainer also
 intends to offer a commercial edition with additional features. This agreement lets your contribution be used in
 both, while you keep the copyright of what you write.
 
