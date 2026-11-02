@@ -845,6 +845,8 @@ a:focus-visible, input:focus-visible, select:focus-visible, summary:focus-visibl
 .account-list .btn { white-space: nowrap; }
 .team-accounts { display: grid; gap: var(--space-3); }
 .team-accounts > :is(h3, p) { margin: 0; }
+.account-status { font-weight: 700; }
+.account-status:empty { display: none; }
 .invite-links li { display: flex; align-items: center; justify-content: space-between; gap: var(--space-2); }
 .link { justify-self: start; display: inline-flex; align-items: center; min-height: var(--target); border: 0; background: none; padding: 0; color: var(--fg); text-decoration: underline; font: var(--type-body); cursor: pointer; }
 .home-status:empty { display: none; }
@@ -6158,7 +6160,7 @@ table { border-collapse: collapse; width: 100%; }
   let currentMatchId = null;
   let syncTimer = null;
   let attendanceSyncTimer = null;
-  const home = { view: 'loading', user: null, teams: [], roster: [], matches: [], season: null, templates: [], template: null, squad: new Set(), leaderMetric: 'goals', playerId: null, playerMatchId: null, playerEdit: false, playerDraft: null, offline: false, error: '', draft: null, crestDraft: undefined, armed: null, passwordChange: false, seasonOffline: false, sessions: null, fixtures: null, teamMatches: [], fixtureEdit: null, squadFixture: null, attendanceDate: null, attendanceMode: null, attendanceNoteFor: null, stateMatches: [], statsSort: null, statsMetric: 'goals', statsPlayer: null, callupDraft: null, callup: null, callupBusy: null, inviteLinks: [], inviteList: '', invitePlan: null, accounts: null, weightsDraft: null, ratingCache: null };
+  const home = { view: 'loading', user: null, teams: [], roster: [], matches: [], season: null, templates: [], template: null, squad: new Set(), leaderMetric: 'goals', playerId: null, playerMatchId: null, playerEdit: false, playerDraft: null, offline: false, error: '', draft: null, crestDraft: undefined, armed: null, passwordChange: false, seasonOffline: false, sessions: null, fixtures: null, teamMatches: [], fixtureEdit: null, squadFixture: null, attendanceDate: null, attendanceMode: null, attendanceNoteFor: null, stateMatches: [], statsSort: null, statsMetric: 'goals', statsPlayer: null, callupDraft: null, callup: null, callupBusy: null, inviteTeamId: null, inviteWho: '', inviteEmail: '', inviteLinks: [], inviteList: '', invitePlan: null, inviteBusy: false, accountStatus: '', accounts: null, weightsDraft: null, ratingCache: null };
 
   // ---- Device storage ----
   function readJson(key) {
@@ -6903,15 +6905,44 @@ table { border-collapse: collapse; width: 100%; }
   const ACCOUNT_ROLES = { [STAFF_ROLE]: 'Dueño', [COACH_INVITE]: 'Entrenador', [PLAYER_ROLE]: 'Jugador', [VIEWER_ROLE]: 'Invitado' };
   // The staff take off players and guests; only the owner takes off a coach; nobody takes off the owner or themselves.
   const removableAccount = (a) => !a.isMe && a.role !== STAFF_ROLE && (a.role !== COACH_INVITE || team.role === STAFF_ROLE);
+  // How an invite reaches someone: an e-mail from the server, or a sign-in link the coach shares.
+  const INVITE_BY_EMAIL = 'email', INVITE_BY_LINK = 'link';
+  // What the card holds (typed e-mail, pasted list, links, its message) belongs to the team it was made for, and lives
+  // in state so a re-render (the account list arriving, a disarmed button) never wipes it.
+  function inviteStateFor(teamId) {
+    if (home.inviteTeamId === teamId) return;
+    Object.assign(home, { inviteTeamId: teamId, inviteWho: COACH_INVITE, inviteEmail: '', inviteList: '', invitePlan: null, inviteLinks: [], accountStatus: '' });
+  }
+  // The card's own message line, next to its buttons and brought into view: the page's status sits at the top.
+  function accountStatus(text) {
+    home.accountStatus = text;
+    const el = $('account-status');
+    if (!el) return;
+    el.textContent = text;
+    if (text) el.scrollIntoView({ block: 'nearest' });
+  }
+  // One account request at a time: while it runs the card's buttons are disabled and further taps are ignored.
+  async function inviteTask(run) {
+    if (home.inviteBusy) return;
+    home.inviteBusy = true;
+    renderHome();
+    try {
+      await run();
+    } finally {
+      home.inviteBusy = false;
+      renderHome();
+    }
+  }
+  const busyAttr = () => (home.inviteBusy ? ' disabled' : '');
   async function loadAccounts() {
     const teamId = team.id;
     home.accounts = { teamId, rows: null };
     try {
       const rows = await backend.listAccounts(teamId);
-      if (home.accounts.teamId === teamId) home.accounts.rows = rows;
+      if (home.accounts?.teamId === teamId) home.accounts.rows = rows;
     } catch (err) {
       home.accounts = null;
-      homeStatus(`No se pudieron cargar las cuentas: ${cloudErrorText(err)}.`);
+      accountStatus(`No se pudieron cargar las cuentas: ${cloudErrorText(err)}.`);
       return;
     }
     if (home.view === 'team-edit') renderHome();
@@ -6922,56 +6953,61 @@ table { border-collapse: collapse; width: 100%; }
     const rows = home.accounts.rows.map((a) => {
       const player = a.playerId && rosterPlayer(a.playerId);
       const who = player ? ` · #${player.num} ${esc(player.name)}` : '';
-      const resend = !a.signedIn && a.role !== STAFF_ROLE ? `<button class="btn primary press" type="button" data-account-resend="${a.userId}">Reenviar correo</button>
-        <button class="btn press" type="button" data-account-link="${a.userId}">Enlace</button>` : '';
-      const remove = removableAccount(a) ? armedButton(`account-${a.userId}`, a.signedIn ? 'Quitar' : 'Anular invitación', `data-account-remove="${a.userId}" aria-label="Quitar la cuenta de ${esc(a.email)}"`) : '';
+      const resend = !a.signedIn && a.role !== STAFF_ROLE ? `<button class="btn primary press" type="button" data-account-resend="${a.userId}"${busyAttr()}>Reenviar correo</button>
+        <button class="btn press" type="button" data-account-link="${a.userId}"${busyAttr()}>Enlace</button>` : '';
+      const remove = removableAccount(a) ? armedButton(`account-${a.userId}`, a.signedIn ? 'Quitar' : 'Anular invitación', `data-account-remove="${a.userId}" aria-label="Quitar la cuenta de ${esc(a.email)}"${busyAttr()}`) : '';
       return `<li><div class="account-who"><b>${ACCOUNT_ROLES[a.role]}${who}</b><small>${esc(a.email)} · ${a.signedIn ? 'activa' : '<i>sin entrar aún</i>'}</small></div><div class="row-actions">${resend}${remove}</div></li>`;
     }).join('');
     return `<h4>Con acceso</h4><ul class="account-list">${rows}</ul>`;
   }
+  const accountOf = (userId) => home.accounts?.rows?.find((a) => a.userId === userId) || null;
   // Someone who never used their invite (or lost it) gets a fresh one, by e-mail or as a link to share; the old one stops working.
-  async function resendInvite(userId, delivery) {
-    const account = home.accounts.rows.find((a) => a.userId === userId), player = account.playerId && rosterPlayer(account.playerId);
-    const name = player ? player.name : account.email;
-    homeStatus(delivery === INVITE_BY_EMAIL ? 'Enviando el correo…' : 'Creando un enlace nuevo…');
-    try {
-      await inviteAccount(player ? { role: PLAYER_ROLE, playerId: player.id } : { role: account.role }, account.email, name, delivery);
-    } catch (err) {
-      homeStatus(`No se pudo invitar: ${cloudErrorText(err)}.`);
-      return;
-    }
-    renderHome();
-    homeStatus(delivery === INVITE_BY_EMAIL ? `Correo enviado a ${account.email}.` : `Enlace nuevo para ${name}: compártelo.`);
+  function resendInvite(userId, delivery) {
+    const account = accountOf(userId);
+    if (!account) return Promise.resolve();
+    const player = account.playerId && rosterPlayer(account.playerId), name = player ? player.name : account.email;
+    const member = account.playerId ? { role: PLAYER_ROLE, playerId: account.playerId } : { role: account.role };
+    return inviteTask(async () => {
+      accountStatus(delivery === INVITE_BY_EMAIL ? `Enviando el correo a ${account.email}…` : 'Creando un enlace nuevo…');
+      try {
+        await inviteAccount(member, account.email, name, delivery);
+        accountStatus(delivery === INVITE_BY_EMAIL ? `Correo enviado a ${account.email}.` : `Enlace nuevo para ${name}: compártelo.`);
+      } catch (err) {
+        accountStatus(`No se pudo invitar a ${account.email}: ${cloudErrorText(err)}.`);
+      }
+    });
   }
-  async function removeAccount(userId) {
-    const account = home.accounts.rows.find((a) => a.userId === userId);
-    homeStatus('Quitando…');
-    try {
-      await backend.removeAccount(team.id, userId);
-    } catch (err) {
-      renderHome();
-      homeStatus(`No se pudo quitar: ${cloudErrorText(err)}.`);
-      return;
-    }
-    home.accounts.rows = home.accounts.rows.filter((a) => a.userId !== userId);
-    renderHome();
-    homeStatus(account.signedIn ? `${account.email} ya no tiene acceso al equipo.` : `Invitación de ${account.email} anulada: su enlace ya no sirve.`);
+  function removeAccount(userId) {
+    const account = accountOf(userId);
+    if (!account) return Promise.resolve();
+    return inviteTask(async () => {
+      accountStatus('Quitando…');
+      try {
+        await backend.removeAccount(team.id, userId);
+      } catch (err) {
+        accountStatus(`No se pudo quitar: ${cloudErrorText(err)}.`);
+        return;
+      }
+      if (home.accounts?.rows) home.accounts.rows = home.accounts.rows.filter((a) => a.userId !== userId);
+      accountStatus(account.signedIn ? `${account.email} ya no tiene acceso al equipo.` : `Invitación de ${account.email} anulada: su enlace ya no sirve.`);
+    });
   }
   function teamAccountsHtml() {
-    const options = [`<option value="${COACH_INVITE}">Entrenador · acceso total</option>`, `<option value="${VIEWER_ROLE}">Invitado · solo ver</option>`,
-      ...home.roster.slice().sort(benchOrder).map((p) => `<option value="${esc(p.id)}">Jugador · #${p.num} ${esc(p.name)}</option>`)].join('');
+    inviteStateFor(team.id);
+    const option = (value, label) => `<option value="${esc(value)}"${home.inviteWho === value ? ' selected' : ''}>${esc(label)}</option>`;
+    const options = [option(COACH_INVITE, 'Entrenador · acceso total'), option(VIEWER_ROLE, 'Invitado · solo ver'),
+      ...home.roster.slice().sort(benchOrder).map((p) => option(p.id, `Jugador · #${p.num} ${p.name}`))].join('');
     const links = home.inviteLinks.length ? `<p class="note">Comparte a cada uno su enlace: lo abre una vez para entrar y poner su contraseña.</p>
       <ul class="invite-links">${home.inviteLinks.map(({ name }, i) => `<li><b>${esc(name)}</b><button class="btn primary press" type="button" data-invite-share="${i}">Compartir enlace</button></li>`).join('')}</ul>` : '';
     return `<section class="sheet-card team-accounts"><h3>Cuentas del equipo</h3>
       <p class="note">Un entrenador puede hacer lo mismo que tú. Un jugador o un invitado ve los partidos, las estadísticas y la asistencia de todo el equipo, sin poder cambiar nada. Cada uno recibe un correo para entrar y poner su contraseña; si no le llega, pulsa «Enlace» junto a su nombre y compártelo por WhatsApp.</p>
       <div class="row-actions"><label class="field">Cuenta para<select class="in" id="invite-who">${options}</select></label>
-        <label class="field">Correo<input class="in" id="invite-email" type="email" inputmode="email" autocomplete="off" placeholder="nombre@correo.es"></label>
-        <button class="btn press" type="button" data-invite>Invitar</button></div>
+        <label class="field">Correo<input class="in" id="invite-email" type="email" inputmode="email" autocomplete="off" placeholder="nombre@correo.es" value="${esc(home.inviteEmail)}"></label>
+        <button class="btn press" type="button" data-invite${busyAttr()}>Invitar</button></div>
       <label class="field">Varios jugadores a la vez: pega la lista, con el nombre y luego el correo de cada uno<textarea class="in" id="invite-list" rows="4">${esc(home.inviteList)}</textarea></label>
-      <div class="row-actions"><button class="btn press" type="button" data-invite-list-check>Revisar lista</button></div>${invitePlanHtml()}${links}${accountListHtml()}</section>`;
+      <div class="row-actions"><button class="btn press" type="button" data-invite-list-check${busyAttr()}>Revisar lista</button></div>${invitePlanHtml()}
+      <p class="account-status" id="account-status" role="status" aria-live="polite">${esc(home.accountStatus)}</p>${links}${accountListHtml()}</section>`;
   }
-  // How an invite reaches someone: an e-mail from the server, or a sign-in link the coach shares.
-  const INVITE_BY_EMAIL = 'email', INVITE_BY_LINK = 'link';
   // Links the account and keeps the sign-in link to share, if one came; returns whether an invite went out (an
   // account already in use is linked without one).
   async function inviteAccount(member, email, name, delivery = INVITE_BY_EMAIL) {
@@ -6980,43 +7016,46 @@ table { border-collapse: collapse; width: 100%; }
     if (link) home.inviteLinks.push({ name, url: link });
     return Boolean(link || sent);
   }
-  async function inviteMember() {
-    const who = $('invite-who').value, email = $('invite-email').value.trim(), player = rosterPlayer(who);
-    if (who !== COACH_INVITE && who !== VIEWER_ROLE && !player) return;
-    if (!EMAIL_PATTERN.test(email)) { homeStatus('Escribe un correo válido.'); return; }
+  function inviteMember() {
+    const who = home.inviteWho, email = home.inviteEmail.trim(), player = rosterPlayer(who);
+    if (who !== COACH_INVITE && who !== VIEWER_ROLE && !player) return Promise.resolve();
+    if (!EMAIL_PATTERN.test(email)) { accountStatus('Escribe un correo válido.'); return Promise.resolve(); }
     const name = player ? player.name : email;
-    homeStatus('Invitando…');
-    try {
-      const fresh = await inviteAccount(player ? { role: PLAYER_ROLE, playerId: player.id } : { role: who }, email, name);
-      renderHome();
-      homeStatus(fresh ? `Correo de invitación enviado a ${email}.` : `${name} ya tenía cuenta: ya ve el equipo al entrar.`);
-    } catch (err) {
-      homeStatus(`No se pudo invitar: ${cloudErrorText(err)}.`);
-    }
+    return inviteTask(async () => {
+      accountStatus(`Invitando a ${email}…`);
+      try {
+        const fresh = await inviteAccount(player ? { role: PLAYER_ROLE, playerId: player.id } : { role: who }, email, name);
+        home.inviteEmail = '';
+        accountStatus(fresh ? `Correo de invitación enviado a ${email}.` : `${email} ya tenía cuenta en ${APP_NAME}: no hace falta correo, ya ve el equipo al entrar.`);
+      } catch (err) {
+        accountStatus(`No se pudo invitar a ${email}: ${cloudErrorText(err)}.`);
+      }
+    });
   }
   function checkInviteList() {
-    home.inviteList = $('invite-list').value;
     home.invitePlan = invitePlanOf(home.inviteList);
     renderHome();
-    homeStatus(home.invitePlan.length ? 'Revisa a quién va cada correo antes de invitar.' : 'La lista no tiene ningún correo.');
+    accountStatus(home.invitePlan.length ? 'Revisa a quién va cada correo antes de invitar.' : 'La lista no tiene ningún correo.');
   }
   // One at a time, so a failure names its player and the others still go.
-  async function inviteList() {
-    const rows = home.invitePlan.filter((row) => row.player), failed = [];
-    let linked = 0;
-    for (const [i, { email, player }] of rows.entries()) {
-      homeStatus(`Invitando ${i + 1} de ${rows.length}…`);
-      try {
-        if (!(await inviteAccount({ role: PLAYER_ROLE, playerId: player.id }, email, player.name))) linked += 1;
-      } catch (err) {
-        failed.push(`${player.name} (${cloudErrorText(err)})`);
+  function inviteList() {
+    const rows = (home.invitePlan || []).filter((row) => row.player);
+    return inviteTask(async () => {
+      const failed = [];
+      let linked = 0;
+      for (const [i, { email, player }] of rows.entries()) {
+        accountStatus(`Invitando ${i + 1} de ${rows.length}…`);
+        try {
+          if (!(await inviteAccount({ role: PLAYER_ROLE, playerId: player.id }, email, player.name))) linked += 1;
+        } catch (err) {
+          failed.push(`${player.name} (${cloudErrorText(err)})`);
+        }
       }
-    }
-    Object.assign(home, { invitePlan: null, inviteList: '' });
-    renderHome();
-    const done = rows.length - failed.length, mailed = done - linked;
-    homeStatus([plural(done, 'jugador invitado', 'jugadores invitados'), mailed ? `${plural(mailed, 'correo enviado', 'correos enviados')}` : '',
-      linked ? `${linked} ${linked === 1 ? 'ya tenía' : 'ya tenían'} cuenta` : '', failed.length ? `no se pudo con ${failed.join(', ')}` : ''].filter(Boolean).join(' · ') + '.');
+      Object.assign(home, { invitePlan: null, inviteList: failed.length ? home.inviteList : '' });
+      const done = rows.length - failed.length, mailed = done - linked;
+      accountStatus([plural(done, 'jugador invitado', 'jugadores invitados'), mailed ? plural(mailed, 'correo enviado', 'correos enviados') : '',
+        linked ? `${linked} ${linked === 1 ? 'ya tenía' : 'ya tenían'} cuenta` : '', failed.length ? `no se pudo con ${failed.join(', ')}` : ''].filter(Boolean).join(' · ') + '.');
+    });
   }
   async function shareInviteLink(index) {
     const { url } = home.inviteLinks[index], text = `Entra en ${APP_NAME} con ${team.name}:`;
@@ -7024,7 +7063,7 @@ table { border-collapse: collapse; width: 100%; }
       if (navigator.share) { await navigator.share({ title: APP_NAME, text, url }); return; }
       window.open(`${WHATSAPP_URL}${encodeURIComponent(`${text} ${url}`)}`, '_blank', 'noopener');
     } catch (err) {
-      if (err && err.name !== 'AbortError') homeStatus(`No se pudo compartir: ${err.message}.`);
+      if (err && err.name !== 'AbortError') accountStatus(`No se pudo compartir: ${err.message}.`);
     }
   }
   function calendarRowHtml() {
@@ -9329,6 +9368,7 @@ table { border-collapse: collapse; width: 100%; }
   $('home').addEventListener('change', (ev) => {
     const el = ev.target;
     if (el.id === 'tpl-name') { home.template.name = el.value; return; }
+    if (el.id === 'invite-who') { home.inviteWho = el.value; return; }
     if (el.dataset.knob) { homeStatus(Number.isFinite(parseKnobText(el.value)) || el.type === 'range' ? '' : KNOB_NUMBER_HINT); setKnobControl(el, home.weightsDraft[el.dataset.knob]); return; }
     if (el.id === 'att-date') { openAttendanceDay(el.value); return; }
     if (el.id === 'callup-fixture') { chooseCallupFixture(el.value); return; }
@@ -9340,6 +9380,8 @@ table { border-collapse: collapse; width: 100%; }
   });
   // A note is kept as it is typed, so no tap can lose it.
   $('home').addEventListener('input', (ev) => {
+    if (ev.target.id === 'invite-email') home.inviteEmail = ev.target.value;
+    if (ev.target.id === 'invite-list') home.inviteList = ev.target.value;
     if (ev.target.dataset.attNoteInput) saveAttendanceNote(ev.target.dataset.attNoteInput, ev.target.value);
     if (ev.target.dataset.knob) tuneKnob(ev.target);
   });
