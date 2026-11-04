@@ -944,7 +944,7 @@
     const snap = snapshot();
     try {
       state = sampleState(); commit();
-      const cells = [...new DOMParser().parseFromString(`<table>${sheetStatsHtml().match(/<tbody>.*?<\/tbody>/s)[0]}</table>`, 'text/html').querySelector('tr').children].map((c) => c.textContent);
+      const cells = [...new DOMParser().parseFromString(`<table>${sheetStatsHtml().match(/<tbody>.*?<\/tbody>/s)[0]}</table>`, 'text/html').querySelector('tr').children].filter((c) => !c.hasAttribute('data-phone-only')).map((c) => c.textContent);
       if (cells[2] !== '–' || cells[3] !== '–') throw new Error(JSON.stringify(cells.slice(0, 4)));
     } finally { restore(snap); }
     if (minutesSentence({ rows: [{ seconds: null }], totals: { seconds: 0 } }).length) throw new Error('sentence without a log');
@@ -2675,7 +2675,7 @@
       if (seasonPlayerTable([old], statsPlayers).some((r) => r.played === 0) || seasonPlayerTable([], statsPlayers).length) throw new Error('players who did not play');
       await withStatsPage([old], async () => {
         showHomeView('stats');
-        const cells = (col) => [...document.querySelectorAll(`.stats-players [data-col="${col}"]`)].map((c) => c.textContent);
+        const cells = (col) => [...document.querySelectorAll(`.stats-players tbody [data-col="${col}"]`)].map((c) => c.textContent);
         if (!cells('seconds').length || cells('seconds').some((x) => x !== '–') || cells('plusMinus').some((x) => x !== '–')) throw new Error(cells('seconds') + ' / ' + cells('plusMinus'));
       });
     });
@@ -3411,6 +3411,114 @@
         if (current === null) removeKey(CURRENT_MATCH_KEY); else localStorage.setItem(CURRENT_MATCH_KEY, current);
         currentMatchId = keepId; restore(snap);
       }
+    }));
+    // A phone is stubbed through matchMedia: PHONE_QUERY matches, every other query keeps its real answer.
+    const asPhone = async (fn) => {
+      const real = window.matchMedia;
+      window.matchMedia = (q) => (q === PHONE_QUERY ? { matches: true, media: q } : real.call(window, q));
+      try { await fn(); } finally { window.matchMedia = real; }
+    };
+    await TA('phone: a match opens in its statistics and goes back to the screen it came from', async () => withNavHome(() => asPhone(async () => {
+      const keepId = currentMatchId, snap = snapshot(), current = localStorage.getItem(CURRENT_MATCH_KEY);
+      try {
+        showHomeView('matches');
+        const card = $('home').querySelector('.match-card');
+        if ($('home').querySelector('[data-match-stats]') || card.querySelector('[data-open-match]').textContent !== 'Ver') throw new Error('the phone still offers the live screen');
+        showHomeView('team');
+        enterMatch('phone-x', { ...JSON.parse(snap), setupDone: true }, false);
+        if ($('sheet').hidden || ui.sheetTab !== 'summary') throw new Error(`not on the summary: ${ui.sheetTab}`);
+        const back = document.querySelector('#sheet [data-close-sheet]');
+        if (!back.textContent.includes(NAV_LABELS.team)) throw new Error(`back reads «${back.textContent}»`);
+        back.click();
+        for (let i = 0; i < 5; i++) await tick0();
+        if (!$('sheet').hidden || currentMatchId !== null || home.view !== 'team') throw new Error(`back: ${home.view}`);
+        enterMatch('phone-x', { ...JSON.parse(snap), setupDone: false }, false);
+        if (ui.sheetMode !== 'setup') throw new Error('a match to prepare skipped its set-up');
+        leaveMatch();
+        for (let i = 0; i < 5; i++) await tick0();
+      } finally {
+        removeKey(MATCH_KEY_PREFIX + 'phone-x');
+        if (current === null) removeKey(CURRENT_MATCH_KEY); else localStorage.setItem(CURRENT_MATCH_KEY, current);
+        currentMatchId = keepId; restore(snap);
+      }
+    })));
+    await TA('orientation: an open match holds landscape, leaving it lets the screen turn', async () => withNavHome(async () => {
+      const keepId = currentMatchId, snap = snapshot(), current = localStorage.getItem(CURRENT_MATCH_KEY), calls = [];
+      const fake = { lock: async (o) => { calls.push(`lock:${o}`); throw new DOMException('not in full screen', 'NotSupportedError'); }, unlock: () => calls.push('unlock') };
+      Object.defineProperty(screen, 'orientation', { value: fake, configurable: true });
+      const realInfo = console.info;
+      console.info = () => {};
+      try {
+        showHomeView('matches');
+        enterMatch('turn-x', { ...JSON.parse(snap), setupDone: true }, false);
+        if (calls.join() !== `lock:${MATCH_ORIENTATION}`) throw new Error(`live: ${calls}`);
+        leaveMatch();
+        for (let i = 0; i < 5; i++) await tick0();
+        if (calls.at(-1) !== 'unlock') throw new Error(`left: ${calls}`);
+        calls.length = 0;
+        enterMatch('turn-x', { ...JSON.parse(snap), setupDone: true }, false, { summary: true });
+        if (calls.join() !== 'unlock') throw new Error(`statistics: ${calls}`);
+        leaveMatch();
+        for (let i = 0; i < 5; i++) await tick0();
+      } finally {
+        delete screen.orientation; console.info = realInfo;
+        removeKey(MATCH_KEY_PREFIX + 'turn-x');
+        if (current === null) removeKey(CURRENT_MATCH_KEY); else localStorage.setItem(CURRENT_MATCH_KEY, current);
+        currentMatchId = keepId; restore(snap);
+      }
+    }));
+    await TA('phone tables: each wide table keeps its key columns, the match one adds a coloured «Goles»', async () => withNavHome(async () => {
+      const shown = (table) => [...table.querySelectorAll('thead th')].filter((th) => !th.hasAttribute('data-phone-hide')).map((th) => th.textContent.trim());
+      const parse = (html) => new DOMParser().parseFromString(html, 'text/html');
+      const keep = { tab: ui.sheetTab, player: ui.sheetPlayer }, snap = snapshot();
+      state = sampleState();
+      try {
+        const doc = parse(sheetStatsHtml()), table = doc.querySelector('.stats-table');
+        if (shown(table).join() !== 'Jugador,Min,Goles,Recup.,Pérdida') throw new Error(`match: ${shown(table)}`);
+        const p = fieldPlayers().find((x) => sumOf(SHEET_ZONES, (z) => playerStats(x.id, state.events).goals[z]) > 0);
+        if (!p) throw new Error('the sample match has no scorer');
+        const row = [...table.querySelectorAll('tbody tr')][fieldPlayers().indexOf(p)];
+        const goals = row.querySelector('td[data-phone-only]'), stats = playerStats(p.id, state.events);
+        const [made, tried] = [stats.goals, stats.shots].map((byZone) => sumOf(SHEET_ZONES, (z) => byZone[z]));
+        if (goals.textContent !== `${made}/${tried}` || goals.className !== ratioTone(made, tried, 'shooting')) throw new Error(`goals cell ${goals.outerHTML}`);
+        if (row.children.length !== table.querySelectorAll('thead th').length) throw new Error('rows and head differ in length');
+        const zones = parse(tableHtml(GK_ZONE_HEAD, [], undefined, PHONE_COLUMNS.gkZones)).querySelector('table');
+        if (shown(zones).join() !== 'Zona,A puerta,Detenidos,% paradas') throw new Error(`gk zones: ${shown(zones)}`);
+        if (shown(parse(tableHtml(SHOT_ZONE_HEAD, [])).querySelector('table')).length !== SHOT_ZONE_HEAD.length) throw new Error('a table without a phone list lost columns');
+        showPlayer(cardField.id);
+        const season = $('home').querySelector('.match-table');
+        if (shown(season).join() !== 'Fecha,Rival,Res.,Nota,Gol') throw new Error(`player matches: ${shown(season)}`);
+        const first = season.querySelector('tbody tr');
+        if ([...first.children].filter((c) => !c.hasAttribute('data-phone-hide')).length !== shown(season).length) throw new Error('player match row and head disagree');
+        showHomeView('stats');
+        const players = $('home').querySelector('.stats-players table');
+        if (shown(players).join() !== 'Jugador,Min,Nota,% tiro') throw new Error(`season players: ${shown(players)}`);
+      } finally { Object.assign(ui, { sheetTab: keep.tab, sheetPlayer: keep.player }); restore(snap); }
+    }));
+    T('sheet tabs stay on one scrolling row', () => {
+      const keep = ui.sheetTab;
+      renderSheet(); $('sheet').hidden = false;
+      try {
+        const tabs = $('sheet').querySelector('.sheet-tabs'), style = getComputedStyle(tabs);
+        if (style.flexWrap !== 'nowrap' || style.overflowX !== 'auto') throw new Error(`${style.flexWrap} ${style.overflowX}`);
+      } finally { $('sheet').hidden = true; ui.sheetTab = keep; }
+    });
+    await TA('attendance notes: on the player page for the staff, latest first, never for players', async () => withNavHome(async () => {
+      const day = (date, mark) => ({ id: `n-${date}`, date, kind: 'ENTRENO', matchId: null, marks: { [cardField.id]: mark }, note: '' });
+      home.sessions = [day('2026-10-20', { s: 'L', n: 'Esguince tobillo' }), day('2026-10-27', { s: 'J', n: 'Médico' }), day('2026-10-29', { s: 'F' }), { ...day('2026-10-30', { s: 'L', n: 'Otro' }), marks: { [cardKeeper.id]: { s: 'L', n: 'Otro' } } }];
+      const notes = attendanceNotes(home.sessions, cardField.id);
+      if (notes.map((n) => `${n.date}:${n.code}:${n.text}`).join() !== '2026-10-27:J:Médico,2026-10-20:L:Esguince tobillo') throw new Error(JSON.stringify(notes));
+      showPlayer(cardField.id);
+      const list = $('home').querySelector('.att-note-list');
+      if (!list || list.children.length !== 2 || !list.textContent.includes('Esguince tobillo')) throw new Error(`staff list: ${list && list.textContent}`);
+      showPlayer(cardKeeper.id);
+      if ($('home').querySelector('.att-note-list').children.length !== 1) throw new Error('another player\'s note leaked');
+      const role = team.role;
+      team.role = PLAYER_ROLE;
+      try { showPlayer(cardField.id); if ($('home').querySelector('.att-note-list')) throw new Error('a player reads the staff notes'); } finally { team.role = role; }
+      home.sessions = [];
+      showPlayer(cardField.id);
+      if ($('home').querySelector('.att-notes')) throw new Error('an empty notes card');
     }));
     await TA('guest account: reads the team like a player, changes nothing', async () => withNavHome(async () => {
       const role = team.role;

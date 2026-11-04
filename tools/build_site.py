@@ -131,7 +131,7 @@ def manifest() -> str:
         "description": "Estadísticas de balonmano en directo para tablet",
         "id": "./", "start_url": "./", "scope": "./",
         "display": "fullscreen", "display_override": ["fullscreen", "standalone"],
-        "orientation": "landscape",
+        "orientation": "any",
         "background_color": BACKGROUND, "theme_color": THEME,
         "lang": "es", "dir": "ltr", "categories": ["sports", "productivity"],
         "icons": [
