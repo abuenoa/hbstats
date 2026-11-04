@@ -944,7 +944,7 @@
     const snap = snapshot();
     try {
       state = sampleState(); commit();
-      const cells = [...new DOMParser().parseFromString(`<table>${sheetStatsHtml().match(/<tbody>.*?<\/tbody>/s)[0]}</table>`, 'text/html').querySelector('tr').children].map((c) => c.textContent);
+      const cells = [...new DOMParser().parseFromString(`<table>${sheetStatsHtml().match(/<tbody>.*?<\/tbody>/s)[0]}</table>`, 'text/html').querySelector('tr').children].filter((c) => !c.hasAttribute('data-phone-only')).map((c) => c.textContent);
       if (cells[2] !== '–' || cells[3] !== '–') throw new Error(JSON.stringify(cells.slice(0, 4)));
     } finally { restore(snap); }
     if (minutesSentence({ rows: [{ seconds: null }], totals: { seconds: 0 } }).length) throw new Error('sentence without a log');
@@ -3466,6 +3466,34 @@
         if (current === null) removeKey(CURRENT_MATCH_KEY); else localStorage.setItem(CURRENT_MATCH_KEY, current);
         currentMatchId = keepId; restore(snap);
       }
+    }));
+    await TA('phone tables: each wide table keeps its key columns, the match one adds a coloured «Goles»', async () => withNavHome(async () => {
+      const shown = (table) => [...table.querySelectorAll('thead th')].filter((th) => !th.hasAttribute('data-phone-hide')).map((th) => th.textContent.trim());
+      const parse = (html) => new DOMParser().parseFromString(html, 'text/html');
+      const keep = { tab: ui.sheetTab, player: ui.sheetPlayer }, snap = snapshot();
+      state = sampleState();
+      try {
+        const doc = parse(sheetStatsHtml()), table = doc.querySelector('.stats-table');
+        if (shown(table).join() !== 'Jugador,Min,Goles,Recup.,Pérdida') throw new Error(`match: ${shown(table)}`);
+        const p = fieldPlayers().find((x) => sumOf(SHEET_ZONES, (z) => playerStats(x.id, state.events).goals[z]) > 0);
+        if (!p) throw new Error('the sample match has no scorer');
+        const row = [...table.querySelectorAll('tbody tr')][fieldPlayers().indexOf(p)];
+        const goals = row.querySelector('td[data-phone-only]'), stats = playerStats(p.id, state.events);
+        const [made, tried] = [stats.goals, stats.shots].map((byZone) => sumOf(SHEET_ZONES, (z) => byZone[z]));
+        if (goals.textContent !== `${made}/${tried}` || goals.className !== ratioTone(made, tried, 'shooting')) throw new Error(`goals cell ${goals.outerHTML}`);
+        if (row.children.length !== table.querySelectorAll('thead th').length) throw new Error('rows and head differ in length');
+        const zones = parse(tableHtml(GK_ZONE_HEAD, [], undefined, PHONE_COLUMNS.gkZones)).querySelector('table');
+        if (shown(zones).join() !== 'Zona,A puerta,Detenidos,% paradas') throw new Error(`gk zones: ${shown(zones)}`);
+        if (shown(parse(tableHtml(SHOT_ZONE_HEAD, [])).querySelector('table')).length !== SHOT_ZONE_HEAD.length) throw new Error('a table without a phone list lost columns');
+        showPlayer(cardField.id);
+        const season = $('home').querySelector('.match-table');
+        if (shown(season).join() !== 'Fecha,Rival,Res.,Nota,Gol') throw new Error(`player matches: ${shown(season)}`);
+        const first = season.querySelector('tbody tr');
+        if ([...first.children].filter((c) => !c.hasAttribute('data-phone-hide')).length !== shown(season).length) throw new Error('player match row and head disagree');
+        showHomeView('stats');
+        const players = $('home').querySelector('.stats-players table');
+        if (shown(players).join() !== 'Jugador,Min,Nota,% tiro') throw new Error(`season players: ${shown(players)}`);
+      } finally { Object.assign(ui, { sheetTab: keep.tab, sheetPlayer: keep.player }); restore(snap); }
     }));
     T('sheet tabs stay on one scrolling row', () => {
       const keep = ui.sheetTab;
