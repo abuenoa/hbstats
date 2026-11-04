@@ -3442,6 +3442,31 @@
         currentMatchId = keepId; restore(snap);
       }
     })));
+    await TA('orientation: an open match holds landscape, leaving it lets the screen turn', async () => withNavHome(async () => {
+      const keepId = currentMatchId, snap = snapshot(), current = localStorage.getItem(CURRENT_MATCH_KEY), calls = [];
+      const fake = { lock: async (o) => { calls.push(`lock:${o}`); throw new DOMException('not in full screen', 'NotSupportedError'); }, unlock: () => calls.push('unlock') };
+      Object.defineProperty(screen, 'orientation', { value: fake, configurable: true });
+      const realInfo = console.info;
+      console.info = () => {};
+      try {
+        showHomeView('matches');
+        enterMatch('turn-x', { ...JSON.parse(snap), setupDone: true }, false);
+        if (calls.join() !== `lock:${MATCH_ORIENTATION}`) throw new Error(`live: ${calls}`);
+        leaveMatch();
+        for (let i = 0; i < 5; i++) await tick0();
+        if (calls.at(-1) !== 'unlock') throw new Error(`left: ${calls}`);
+        calls.length = 0;
+        enterMatch('turn-x', { ...JSON.parse(snap), setupDone: true }, false, { summary: true });
+        if (calls.join() !== 'unlock') throw new Error(`statistics: ${calls}`);
+        leaveMatch();
+        for (let i = 0; i < 5; i++) await tick0();
+      } finally {
+        delete screen.orientation; console.info = realInfo;
+        removeKey(MATCH_KEY_PREFIX + 'turn-x');
+        if (current === null) removeKey(CURRENT_MATCH_KEY); else localStorage.setItem(CURRENT_MATCH_KEY, current);
+        currentMatchId = keepId; restore(snap);
+      }
+    }));
     await TA('attendance notes: on the player page for the staff, latest first, never for players', async () => withNavHome(async () => {
       const day = (date, mark) => ({ id: `n-${date}`, date, kind: 'ENTRENO', matchId: null, marks: { [cardField.id]: mark }, note: '' });
       home.sessions = [day('2026-10-20', { s: 'L', n: 'Esguince tobillo' }), day('2026-10-27', { s: 'J', n: 'Médico' }), day('2026-10-29', { s: 'F' }), { ...day('2026-10-30', { s: 'L', n: 'Otro' }), marks: { [cardKeeper.id]: { s: 'L', n: 'Otro' } } }];

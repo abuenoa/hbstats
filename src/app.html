@@ -2705,6 +2705,19 @@ span.att-foot { visibility: hidden; }
     } catch (err) { wakeLock = null; }
   }
   document.addEventListener('pointerdown', ensureAudio, { capture: true });
+  // The live screen is built for a landscape tablet: an open match holds the screen there, every other screen turns
+  // with the device. Where the browser cannot lock (iOS, a tab outside full screen) the device keeps deciding.
+  const MATCH_ORIENTATION = 'landscape';
+  async function holdLandscape(on) {
+    const orientation = screen.orientation;
+    if (!orientation || !orientation.lock) return;
+    try {
+      if (on) await orientation.lock(MATCH_ORIENTATION);
+      else orientation.unlock();
+    } catch (err) {
+      console.info(`Screen orientation not ${on ? 'locked' : 'unlocked'}: ${err.message}`);
+    }
+  }
 
   // ===================== Clock and timed alerts =====================
   function pauseClock() {
@@ -8919,7 +8932,9 @@ table { border-collapse: collapse; width: 100%; }
     armBackGuard();
     // A player's Hoja sits over a live screen they cannot touch: no taps and no tab stops reach it.
     document.querySelector('.app').inert = readOnly();
-    if (readOnly() || summary || (onPhone() && state.setupDone)) openMatchViewer(sheetPlayer);
+    const viewer = readOnly() || summary || (onPhone() && state.setupDone);
+    holdLandscape(!viewer);
+    if (viewer) openMatchViewer(sheetPlayer);
     else if (!state.setupDone) openSetup();
     else if (sheetPlayer) openSheetPlayer(sheetPlayer);
     else if (state.finished) openFinal();
@@ -9016,6 +9031,7 @@ table { border-collapse: collapse; width: 100%; }
     ui.sheetPlayer = null;
     ui.sheetReturn = null;
     keepScreenOn(false);
+    holdLandscape(false);
     $('sheet').hidden = true;
     hideFinal();
     after();
@@ -9047,6 +9063,7 @@ table { border-collapse: collapse; width: 100%; }
     ['home', 'sheet'].forEach((el) => { $(el).hidden = true; });
     hideFinal();
     renderAll();
+    holdLandscape(true);
     armBackGuard();
     hint('Partido de ejemplo · «Atrás» para volver a tus partidos');
   }
