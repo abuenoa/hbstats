@@ -3412,6 +3412,36 @@
         currentMatchId = keepId; restore(snap);
       }
     }));
+    // A phone is stubbed through matchMedia: PHONE_QUERY matches, every other query keeps its real answer.
+    const asPhone = async (fn) => {
+      const real = window.matchMedia;
+      window.matchMedia = (q) => (q === PHONE_QUERY ? { matches: true, media: q } : real.call(window, q));
+      try { await fn(); } finally { window.matchMedia = real; }
+    };
+    await TA('phone: a match opens in its statistics and goes back to the screen it came from', async () => withNavHome(() => asPhone(async () => {
+      const keepId = currentMatchId, snap = snapshot(), current = localStorage.getItem(CURRENT_MATCH_KEY);
+      try {
+        showHomeView('matches');
+        const card = $('home').querySelector('.match-card');
+        if ($('home').querySelector('[data-match-stats]') || card.querySelector('[data-open-match]').textContent !== 'Ver') throw new Error('the phone still offers the live screen');
+        showHomeView('team');
+        enterMatch('phone-x', { ...JSON.parse(snap), setupDone: true }, false);
+        if ($('sheet').hidden || ui.sheetTab !== 'summary') throw new Error(`not on the summary: ${ui.sheetTab}`);
+        const back = document.querySelector('#sheet [data-close-sheet]');
+        if (!back.textContent.includes(NAV_LABELS.team)) throw new Error(`back reads «${back.textContent}»`);
+        back.click();
+        for (let i = 0; i < 5; i++) await tick0();
+        if (!$('sheet').hidden || currentMatchId !== null || home.view !== 'team') throw new Error(`back: ${home.view}`);
+        enterMatch('phone-x', { ...JSON.parse(snap), setupDone: false }, false);
+        if (ui.sheetMode !== 'setup') throw new Error('a match to prepare skipped its set-up');
+        leaveMatch();
+        for (let i = 0; i < 5; i++) await tick0();
+      } finally {
+        removeKey(MATCH_KEY_PREFIX + 'phone-x');
+        if (current === null) removeKey(CURRENT_MATCH_KEY); else localStorage.setItem(CURRENT_MATCH_KEY, current);
+        currentMatchId = keepId; restore(snap);
+      }
+    })));
     await TA('attendance notes: on the player page for the staff, latest first, never for players', async () => withNavHome(async () => {
       const day = (date, mark) => ({ id: `n-${date}`, date, kind: 'ENTRENO', matchId: null, marks: { [cardField.id]: mark }, note: '' });
       home.sessions = [day('2026-10-20', { s: 'L', n: 'Esguince tobillo' }), day('2026-10-27', { s: 'J', n: 'Médico' }), day('2026-10-29', { s: 'F' }), { ...day('2026-10-30', { s: 'L', n: 'Otro' }), marks: { [cardKeeper.id]: { s: 'L', n: 'Otro' } } }];

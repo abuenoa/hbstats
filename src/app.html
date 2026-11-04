@@ -4435,7 +4435,7 @@ span.att-foot { visibility: hidden; }
     const back = ui.sheetReturn;
     if (back?.playerId) return `${(playerById(back.playerId) || rosterPlayer(back.playerId))?.name} · ${state.them}`;
     if (back?.summary) return NAV_LABELS[back.summary];
-    if (back?.matches) return NAV_LABELS.matches;
+    if (back?.view) return NAV_LABELS[back.view];
     return NAV_LABELS.liveMatch;
   }
   function renderSheet() {
@@ -6898,7 +6898,7 @@ table { border-collapse: collapse; width: 100%; }
       <div class="match-top">${chip}<span class="match-who"><b class="match-rival">${esc(m.them)}</b><small>${where}</small></span>
         <strong class="match-score${finished ? ` res-${result}` : ''}">${setup ? '–' : `${m.scoreUs}–${m.scoreThem}`}</strong></div>
       ${meta ? `<div class="match-meta">${meta}</div>` : ''}
-      <div class="match-foot"><div class="row-actions"><button class="btn primary press" type="button" data-open-match="${m.id}">${finished || readOnly() ? 'Ver' : 'Seguir'}</button>${setup || readOnly() ? '' : `<button class="btn press" type="button" data-match-stats="${m.id}">Estadísticas</button>`}${setup ? '' : armedButton(`restart-${m.id}`, 'Reiniciar', `data-restart-match="${m.id}" aria-label="Reiniciar el partido contra ${esc(m.them)}"`)}${armedButton(`delete-${m.id}`, 'Borrar', `data-delete-match="${m.id}" aria-label="Borrar el partido contra ${esc(m.them)}"`)}</div>${face}</div></article>`;
+      <div class="match-foot"><div class="row-actions"><button class="btn primary press" type="button" data-open-match="${m.id}">${finished || readOnly() || onPhone() ? 'Ver' : 'Seguir'}</button>${setup || readOnly() || onPhone() ? '' : `<button class="btn press" type="button" data-match-stats="${m.id}">Estadísticas</button>`}${setup ? '' : armedButton(`restart-${m.id}`, 'Reiniciar', `data-restart-match="${m.id}" aria-label="Reiniciar el partido contra ${esc(m.them)}"`)}${armedButton(`delete-${m.id}`, 'Borrar', `data-delete-match="${m.id}" aria-label="Borrar el partido contra ${esc(m.them)}"`)}</div>${face}</div></article>`;
   }
   function matchesHtml() {
     const rounds = matchRounds();
@@ -7201,6 +7201,9 @@ table { border-collapse: collapse; width: 100%; }
   const ACCOUNT_ICON = '<svg viewBox="0 0 24 24" width="24" height="24" aria-hidden="true" fill="currentColor"><circle cx="12" cy="8" r="4.2"/><path d="M3.5 21c.6-4.6 4-7.2 8.5-7.2s7.9 2.6 8.5 7.2z"/></svg>';
   // An installed app (its own window) can be closed from the menu; in a browser tab that is the browser's job.
   const STANDALONE_QUERY = '(display-mode: standalone)';
+  // A phone, upright or on its side: too small for the live screen, so a match opens in its statistics.
+  const PHONE_QUERY = '(max-width: 700px), (max-height: 500px)';
+  const onPhone = () => matchMedia(PHONE_QUERY).matches;
   function accountMenuHtml() {
     const exit = matchMedia(STANDALONE_QUERY).matches ? '<button class="btn press" type="button" data-app-exit>Salir de la app</button>' : '';
     const account = home.user ? `<p class="account-email">${esc(home.user.email)}</p>
@@ -8896,7 +8899,8 @@ table { border-collapse: collapse; width: 100%; }
     renderHome();
     homeStatus('Ficha guardada.');
   }
-  // `summary`: straight to the match's statistics, as a player's view opens, then back to the list.
+  // `summary`: straight to the match's statistics, as a player's view opens, then back to where it was opened from.
+  // On a phone a prepared match always opens that way.
   function enterMatch(id, saved, dirty, { sheetPlayer, version, summary } = {}) {
     currentMatchId = id;
     home.season = null;
@@ -8915,15 +8919,17 @@ table { border-collapse: collapse; width: 100%; }
     armBackGuard();
     // A player's Hoja sits over a live screen they cannot touch: no taps and no tab stops reach it.
     document.querySelector('.app').inert = readOnly();
-    if (readOnly() || summary) openMatchViewer(sheetPlayer);
+    if (readOnly() || summary || (onPhone() && state.setupDone)) openMatchViewer(sheetPlayer);
     else if (!state.setupDone) openSetup();
     else if (sheetPlayer) openSheetPlayer(sheetPlayer);
     else if (state.finished) openFinal();
   }
-  // A player opens a match in its statistics, never on the live screen: «‹ Partidos» (or their card) leads back.
+  // A player opens a match in its statistics, never on the live screen: «‹ Equipo» or «‹ Partidos» (or their card) leads back.
+  const VIEWER_RETURNS = { team: showTeamPage, matches: showMatches };
   function openMatchViewer(playerId) {
     if (playerId) { openSheetPlayer(playerId); return; }
-    Object.assign(ui, { sheetMode: 'sheet', sheetTab: 'summary', sheetReturn: { matches: true } });
+    const view = home.view in VIEWER_RETURNS ? home.view : 'matches';
+    Object.assign(ui, { sheetMode: 'sheet', sheetTab: 'summary', sheetReturn: { view } });
     renderSheet();
     $('sheet').hidden = false;
   }
@@ -9022,7 +9028,7 @@ table { border-collapse: collapse; width: 100%; }
       ui.sheetReturn = null;
       $('sheet').hidden = true;
       (back.summary === 'final' ? openFinal : openHalftime)();
-    } else if (back?.matches) leaveMatch();
+    } else if (back?.view) leaveMatch(VIEWER_RETURNS[back.view]);
     else if (back) backToPlayerMatch(back);
     else $('sheet').hidden = true;
   }
