@@ -665,6 +665,8 @@ th { font-weight: 700; letter-spacing: .06em; text-transform: uppercase; color: 
 @media (max-width: 900px) { .tune-page { grid-template-columns: minmax(0, 1fr); } .tune-preview { position: static; } }
 /* The player table has one column per figure: tight padding keeps it inside the page at 1280 */
 .stats-table th, .stats-table td { padding-inline: var(--space-1); }
+/* On a phone the season's player table keeps the player, minutes, rating and shooting %; the tablet shows every column. */
+@media (max-width: 700px) { .stats-players [data-col]:not([data-col="seconds"], [data-col="rating"], [data-col="shooting"]) { display: none; } }
 td.name { text-align: left; font-weight: 600; }
 td.name span { display: inline-block; width: var(--space-3); height: var(--space-3); border-radius: 50%; margin-right: var(--space-2); }
 td.zero { color: var(--color-text-tertiary); }
@@ -8298,7 +8300,7 @@ table { border-collapse: collapse; width: 100%; }
   const STATS_COLUMNS = [['player', 'Jugador'], ['played', 'PJ'], ['seconds', 'Min'], ['plusMinus', '+/−'], ['rating', 'Nota'], ['goals', 'Goles/tiros'], ['shooting', '% tiro'], ['assists', 'Pases gol'], ['recoveries', 'Recup.'], ['turnovers', 'Pérd.']];
   function playersCardHtml(matches) {
     const sort = home.statsSort || STATS_DEFAULT_SORT, rows = sortedPlayerRows(seasonPlayerTable(matches, home.roster), sort);
-    const head = STATS_COLUMNS.map(([key, label]) => `<th${key === 'player' ? ' class="who"' : ''} aria-sort="${sort.key === key ? (sort.dir > 0 ? 'ascending' : 'descending') : 'none'}"><button class="sort-btn press" type="button" data-sort="${key}">${label}</button></th>`).join('');
+    const head = STATS_COLUMNS.map(([key, label]) => `<th${key === 'player' ? ' class="who"' : ` data-col="${key}"`} aria-sort="${sort.key === key ? (sort.dir > 0 ? 'ascending' : 'descending') : 'none'}"><button class="sort-btn press" type="button" data-sort="${key}">${label}</button></th>`).join('');
     const body = rows.map((r) => `<tr data-player-row="${esc(r.player.id)}"><td class="who"><button class="who-cell who-link press" type="button" data-player="${esc(r.player.id)}" aria-label="Ver a ${esc(r.player.name)}">${discHtml(r.player)}${esc(r.player.name)}</button></td><td data-col="played">${r.played}</td>
       <td data-col="seconds">${minutesText(r.seconds)}</td><td data-col="plusMinus">${plusMinusText(r.plusMinus)}</td><td data-col="rating">${r.rating == null ? '–' : ratingChipHtml(r.rating)}</td>
       <td data-col="goals">${r.goals}/${r.shots}</td><td data-col="shooting">${pctText(r.shooting)}</td><td data-col="assists">${r.assists}</td><td data-col="recoveries">${r.recoveries}</td><td data-col="turnovers">${r.turnovers}</td></tr>`).join('');

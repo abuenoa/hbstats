@@ -2675,7 +2675,7 @@
       if (seasonPlayerTable([old], statsPlayers).some((r) => r.played === 0) || seasonPlayerTable([], statsPlayers).length) throw new Error('players who did not play');
       await withStatsPage([old], async () => {
         showHomeView('stats');
-        const cells = (col) => [...document.querySelectorAll(`.stats-players [data-col="${col}"]`)].map((c) => c.textContent);
+        const cells = (col) => [...document.querySelectorAll(`.stats-players tbody [data-col="${col}"]`)].map((c) => c.textContent);
         if (!cells('seconds').length || cells('seconds').some((x) => x !== '–') || cells('plusMinus').some((x) => x !== '–')) throw new Error(cells('seconds') + ' / ' + cells('plusMinus'));
       });
     });
