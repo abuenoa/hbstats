@@ -3412,6 +3412,23 @@
         currentMatchId = keepId; restore(snap);
       }
     }));
+    await TA('attendance notes: on the player page for the staff, latest first, never for players', async () => withNavHome(async () => {
+      const day = (date, mark) => ({ id: `n-${date}`, date, kind: 'ENTRENO', matchId: null, marks: { [cardField.id]: mark }, note: '' });
+      home.sessions = [day('2026-10-20', { s: 'L', n: 'Esguince tobillo' }), day('2026-10-27', { s: 'J', n: 'Médico' }), day('2026-10-29', { s: 'F' }), { ...day('2026-10-30', { s: 'L', n: 'Otro' }), marks: { [cardKeeper.id]: { s: 'L', n: 'Otro' } } }];
+      const notes = attendanceNotes(home.sessions, cardField.id);
+      if (notes.map((n) => `${n.date}:${n.code}:${n.text}`).join() !== '2026-10-27:J:Médico,2026-10-20:L:Esguince tobillo') throw new Error(JSON.stringify(notes));
+      showPlayer(cardField.id);
+      const list = $('home').querySelector('.att-note-list');
+      if (!list || list.children.length !== 2 || !list.textContent.includes('Esguince tobillo')) throw new Error(`staff list: ${list && list.textContent}`);
+      showPlayer(cardKeeper.id);
+      if ($('home').querySelector('.att-note-list').children.length !== 1) throw new Error('another player\'s note leaked');
+      const role = team.role;
+      team.role = PLAYER_ROLE;
+      try { showPlayer(cardField.id); if ($('home').querySelector('.att-note-list')) throw new Error('a player reads the staff notes'); } finally { team.role = role; }
+      home.sessions = [];
+      showPlayer(cardField.id);
+      if ($('home').querySelector('.att-notes')) throw new Error('an empty notes card');
+    }));
     await TA('guest account: reads the team like a player, changes nothing', async () => withNavHome(async () => {
       const role = team.role;
       team.role = VIEWER_ROLE;
