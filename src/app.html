@@ -641,8 +641,9 @@ button.rex-chip { border: 0; cursor: pointer; position: relative; }
 .stat-tile:last-child:nth-child(4n+3) { grid-column: span 2; }
 #sheet .page-bar { margin-bottom: var(--space-3); }
 /* One line at 1024 px: the row scrolls sideways before it wraps */
-.sheet-tabs { flex-wrap: nowrap; overflow-x: auto; margin-bottom: var(--space-3); }
+.tabs.sheet-tabs { flex-wrap: nowrap; overflow-x: auto; margin-bottom: var(--space-3); }
 .sheet-tabs button { flex: none; }
+@media (max-width: 700px) { .sheet .sheet-tabs button { padding-inline: var(--space-3); font-size: .9rem; } }
 .final-actions .spacer { flex: 1 1 auto; }
 .table-wrap { overflow-x: auto; background: var(--surface); border: 1px solid var(--line); border-radius: var(--inner-radius, var(--radius)); }
 table { border-collapse: collapse; width: 100%; font: var(--type-caption); font-variant-numeric: tabular-nums; }

@@ -3467,6 +3467,14 @@
         currentMatchId = keepId; restore(snap);
       }
     }));
+    T('sheet tabs stay on one scrolling row', () => {
+      const keep = ui.sheetTab;
+      renderSheet(); $('sheet').hidden = false;
+      try {
+        const tabs = $('sheet').querySelector('.sheet-tabs'), style = getComputedStyle(tabs);
+        if (style.flexWrap !== 'nowrap' || style.overflowX !== 'auto') throw new Error(`${style.flexWrap} ${style.overflowX}`);
+      } finally { $('sheet').hidden = true; ui.sheetTab = keep; }
+    });
     await TA('attendance notes: on the player page for the staff, latest first, never for players', async () => withNavHome(async () => {
       const day = (date, mark) => ({ id: `n-${date}`, date, kind: 'ENTRENO', matchId: null, marks: { [cardField.id]: mark }, note: '' });
       home.sessions = [day('2026-10-20', { s: 'L', n: 'Esguince tobillo' }), day('2026-10-27', { s: 'J', n: 'Médico' }), day('2026-10-29', { s: 'F' }), { ...day('2026-10-30', { s: 'L', n: 'Otro' }), marks: { [cardKeeper.id]: { s: 'L', n: 'Otro' } } }];
