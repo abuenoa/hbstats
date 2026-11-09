@@ -46,7 +46,7 @@ owner (whoever created it) can delete it, which also deletes its roster and matc
 
 | Table | What it holds |
 |---|---|
-| `teams` | Club and scoreboard names, brand colours, crest (a small image as a data URL). |
+| `teams` | Club and scoreboard names, brand colours, crest (a small image as a data URL), coaching staff (name, job and photo, up to 6). |
 | `team_members` | Which users belong to which team (`owner` creates it, `coach` is added). |
 | `players` | The team roster. Players who leave are kept as inactive so past matches still make sense. |
 | `matches` | One row per match: listing columns (date, rival, venue, status, score) and the whole match state as JSON. |

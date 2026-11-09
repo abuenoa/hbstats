@@ -21,6 +21,9 @@ create table if not exists public.teams (
 -- The coach's own rating weights (only the knobs he changed, keyed as in the app's RATING_KNOBS); null = the defaults.
 alter table public.teams add column if not exists rating_weights jsonb
   check (rating_weights is null or (jsonb_typeof(rating_weights) = 'object' and pg_column_size(rating_weights) <= 2000));
+-- The coaching staff: [{ id, name, job, photo }], the photo a small face crop as a data URL like the players'. Up to 6.
+alter table public.teams add column if not exists staff jsonb not null default '[]'
+  check (jsonb_typeof(staff) = 'array' and jsonb_array_length(staff) <= 6 and pg_column_size(staff) <= 400000);
 
 create table if not exists public.team_members (
   team_id uuid not null references public.teams (id) on delete cascade,
