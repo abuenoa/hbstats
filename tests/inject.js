@@ -2045,6 +2045,20 @@
       } finally { team.role = role; }
       await saveStaff([]);
     });
+    await TA('staff: a profile for each coach account, linked and named from the e-mail', async () => {
+      showHomeView('team-edit');
+      home.accounts = { teamId: team.id, rows: [
+        { userId: 'u-coach', role: COACH_INVITE, email: 'jorge.caro@correo.es' }, { userId: 'u-owner', role: STAFF_ROLE, email: 'antonio_bueno2@correo.es' },
+        { userId: 'u-player', role: PLAYER_ROLE, email: 'p@correo.es' }, { userId: 'u-guest', role: VIEWER_ROLE, email: 'g@correo.es' }] };
+      renderHome();
+      const button = document.querySelector('[data-staff-from-accounts]');
+      if (!button || !button.textContent.includes('(2)')) throw new Error('offer for the two coach accounts: ' + (button && button.textContent));
+      await addCoachProfiles();
+      const got = teamStaff().map((m) => `${m.userId}:${m.name}:${staffRoleOf(m)}`).join();
+      if (got !== 'u-owner:Antonio Bueno:head,u-coach:Jorge Caro:assistant') throw new Error(got);
+      if (document.querySelector('[data-staff-from-accounts]') || (await addCoachProfiles()) !== false) throw new Error('profiles made twice');
+      home.accounts = null; await saveStaff([]);
+    });
     await TA('team form refuses empty names', async () => { showHomeView('team-edit'); $('team-name').value = '  '; await submitTeam(document.querySelector('[data-form="team"]'), false); if (team.name !== 'Ejemplo Sur' || !$('home-status').textContent.includes('vacíos')) throw new Error($('home-status').textContent); });
     await TA('team roster: add, position, duplicate dorsal refused, retire', async () => { showHomeView('team-edit'); await addTeamPlayer(); await addTeamPlayer(); await addTeamPlayer(); const [a, b, c] = home.roster; await saveTeamPlayer(a, { pos: 'POR', name: 'Ana' }); if (rosterPlayer(a.id).pos !== 'POR') throw new Error('pos'); await saveTeamPlayer(rosterPlayer(b.id), { num: a.num }); if (rosterPlayer(b.id).num === a.num || !$('home-status').textContent.includes('ya está')) throw new Error('dup'); document.querySelector(`[data-team-del="${c.id}"]`).click(); if (!rosterPlayer(c.id)) throw new Error('retired on first tap'); document.querySelector(`[data-team-del="${c.id}"]`).click(); await tick0(); await tick0(); if (rosterPlayer(c.id)) throw new Error('not retired'); const listed = await backend.listPlayers(team.id); if (listed.length !== 2) throw new Error('backend ' + listed.length); });
     await TA('roster file adds new dorsals and updates existing ones', async () => { const a = home.roster.find((p) => p.pos === 'POR'); const file = new File([JSON.stringify({ format: ROSTER_FORMAT, players: [{ num: a.num, name: 'Ana Ruiz', pos: 'POR' }, { num: 9, name: 'Lola', pos: 'CEN' }, { num: 11, name: 'Marta', pos: 'EXT' }, { num: 12, name: 'Sara', pos: 'POR' }] })], 'p.json', { type: 'application/json' }); await importTeamRoster(file); if (home.roster.length !== 5 || rosterPlayer(a.id).name !== 'Ana Ruiz') throw new Error(home.roster.map((p) => p.num + p.name).join()); });

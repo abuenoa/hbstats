@@ -7027,7 +7027,9 @@ table { border-collapse: collapse; width: 100%; }
   function staffCardHtml() {
     const staff = teamStaff();
     if (!staff.length && readOnly()) return '';
-    const add = `<div class="row-actions"><button class="btn press" type="button" data-staff-add ${staff.length >= MAX_STAFF ? 'disabled' : ''}>+ Miembro</button></div>`;
+    const missing = missingCoaches().length, full = staff.length >= MAX_STAFF;
+    const fromAccounts = missing ? `<button class="btn primary press" type="button" data-staff-from-accounts ${full ? 'disabled' : ''}>Crear ficha a los entrenadores con cuenta (${missing})</button>` : '';
+    const add = `<div class="row-actions">${fromAccounts}<button class="btn press" type="button" data-staff-add ${full ? 'disabled' : ''}>+ Miembro</button></div>`;
     return `<section class="sheet-card squad staff-card"><h3>Cuerpo técnico · ${staff.length}</h3>
       ${staff.length ? `<div class="faces">${staff.map(staffFaceHtml).join('')}</div>` : '<p class="note">Añade al entrenador principal, al segundo y al resto del cuerpo técnico; salen en la convocatoria.</p>'}${add}</section>`;
   }
@@ -7078,6 +7080,24 @@ table { border-collapse: collapse; width: 100%; }
   }
   async function removeStaff(id) {
     if (await saveStaff(teamStaff().filter((m) => m.id !== id))) showTeamPage();
+  }
+  // The accounts with full access (owner and coaches) that have no profile yet; the owner first. Known once «Editar
+  // equipo» has loaded the accounts.
+  const missingCoaches = () => (home.accounts?.teamId === team.id && home.accounts.rows || [])
+    .filter((a) => (a.role === STAFF_ROLE || a.role === COACH_INVITE) && !teamStaff().some((m) => m.userId === a.userId))
+    .sort((a, b) => (b.role === STAFF_ROLE) - (a.role === STAFF_ROLE));
+  // «jorge.caro@…» reads «Jorge Caro»: a first guess at the name, to be corrected on the profile.
+  const nameFromEmail = (email) => email.split('@')[0].split(/[._+-]+/).map((w) => w.replace(/\d+/g, '')).filter(Boolean)
+    .map((w) => w[0].toUpperCase() + w.slice(1)).join(' ').slice(0, MAX_NAME_LENGTH) || STAFF_ROLES.staff;
+  // A profile for each of them, linked to the account, taking the coach roles still free.
+  function addCoachProfiles() {
+    const staff = teamStaff(), taken = new Set(staff.map(staffRoleOf));
+    const added = missingCoaches().slice(0, MAX_STAFF - staff.length).map((a) => {
+      const role = UNIQUE_STAFF_ROLES.find((r) => !taken.has(r)) || 'staff';
+      taken.add(role);
+      return { id: newUuid(), userId: a.userId, name: nameFromEmail(a.email), role, job: '', photo: null };
+    });
+    return added.length ? saveStaff([...staff, ...added]) : Promise.resolve(false);
   }
   // The photo belongs to the member picked when the file dialog opened; one gone by then is skipped.
   async function pickStaffPhoto(id, file) {
@@ -9635,6 +9655,7 @@ table { border-collapse: collapse; width: 100%; }
     if (b.hasAttribute('data-crest-clear')) { home.crestDraft = null; $('crest-preview').src = crestSrc({ ...(home.view === 'team-new' ? home.draft : team), crest: null }); b.remove(); return; }
     if (b.hasAttribute('data-team-add')) { addTeamPlayer(); return; }
     if (b.hasAttribute('data-staff-add')) { addStaff(); return; }
+    if (b.hasAttribute('data-staff-from-accounts')) { addCoachProfiles(); return; }
     if (b.dataset.staffPhoto) { home.staffPhotoFor = b.dataset.staffPhoto; $('photo-file').click(); return; }
     if (b.dataset.staffPhotoClear) { editStaff(b.dataset.staffPhotoClear, { photo: null }); return; }
     if (b.dataset.staffOpen) { showStaff(b.dataset.staffOpen); return; }
