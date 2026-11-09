@@ -603,6 +603,7 @@ button.rex-chip { border: 0; cursor: pointer; position: relative; }
 .mvp-tag { font: var(--type-caption); font-weight: 800; color: var(--fg); }
 .mvp-share { display: grid; gap: var(--space-2); }
 .mvp-preview { font: var(--type-caption); color: var(--muted); }
+.summary-mvp .mvp-preview-img { width: min(100%, 320px); }
 .mvp-preview-img { display: block; margin-inline: auto; width: min(100%, 200px); height: auto; aspect-ratio: 1080 / 1350; border-radius: var(--radius-md); }
 .ratings { display: grid; gap: var(--space-2); }
 .rating-list { margin: 0; padding: 0; list-style: none; }
@@ -1034,6 +1035,14 @@ body:has(#home:not([hidden])) { overflow: hidden; }
 .face span:not(.disc) { max-width: 100%; display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; overflow: hidden; overflow-wrap: anywhere; text-align: center; }
 .face .disc, .last-match .disc { width: var(--face-disc); height: var(--face-disc); font-size: 22px; }
 .face .disc { box-shadow: 0 0 0 3px var(--pos); }
+.staff-face small { color: var(--muted); font-weight: 600; text-align: center; }
+.staff-profile { display: grid; gap: var(--space-4); max-width: 640px; }
+.staff-hero { display: grid; justify-items: center; gap: var(--space-2); text-align: center; }
+.staff-hero .disc { width: 128px; height: 128px; font-size: 44px; box-shadow: 0 0 0 4px var(--gold); }
+.staff-hero h2, .staff-hero p { margin: 0; }
+.staff-hero p { color: var(--muted); font-weight: 600; }
+.staff-profile-edit { display: grid; gap: var(--space-3); }
+.staff-roles { flex-wrap: wrap; }
 .squad .row-actions { margin-top: var(--space-4); }
 /* Attendance: the faces with a status badge that carries a letter and a word, never colour alone */
 .att-bar { display: flex; align-items: end; gap: var(--space-4); flex-wrap: wrap; margin-bottom: var(--space-3); }
@@ -1541,7 +1550,7 @@ span.att-foot { visibility: hidden; }
   const soleTeam = () => (home.teams.length === 1 ? home.teams[0] : null);
   // The controls that change the team, its matches, calendar or attendance: they leave the page for a player.
   const STAFF_ONLY_SELECTOR = ['[data-new-match]', '[data-player-edit]', '[data-home-view="team-edit"]', '[data-rating-tune]', '[data-fixture-edit]',
-    '[data-calendar-import]', '[data-restart-match]', '[data-delete-match]', '[data-att-delete]', '[data-att-note]', '.callup', '[data-att-mode]', '[data-tab="acta"]', '[data-legacy-import]', '[data-legacy-drop]'].join();
+    '[data-calendar-import]', '[data-staff-add]', '.staff-profile-edit', '[data-restart-match]', '[data-delete-match]', '[data-att-delete]', '[data-att-note]', '.callup', '[data-att-mode]', '[data-tab="acta"]', '[data-legacy-import]', '[data-legacy-drop]'].join();
   function stripStaffControls(root) {
     if (!readOnly()) return;
     root.querySelectorAll(STAFF_ONLY_SELECTOR).forEach((el) => el.remove());
@@ -4457,11 +4466,15 @@ span.att-foot { visibility: hidden; }
       <span class="head">${discHtml(p)}<b>${esc(p.name)}</b>${ratingChipHtml(ratingValue(ratings, p))}</span>
       <span class="figures">${ratingKpiHtml(minutesText(court.seconds), 'Min')}${ratingKpiHtml(plusMinusText(court.plusMinus), '+/−', plusMinusTone(court.plusMinus))}${ratingKpiHtml(`${made}/${tried}`, keeper ? 'Paradas' : 'Goles', ratioTone(made, tried, keeper ? 'gk' : 'shooting'))}</span></button>`;
   }
+  const summaryMvpHtml = () => `<section class="sheet-card mvp-share summary-mvp"><h3>MVP del partido</h3>
+      <div class="mvp-preview" id="mvp-preview" aria-live="polite"></div>
+      <div class="row-actions"><button class="btn primary press" type="button" data-mvp-share>Compartir imagen</button></div>
+      <p class="note" id="${MVP_SHARE_STATUS}" aria-live="polite"></p></section>`;
   function sheetSummaryHtml() {
     const ours = ourShots(), theirs = rivalShots(), ratings = matchRatings(state);
     const onGoal = (list) => list.filter(onTarget).length;
     const players = state.players.slice().sort(byPosition).map((p) => summaryPlayerHtml(p, ratings)).join('');
-    return `<div class="stat-tiles summary-tiles">${summaryTilesHtml(matchFigures())}</div>
+    return `${state.finished ? summaryMvpHtml() : ''}<div class="stat-tiles summary-tiles">${summaryTilesHtml(matchFigures())}</div>
       <p class="note">${TARGET_COLOUR_NOTE}</p>
       <div class="summary-cols">
         <div class="summary-col">${summaryChartHtml('Nuestros tiros · % de gol por zona', 'zone-map', ours.length, () => zoneMapSvg(ours, isGoal, CARD_ZONE_COLOURS.field, anyShot, FIELD_TARGETS))}
@@ -4499,6 +4512,7 @@ span.att-foot { visibility: hidden; }
       <div class="tabs sheet-tabs" role="group" aria-label="Secciones">${Object.entries(SHEET_TABS).map(([k, label]) => `<button class="press" type="button" data-tab="${k}" aria-pressed="${k === ui.sheetTab}">${label}</button>`).join('')}</div>
       <div class="sheet-body">${SHEET_RENDERERS[ui.sheetTab]()}</div>`;
     stripStaffControls($('sheet'));
+    if ($('mvp-preview')) ui.mvpCardReady = renderMvpPreview();
   }
   const sheetStatus = (id, text) => { const el = $(id); if (el) el.textContent = text; };
   function openSetup() {
@@ -5733,6 +5747,9 @@ table { border-collapse: collapse; width: 100%; }
     w: 1080, h: 1620, pad: 48, stroke: 12, tilt: -0.035, minAccentContrast: 3, shade: 0.28, paperAlpha: 0.45,
     textures: { paper: 'cards/callup-texture.webp', brush: 'cards/brush.webp', ball: 'cards/ball.webp' },
     title: { x: 48, y: 168, size: 150, minSize: 90, w: 640, subY: 246, subSize: 56 },
+    // The coaching staff on the top left, face and name with the job under it; the title moves down a little for them.
+    staff: { y: 20, r: 40, w: 680, slotW: 320, nameSize: 26, jobSize: 20, max: 3 },
+    titleWithStaff: { y: 206, size: 116, minSize: 76, subY: 266, subSize: 46 },
     crest: { cx: 880, cy: 160, r: 128, ring: 10 }, ball: { x: 860, y: 268, size: 190 },
     tag: { y: 300, h: 84, w: 800, icon: 50, size: 42 },
     info: { y: 412, h: 156, labelSize: 26, valueSize: 34, minSize: 22, icon: 40 },
@@ -5775,7 +5792,8 @@ table { border-collapse: collapse; width: 100%; }
       tag: fixture ? [fixture.competition, `Jornada ${fixture.round}`, homeAwayText(fixture.home)].filter(Boolean).join(' · ') : 'Partido',
       rival: fixture ? fixtureRivalName(fixture.opponent) : draft.rival, day: callupDay(draft.date), venue: (fixture && fixture.venue) || '',
       meet: meetTime(draft), time: draft.time, shirt: shirtOf(draft, t), phrase: callupPhrase(draft.date, t.name),
-      players: players.slice().sort(benchOrder).map(face)
+      players: players.slice().sort(benchOrder).map(face),
+      staff: teamStaff(t).slice(0, CALLUP_CARD.staff.max).map((m) => ({ name: m.name, job: staffLabel(m), photo: staffPhoto(m) }))
     };
   }
   // Words in white with a black edge, as painted on the poster; shrunk to fit `width`, then cut with an ellipsis.
@@ -5835,7 +5853,7 @@ table { border-collapse: collapse; width: 100%; }
     posterIcon(ctx, icon, x + 20, y + 22, P.headSize, accent);
     [].concat(title).forEach((line, i) => posterText(ctx, line, x + 30 + P.headSize, y + 22 + size * 0.86 + i * size * 1.15, { ink: accent, size, width: w - 50 - P.headSize, minSize: 16, specOf: cardBody(CARD_WEIGHTS.semi), stroke: 6 }));
   }
-  // Draws the convocatoria on `canvas`; `images` holds what loaded (null when missing): crest, logo, paper, brush, ball, faces.
+  // Draws the convocatoria on `canvas`; `images` holds what loaded (null when missing): crest, logo, paper, brush, ball, faces, staffFaces.
   function drawCallupCard(canvas, data, images = {}) {
     const C = CALLUP_CARD, P = CARD_PALETTE, ctx = canvas.getContext('2d'), accent = cardAccent(data, C.minAccentContrast);
     const { semi } = CARD_WEIGHTS, faces = images.faces || [];
@@ -5843,8 +5861,17 @@ table { border-collapse: collapse; width: 100%; }
     ctx.fillStyle = data.brand; ctx.fillRect(0, 0, C.w, C.h);
     ctx.fillStyle = `rgba(0, 0, 0, ${C.shade})`; ctx.fillRect(0, 0, C.w, C.h);
     if (images.paper) { ctx.save(); ctx.globalCompositeOperation = 'multiply'; ctx.globalAlpha = C.paperAlpha; ctx.drawImage(images.paper, 0, 0, C.w, C.h); ctx.restore(); }
+    // The coaching staff over the title, each a face with the name and the job beside it.
+    const S = C.staff, staff = data.staff || [], slotW = Math.min(S.slotW, S.w / Math.max(1, staff.length));
+    staff.forEach((m, i) => {
+      const x = C.pad + i * slotW, cx = x + S.r, cy = S.y + S.r, textX = x + 2 * S.r + 12, textW = slotW - 2 * S.r - 20;
+      ctx.beginPath(); ctx.arc(cx, cy, S.r + 4, 0, 2 * Math.PI); ctx.fillStyle = P.base; ctx.fill(); ctx.lineWidth = 3; ctx.strokeStyle = accent; ctx.stroke();
+      drawFace(ctx, cardWriter(ctx, slotW), { name: m.name, pos: 'CEN' }, (images.staffFaces || [])[i], cx, cy, S.r);
+      posterText(ctx, m.name.toUpperCase(), textX, cy - 2, { size: S.nameSize, width: textW, minSize: 16, stroke: 6 });
+      posterText(ctx, m.job, textX, cy + S.jobSize + 6, { ink: accent, size: S.jobSize, width: textW, minSize: 14, specOf: cardBody(semi), stroke: 5 });
+    });
     // The team, painted big and a little tilted, the club under it; the crest and the ball on the right.
-    const T = C.title;
+    const T = staff.length ? { ...C.title, ...C.titleWithStaff } : C.title;
     ctx.save(); ctx.translate(T.x, T.y); ctx.rotate(C.tilt);
     posterText(ctx, data.team.toUpperCase(), 0, 0, { size: T.size, width: T.w, minSize: T.minSize, stroke: C.stroke * 1.6 });
     posterText(ctx, data.club.toUpperCase(), 0, T.subY - T.y, { ink: accent, size: T.subSize, width: T.w, minSize: 32 });
@@ -5914,9 +5941,10 @@ table { border-collapse: collapse; width: 100%; }
   async function callupCardBlob(data) {
     const { heavy, semi } = CARD_WEIGHTS, X = CALLUP_CARD.textures;
     await loadCardFonts([cardFont(heavy, CALLUP_CARD.title.size, 'display'), cardFont(semi, CALLUP_CARD.info.labelSize, 'body')]);
-    const [crest, logo, paper, brush, ball, ...faces] = await loadCardImages([data.crest, data.logo, X.paper, X.brush, X.ball, ...data.players.map((p) => p.photo)]);
+    const [crest, logo, paper, brush, ball, ...photos] = await loadCardImages([data.crest, data.logo, X.paper, X.brush, X.ball, ...data.players.map((p) => p.photo), ...data.staff.map((m) => m.photo)]);
+    const faces = photos.slice(0, data.players.length), staffFaces = photos.slice(data.players.length);
     const canvas = document.createElement('canvas');
-    drawCallupCard(canvas, data, { crest, logo, paper, brush, ball, faces });
+    drawCallupCard(canvas, data, { crest, logo, paper, brush, ball, faces, staffFaces });
     return canvasPng(canvas, 'The convocatoria card');
   }
 
@@ -6076,13 +6104,17 @@ table { border-collapse: collapse; width: 100%; }
     const ticket = ui.mvpCardTicket, ratings = matchRatings(state), seconds = minutesOnCourt(state), mvp = matchMvp(state, ratings, seconds);
     const show = (html) => { const slot = $('mvp-preview'); if (slot) slot.innerHTML = html; };
     if (!mvp.id) { show(esc(MVP_PREVIEW_TEXT.none)); return; }
+    const img = (name) => `<img class="mvp-preview-img" src="${ui.mvpCardUrl}" alt="Tarjeta del MVP: ${esc(name)}">`;
+    if (ui.mvpCardUrl) { show(img(playerById(mvp.id).name)); return; }
     show(esc(MVP_PREVIEW_TEXT.busy));
     try {
       const data = mvpCardData(state, mvp.id, ratings, team, seconds), blob = await mvpCardBlob(data);
       if (ticket !== ui.mvpCardTicket) return;
+      // Two renders started before either finished: the later one wins and the earlier URL is freed.
+      if (ui.mvpCardUrl) URL.revokeObjectURL(ui.mvpCardUrl);
       ui.mvpCardBlob = blob;
       ui.mvpCardUrl = URL.createObjectURL(blob);
-      show(`<img class="mvp-preview-img" src="${ui.mvpCardUrl}" alt="Tarjeta del MVP: ${esc(data.name)}">`);
+      show(img(data.name));
     } catch (err) {
       console.error('MVP card failed', err);
       if (ticket === ui.mvpCardTicket) { ui.mvpCardBlob = false; show(esc(MVP_PREVIEW_TEXT.failed)); }
@@ -6160,18 +6192,30 @@ table { border-collapse: collapse; width: 100%; }
   }
   // One button, the system's share sheet: Android and iOS list the apps (WhatsApp, Gmail, Drive…) and the coach picks.
   // Called straight from the tap, as the sheet needs its user activation; a device that cannot share files downloads them.
-  async function shareMatch() {
+  function shareMatch() {
     const files = shareBundle();
     if (!files) { finalStatus(SHARE_TEXT.preparing); return; }
+    return shareOrDownload(files, finalTitle(), shareText(), finalStatus);
+  }
+  // The system's share sheet with `files`, or a download of each where files cannot be shared; `status` reports the outcome.
+  async function shareOrDownload(files, title, text, status) {
     try {
-      const result = await shareFiles(files, finalTitle(), shareText());
-      if (result !== 'unsupported') { finalStatus(SHARE_STATUS[result]); return; }
+      const result = await shareFiles(files, title, text);
+      if (result !== 'unsupported') { status(SHARE_STATUS[result]); return; }
       for (const f of files) await offerFile(f.name, f);
-      finalStatus(`Este dispositivo no comparte archivos: descargados ${files.map((f) => f.name).join(', ')}.`);
+      status(`Este dispositivo no comparte archivos: descargados ${files.map((f) => f.name).join(', ')}.`);
     } catch (err) {
-      console.error('Match share failed', err);
-      finalStatus(err && err.name === 'NotAllowedError' ? SHARE_TEXT.denied : err && err.code ? fileErrorText(err) : `No se pudo compartir: ${(err && err.message) || 'error desconocido'}.`);
+      console.error('Share failed', err);
+      status(err && err.name === 'NotAllowedError' ? SHARE_TEXT.denied : err && err.code ? fileErrorText(err) : `No se pudo compartir: ${(err && err.message) || 'error desconocido'}.`);
     }
+  }
+  // The MVP card alone, from the match summary (a phone opens a finished match there, never on the final screen).
+  const MVP_SHARE_STATUS = 'mvp-share-status';
+  function shareMvpCard() {
+    const status = (text) => sheetStatus(MVP_SHARE_STATUS, text);
+    if (!ui.mvpCardBlob) { status(ui.mvpCardBlob === false ? MVP_PREVIEW_TEXT.failed : MVP_PREVIEW_TEXT.busy); return; }
+    const file = new File([ui.mvpCardBlob], shareFilename('mvp', 'png'), { type: ui.mvpCardBlob.type });
+    return shareOrDownload([file], finalTitle(), shareText(), status);
   }
   $('final').addEventListener('click', (ev) => {
     const b = ev.target.closest('button');
@@ -6197,6 +6241,7 @@ table { border-collapse: collapse; width: 100%; }
     if (!b) return;
     if (b.hasAttribute('data-close-sheet')) { closeSheet(); return; }
     if (b.hasAttribute('data-start-match')) { startMatch(); return; }
+    if (b.hasAttribute('data-mvp-share')) { shareMvpCard(); return; }
     if (b.hasAttribute('data-go-home')) { leaveMatch(); return; }
     if (b.dataset.tab) { const moved = ui.sheetTab !== b.dataset.tab; ui.sheetTab = b.dataset.tab; renderSheet(); if (moved) $('sheet').scrollTop = 0; return; }
     if (b.dataset.sheetOpenPlayer) { showSheetPlayer(b.dataset.sheetOpenPlayer); return; }
@@ -6265,7 +6310,7 @@ table { border-collapse: collapse; width: 100%; }
   let currentMatchId = null;
   let syncTimer = null;
   let attendanceSyncTimer = null;
-  const home = { view: 'loading', user: null, teams: [], roster: [], matches: [], season: null, templates: [], template: null, squad: new Set(), leaderMetric: 'goals', playerId: null, playerMatchId: null, playerEdit: false, playerDraft: null, offline: false, error: '', draft: null, crestDraft: undefined, armed: null, passwordChange: false, seasonOffline: false, sessions: null, fixtures: null, teamMatches: [], fixtureEdit: null, squadFixture: null, attendanceDate: null, attendanceMode: null, attendanceNoteFor: null, stateMatches: [], statsSort: null, statsMetric: 'goals', statsPlayer: null, callupDraft: null, callup: null, callupBusy: null, inviteTeamId: null, inviteWho: '', inviteEmail: '', inviteLinks: [], inviteList: '', invitePlan: null, inviteBusy: false, accountStatus: '', accounts: null, weightsDraft: null, ratingCache: null };
+  const home = { view: 'loading', user: null, teams: [], roster: [], matches: [], season: null, templates: [], template: null, squad: new Set(), leaderMetric: 'goals', playerId: null, playerMatchId: null, playerEdit: false, playerDraft: null, offline: false, error: '', draft: null, crestDraft: undefined, armed: null, passwordChange: false, seasonOffline: false, sessions: null, fixtures: null, teamMatches: [], fixtureEdit: null, squadFixture: null, attendanceDate: null, attendanceMode: null, attendanceNoteFor: null, stateMatches: [], statsSort: null, statsMetric: 'goals', statsPlayer: null, callupDraft: null, callup: null, callupBusy: null, staffPhotoFor: null, staffId: null, inviteTeamId: null, inviteWho: '', inviteEmail: '', inviteLinks: [], inviteList: '', invitePlan: null, inviteBusy: false, accountStatus: '', accounts: null, weightsDraft: null, ratingCache: null };
 
   // ---- Device storage ----
   function readJson(key) {
@@ -6460,9 +6505,9 @@ table { border-collapse: collapse; width: 100%; }
     const check = (result) => { if (result.error) throw new Error(result.error.message); return result.data; };
     // A team the user creates or edits is theirs to run, so its role is the owner's unless listTeams says otherwise.
     // `playerId`: the roster player a player's account is, in that team.
-    const toTeam = (r, role = STAFF_ROLE, playerId = null) => ({ id: r.id, club: r.club, name: r.name, brand: r.brand, brand2: r.brand2, brandInk: r.brand_ink, crest: r.crest, ratingWeights: r.rating_weights, role, playerId });
+    const toTeam = (r, role = STAFF_ROLE, playerId = null) => ({ id: r.id, club: r.club, name: r.name, brand: r.brand, brand2: r.brand2, brandInk: r.brand_ink, crest: r.crest, ratingWeights: r.rating_weights, staff: r.staff || [], role, playerId });
     const teamRow = (t) => ({ club: t.club, name: t.name, brand: t.brand, brand2: t.brand2, brand_ink: t.brandInk, crest: t.crest,
-      ...(t.ratingWeights === undefined ? {} : { rating_weights: t.ratingWeights }) });
+      ...(t.ratingWeights === undefined ? {} : { rating_weights: t.ratingWeights }), ...(t.staff === undefined ? {} : { staff: t.staff }) });
     const PLAYER_COLUMNS = 'id,num,name,pos,full_name,photo';
     // `name` is the short name shown on court; `fullName` is the one on the official card.
     const toPlayer = (r) => ({ id: r.id, num: r.num, name: r.name, pos: r.pos, fullName: r.full_name, photo: r.photo });
@@ -6957,6 +7002,87 @@ table { border-collapse: collapse; width: 100%; }
       ${home.matches.length ? `<div class="card-grid">${home.matches.map((m) => matchCardHtml(m, rounds)).join('')}</div>`
         : '<p class="note">Todavía no hay partidos. Pulsa «Nuevo partido» para elegir la convocatoria y prepararlo.</p>'}`;
   }
+  // ---- The coaching staff: each member has a profile (photo, name, role, job), kept on the team (teams.staff) and shown on
+  // the team page and the convocatoria ----
+  const MAX_STAFF = 6;
+  // One head coach and one assistant; everyone else is the staff, with a job of their own (Delegado, Fisioterapeuta…).
+  const STAFF_ROLES = { head: 'Entrenador principal', assistant: 'Segundo entrenador', staff: 'Cuerpo técnico' };
+  const STAFF_ORDER = Object.keys(STAFF_ROLES), UNIQUE_STAFF_ROLES = ['head', 'assistant'];
+  const STAFF_JOBS = ['Delegado', 'Preparador físico', 'Entrenador de porteros', 'Fisioterapeuta', 'Auxiliar'];
+  const staffRoleOf = (m) => (m.role in STAFF_ROLES ? m.role : 'staff');
+  const staffLabel = (m) => (staffRoleOf(m) === 'staff' && m.job ? m.job : STAFF_ROLES[staffRoleOf(m)]);
+  // The head coach first, then the assistant, then the staff in the order they were added.
+  const teamStaff = (t = team) => (Array.isArray(t.staff) ? t.staff : []).slice().sort((a, b) => STAFF_ORDER.indexOf(staffRoleOf(a)) - STAFF_ORDER.indexOf(staffRoleOf(b)));
+  const staffMember = (id) => teamStaff().find((m) => m.id === id);
+  const staffPhoto = (m) => (m.photo && IMAGE_DATA_URL.test(m.photo) ? m.photo : null);
+  const staffDiscHtml = (m) => (staffPhoto(m) ? `<span class="disc photo" style="background:var(--soft) url('${staffPhoto(m)}') center/cover"></span>`
+    : `<span class="disc" style="background:var(--soft)">${esc(initialsOf(m.name) || '?')}</span>`);
+  const staffFaceHtml = (m) => `<button class="face staff-face press" type="button" data-staff-open="${esc(m.id)}" style="--pos:var(--gold)" aria-label="${esc(m.name)}, ${esc(staffLabel(m))}">${staffDiscHtml(m)}<span>${esc(m.name)}</span><small>${esc(staffLabel(m))}</small></button>`;
+  // On the team page and in «Editar equipo»; a player sees it only when there is someone in it.
+  function staffCardHtml() {
+    const staff = teamStaff();
+    if (!staff.length && readOnly()) return '';
+    const add = `<div class="row-actions"><button class="btn press" type="button" data-staff-add ${staff.length >= MAX_STAFF ? 'disabled' : ''}>+ Miembro</button></div>`;
+    return `<section class="sheet-card squad staff-card"><h3>Cuerpo técnico · ${staff.length}</h3>
+      ${staff.length ? `<div class="faces">${staff.map(staffFaceHtml).join('')}</div>` : '<p class="note">Añade al entrenador principal, al segundo y al resto del cuerpo técnico; salen en la convocatoria.</p>'}${add}</section>`;
+  }
+  // A member's profile: the face, the name and the role; the staff edit it in place, each change saved at once.
+  function staffPageHtml() {
+    const m = staffMember(home.staffId);
+    if (!m) { queueMicrotask(showTeamPage); return ''; }
+    const id = esc(m.id), role = staffRoleOf(m);
+    const roles = STAFF_ORDER.map((r) => `<button class="press" type="button" data-staff-role="${id}:${r}" aria-pressed="${r === role}">${STAFF_ROLES[r]}</button>`).join('');
+    const edit = `<section class="sheet-card staff-profile-edit"><h3>Editar perfil</h3>
+      <div class="row-actions"><button class="btn press" type="button" data-staff-photo="${id}">Subir foto</button>${staffPhoto(m) ? `<button class="btn press" type="button" data-staff-photo-clear="${id}">Quitar foto</button>` : ''}</div>
+      <label class="field">Nombre<input class="in" type="text" maxlength="${MAX_NAME_LENGTH}" value="${esc(m.name)}" data-staff-name="${id}"></label>
+      <div class="field">Rol<div class="tabs staff-roles" role="group" aria-label="Rol">${roles}</div></div>
+      ${role === 'staff' ? `<label class="field">Cargo<input class="in" type="text" maxlength="${MAX_NAME_LENGTH}" value="${esc(m.job || '')}" list="staff-jobs" placeholder="Delegado, Fisioterapeuta…" data-staff-job="${id}"></label>
+        <datalist id="staff-jobs">${STAFF_JOBS.map((j) => `<option value="${esc(j)}">`).join('')}</datalist>` : ''}
+      <div class="row-actions">${armedButton(`staff-${m.id}`, 'Quitar del cuerpo técnico', `data-staff-del="${id}"`)}</div></section>`;
+    return `${statusHtml()}<div class="staff-profile"><section class="sheet-card staff-hero">${staffDiscHtml(m)}<h2>${esc(m.name)}</h2><p>${esc(staffLabel(m))}</p></section>${edit}</div>`;
+  }
+  function showStaff(id) {
+    if (!staffMember(id)) { showTeamPage(); return; }
+    home.staffId = id;
+    showHomeView('staff');
+    $('home').scrollTop = 0;
+  }
+  // Every change saves the whole list; resolves to whether it was saved.
+  async function saveStaff(staff) {
+    homeStatus('Guardando…');
+    try {
+      keepUpdatedTeam(await backend.updateTeam(team.id, { staff }));
+      renderHome();
+      homeStatus('Cuerpo técnico guardado.');
+      return true;
+    } catch (err) {
+      homeStatus(`No se pudo guardar: ${cloudErrorText(err)}.`);
+      return false;
+    }
+  }
+  const editStaff = (id, change) => saveStaff(teamStaff().map((m) => (m.id === id ? { ...m, ...change } : m)));
+  // A new head coach or assistant moves whoever held that role to the staff.
+  const setStaffRole = (id, role) => saveStaff(teamStaff().map((m) => (m.id === id ? { ...m, role }
+    : UNIQUE_STAFF_ROLES.includes(role) && staffRoleOf(m) === role ? { ...m, role: 'staff' } : m)));
+  // A new member takes the first coach role still free, and opens on their profile to be filled in.
+  async function addStaff() {
+    if (teamStaff().length >= MAX_STAFF) return;
+    const taken = new Set(teamStaff().map(staffRoleOf));
+    const member = { id: newUuid(), name: 'Nuevo', role: UNIQUE_STAFF_ROLES.find((r) => !taken.has(r)) || 'staff', job: '', photo: null };
+    if (await saveStaff([...teamStaff(), member])) showStaff(member.id);
+  }
+  async function removeStaff(id) {
+    if (await saveStaff(teamStaff().filter((m) => m.id !== id))) showTeamPage();
+  }
+  // The photo belongs to the member picked when the file dialog opened; one gone by then is skipped.
+  async function pickStaffPhoto(id, file) {
+    try {
+      const photo = await photoFromFile(file);
+      if (staffMember(id)) await editStaff(id, { photo });
+    } catch (err) {
+      homeStatus(`No se pudo usar la imagen: ${err.message}.`);
+    }
+  }
   function teamRosterHtml() {
     const rows = home.roster.slice().sort((a, b) => a.num - b.num).map((p) => `<tr>
         <td><input class="in num" type="number" inputmode="numeric" min="${DORSAL_RANGE[0]}" max="${DORSAL_RANGE[1]}" value="${p.num}" data-team-num="${p.id}" aria-label="Dorsal de ${esc(p.name)}"></td>
@@ -6976,6 +7102,7 @@ table { border-collapse: collapse; width: 100%; }
       ${armedButton('delete-team', 'Borrar equipo', 'data-delete-team')}</div>`;
     return `${calendarRowHtml()}
       <div class="team-layout"><section class="sheet-card"><h3>Equipo</h3>${teamFormHtml(team, false)}${remove}</section><section class="sheet-card">${teamRosterHtml()}</section></div>
+      ${staffCardHtml()}
       ${teamRivalsHtml()}
       ${backend.needsLogin ? teamAccountsHtml() : ''}`;
   }
@@ -7227,6 +7354,7 @@ table { border-collapse: collapse; width: 100%; }
       return { leading, title: `${player.name} · ${match.them}`, actions: `<button class="btn primary press" type="button" data-player-match-open="${match.id}">Abrir el partido</button>` };
     },
     'team-edit': () => ({ leading: backToTeam(), title: 'Editar equipo' }),
+    staff: () => ({ leading: backToTeam(), title: staffMember(home.staffId)?.name || '' }),
     template: () => ({
       task: true,
       leading: cancelButtonHtml('data-home-view="team-edit"'),
@@ -7242,7 +7370,7 @@ table { border-collapse: collapse; width: 100%; }
       actions: `<button class="btn press" type="button" data-tune="reset">Restablecer</button><button class="btn primary press" type="button" id="tune-save" data-tune="save"${tuneDirty() ? '' : ' disabled'}>Guardar</button>`,
     }),
   };
-  const HOME_VIEWS = { team: teamPageHtml, player: playerPageHtml, 'player-match': playerMatchHtml, 'team-edit': teamEditHtml, template: templateHtml, matches: matchesHtml, stats: teamStatsHtml, squad: squadHtml, attendance: attendanceHtml, 'rating-tune': ratingTuneHtml };
+  const HOME_VIEWS = { team: teamPageHtml, player: playerPageHtml, 'player-match': playerMatchHtml, staff: staffPageHtml, 'team-edit': teamEditHtml, template: templateHtml, matches: matchesHtml, stats: teamStatsHtml, squad: squadHtml, attendance: attendanceHtml, 'rating-tune': ratingTuneHtml };
 
   // ---- Profile: the first screen after signing in (teams; the account in the corner menu) ----
   // The app's mark (assets/icon.svg); each copy on the page needs its own clip id.
@@ -8157,7 +8285,7 @@ table { border-collapse: collapse; width: 100%; }
     const fixtures = home.fixtures || [];
     const links = linkFixtures(fixtures, home.teamMatches);
     return `${statusHtml()}${note}
-      <div class="team-page">${nextFixtureCardHtml(fixtures, links)}${seasonCardHtml(home.season)}${leadersCardHtml(home.season)}${squadCardHtml()}${calendarCardHtml(fixtures, links)}</div>`;
+      <div class="team-page">${nextFixtureCardHtml(fixtures, links)}${seasonCardHtml(home.season)}${leadersCardHtml(home.season)}${squadCardHtml()}${staffCardHtml()}${calendarCardHtml(fixtures, links)}</div>`;
   }
   // The season stays loaded while the coach moves between the team pages; anything that changes it clears it.
   async function ensureSeason() {
@@ -8672,18 +8800,10 @@ table { border-collapse: collapse; width: 100%; }
     }
   }
   // Through the system share sheet, straight from the tap; a device that cannot share files downloads the image.
-  async function shareCallup() {
+  function shareCallup() {
     if (!home.callup) return;
     const file = new File([home.callup.blob], `convocatoria-${slug(team.name)}-${callupDraft().date}.png`, { type: home.callup.blob.type });
-    try {
-      const result = await shareFiles([file], `${CALLUP_TITLE} ${team.name}`, `${CALLUP_TITLE} · ${team.name}`);
-      if (result !== 'unsupported') { homeStatus(SHARE_STATUS[result]); return; }
-      await offerFile(file.name, file);
-      homeStatus(`Imagen descargada: ${file.name}.`);
-    } catch (err) {
-      console.error('Convocatoria share failed', err);
-      homeStatus(err && err.name === 'NotAllowedError' ? SHARE_TEXT.denied : `No se pudo compartir: ${(err && err.message) || 'error desconocido'}.`);
-    }
+    return shareOrDownload([file], `${CALLUP_TITLE} ${team.name}`, `${CALLUP_TITLE} · ${team.name}`, homeStatus);
   }
   async function showAttendance() {
     Object.assign(home, { attendanceDate: nextTrainingDate(), attendanceNoteFor: null, callupDraft: null, attendanceMode: ATTENDANCE_MODES.TRAINING });
@@ -9435,6 +9555,7 @@ table { border-collapse: collapse; width: 100%; }
     if (b.dataset.restartMatch) { if (confirmTap(`restart-${b.dataset.restartMatch}`)) restartMatch(b.dataset.restartMatch); return; }
     if (b.dataset.deleteMatch) { if (confirmTap(`delete-${b.dataset.deleteMatch}`)) deleteMatch(b.dataset.deleteMatch); return; }
     if (b.dataset.teamDel) { if (confirmTap(`retire-${b.dataset.teamDel}`)) retireTeamPlayer(rosterPlayer(b.dataset.teamDel)); return; }
+    if (b.dataset.staffDel) { if (confirmTap(`staff-${b.dataset.staffDel}`)) removeStaff(b.dataset.staffDel); return; }
     if (b.hasAttribute('data-delete-team')) { if (confirmTap('delete-team')) deleteTeam(); return; }
     if (b.dataset.templateDel) { if (confirmTap(`template-${b.dataset.templateDel}`)) deleteTemplate(b.dataset.templateDel); return; }
     if (b.dataset.accountRemove) { if (confirmTap(`account-${b.dataset.accountRemove}`)) removeAccount(b.dataset.accountRemove); return; }
@@ -9471,7 +9592,7 @@ table { border-collapse: collapse; width: 100%; }
     if (b.dataset.playerMatchOpen) { openMatchForPlayer(b.dataset.playerMatchOpen, home.playerId); return; }
     if (b.hasAttribute('data-player-edit')) { toggleEdit(); return; }
     if (b.dataset.playerPos) { editDraft({ pos: b.dataset.playerPos.split(':')[1] }); return; }
-    if (b.hasAttribute('data-player-photo')) { $('photo-file').click(); return; }
+    if (b.hasAttribute('data-player-photo')) { home.staffPhotoFor = null; $('photo-file').click(); return; }
     if (b.hasAttribute('data-player-photo-clear')) { editDraft({ photo: null }); return; }
     if (b.hasAttribute('data-player-save')) { savePlayerCard(); return; }
     if (b.dataset.leader) { home.leaderMetric = b.dataset.leader; renderHome(); return; }
@@ -9508,6 +9629,11 @@ table { border-collapse: collapse; width: 100%; }
     if (b.hasAttribute('data-crest-pick')) { $('crest-file').click(); return; }
     if (b.hasAttribute('data-crest-clear')) { home.crestDraft = null; $('crest-preview').src = crestSrc({ ...(home.view === 'team-new' ? home.draft : team), crest: null }); b.remove(); return; }
     if (b.hasAttribute('data-team-add')) { addTeamPlayer(); return; }
+    if (b.hasAttribute('data-staff-add')) { addStaff(); return; }
+    if (b.dataset.staffPhoto) { home.staffPhotoFor = b.dataset.staffPhoto; $('photo-file').click(); return; }
+    if (b.dataset.staffPhotoClear) { editStaff(b.dataset.staffPhotoClear, { photo: null }); return; }
+    if (b.dataset.staffOpen) { showStaff(b.dataset.staffOpen); return; }
+    if (b.dataset.staffRole) { const [id, role] = b.dataset.staffRole.split(':'); setStaffRole(id, role); return; }
     if (b.dataset.teamPos) { const [id, pos] = b.dataset.teamPos.split(':'); saveTeamPlayer(rosterPlayer(id), { pos }); return; }
     if (b.hasAttribute('data-team-export')) { exportRoster(team.name, home.roster, 'home-status'); return; }
     if (b.dataset.rosterImport) { ui.rosterSide = b.dataset.rosterImport; $('roster-file').click(); return; }
@@ -9523,6 +9649,8 @@ table { border-collapse: collapse; width: 100%; }
     if (['callup-date', 'callup-time', 'callup-rival', 'callup-meet'].includes(el.id)) { editCallup(el.id.slice('callup-'.length), el.value); return; }
     if (el.dataset.tplNum) { editDraftRival(draftRival(el.dataset.tplNum), { num: Number(el.value) }); return; }
     if (el.dataset.tplName) { editDraftRival(draftRival(el.dataset.tplName), { name: el.value.trim().slice(0, MAX_NAME_LENGTH) }); return; }
+    if (el.dataset.staffName) { const name = el.value.trim().slice(0, MAX_NAME_LENGTH); if (name) editStaff(el.dataset.staffName, { name }); else renderHome(); return; }
+    if (el.dataset.staffJob) { editStaff(el.dataset.staffJob, { job: el.value.trim().slice(0, MAX_NAME_LENGTH) }); return; }
     if (el.dataset.teamNum) { saveTeamPlayer(rosterPlayer(el.dataset.teamNum), { num: Number(el.value) }); return; }
     if (el.dataset.teamName) saveTeamPlayer(rosterPlayer(el.dataset.teamName), { name: el.value.trim().slice(0, MAX_NAME_LENGTH) });
   });
@@ -9543,7 +9671,9 @@ table { border-collapse: collapse; width: 100%; }
   $('photo-file').addEventListener('change', (ev) => {
     const file = ev.target.files && ev.target.files[0];
     ev.target.value = '';
-    if (file) pickPhoto(file);
+    const staffId = home.staffPhotoFor;
+    home.staffPhotoFor = null;
+    if (file) { if (staffId) pickStaffPhoto(staffId, file); else pickPhoto(file); }
   });
 
   // ---- Splash: the logo dribbles across a court's sound, the name rises and the app appears on the referee's whistle ----

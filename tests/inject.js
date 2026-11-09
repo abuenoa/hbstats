@@ -1952,6 +1952,24 @@
         if (ui.mvpCardUrl || ui.mvpCardBlob || ui.ratingsCardBlob) throw new Error('a render finishing after leaving kept a card');
       } finally { spy.stop(); done(); }
     });
+    await TA('summary: a finished match shows the MVP card and shares it alone', async () => {
+      const done = withFinal({ ...playedFew(), finished: true }), shared = [], unstub = sheetStubs(() => true, async (d) => { shared.push(d); });
+      try {
+        await ui.mvpCardReady;
+        $('final').querySelector('[data-final-sheet]').click();
+        await ui.mvpCardReady;
+        const img = $('sheet').querySelector('.summary-mvp .mvp-preview-img');
+        if (!img || !img.alt.includes('Diego') || img.src !== ui.mvpCardUrl) throw new Error('no MVP card in the summary');
+        const url = ui.mvpCardUrl;
+        $('sheet').querySelector('[data-tab="stats"]').click(); $('sheet').querySelector('[data-tab="summary"]').click();
+        await ui.mvpCardReady;
+        if (ui.mvpCardUrl !== url || $('sheet').querySelector('.mvp-preview-img').src !== url) throw new Error('the card was drawn again on a tab tap');
+        $('sheet').querySelector('[data-mvp-share]').click();
+        if (shared.length !== 1 || shared[0].files.length !== 1 || !/^mvp-.+\.png$/.test(shared[0].files[0].name)) throw new Error(JSON.stringify(shared.map((d) => d.files.map((f) => f.name))));
+        state.finished = false; renderSheet();
+        if ($('sheet').querySelector('.summary-mvp')) throw new Error('a match in play shows no MVP card');
+      } finally { unstub(); $('sheet').hidden = true; done(); }
+    });
     await TA('shareFiles: shared, cancelled, unsupported and failures', async () => {
       const file = new File(['x'], 'a.png', { type: 'image/png' });
       let unstub = sheetStubs(undefined, undefined);
@@ -1972,6 +1990,61 @@
     });
     await TA('home opens on team creation when the device has no team', async () => { await startHome(); if (home.view !== 'team-new' || $('home').hidden || !document.querySelector('[data-form="team-new"]')) throw new Error(home.view); });
     await TA('create team: name, colours and initials crest applied', async () => { $('team-club').value = 'CB Ejemplo'; $('team-name').value = 'Ejemplo Sur'; $('team-brand').value = '#1d4ed8'; $('team-brand2').value = '#facc15'; await submitTeam(document.querySelector('[data-form="team-new"]'), true); if (home.view !== 'team' || team.name !== 'Ejemplo Sur' || !team.id) throw new Error(home.view + ' ' + team.name); if (getComputedStyle($('score-us')).color !== 'rgb(29, 78, 216)') throw new Error('score colour ' + getComputedStyle($('score-us')).color); if (PDF_RGB.brand.join() !== '29,78,216' || team.brandInk !== '#ffffff') throw new Error('pdf/ink'); if (!decodeURIComponent($('bar-crest').src).includes('>ES<')) throw new Error('initials'); if (inkFor('#facc15') !== '#151515') throw new Error('ink for light'); });
+    await TA('staff: head coach, assistant and staff, each with a profile; on the team page and the convocatoria', async () => {
+      const until = async (ok, what) => { for (let i = 0; i < 100 && !ok(); i++) await new Promise((r) => setTimeout(r, 20)); if (!ok()) throw new Error(what); };
+      const change = (el, value) => { el.value = value; el.dispatchEvent(new Event('change', { bubbles: true })); };
+      const tap = (sel) => document.querySelector(sel).click();
+      showHomeView('team');
+      if (teamStaff().length || !document.querySelector('.staff-card [data-staff-add]')) throw new Error('a new team has no staff and offers to add');
+      // Each new member takes the first coach role still free and opens on their profile.
+      tap('[data-staff-add]');
+      await until(() => home.view === 'staff' && teamStaff().length === 1, 'not added');
+      const head = teamStaff()[0].id;
+      if (staffRoleOf(teamStaff()[0]) !== 'head' || !document.querySelector('.staff-hero').textContent.includes('Entrenador principal')) throw new Error('the first is the head coach');
+      change(document.querySelector(`[data-staff-name="${head}"]`), '  Paco Ruiz  ');
+      await until(() => staffMember(head).name === 'Paco Ruiz', 'not renamed');
+      change(document.querySelector(`[data-staff-name="${head}"]`), '   ');
+      if (staffMember(head).name !== 'Paco Ruiz') throw new Error('an empty name was saved');
+      const c = document.createElement('canvas'); c.width = c.height = 8;
+      await pickStaffPhoto(head, new File([await new Promise((r) => c.toBlob(r, 'image/png'))], 'a.png', { type: 'image/png' }));
+      if (!/^data:image\/jpeg;base64,/.test(staffMember(head).photo || '') || !document.querySelector('.staff-hero .disc.photo')) throw new Error('no photo');
+      showHomeView('team'); tap('[data-staff-add]');
+      await until(() => teamStaff().length === 2 && home.view === 'staff', 'second not added');
+      const second = home.staffId;
+      if (staffRoleOf(staffMember(second)) !== 'assistant') throw new Error('the second is the assistant');
+      showHomeView('team'); tap('[data-staff-add]');
+      await until(() => teamStaff().length === 3 && home.view === 'staff', 'third not added');
+      const third = home.staffId;
+      if (staffRoleOf(staffMember(third)) !== 'staff' || !document.querySelector(`[data-staff-job="${third}"]`)) throw new Error('the third is staff with a job');
+      change(document.querySelector(`[data-staff-job="${third}"]`), 'Delegado');
+      await until(() => staffMember(third).job === 'Delegado' && staffLabel(staffMember(third)) === 'Delegado', 'job not saved');
+      // Making the delegate the head coach moves Paco to the staff; only one head coach.
+      tap(`[data-staff-role="${third}:head"]`);
+      await until(() => staffRoleOf(staffMember(third)) === 'head', 'role not saved');
+      if (staffRoleOf(staffMember(head)) !== 'staff' || teamStaff().filter((m) => staffRoleOf(m) === 'head').length !== 1) throw new Error('two head coaches');
+      if (teamStaff().map((m) => m.id).join() !== [third, second, head].join()) throw new Error('order: head, assistant, staff');
+      const data = callupCardData({ date: todayIso(), time: '', rival: 'CB Este', ids: new Set() }, []);
+      if (data.staff.map((m) => m.job).join() !== 'Entrenador principal,Segundo entrenador,Cuerpo técnico' || data.staff[2].photo !== staffMember(head).photo) throw new Error(JSON.stringify(data.staff.map((m) => m.job)));
+      if (!((await callupCardBlob(data)) instanceof Blob)) throw new Error('the poster with the staff did not draw');
+      showHomeView('team');
+      const faces = [...document.querySelectorAll('.staff-face')];
+      if (faces.length !== 3 || !faces[2].textContent.includes('Paco Ruiz')) throw new Error('team page: ' + faces.map((f) => f.textContent).join('|'));
+      faces[2].click();
+      if (home.view !== 'staff' || home.staffId !== head) throw new Error('the face opens the profile');
+      tap(`[data-staff-del="${head}"]`);
+      if (teamStaff().length !== 3) throw new Error('removed without asking');
+      tap(`[data-staff-del="${head}"]`);
+      await until(() => teamStaff().length === 2 && home.view === 'team', 'not removed');
+      // A player sees the profiles but cannot change them.
+      const role = team.role; team.role = PLAYER_ROLE;
+      try {
+        showStaff(second);
+        if (document.querySelector('.staff-profile-edit') || !document.querySelector('.staff-hero')) throw new Error('a player can edit a profile');
+        showHomeView('team');
+        if (document.querySelector('[data-staff-add]') || document.querySelectorAll('.staff-face').length !== 2) throw new Error('a player can add staff');
+      } finally { team.role = role; }
+      await saveStaff([]);
+    });
     await TA('team form refuses empty names', async () => { showHomeView('team-edit'); $('team-name').value = '  '; await submitTeam(document.querySelector('[data-form="team"]'), false); if (team.name !== 'Ejemplo Sur' || !$('home-status').textContent.includes('vacíos')) throw new Error($('home-status').textContent); });
     await TA('team roster: add, position, duplicate dorsal refused, retire', async () => { showHomeView('team-edit'); await addTeamPlayer(); await addTeamPlayer(); await addTeamPlayer(); const [a, b, c] = home.roster; await saveTeamPlayer(a, { pos: 'POR', name: 'Ana' }); if (rosterPlayer(a.id).pos !== 'POR') throw new Error('pos'); await saveTeamPlayer(rosterPlayer(b.id), { num: a.num }); if (rosterPlayer(b.id).num === a.num || !$('home-status').textContent.includes('ya está')) throw new Error('dup'); document.querySelector(`[data-team-del="${c.id}"]`).click(); if (!rosterPlayer(c.id)) throw new Error('retired on first tap'); document.querySelector(`[data-team-del="${c.id}"]`).click(); await tick0(); await tick0(); if (rosterPlayer(c.id)) throw new Error('not retired'); const listed = await backend.listPlayers(team.id); if (listed.length !== 2) throw new Error('backend ' + listed.length); });
     await TA('roster file adds new dorsals and updates existing ones', async () => { const a = home.roster.find((p) => p.pos === 'POR'); const file = new File([JSON.stringify({ format: ROSTER_FORMAT, players: [{ num: a.num, name: 'Ana Ruiz', pos: 'POR' }, { num: 9, name: 'Lola', pos: 'CEN' }, { num: 11, name: 'Marta', pos: 'EXT' }, { num: 12, name: 'Sara', pos: 'POR' }] })], 'p.json', { type: 'application/json' }); await importTeamRoster(file); if (home.roster.length !== 5 || rosterPlayer(a.id).name !== 'Ana Ruiz') throw new Error(home.roster.map((p) => p.num + p.name).join()); });
