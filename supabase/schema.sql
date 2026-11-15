@@ -379,23 +379,9 @@ drop policy if exists members_remove_player on public.team_members;
 create policy members_remove_player on public.team_members for delete to authenticated
   using (role in ('player', 'viewer') and private.is_team_staff(team_id));
 
--- The staff see who has an account in their team (e-mails live in auth.users, out of the API's reach) and take one off.
--- The staff remove players and guests, only the owner removes a coach, and nobody removes the owner. An invite never
--- used is cancelled whole: an unconfirmed account left in no team is deleted, so its link stops working.
-create or replace function public.team_accounts(p_team uuid)
-returns table (user_id uuid, role text, player_id uuid, email text, signed_in boolean, is_me boolean)
-language plpgsql stable security definer set search_path = public, auth as $$
-begin
-  if not private.is_team_staff(p_team) then raise exception 'solo los entrenadores ven las cuentas' using errcode = '42501'; end if;
-  return query
-    select m.user_id, m.role, m.player_id, u.email::text, u.email_confirmed_at is not null, m.user_id = auth.uid()
-    from team_members m join auth.users u on u.id = m.user_id
-    where m.team_id = p_team order by m.role, u.email;
-end;
-$$;
-revoke all on function public.team_accounts(uuid) from public, anon;
-grant execute on function public.team_accounts(uuid) to authenticated;
-
+-- The staff take accounts off their team: the staff remove players and guests, only the owner removes a coach, and
+-- nobody removes the owner. An invite never used is cancelled whole: an unconfirmed account left in no team is deleted,
+-- so its link stops working. (Who has an account, team_accounts, is defined with the visual invitations below.)
 create or replace function public.remove_team_account(p_team uuid, p_user uuid) returns void
 language plpgsql security definer set search_path = public, auth as $$
 declare
@@ -413,3 +399,55 @@ end;
 $$;
 revoke all on function public.remove_team_account(uuid, uuid) from public, anon;
 grant execute on function public.remove_team_account(uuid, uuid) to authenticated;
+
+-- ==== Migration: visual invitations (2026-11) ====
+-- The staff invite the squad from photo cards, by e-mail or by WhatsApp, with a message of their own.
+
+-- Each player's contact (e-mail, phone), staff only: players and guests read the roster but never their team-mates'
+-- addresses, which is why they are not columns of players. An e-mail typed before the invite is kept here, and stays
+-- after an invite is cancelled or an account taken off; once an account exists, auth.users holds the address the
+-- player signs in with, and invite-player writes it here too so both agree. The phone, digits with their country code
+-- after a «+», opens the player's own WhatsApp chat.
+create table if not exists public.player_contacts (
+  player_id uuid primary key references public.players (id) on delete cascade,
+  team_id uuid not null references public.teams (id) on delete cascade,
+  email text check (email is null or (char_length(email) <= 254 and email ~ '^[^[:space:]@,;]+@[^[:space:]@,;]+\.[^[:space:]@,;]+$')),
+  phone text check (phone is null or phone ~ '^\+[1-9][0-9]{7,14}$')
+);
+create index if not exists player_contacts_team on public.player_contacts (team_id);
+alter table public.player_contacts enable row level security;
+revoke all on table public.player_contacts from anon;
+drop policy if exists player_contacts_staff on public.player_contacts;
+create policy player_contacts_staff on public.player_contacts for all to authenticated
+  using (private.is_team_staff(team_id))
+  with check (
+    private.is_team_staff(team_id)
+    and exists (select 1 from public.players p where p.id = player_id and p.team_id = player_contacts.team_id)
+  );
+
+-- When the last invite went out and how (an e-mail from the server, or a link the coach shared): an invite unused past
+-- the link's validity reads «Caducada» in the app.
+alter table public.team_members add column if not exists invited_at timestamptz;
+alter table public.team_members add column if not exists invited_via text check (invited_via is null or invited_via in ('email', 'link'));
+
+-- The team's invitation message, written once by the staff, with {nombre} and {equipo} filled in for each player;
+-- null is the app's default text. The app appends each player's link, so the message never loses it.
+alter table public.teams add column if not exists invite_message text
+  check (invite_message is null or char_length(invite_message) between 1 and 600);
+
+-- The staff see who has an account in their team (e-mails live in auth.users, out of the API's reach), with the date
+-- and channel of the last invite. Dropped first: its columns changed.
+drop function if exists public.team_accounts(uuid);
+create function public.team_accounts(p_team uuid)
+returns table (user_id uuid, role text, player_id uuid, email text, signed_in boolean, is_me boolean, invited_at timestamptz, invited_via text)
+language plpgsql stable security definer set search_path = public, auth as $$
+begin
+  if not private.is_team_staff(p_team) then raise exception 'solo los entrenadores ven las cuentas' using errcode = '42501'; end if;
+  return query
+    select m.user_id, m.role, m.player_id, u.email::text, u.email_confirmed_at is not null, m.user_id = auth.uid(), m.invited_at, m.invited_via
+    from team_members m join auth.users u on u.id = m.user_id
+    where m.team_id = p_team order by m.role, u.email;
+end;
+$$;
+revoke all on function public.team_accounts(uuid) from public, anon;
+grant execute on function public.team_accounts(uuid) to authenticated;
