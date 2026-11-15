@@ -1145,6 +1145,48 @@
     const points = (r) => sumOf(Object.values(r.get('a').lines), (v) => v);
     if (!(points(withGood) > points(plain)) || !withGood.get('a').rated) throw new Error('his rating does not go up');
   });
+  // Zone defence: six defenders on the sample's DEF spots, stamped on court as set 0.
+  const zoneSix = ['a', 'b', 'c', 'd', 'e', 'f'], zoneSpots = { a: m(-7.6, 2.2), b: m(-5, 5.2), c: m(-1.8, 6.6), d: m(1.8, 6.6), e: m(5, 5.2), f: m(7.6, 2.2) };
+  const zoneMatch = (events, over = {}) => rateMatch(events, { players: [...zoneSix.map((id) => ({ id, pos: 'LAT' })), keeperG], lineups: { ATK: {}, DEF: zoneSpots }, court: [{ abs: 0, set: 0 }], courtSets: [[...zoneSix, 'g']], ...over });
+  const zoneGoal = (i, origin, extra = {}) => ({ id: 'zg' + i, abs: 10 + i, kind: 'RIVAL_SHOT', gkId: 'g', zone: '9M', result: 'GOL', origin, on: 0, ...extra });
+  const zoneCharges = (ratings, id) => ratings.get(id).moments.filter((x) => x.label === 'Gol en su zona');
+  T('zone defence: a field goal costs the defender of its lane nearest the shot a little', () => {
+    const r = matchRatings(zoneMatch([zoneGoal(1, m(-8, 2.5), { zone: '6M' })]));
+    if (zoneCharges(r, 'a').length !== 1 || zoneSix.slice(1).some((id) => zoneCharges(r, id).length)) throw new Error('charged to the wrong defender');
+    if (!nearTo(zoneCharges(r, 'a')[0].value, -RW.defence.zoneGoal)) throw new Error('value');
+    if (!(RW.defence.zoneGoal < 0.5 * RW.defence.goodDefence)) throw new Error('not modest');
+    const lane = zoneDefence(zoneMatch([zoneGoal(2, m(-5.2, 3.6))]));
+    if (laneOf(m(-5.2, 3.6)) !== laneOf(zoneSpots.a) || !lane.conceded.has('a')) throw new Error('the lane comes before the nearest spot: ' + [...lane.conceded.keys()]);
+    const centre = zoneDefence(zoneMatch([zoneGoal(3, m(0.5, 9))]));
+    if (!centre.conceded.has('d')) throw new Error('no defender in the lane: the nearest one ' + [...centre.conceded.keys()]);
+  });
+  T('zone defence: 7 m, counter-attacks, unstamped goals, no court log and spotless defenders are left out', () => {
+    const none = (events, over) => { const z = zoneDefence(zoneMatch(events, over)); return z.conceded.size === 0 && z.share.size === 0; };
+    if (!none([zoneGoal(1, m(0, 7), { zone: '7M' })])) throw new Error('7 m counted');
+    if (!none([zoneGoal(2, m(-3, 9), { contra: true })]) || !none([zoneGoal(3, m(-3, 9), { zone: 'CONTRA' })])) throw new Error('counter-attack counted');
+    const { on, ...unstamped } = zoneGoal(4, m(-3, 9));
+    if (!none([unstamped]) || !none([zoneGoal(5, m(-3, 9), { on: 9 })])) throw new Error('a goal with nobody stamped counted');
+    if (!none([zoneGoal(6, null)])) throw new Error('a goal without an origin counted');
+    if (!none([unstamped], { court: undefined, courtSets: undefined })) throw new Error('no court log');
+    if (!none([zoneGoal(7, m(-3, 9))], { lineups: undefined })) throw new Error('no DEF spots');
+    if (!none([zoneGoal(8, m(-3, 9), { result: 'PARADA' })])) throw new Error('a save counted');
+    const partial = zoneDefence(zoneMatch([zoneGoal(9, m(-8, 2.5))], { courtSets: [['x', 'c', 'g']], players: [{ id: 'x', pos: 'LAT' }, { id: 'c', pos: 'LAT' }, keeperG] }));
+    if (!partial.conceded.has('c') || partial.share.has('x')) throw new Error('a stamped defender with no spot is not a candidate');
+    const legacy = matchRatings(rateMatch([rAct('a', 'RECUP'), { id: 'rg', abs: 10, kind: 'RIVAL_SHOT', gkId: 'g', zone: '9M', result: 'GOL' }]));
+    if (!nearTo(legacy.get('a').lines.defInd, B * PPG)) throw new Error('an old match without a court log changed');
+  });
+  T('zone defence: a zone that conceded clearly fewer than its share gains a little', () => {
+    const d = RW.defence, wing = (n) => rMany(n, (i) => zoneGoal(i, m(-8, 2.5)));
+    const many = d.zoneMinGoals * zoneSix.length, r = matchRatings(zoneMatch(wing(many))), z = zoneDefence(zoneMatch(wing(many)));
+    if (!nearTo(z.share.get('b'), many / zoneSix.length) || z.conceded.get('a').length !== many) throw new Error('shares');
+    const defInd = (ratings, id) => ratings.get(id).lines.defInd;
+    if (zoneSix.slice(1).some((id) => !nearTo(defInd(r, id), d.zoneSolid * PPG))) throw new Error('the zones that held gain ' + zoneSix.map((id) => defInd(r, id)));
+    if (!(defInd(r, 'a') < 0)) throw new Error('the beaten zone ' + defInd(r, 'a'));
+    const few = matchRatings(zoneMatch(wing(many - zoneSix.length)));
+    if (zoneSix.slice(1).some((id) => defInd(few, id) !== 0)) throw new Error('below zoneMinGoals nobody gains');
+    const even = matchRatings(zoneMatch(zoneSix.flatMap((id, k) => rMany(d.zoneMinGoals, (i) => zoneGoal(k * 10 + i, zoneSpots[id])))));
+    if (zoneSix.some((id) => zoneCharges(even, id).length !== d.zoneMinGoals || !(defInd(even, id) < 0))) throw new Error('an even spread gives no bonus');
+  });
   T('rating: the unit on court shares what each possession left, and adds up to it', () => {
     const six = ['a', 'b', 'c', 'd', 'e', 'f'], players = [...six.map((id) => ({ id, pos: 'LAT' })), keeperG];
     const goals = rMany(4, (i) => ({ id: 'rg' + i, abs: 10 + i, kind: 'RIVAL_SHOT', gkId: 'g', zone: '6M', result: 'GOL', on: 0 }));
@@ -1628,6 +1670,12 @@
     const snap = snapshot();
     try { state = makeState(); return new DOMParser().parseFromString(matchReportDocument(), 'text/html'); } finally { restore(snap); }
   };
+  T('report: the scoring note explains the defence values and both close windows from the config', () => {
+    const note = reportOf().querySelector('.model').textContent.replace(/\s+/g, ' '), d = CONFIG.rating.defence, pts = (v) => String(roundHalfUp(v * POINTS_PER_GOAL, 2)).replace('.', ',');
+    [`falta en ataque provocada +${pts(CONFIG.rating.possession + d.offensiveFoulExtra)}`, `buena defensa (salida, golpe, dureza) +${pts(d.goodDefence)}`, `−${pts(d.zoneGoal)}`, `+${pts(d.zoneSolid)}`,
+      'sin 7 m ni contraataques', `desde el ${CONFIG.rating.context.firstHalfCloseFrom / SECONDS_PER_MINUTE}' de la primera parte`, `desde el ${CONFIG.rating.context.closeFrom / SECONDS_PER_MINUTE}'`]
+      .forEach((text) => { if (!note.includes(text)) throw new Error(`no «${text}» in ${note}`); });
+  });
   T('report: five pages with every section the coach asked for, and no NaN', () => {
     ['sample', 'other'].forEach((name) => {
       const doc = reportOf(name === 'sample' ? sampleState : otherMatch), titles = [...doc.querySelectorAll('h2')].map((h) => h.firstChild.textContent.trim());

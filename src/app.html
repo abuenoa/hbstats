@@ -1507,6 +1507,8 @@ span.att-foot { visibility: hidden; }
     // end of the first half from firstHalfCloseFrom and the second from closeFrom, both within closeMargin).
     // defence: goodDefence is a «Buena defensa» (good exit, hit, physical duel); offensiveFoulExtra is what a
     // provoked offensive foul adds to a recovery.
+    // Zone defence: zoneGoal is taken from the defender who covered a field goal conceded (no 7 m, no counter-attack);
+    // zoneSolid goes to one whose zone conceded at most zoneFewerShare of his share of them, once it reaches zoneMinGoals.
     // Bands: lower bound in points, label and chip class (the --rating-<band> tokens), best first.
     rating: {
       pointsPerGoal: 3, decimals: 1, minPossessions: 5, shrinkPossessions: 15, mvpFullShare: 2 / 3,
@@ -1516,7 +1518,7 @@ span.att-foot { visibility: hidden; }
       shooterCreationShare: 0.5, exclusionSeconds: 120, lastSecondsWindow: 30, sameMomentSeconds: 2, playerLossPerMatch: 0.5,
       windows: { provoked7: 90, fastBreakStart: 10, assist: 15, counterAfterTurnover: 15 },
       context: { firstHalfCloseFrom: 1500, closeFrom: 3000, closeMargin: 2, lateFrom: 3300, lateMargin: 1, blowoutMargin: 6, blowoutFactor: 0.75 },
-      defence: { goodDefence: 0.30, offensiveFoulExtra: 0.05 },
+      defence: { goodDefence: 0.30, offensiveFoulExtra: 0.05, zoneGoal: 0.03, zoneSolid: 0.10, zoneFewerShare: 0.5, zoneMinGoals: 2 },
       weights: {
         keeperWeight: 0.65, assist: 0.15, starter: 0.14, oneOnOne: 0.20, ruleFaultDiscount: 0.10, blocRetained: 0.12,
         minorFault: -0.07, teamFaultField: -0.05, teamFaultKeeper: -0.02, result: 0.25, yellow: -0.10,
@@ -2440,6 +2442,26 @@ span.att-foot { visibility: hidden; }
     return { factor: 1, score: before };
   }
 
+  // ---- Zone defence: whose zone a field goal was scored in ----
+  // The defensive zone of a spot is its lane (laneOf: wing, back or centre and the side), the attacker's lanes mirrored
+  // onto our DEF spots. A rival field goal (no 7 m, and no counter-attack, where the court is empty) is charged to the
+  // nearest defender of its lane, else to the nearest defender, among the field players stamped on court for it who
+  // hold a DEF spot. `share` is each defender's even part of the goals he was on court for (the team average).
+  const isZoneGoal = (e) => e.result === 'GOL' && e.zone !== '7M' && e.zone !== ZONE_CONTRA && !e.contra && Boolean(e.origin) && e.on != null;
+  function zoneDefence(s) {
+    const spots = s.lineups?.DEF || {}, conceded = new Map(), share = new Map();
+    rivalShots(s.events).filter(isZoneGoal).forEach((e) => {
+      const ids = fieldOnCourt(s, e.on).filter((id) => spots[id]);
+      if (!ids.length) return;
+      const dist = (id) => Math.hypot(spots[id].x - e.origin.x, spots[id].y - e.origin.y);
+      const nearest = (list) => (list.length ? list.reduce((a, b) => (dist(b) < dist(a) ? b : a)) : null);
+      const lane = laneOf(e.origin), id = nearest(ids.filter((x) => laneOf(spots[x]) === lane)) || nearest(ids);
+      conceded.set(id, [...(conceded.get(id) || []), e]);
+      ids.forEach((x) => share.set(x, (share.get(x) || 0) + 1 / ids.length));
+    });
+    return { conceded, share };
+  }
+
   // Every player's rating by id for one match: { value (points, null = «S/C»), rated, lines (points by line), events
   // (the owned moments with their leverage), possessions }.
   function matchRatings(s, players = s.players, weights = ratingWeights()) {
@@ -2538,6 +2560,12 @@ span.att-foot { visibility: hidden; }
     events.filter((e) => e.kind === 'ACTION' && TEAM_FAULTS.includes(e.action)).forEach((e) => {
       const on = e.playerId == null ? courtSetOf(e.on ?? courtSetBefore(s, e.abs), s) : [e.playerId];
       on.forEach((id) => own(id, 'defInd', isKeeperOf(s, id) ? weights.teamFaultKeeper : weights.teamFaultField, e, ACTIONS[e.action].label));
+    });
+    // Zone defence: a little off the defender of each field goal's zone, a little on one whose zone clearly held.
+    const zone = zoneDefence(s), d = r.defence;
+    zone.conceded.forEach((goals, id) => goals.forEach((e) => own(id, 'defInd', -d.zoneGoal, e, 'Gol en su zona')));
+    zone.share.forEach((expected, id) => {
+      if (expected >= d.zoneMinGoals && (zone.conceded.get(id) || []).length <= expected * d.zoneFewerShare) own(id, 'defInd', d.zoneSolid, null, 'Zona sólida');
     });
 
     // Unit lines: shared per possession, shrunk toward the team's mean, renormalised to the team total.
@@ -5273,6 +5301,7 @@ span.att-foot { visibility: hidden; }
       return `<div class="model"><b>Cómo se puntúa.</b> Cada posesión vale lo que acabó dando (gol o no) menos lo que da una posesión media (${exact(b)} goles). Ese valor se reparte una sola vez: primero a quien la decide y lo que sobra entre los que estaban en pista. 1 gol aportado = ${POINTS_PER_GOAL} puntos.
         <b>Tiro:</b> ${['6M', '9M', '7M'].map(shot).join(' · ')} (con la mitad de la ocasión creada). <b>Creación:</b> 7 m provocado ${sign(weights.oneOnOne)}, asistencia ${sign(weights.assist)}, iniciar un contraataque ${sign(weights.starter)}.
         <b>Balón:</b> pérdida ${sign(-b)} (de reglamento ${sign(-(b - weights.ruleFaultDiscount))}; más si acaba en contraataque rival). <b>Def. individual:</b> robo ${sign(b)}, falta en ataque provocada ${sign(b + d.offensiveFoulExtra)}, buena defensa (salida, golpe, dureza) ${sign(d.goodDefence)}, blocaje ${sign(weights.blocRetained)}, 7 m cometido y 1x1 superado ${sign(-weights.oneOnOne)}.
+        <b>Tu zona:</b> cada gol rival de juego (sin 7 m ni contraataques) va al defensor de su carril más cerca del lanzamiento ${sign(-d.zoneGoal)}; si tu zona encaja como mucho el ${Math.round(d.zoneFewerShare * PERCENT)}% de los goles que te tocaban (desde ${d.zoneMinGoals} goles) ${sign(d.zoneSolid)}.
         <b>Def. en pista:</b> lo que el rival consigue tirar a puerta mientras defiendes (lo que pasa después es cosa del portero), repartido entre los que estáis en pista. <b>Atq. en pista:</b> igual con nuestras posesiones.
         <b>Portería:</b> goles evitados frente a lo esperable, al ${Math.round(kw * PERCENT)}% (parar en 6 m ${sign(r.pOn['6M'] * kw)}, encajar ${sign(-(1 - r.pOn['6M']) * kw)}; parar un 7 m ${sign(r.pOn['7M'] * kw)}).
         <b>Disciplina:</b> el 2' cuesta lo que se perdió con uno menos; roja: eso, la conducta y el resto del partido sin el jugador. <b>Momento decisivo:</b> desde el ${r.context.firstHalfCloseFrom / SECONDS_PER_MINUTE}' de la primera parte y desde el ${r.context.closeFrom / SECONDS_PER_MINUTE}' con ±${r.context.closeMargin} goles cada acción vale ×${exact(weights.closeFactor)}; desde el ${r.context.lateFrom / SECONDS_PER_MINUTE}' con ±${r.context.lateMargin} ×${exact(weights.lateFactor)}; para bien y para mal.
