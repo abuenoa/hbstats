@@ -7025,13 +7025,14 @@ table { border-collapse: collapse; width: 100%; }
     const typed = (key) => ({ key, kind: key === 'TURNOVER' ? 'TURNOVER' : 'ACTION', label: PANEL_TYPED[key].label, cls: 'c-act-bad',
       subs: PANEL_TYPED[key].groups().map((g) => ({ label: g.label, team: Boolean(g.team), options: g.subs })) });
     const plain = Object.keys(ACTIONS).filter((k) => !DEFENSIVE_FAULTS.includes(k) && !RETIRED_FAULTS.includes(k));
-    const action = (k) => ({ key: `ACTION:${k}`, kind: 'ACTION', label: ACTIONS[k].label, cls: `c-${ACTIONS[k].group}`, action: k });
+    const action = (k) => ({ key: `ACTION:${k}`, kind: 'ACTION', label: ACTIONS[k].label, cls: `c-${ACTIONS[k].group}`, action: k,
+      split: Boolean(PANEL_SPLIT[k]), subs: PANEL_SPLIT[k] ? [{ label: 'Tipo', options: PANEL_SPLIT[k].map((v) => [v, v, `c-${ACTIONS[k].group}`]) }] : null });
     const attack = plain.filter((k) => PANEL_ACTIONS.ATK.includes(k));
     return [...SHOT_GROUPS.map(shotTile('SHOT')), ...attack.map(action), typed('TURNOVER'), ...plain.filter((k) => !attack.includes(k)).map(action),
       typed('DEFFAULT'), { key: 'SANCTION', kind: 'SANCTION', label: 'Sanción', cls: 'c-dos', subs: cards }];
   }
   // The type a ▸ tile starts on: a 2' for cards (as live), the first result of a shot; turnovers and faults wait for a tap.
-  const defaultSub = (tile) => (!tile.subs ? null : tile.subs[0].cards ? DEFAULT_CARD : SHOT_KINDS.includes(tile.kind) ? tile.result : null);
+  const defaultSub = (tile) => (!tile.subs ? null : tile.subs[0].cards ? DEFAULT_CARD : SHOT_KINDS.includes(tile.kind) ? tile.result : tile.split ? tile.subs[0].options[0][0] : null);
   const tileOf = (c) => playTiles(c.team).find((t) => t.key === c.tile) || null;
   const subGroupOf = (tile, sub) => (tile && tile.subs ? tile.subs.find((g) => g.options.some(([v]) => v === sub)) || null : null);
   // Logged without a player: a fault of the whole defence.
@@ -7040,7 +7041,7 @@ table { border-collapse: collapse; width: 100%; }
   function tileForEvent(e) {
     switch (e.kind) {
       case 'SHOT': case 'RIVAL_SHOT': { const g = groupOf(e.result); return { tile: `${e.kind}:${g}`, sub: resultsOfGroup(g).length > 1 ? e.result : null }; }
-      case 'ACTION': return DEFENSIVE_FAULTS.includes(e.action) ? { tile: 'DEFFAULT', sub: e.action } : { tile: `ACTION:${e.action}`, sub: null };
+      case 'ACTION': return DEFENSIVE_FAULTS.includes(e.action) ? { tile: 'DEFFAULT', sub: e.action } : { tile: `ACTION:${e.action}`, sub: PANEL_SPLIT[e.action] ? e.subtype || PANEL_SPLIT[e.action][0] : null };
       case 'TURNOVER': return { tile: 'TURNOVER', sub: e.subtype };
       default: return { tile: e.kind, sub: e.card };
     }
@@ -7056,7 +7057,7 @@ table { border-collapse: collapse; width: 100%; }
       case 'TURNOVER': return { kind: 'TURNOVER', data: { playerId: c.playerId, subtype: sub } };
       case 'SANCTION': return { kind: 'SANCTION', data: { playerId: c.playerId, card: sub } };
       case 'RIVAL_SANCTION': return { kind: 'RIVAL_SANCTION', data: { rivalId: c.rivalId || null, card: sub } };
-      default: return { kind: 'ACTION', data: { playerId: isTeamPlay(c) ? null : c.playerId, action: tile.action || sub } };
+      default: return { kind: 'ACTION', data: { playerId: isTeamPlay(c) ? null : c.playerId, action: tile.action || sub, ...(tile.action ? typedFields(tile.action, sub) : {}) } };
     }
   }
   // The log as it would be with the composer's play in it (the play it edits taken out), under a placeholder id.

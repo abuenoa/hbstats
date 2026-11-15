@@ -2051,6 +2051,15 @@
     tapIn('[data-plays-add]'); tapIn('[data-cmp-tile="SHOT:GOL"]'); tapIn('[data-cmp-contra]'); tapIn('[data-cmp-zone="7M"]');
     if (!inPlays('[data-cmp-contra]').disabled || ui.plays.composer.contra) throw new Error('a 7 m counter-attack');
   }));
+  T('plays: an added recovery takes its type, a steal by default; editing keeps it', withPlays(() => {
+    const steal = addVia({ min: 3, tile: 'ACTION:RECUP', player: 'p8' });
+    if (steal.action !== 'RECUP' || steal.subtype !== RECOVERY_TYPES.STEAL) throw new Error(JSON.stringify(steal));
+    const foul = addVia({ min: 4, tile: 'ACTION:RECUP', sub: RECOVERY_TYPES.OFFENSIVE_FOUL, player: 'p8' });
+    if (foul.subtype !== RECOVERY_TYPES.OFFENSIVE_FOUL) throw new Error(JSON.stringify(foul));
+    if (tileForEvent(foul).sub !== RECOVERY_TYPES.OFFENSIVE_FOUL || tileForEvent({ kind: 'ACTION', action: 'RECUP' }).sub !== RECOVERY_TYPES.STEAL) throw new Error('type lost when editing');
+    const good = addVia({ min: 5, tile: 'ACTION:GOODDEF', player: 'p8' });
+    if (good.action !== 'GOODDEF' || 'subtype' in good) throw new Error(JSON.stringify(good));
+  }));
   T('plays: the Qué tiles come from the action registry, so a new action shows up', withPlays(() => {
     const keys = playTiles('us').map((t) => t.key);
     const expected = Object.keys(ACTIONS).filter((k) => !DEFENSIVE_FAULTS.includes(k) && !RETIRED_FAULTS.includes(k)).map((k) => `ACTION:${k}`);
