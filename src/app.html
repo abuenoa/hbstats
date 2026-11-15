@@ -3977,6 +3977,10 @@ span.att-foot { visibility: hidden; }
     return out;
   }
   const turnoverCounts = (events) => countBy(events.filter((e) => e.kind === 'TURNOVER'), (e) => e.subtype);
+  const recoveryCounts = (events) => countBy(events.filter((e) => isAction(e, 'RECUP')), recoveryType);
+  // «Pasos 2 · Pase 1»: counts by type, most first; empty when there are none.
+  const typeBreakdownText = (counts) => Object.entries(counts).sort((a, b) => b[1] - a[1]).map(([type, n]) => `${type} ${n}`).join(' · ');
+  const titleAttr = (text) => (text ? ` title="${esc(text)}"` : '');
   const defFaultCounts = (events) => countBy(events.filter((e) => e.kind === 'ACTION' && DEFENSIVE_FAULTS.includes(e.action)), (e) => ACTIONS[e.action].label);
   const eventsOf = (id, events = state.events) => events.filter((e) => e.playerId === id);
   // One row of the player table, as PLAYER_HEAD; Min and +/− read «–» when the match logged no court.
@@ -3988,6 +3992,12 @@ span.att-foot { visibility: hidden; }
   }
   // The tones of a playerRow, cell by cell: the +/− by its sign and each zone's goals/shots by its target.
   const PLAYER_ROW_LEAD = 2, PLAYER_ROW_PLUS_MINUS = 3, PLAYER_ROW_FIRST_ZONE = 4;
+  const PLAYER_ROW_RECOVERIES = PLAYER_HEAD.indexOf('Recup.'), PLAYER_ROW_TURNOVERS = PLAYER_HEAD.indexOf('Pérdida');
+  // The types behind the counted cells of a playerRow, by column (shown as the cell's title).
+  function playerRowBreakdowns(p, s = state) {
+    const mine = eventsOf(p.id, s.events);
+    return { [PLAYER_ROW_RECOVERIES]: typeBreakdownText(recoveryCounts(mine)), [PLAYER_ROW_TURNOVERS]: typeBreakdownText(turnoverCounts(mine)) };
+  }
   function playerRowTones(p, s = state) {
     const stats = playerStats(p.id, s.events), tones = [];
     tones[PLAYER_ROW_PLUS_MINUS] = plusMinusTone(courtFiguresOf(s, p.id).plusMinus);
@@ -4147,14 +4157,16 @@ span.att-foot { visibility: hidden; }
       ['Pérdidas', us.turnovers, `de ${us.possessions} posesiones`, rate(us.turnoverPct, 'turnovers')],
       ['Paradas', pctText(them.savedPct), `${them.saved}/${them.onTarget} a puerta`, rate(them.savedPct, 'gk')],
       ['Defensa', pctText(s.defense), 'ataques rivales sin gol', rate(s.defense, 'defense')],
-      ['Recuperaciones', s.recov, ''],
+      ['Recuperaciones', s.recov, typeBreakdownText(recoveryCounts(state.events))],
       ['Blocajes', s.blocks, `nos bloquean ${us.blocked}`],
       ['Fallos defensivos', s.defFaults, ''],
       ["Exclusiones 2'", `${exclusionEvents().length}–${rivalExclusionEvents().length}`, `${state.us}–${state.them}`, balanceTone(rivalExclusionEvents().length, exclusionEvents().length)]
     ];
   }
-  function playerFigures(p, s = state) {
-    const stats = playerStats(p.id, s.events);
+  // `detailed` (the screen's player card): the recoveries and turnovers by type, and the good defences.
+  function playerFigures(p, s = state, { detailed = false } = {}) {
+    const stats = playerStats(p.id, s.events), mine = eventsOf(p.id, s.events);
+    const breakdown = (counts) => (detailed ? typeBreakdownText(counts) : '');
     const shots = ourShots(s.events).filter((e) => e.playerId === p.id);
     const c = countGroups(shots);
     const faults = DEFENSIVE_FAULTS.reduce((n, k) => n + stats[k], 0);
@@ -4165,9 +4177,10 @@ span.att-foot { visibility: hidden; }
       ['Fallados', c.FALLO, 'fuera · palo · bloqueado'],
       ['Pases de gol', stats.ASIST, ''],
       ['Provoca 7 m', stats.PROV7, ''],
-      ['Recuperaciones', stats.RECUP, ''],
+      ['Recuperaciones', stats.RECUP, breakdown(recoveryCounts(mine))],
       ['Blocajes', stats.BLOC, ''],
-      ['Pérdidas', stats.TURNOVER, ''],
+      ...(detailed ? [['Buenas defensas', stats.GOODDEF, '']] : []),
+      ['Pérdidas', stats.TURNOVER, breakdown(turnoverCounts(mine))],
       ['Fallos defensivos', faults, ''],
       ['Sanciones', cards, '']
     ];
@@ -4209,9 +4222,9 @@ span.att-foot { visibility: hidden; }
     const phoneGoals = (cell, tone = '') => `<${cell} data-phone-only${tone ? ` class="${tone}"` : ''}>${cell === 'th' ? PHONE_GOALS_HEAD : ''}`;
     const rows = fieldPlayers().map((p) => {
       const [num, name, ...rest] = playerRow(p, state);
-      const tones = playerRowTones(p), stats = playerStats(p.id, state.events);
+      const tones = playerRowTones(p), stats = playerStats(p.id, state.events), titles = playerRowBreakdowns(p);
       const [goals, shots] = [stats.goals, stats.shots].map((byZone) => sumOf(SHEET_ZONES, (z) => byZone[z]));
-      const cells = rest.map((v, i) => td(v, tones[i + PLAYER_ROW_LEAD], hide(i + PLAYER_ROW_LEAD)));
+      const cells = rest.map((v, i) => td(v, tones[i + PLAYER_ROW_LEAD], hide(i + PLAYER_ROW_LEAD) + titleAttr(titles[i + PLAYER_ROW_LEAD])));
       cells.splice(PHONE_GOALS_AFTER, 0, `${phoneGoals('td', ratioTone(goals, shots, 'shooting'))}${goals}/${shots}</td>`);
       return `<tr><td${hide(0)}>${num}</td><td class="name"${hide(1)}><button class="who-link press" type="button" data-sheet-open-player="${esc(p.id)}" aria-label="Ver el partido de ${esc(name)}"><span style="background:${posOf(p).color}"></span>${esc(name)}</button></td>${cells.join('')}</tr>`;
     }).join('');
@@ -4442,7 +4455,7 @@ span.att-foot { visibility: hidden; }
         ${tableHtml(report.zoneHead, report.zoneRows, gkZoneTone(), PHONE_COLUMNS.gkZones)}
         <div class="sheet-grid">${goalGridHtml(report.shots, 'PARADA', 'Detenidos por zona de portería', 'GK')}${goalGridHtml(report.shots, 'GOL', 'Encajados por zona de portería', 'GK')}</div>`;
     }
-    return `${heading}${figuresHtml(report.figures)}${spellsCardHtml(state, p)}
+    return `${heading}${figuresHtml(playerFigures(p, state, { detailed: true }))}${spellsCardHtml(state, p)}
       <div class="match-grid">${card(`Tiros · ${report.shots.length}`, shotMapSvg(report.shots, 'US', null))}${card('Por zona', tableHtml(report.zoneHead, report.zoneRows, shotZoneTone, PHONE_COLUMNS.shotZones))}</div>
       <div class="sheet-grid">${card('Pérdidas por tipo', tableHtml(['Tipo', 'N'], report.turnoverRows))}${card('Fallos defensivos', tableHtml(['Tipo', 'N'], report.faultRows))}</div>
       ${card('Cronología', tableHtml(['Min', 'Acción'], report.timeline.length ? report.timeline : [['–', 'Sin acciones']]))}`;
@@ -4458,7 +4471,7 @@ span.att-foot { visibility: hidden; }
   // A chart of fewer points than this says how few there are instead of drawing.
   const SUMMARY_MIN_SHOTS = 4;
   const FAILED_SHOT_NOTE = 'fuera, palo o bloqueado';
-  const statTileHtml = (label, value, note, tone = '') => `<div class="stat-tile"><span>${esc(label)}</span><strong class="${tone}">${esc(value)}</strong><small>${esc(note)}</small></div>`;
+  const statTileHtml = (label, value, note, tone = '', title = '') => `<div class="stat-tile"${titleAttr(title)}><span>${esc(label)}</span><strong class="${tone}">${esc(value)}</strong><small>${esc(note)}</small></div>`;
   const failedShotTileHtml = (label, misses) => statTileHtml(label, misses, FAILED_SHOT_NOTE);
   // Each tile takes the colour of its target in CONFIG.targets; counts and the failed shots have none.
   const DISTANCE_LABELS = { near: '6\u00a0m', far: '9\u00a0m+' };
@@ -4470,8 +4483,8 @@ span.att-foot { visibility: hidden; }
       statTileHtml('Goles', f.goals, plural(f.shots, 'lanzamiento', 'lanzamientos'), balanceTone(f.goals, score().them)),
       ...distanceTilesHtml(d.shooting.us, '% tiro', 'goals', 'shots', FIELD_TARGETS),
       failedShotTileHtml('Fallos 6 m', f.miss6), failedShotTileHtml('Fallos 9 m', f.miss9),
-      statTileHtml('Pérdidas', f.turnovers, `${pctText(pct(f.turnovers, possessions))} · de ${plural(possessions, 'posesión', 'posesiones')}`, rate(pct(f.turnovers, possessions), 'turnovers')),
-      statTileHtml('Recuperaciones', f.recoveries, ''),
+      statTileHtml('Pérdidas', f.turnovers, `${pctText(pct(f.turnovers, possessions))} · de ${plural(possessions, 'posesión', 'posesiones')}`, rate(pct(f.turnovers, possessions), 'turnovers'), typeBreakdownText(turnoverCounts(state.events))),
+      statTileHtml('Recuperaciones', f.recoveries, typeBreakdownText(recoveryCounts(state.events))),
       ...distanceTilesHtml(d.saves.us, '% paradas', 'saved', 'onTarget', KEEPER_TARGETS)
     ].join('');
   }
@@ -9061,7 +9074,7 @@ table { border-collapse: collapse; width: 100%; }
         <span class="last-who"><b>${esc(dateText(match.date))}</b>${match.venue ? `<small>${esc(match.venue)}</small>` : ''}</span>
         <span class="res-chip ${resultClass(row)}">${RESULT_LABEL[matchResult(row)]}</span>${ratingChipHtml(row.rating)}
         <strong class="last-score ${resultClass(row)}">${row.scoreUs}–${row.scoreThem}</strong></div></section>
-      ${figuresHtml(keeper ? gkFigures(row.facedList) : [...courtFigures(row), ...playerFigures(player, s)])}
+      ${figuresHtml(keeper ? gkFigures(row.facedList) : [...courtFigures(row), ...playerFigures(player, s, { detailed: true })])}
       ${maps}</div>`;
   }
   function showPlayerMatch(matchId) {

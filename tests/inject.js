@@ -798,6 +798,46 @@
     const steal = state.events.at(-1);
     if (steal.action !== 'RECUP' || steal.subtype !== RECOVERY_TYPES.STEAL || steal.playerId !== 'p5') throw new Error(JSON.stringify(steal));
   }));
+  T('recovery types: an old recovery without a type counts as a steal and reads as before', () => {
+    const old = { kind: 'ACTION', action: 'RECUP', playerId: 'p10' }, s = sampleState();
+    if (recoveryType(old) !== RECOVERY_TYPES.STEAL || describe(old, s).includes('(')) throw new Error(describe(old, s));
+    const counts = recoveryCounts([old, { ...old, subtype: RECOVERY_TYPES.STEAL }, { ...old, subtype: RECOVERY_TYPES.OFFENSIVE_FOUL }, { kind: 'ACTION', action: 'BLOC', playerId: 'p10' }]);
+    if (counts[RECOVERY_TYPES.STEAL] !== 2 || counts[RECOVERY_TYPES.OFFENSIVE_FOUL] !== 1 || Object.keys(counts).length !== 2) throw new Error(JSON.stringify(counts));
+    if (typeBreakdownText(counts) !== `${RECOVERY_TYPES.STEAL} 2 · ${RECOVERY_TYPES.OFFENSIVE_FOUL} 1` || typeBreakdownText({}) !== '') throw new Error(typeBreakdownText(counts));
+  });
+  T('«Buena defensa»: a blue defensive action for one player, from the panel or the popup', withSample(() => {
+    setPhase('DEF'); document.querySelector('[data-panel-mode="acts"]').click();
+    const b = document.querySelector('#acts [data-panel-act="GOODDEF"]');
+    if (!b || !b.classList.contains('c-act-def') || b.textContent !== 'Buena defensa') throw new Error('panel button');
+    const top = [...document.querySelectorAll('#acts > .acts:first-child .act')].map((x) => x.getBoundingClientRect());
+    if (top.length !== Object.values(RECOVERY_TYPES).length + 2 || new Set(top.map((r) => Math.round(r.top))).size !== 1 || top.some((r) => r.width < 44 || r.height < 44)) throw new Error('the defence actions are not one row of 44 px targets');
+    b.click(); tapEl(document.querySelector('#tokens-layer .tok[data-id="p5"]'));
+    const e = state.events.at(-1);
+    if (e.kind !== 'ACTION' || e.action !== 'GOODDEF' || e.playerId !== 'p5' || 'subtype' in e) throw new Error(JSON.stringify(e));
+    if (state.phase !== 'DEF') throw new Error('a good defence does not end the possession');
+    if (playerStats('p5').GOODDEF !== 1 || eventColor(e) !== 'var(--act-def)') throw new Error('stats or colour');
+    openPlayerPop('p5', { x: 10, y: 10 }); document.querySelector('#pop [data-action="GOODDEF"]').click();
+    if (state.events.at(-1).action !== 'GOODDEF' || playerStats('p5').GOODDEF !== 2) throw new Error('popup');
+    const fig = playerFigures(playerById('p5'), state, { detailed: true }).find(([label]) => label === 'Buenas defensas');
+    if (!fig || fig[1] !== 2) throw new Error('not in the player card');
+    if (playerFigures(playerById('p5'), state).some(([label]) => label === 'Buenas defensas')) throw new Error('the compact figures (PDF) changed');
+  }));
+  T('turnovers and recoveries by type on the Hoja: player card, table cells and team figures', withSample(() => {
+    addEvent('TURNOVER', { playerId: 'p8', subtype: 'Pasos' }); addEvent('TURNOVER', { playerId: 'p8', subtype: 'Pasos' });
+    addEvent('ACTION', { playerId: 'p10', action: 'RECUP', subtype: RECOVERY_TYPES.OFFENSIVE_FOUL });
+    const sub = (p, label, opts) => playerFigures(playerById(p), state, opts).find(([l]) => l === label)[2];
+    if (sub('p8', 'Pérdidas', { detailed: true }) !== 'Pasos 2 · Falta ataque 1') throw new Error(sub('p8', 'Pérdidas', { detailed: true }));
+    if (sub('p10', 'Recuperaciones', { detailed: true }) !== `${RECOVERY_TYPES.STEAL} 1 · ${RECOVERY_TYPES.OFFENSIVE_FOUL} 1`) throw new Error(sub('p10', 'Recuperaciones', { detailed: true }));
+    if (sub('p8', 'Pérdidas') !== '' || sub('p10', 'Recuperaciones') !== '') throw new Error('compact figures carry no breakdown');
+    if (sub('p11', 'Pérdidas', { detailed: true }) !== '') throw new Error('no turnovers, no breakdown');
+    const team = teamFigures().find(([l]) => l === 'Recuperaciones');
+    if (team[2] !== `${RECOVERY_TYPES.STEAL} 1 · ${RECOVERY_TYPES.OFFENSIVE_FOUL} 1`) throw new Error('team ' + team[2]);
+    const html = sheetStatsHtml();
+    if (!html.includes('title="Pasos 2 · Falta ataque 1"') || !html.includes(`title="${RECOVERY_TYPES.STEAL} 1 · ${RECOVERY_TYPES.OFFENSIVE_FOUL} 1"`)) throw new Error('table cell titles');
+    const tiles = summaryTilesHtml(matchFigures());
+    if (!tiles.includes(`title="${typeBreakdownText(turnoverCounts(state.events))}"`) || !tiles.includes(`${RECOVERY_TYPES.STEAL} 1 · ${RECOVERY_TYPES.OFFENSIVE_FOUL} 1</small>`)) throw new Error('summary tiles');
+    if (!playerReportHtml(playerById('p8')).includes('Pasos 2 · Falta ataque 1')) throw new Error('player tab');
+  }));
   const dragTo = (from, to) => { const a = from.getBoundingClientRect(), b = to.getBoundingClientRect(); const at = (r) => ({ clientX: r.left + r.width / 2, clientY: r.top + r.height / 2 }); const o = { bubbles: true, pointerId: 9, pointerType: 'pen' }; from.dispatchEvent(new PointerEvent('pointerdown', { ...o, ...at(a) })); $('court').dispatchEvent(new PointerEvent('pointermove', { ...o, ...at(b) })); $('court').dispatchEvent(new PointerEvent('pointerup', { ...o, ...at(b) })); };
   T('a bench substitution on a player in both phases is made in both', withSample(() => { setPhase('DEF'); const atk = { ...state.lineups.ATK.p18 }, def = { ...state.lineups.DEF.p18 }; substituteFromBench('p21', 'p18'); const L = state.lineups; if (L.DEF.p18 || L.ATK.p18) throw new Error('p18 still on'); if (JSON.stringify(L.DEF.p21) !== JSON.stringify(def) || JSON.stringify(L.ATK.p21) !== JSON.stringify(atk)) throw new Error('p21 not in both spots'); }));
   T('a bench substitution on a one-phase player stays in that phase', withSample(() => { setPhase('DEF'); const atk = JSON.stringify(state.lineups.ATK); substituteFromBench('p21', 'p5'); if (!state.lineups.DEF.p21 || state.lineups.DEF.p5) throw new Error('DEF'); if (JSON.stringify(state.lineups.ATK) !== atk) throw new Error('ATK changed'); }));
