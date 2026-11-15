@@ -388,9 +388,11 @@ button.rex-chip { border: 0; cursor: pointer; position: relative; }
 .panel-section { display: flex; flex-direction: column; gap: 6px; }
 .panel-section .type-row { display: flex; flex-direction: column; gap: 3px; }
 .panel-section .type-row > span { font-size: 10px; font-weight: 800; letter-spacing: .08em; text-transform: uppercase; }
-.panel-acts .acts.types { grid-template-columns: none; grid-auto-flow: column; grid-auto-columns: 1fr; gap: 6px; }
-.panel-acts .acts.types .act { min-height: 44px; font-size: 13px; padding: 0 4px; }
-.panel-acts .acts:not(.types) .act { font-size: 16px; }
+/* A top row with more actions than its two columns (defence) packs them in one compact row, as the type rows. */
+.panel-acts .acts.types, .panel-acts .acts.compact { grid-template-columns: none; grid-auto-flow: column; grid-auto-columns: 1fr; gap: 6px; }
+.panel-acts .acts.types .act, .panel-acts .acts.compact .act { min-height: 44px; font-size: 13px; padding: 0 4px; }
+.panel-acts .acts.compact { grid-auto-columns: auto; }
+.panel-acts .acts:not(.types):not(.compact) .act { font-size: 16px; }
 .tok.target .body { stroke: var(--gold); stroke-width: 10; }
 .bench-player.target .disc, .gk-card.target { box-shadow: 0 0 0 4px var(--gold); }
 .goal-frame-hot { fill: none; stroke: var(--gold); stroke-width: 22; stroke-linejoin: round; pointer-events: none; filter: drop-shadow(0 0 6px var(--gold)); }
@@ -1506,7 +1508,12 @@ span.att-foot { visibility: hidden; }
     // share of shots that reach the goal. possession: goals of an average possession; shortHanded / superiority: the
     // same for each side (att = ours, def = the rival's) while a team is a player short. The weights are the coach's
     // knobs (tuning view): keeperWeight scales the keeper's save and goal values; oneOnOne is 7 m provoked (+), 1x1
-    // beaten and 7 m committed (−); closeFactor / lateFactor multiply what happens late and close (context).
+    // beaten and 7 m committed (−); closeFactor / lateFactor multiply what happens late and close (context: the
+    // end of the first half from firstHalfCloseFrom and the second from closeFrom, both within closeMargin).
+    // defence: goodDefence is a «Buena defensa» (good exit, hit, physical duel); offensiveFoulExtra is what a
+    // provoked offensive foul adds to a recovery.
+    // Zone defence: zoneGoal is taken from the defender who covered a field goal conceded (no 7 m, no counter-attack);
+    // zoneSolid goes to one whose zone conceded at most zoneFewerShare of his share of them, once it reaches zoneMinGoals.
     // Bands: lower bound in points, label and chip class (the --rating-<band> tokens), best first.
     rating: {
       pointsPerGoal: 3, decimals: 1, minPossessions: 5, shrinkPossessions: 15, mvpFullShare: 2 / 3,
@@ -1515,7 +1522,8 @@ span.att-foot { visibility: hidden; }
       possession: 0.43, shortHanded: { att: 0.32, def: 0.58 }, superiority: { att: 0.58, def: 0.32 },
       shooterCreationShare: 0.5, exclusionSeconds: 120, lastSecondsWindow: 30, sameMomentSeconds: 2, playerLossPerMatch: 0.5,
       windows: { provoked7: 90, fastBreakStart: 10, assist: 15, counterAfterTurnover: 15 },
-      context: { closeFrom: 3000, closeMargin: 2, lateFrom: 3300, lateMargin: 1, blowoutMargin: 6, blowoutFactor: 0.75 },
+      context: { firstHalfCloseFrom: 1500, closeFrom: 3000, closeMargin: 2, lateFrom: 3300, lateMargin: 1, blowoutMargin: 6, blowoutFactor: 0.75 },
+      defence: { goodDefence: 0.30, offensiveFoulExtra: 0.05, zoneGoal: 0.03, zoneSolid: 0.10, zoneFewerShare: 0.5, zoneMinGoals: 2 },
       weights: {
         keeperWeight: 0.65, assist: 0.15, starter: 0.14, oneOnOne: 0.20, ruleFaultDiscount: 0.10, blocRetained: 0.12,
         minorFault: -0.07, teamFaultField: -0.05, teamFaultKeeper: -0.02, result: 0.25, yellow: -0.10,
@@ -1592,6 +1600,7 @@ span.att-foot { visibility: hidden; }
     PROV7: { label: 'Provoca 7 m', group: 'act-good' },
     RECUP: { label: 'Recuperación', group: 'act-def' },
     BLOC: { label: 'Blocaje', group: 'act-def' },
+    GOODDEF: { label: 'Buena defensa', group: 'act-def' },
     FALTA: { label: 'Falta regl.', group: 'act-rule' },
     PEN7C: { label: '7 m cometido', group: 'act-bad' },
     GOLPE: { label: 'Golpe', group: 'act-rule' },
@@ -1601,6 +1610,9 @@ span.att-foot { visibility: hidden; }
     LATE: { label: 'Llega tarde', group: 'act-bad' },
     HELP: { label: 'Ayuda innec.', group: 'act-bad' }
   };
+  // A recovery is a steal or an offensive foul we provoke; one logged before the types existed is a steal.
+  const RECOVERY_TYPES = { STEAL: 'Robo', OFFENSIVE_FOUL: 'Falta en ataque' };
+  const recoveryType = (e) => e.subtype || RECOVERY_TYPES.STEAL;
   const DEFENSIVE_FAULTS = CONFIG.defFaultGroups.flatMap((g) => g.actions);
   const TACTICAL_FAULTS = CONFIG.defFaultGroups.find((g) => g.label === 'Táctico').actions;
   const BLOCKED_TURNOVER = 'Bloqueado';
@@ -2080,7 +2092,7 @@ span.att-foot { visibility: hidden; }
     const who = p ? ` #${p.num} ${p.name}` : '';
     switch (e.kind) {
       case 'SHOT': return `${RESULTS[e.result].label} ${ZONES[e.zone]} ·${who}`;
-      case 'ACTION': return `${ACTIONS[e.action].label} ·${who || ' equipo'}`;
+      case 'ACTION': return `${ACTIONS[e.action].label}${e.subtype ? ` (${e.subtype.toLowerCase()})` : ''} ·${who || ' equipo'}`;
       case 'TURNOVER': return `Pérdida ${e.subtype.toLowerCase()} ·${who}`;
       case 'SANCTION': return `${SANCTIONS[e.card].label} ·${who}`;
       case 'RIVAL_SANCTION': return `${rivalTeamLabel(e.rivalId, s)}: ${SANCTIONS[e.card].label}`;
@@ -2413,7 +2425,7 @@ span.att-foot { visibility: hidden; }
     { key: 'conductDirect', label: 'Roja directa: conducta', group: 'Sanciones', unit: 'pts', min: -3, max: 0, step: RATING_KNOB_STEP },
     { key: 'conductLastSeconds', label: 'Roja de los últimos 30 s (con 7 m): conducta', group: 'Sanciones', unit: 'pts', min: -3, max: 0, step: RATING_KNOB_STEP },
     { key: 'blue', label: 'Azul (además de la roja)', group: 'Sanciones', unit: 'pts', min: -2, max: 0, step: RATING_KNOB_STEP },
-    { key: 'closeFactor', label: 'Desde el 50\' con ±2 goles (multiplica)', group: 'Momento decisivo', unit: 'factor', min: 1, max: 2.5, step: RATING_KNOB_STEP },
+    { key: 'closeFactor', label: 'Desde el 25\' y el 50\' con ±2 goles (multiplica)', group: 'Momento decisivo', unit: 'factor', min: 1, max: 2.5, step: RATING_KNOB_STEP },
     { key: 'lateFactor', label: 'Desde el 55\' con ±1 gol (multiplica)', group: 'Momento decisivo', unit: 'factor', min: 1, max: 3, step: RATING_KNOB_STEP }
   ];
   const knobOf = (key) => RATING_KNOBS.find((k) => k.key === key);
@@ -2467,14 +2479,35 @@ span.att-foot { visibility: hidden; }
     if (plus && !short) return r.superiority;
     return { att: r.possession, def: r.possession };
   }
-  // The context of a moment: late and close weighs more, a second-half blowout less.
+  // The context of a moment: late and close (at the end of either half) weighs more, a second-half blowout less.
   function leverageOf(s, e, weights, order) {
     const before = score(s.events.filter((x) => x.abs < e.abs || (x.abs === e.abs && order.get(x) < order.get(e))));
     const margin = Math.abs(before.us - before.them), c = CONFIG.rating.context;
+    const firstHalfClose = e.abs >= c.firstHalfCloseFrom && e.abs < CONFIG.halfSeconds;
     if (e.abs >= c.lateFrom && margin <= c.lateMargin) return { factor: weights.lateFactor, score: before };
-    if (e.abs >= c.closeFrom && margin <= c.closeMargin) return { factor: weights.closeFactor, score: before };
+    if ((e.abs >= c.closeFrom || firstHalfClose) && margin <= c.closeMargin) return { factor: weights.closeFactor, score: before };
     if (e.abs >= CONFIG.halfSeconds && margin >= c.blowoutMargin) return { factor: c.blowoutFactor, score: before };
     return { factor: 1, score: before };
+  }
+
+  // ---- Zone defence: whose zone a field goal was scored in ----
+  // The defensive zone of a spot is its lane (laneOf: wing, back or centre and the side), the attacker's lanes mirrored
+  // onto our DEF spots. A rival field goal (no 7 m, and no counter-attack, where the court is empty) is charged to the
+  // nearest defender of its lane, else to the nearest defender, among the field players stamped on court for it who
+  // hold a DEF spot. `share` is each defender's even part of the goals he was on court for (the team average).
+  const isZoneGoal = (e) => e.result === 'GOL' && e.zone !== '7M' && e.zone !== ZONE_CONTRA && !e.contra && Boolean(e.origin) && e.on != null;
+  function zoneDefence(s) {
+    const spots = s.lineups?.DEF || {}, conceded = new Map(), share = new Map();
+    rivalShots(s.events).filter(isZoneGoal).forEach((e) => {
+      const ids = fieldOnCourt(s, e.on).filter((id) => spots[id]);
+      if (!ids.length) return;
+      const dist = (id) => Math.hypot(spots[id].x - e.origin.x, spots[id].y - e.origin.y);
+      const nearest = (list) => (list.length ? list.reduce((a, b) => (dist(b) < dist(a) ? b : a)) : null);
+      const lane = laneOf(e.origin), id = nearest(ids.filter((x) => laneOf(spots[x]) === lane)) || nearest(ids);
+      conceded.set(id, [...(conceded.get(id) || []), e]);
+      ids.forEach((x) => share.set(x, (share.get(x) || 0) + 1 / ids.length));
+    });
+    return { conceded, share };
   }
 
   // Every player's rating by id for one match: { value (points, null = «S/C»), rated, lines (points by line), events
@@ -2559,16 +2592,28 @@ span.att-foot { visibility: hidden; }
         if (x.action === 'PEN7C') { own(x.playerId, 'defInd', -weights.oneOnOne, x, '7 m cometido'); value += weights.oneOnOne; }
         else if (x.action === 'BEATEN') { own(x.playerId, 'defInd', -weights.oneOnOne, x, 'Superado 1x1'); value += weights.oneOnOne; }
         else if (x.action === 'BLOC') { own(x.playerId, 'defInd', weights.blocRetained, x, 'Blocaje'); value -= weights.blocRetained; }
+        else if (x.action === 'GOODDEF') value -= r.defence.goodDefence;
         else if (MINOR_DEFENSIVE_FAULTS.includes(x.action)) { own(x.playerId, 'defInd', weights.minorFault, x, ACTIONS[x.action].label); value -= weights.minorFault; }
       });
       defencePool.push({ set, value, abs: e.abs });
     });
-    events.filter((e) => isAction(e, 'RECUP')).forEach((e) => own(e.playerId, 'defInd', stateBaselines(s, courtSetBefore(s, e.abs), e.abs).def, e, 'Recuperación'));
+    events.filter((e) => isAction(e, 'RECUP')).forEach((e) => {
+      const foul = recoveryType(e) === RECOVERY_TYPES.OFFENSIVE_FOUL, base = stateBaselines(s, courtSetBefore(s, e.abs), e.abs).def;
+      own(e.playerId, 'defInd', base + (foul ? r.defence.offensiveFoulExtra : 0), e, foul ? 'Falta en ataque provocada' : 'Recuperación');
+    });
+    // A good defence is owned whatever ends the possession; when a rival shot ends it, it comes out of the unit's share.
+    events.filter((e) => isAction(e, 'GOODDEF')).forEach((e) => own(e.playerId, 'defInd', r.defence.goodDefence, e, ACTIONS.GOODDEF.label));
     events.filter((e) => e.kind === 'SCORE_FIX' && e.team === 'them' && e.delta > 0)
       .forEach((e) => defencePool.push({ set: courtSetBefore(s, e.abs), value: r.possession - r.pOn['6M'], abs: e.abs }));
     events.filter((e) => e.kind === 'ACTION' && TEAM_FAULTS.includes(e.action)).forEach((e) => {
       const on = e.playerId == null ? courtSetOf(e.on ?? courtSetBefore(s, e.abs), s) : [e.playerId];
       on.forEach((id) => own(id, 'defInd', isKeeperOf(s, id) ? weights.teamFaultKeeper : weights.teamFaultField, e, ACTIONS[e.action].label));
+    });
+    // Zone defence: a little off the defender of each field goal's zone, a little on one whose zone clearly held.
+    const zone = zoneDefence(s), d = r.defence;
+    zone.conceded.forEach((goals, id) => goals.forEach((e) => own(id, 'defInd', -d.zoneGoal, e, 'Gol en su zona')));
+    zone.share.forEach((expected, id) => {
+      if (expected >= d.zoneMinGoals && (zone.conceded.get(id) || []).length <= expected * d.zoneFewerShare) own(id, 'defInd', d.zoneSolid, null, 'Zona sólida');
     });
 
     // Unit lines: shared per possession, shrunk toward the team's mean, renormalised to the team total.
@@ -3277,10 +3322,11 @@ span.att-foot { visibility: hidden; }
           g.types.map((t) => `<button class="act big ${g.cls}" type="button" data-turnover="${esc(t)}">${esc(t)}</button>`).join(''))).join('')}`;
     }
     const actBtn = (k) => `<button class="act c-${ACTIONS[k].group}" type="button" data-action="${k}">${ACTIONS[k].label}</button>`;
+    const typedBtns = (k) => PANEL_SPLIT[k].map((t) => `<button class="act c-${ACTIONS[k].group}" type="button" data-action="${k}" data-subtype="${esc(t)}">${esc(t)}</button>`).join('');
     // The popup only offers what can happen in the current phase.
     if (state.phase === 'DEF') {
       return `${head}
-        ${group('Bien', 't-act-def', actBtn('RECUP') + actBtn('BLOC'))}
+        ${group('Bien', 't-act-def', typedBtns('RECUP') + actBtn('BLOC') + actBtn('GOODDEF'))}
         ${CONFIG.defFaultGroups.filter((g) => !g.team).map((g) => group(g.label, `t-${g.cls.slice(2)}`,
           g.actions.filter((k) => !RETIRED_FAULTS.includes(k)).map(actBtn).join(''))).join('')}
         ${sanctionGroup()}`;
@@ -3586,7 +3632,11 @@ span.att-foot { visibility: hidden; }
 
   // ===================== Actions panel: action first, then the player =====================
   // TURNOVER and DEFFAULT are a section of their types: one tap on a type arms it.
-  const PANEL_ACTIONS = { ATK: ['ASIST', 'PROV7', 'TURNOVER'], DEF: ['RECUP', 'BLOC', 'DEFFAULT'] };
+  const PANEL_ACTIONS = { ATK: ['ASIST', 'PROV7', 'TURNOVER'], DEF: ['RECUP', 'BLOC', 'GOODDEF', 'DEFFAULT'] };
+  // Actions logged with a type: one button per type, so they still take a single tap.
+  const PANEL_SPLIT = { RECUP: Object.values(RECOVERY_TYPES) };
+  const typedFields = (key, sub) => (PANEL_SPLIT[key] && sub ? { subtype: sub } : {});
+  const PANEL_TOP_COLUMNS = 2;
   // One row per group of types; team groups log at once, without a player.
   const PANEL_TYPED = {
     TURNOVER: { label: 'Pérdida', groups: () => CONFIG.turnoverGroups.map((g) => ({ label: g.label, cls: g.cls, subs: g.types.map((t) => [t, t, g.cls]) })) },
@@ -3617,7 +3667,11 @@ span.att-foot { visibility: hidden; }
     const row = (key) => (g) => `<div class="type-row"><span class="t-${g.cls.slice(2)}">${esc(g.label)}</span><div class="acts types">${g.subs.map(typeButton(key, g)).join('')}</div></div>`;
     const section = (key) => `<div class="panel-section"><h3>${PANEL_TYPED[key].label}</h3>${PANEL_TYPED[key].groups().map(row(key)).join('')}</div>`;
     const note = a ? `${a.sub ? esc(subLabel(a)) : panelLabel(a.key)} · toca al jugador` : 'Toca la acción y luego al jugador';
-    $('acts').innerHTML = `<div class="acts">${keys.filter((k) => !PANEL_TYPED[k]).map((k) => `<button class="act c-${ACTIONS[k].group}" type="button" data-panel-act="${k}" aria-pressed="${armed(k)}">${panelLabel(k)}</button>`).join('')}</div>
+    const topButtons = (k) => (PANEL_SPLIT[k]
+      ? PANEL_SPLIT[k].map((sub) => `<button class="act c-${ACTIONS[k].group}" type="button" data-panel-key="${k}" data-panel-sub="${esc(sub)}" aria-pressed="${armed(k, sub)}">${esc(sub)}</button>`).join('')
+      : `<button class="act c-${ACTIONS[k].group}" type="button" data-panel-act="${k}" aria-pressed="${armed(k)}">${panelLabel(k)}</button>`);
+    const top = keys.filter((k) => !PANEL_TYPED[k]), topCount = sumOf(top, (k) => (PANEL_SPLIT[k] ? PANEL_SPLIT[k].length : 1));
+    $('acts').innerHTML = `<div class="acts${topCount > PANEL_TOP_COLUMNS ? ' compact' : ''}">${top.map(topButtons).join('')}</div>
       <p class="arm-note">${note}</p>${keys.filter((k) => PANEL_TYPED[k]).map(section).join('')}`;
   }
   function logTeamFault(action) {
@@ -3655,7 +3709,7 @@ span.att-foot { visibility: hidden; }
     disarmAction();
     const result = key === 'TURNOVER'
       ? addEvent('TURNOVER', { playerId, subtype: sub }, { bringOn: playerId })
-      : addEvent('ACTION', { playerId, action: key === 'DEFFAULT' ? sub : key }, { bringOn: playerId });
+      : addEvent('ACTION', { playerId, action: key === 'DEFFAULT' ? sub : key, ...typedFields(key, sub) }, { bringOn: playerId });
     hint(withAddNotes(`${describe(state.events.at(-1))} · ↶ deshacer`, result));
     return true;
   }
@@ -3677,7 +3731,7 @@ span.att-foot { visibility: hidden; }
     if (b.hasAttribute('data-back')) { v.sub = null; openPop(playerPopHtml(playerById(v.playerId), v), v.anchor); return; }
     if (b.dataset.sub) { v.sub = b.dataset.sub; openPop(playerPopHtml(playerById(v.playerId), v), v.anchor); return; }
     if (b.hasAttribute('data-arm')) { closePop(); armShooter(v.playerId); return; }
-    if (b.dataset.action) { closePop(); addEvent('ACTION', { playerId: v.playerId, action: b.dataset.action }); return; }
+    if (b.dataset.action) { closePop(); addEvent('ACTION', { playerId: v.playerId, action: b.dataset.action, ...typedFields(b.dataset.action, b.dataset.subtype) }); return; }
     if (b.dataset.turnover) { closePop(); addEvent('TURNOVER', { playerId: v.playerId, subtype: b.dataset.turnover }); return; }
     if (b.dataset.sanction && v.type === 'rivalSanction') { closePop(); addRivalSanction(null, b.dataset.sanction); return; }
     if (b.dataset.sanction) { closePop(); addSanction(v.playerId, b.dataset.sanction); return; }
@@ -4046,6 +4100,10 @@ span.att-foot { visibility: hidden; }
     return out;
   }
   const turnoverCounts = (events) => countBy(events.filter((e) => e.kind === 'TURNOVER'), (e) => e.subtype);
+  const recoveryCounts = (events) => countBy(events.filter((e) => isAction(e, 'RECUP')), recoveryType);
+  // «Pasos 2 · Pase 1»: counts by type, most first; empty when there are none.
+  const typeBreakdownText = (counts) => Object.entries(counts).sort((a, b) => b[1] - a[1]).map(([type, n]) => `${type} ${n}`).join(' · ');
+  const titleAttr = (text) => (text ? ` title="${esc(text)}"` : '');
   const defFaultCounts = (events) => countBy(events.filter((e) => e.kind === 'ACTION' && DEFENSIVE_FAULTS.includes(e.action)), (e) => ACTIONS[e.action].label);
   const eventsOf = (id, events = state.events) => events.filter((e) => e.playerId === id);
   // One row of the player table, as PLAYER_HEAD; Min and +/− read «–» when the match logged no court.
@@ -4057,6 +4115,12 @@ span.att-foot { visibility: hidden; }
   }
   // The tones of a playerRow, cell by cell: the +/− by its sign and each zone's goals/shots by its target.
   const PLAYER_ROW_LEAD = 2, PLAYER_ROW_PLUS_MINUS = 3, PLAYER_ROW_FIRST_ZONE = 4;
+  const PLAYER_ROW_RECOVERIES = PLAYER_HEAD.indexOf('Recup.'), PLAYER_ROW_TURNOVERS = PLAYER_HEAD.indexOf('Pérdida');
+  // The types behind the counted cells of a playerRow, by column (shown as the cell's title).
+  function playerRowBreakdowns(p, s = state) {
+    const mine = eventsOf(p.id, s.events);
+    return { [PLAYER_ROW_RECOVERIES]: typeBreakdownText(recoveryCounts(mine)), [PLAYER_ROW_TURNOVERS]: typeBreakdownText(turnoverCounts(mine)) };
+  }
   function playerRowTones(p, s = state) {
     const stats = playerStats(p.id, s.events), tones = [];
     tones[PLAYER_ROW_PLUS_MINUS] = plusMinusTone(courtFiguresOf(s, p.id).plusMinus);
@@ -4216,14 +4280,16 @@ span.att-foot { visibility: hidden; }
       ['Pérdidas', us.turnovers, `de ${us.possessions} posesiones`, rate(us.turnoverPct, 'turnovers')],
       ['Paradas', pctText(them.savedPct), `${them.saved}/${them.onTarget} a puerta`, rate(them.savedPct, 'gk')],
       ['Defensa', pctText(s.defense), 'ataques rivales sin gol', rate(s.defense, 'defense')],
-      ['Recuperaciones', s.recov, ''],
+      ['Recuperaciones', s.recov, typeBreakdownText(recoveryCounts(state.events))],
       ['Blocajes', s.blocks, `nos bloquean ${us.blocked}`],
       ['Fallos defensivos', s.defFaults, ''],
       ["Exclusiones 2'", `${exclusionEvents().length}–${rivalExclusionEvents().length}`, `${state.us}–${state.them}`, balanceTone(rivalExclusionEvents().length, exclusionEvents().length)]
     ];
   }
-  function playerFigures(p, s = state) {
-    const stats = playerStats(p.id, s.events);
+  // `detailed` (the screen's player card): the recoveries and turnovers by type, and the good defences.
+  function playerFigures(p, s = state, { detailed = false } = {}) {
+    const stats = playerStats(p.id, s.events), mine = eventsOf(p.id, s.events);
+    const breakdown = (counts) => (detailed ? typeBreakdownText(counts) : '');
     const shots = ourShots(s.events).filter((e) => e.playerId === p.id);
     const c = countGroups(shots);
     const faults = DEFENSIVE_FAULTS.reduce((n, k) => n + stats[k], 0);
@@ -4234,9 +4300,10 @@ span.att-foot { visibility: hidden; }
       ['Fallados', c.FALLO, 'fuera · palo · bloqueado'],
       ['Pases de gol', stats.ASIST, ''],
       ['Provoca 7 m', stats.PROV7, ''],
-      ['Recuperaciones', stats.RECUP, ''],
+      ['Recuperaciones', stats.RECUP, breakdown(recoveryCounts(mine))],
       ['Blocajes', stats.BLOC, ''],
-      ['Pérdidas', stats.TURNOVER, ''],
+      ...(detailed ? [['Buenas defensas', stats.GOODDEF, '']] : []),
+      ['Pérdidas', stats.TURNOVER, breakdown(turnoverCounts(mine))],
       ['Fallos defensivos', faults, ''],
       ['Sanciones', cards, '']
     ];
@@ -4278,9 +4345,9 @@ span.att-foot { visibility: hidden; }
     const phoneGoals = (cell, tone = '') => `<${cell} data-phone-only${tone ? ` class="${tone}"` : ''}>${cell === 'th' ? PHONE_GOALS_HEAD : ''}`;
     const rows = fieldPlayers().map((p) => {
       const [num, name, ...rest] = playerRow(p, state);
-      const tones = playerRowTones(p), stats = playerStats(p.id, state.events);
+      const tones = playerRowTones(p), stats = playerStats(p.id, state.events), titles = playerRowBreakdowns(p);
       const [goals, shots] = [stats.goals, stats.shots].map((byZone) => sumOf(SHEET_ZONES, (z) => byZone[z]));
-      const cells = rest.map((v, i) => td(v, tones[i + PLAYER_ROW_LEAD], hide(i + PLAYER_ROW_LEAD)));
+      const cells = rest.map((v, i) => td(v, tones[i + PLAYER_ROW_LEAD], hide(i + PLAYER_ROW_LEAD) + titleAttr(titles[i + PLAYER_ROW_LEAD])));
       cells.splice(PHONE_GOALS_AFTER, 0, `${phoneGoals('td', ratioTone(goals, shots, 'shooting'))}${goals}/${shots}</td>`);
       return `<tr><td${hide(0)}>${num}</td><td class="name"${hide(1)}><button class="who-link press" type="button" data-sheet-open-player="${esc(p.id)}" aria-label="Ver el partido de ${esc(name)}"><span style="background:${posOf(p).color}"></span>${esc(name)}</button></td>${cells.join('')}</tr>`;
     }).join('');
@@ -4511,7 +4578,7 @@ span.att-foot { visibility: hidden; }
         ${tableHtml(report.zoneHead, report.zoneRows, gkZoneTone(), PHONE_COLUMNS.gkZones)}
         <div class="sheet-grid">${goalGridHtml(report.shots, 'PARADA', 'Detenidos por zona de portería', 'GK')}${goalGridHtml(report.shots, 'GOL', 'Encajados por zona de portería', 'GK')}</div>`;
     }
-    return `${heading}${figuresHtml(report.figures)}${spellsCardHtml(state, p)}
+    return `${heading}${figuresHtml(playerFigures(p, state, { detailed: true }))}${spellsCardHtml(state, p)}
       <div class="match-grid">${card(`Tiros · ${report.shots.length}`, shotMapSvg(report.shots, 'US', null))}${card('Por zona', tableHtml(report.zoneHead, report.zoneRows, shotZoneTone, PHONE_COLUMNS.shotZones))}</div>
       <div class="sheet-grid">${card('Pérdidas por tipo', tableHtml(['Tipo', 'N'], report.turnoverRows))}${card('Fallos defensivos', tableHtml(['Tipo', 'N'], report.faultRows))}</div>
       ${card('Cronología', tableHtml(['Min', 'Acción'], report.timeline.length ? report.timeline : [['–', 'Sin acciones']]))}`;
@@ -4527,7 +4594,7 @@ span.att-foot { visibility: hidden; }
   // A chart of fewer points than this says how few there are instead of drawing.
   const SUMMARY_MIN_SHOTS = 4;
   const FAILED_SHOT_NOTE = 'fuera, palo o bloqueado';
-  const statTileHtml = (label, value, note, tone = '') => `<div class="stat-tile"><span>${esc(label)}</span><strong class="${tone}">${esc(value)}</strong><small>${esc(note)}</small></div>`;
+  const statTileHtml = (label, value, note, tone = '', title = '') => `<div class="stat-tile"${titleAttr(title)}><span>${esc(label)}</span><strong class="${tone}">${esc(value)}</strong><small>${esc(note)}</small></div>`;
   const failedShotTileHtml = (label, misses) => statTileHtml(label, misses, FAILED_SHOT_NOTE);
   // Each tile takes the colour of its target in CONFIG.targets; counts and the failed shots have none.
   const DISTANCE_LABELS = { near: '6\u00a0m', far: '9\u00a0m+' };
@@ -4539,8 +4606,8 @@ span.att-foot { visibility: hidden; }
       statTileHtml('Goles', f.goals, plural(f.shots, 'lanzamiento', 'lanzamientos'), balanceTone(f.goals, score().them)),
       ...distanceTilesHtml(d.shooting.us, '% tiro', 'goals', 'shots', FIELD_TARGETS),
       failedShotTileHtml('Fallos 6 m', f.miss6), failedShotTileHtml('Fallos 9 m', f.miss9),
-      statTileHtml('Pérdidas', f.turnovers, `${pctText(pct(f.turnovers, possessions))} · de ${plural(possessions, 'posesión', 'posesiones')}`, rate(pct(f.turnovers, possessions), 'turnovers')),
-      statTileHtml('Recuperaciones', f.recoveries, ''),
+      statTileHtml('Pérdidas', f.turnovers, `${pctText(pct(f.turnovers, possessions))} · de ${plural(possessions, 'posesión', 'posesiones')}`, rate(pct(f.turnovers, possessions), 'turnovers'), typeBreakdownText(turnoverCounts(state.events))),
+      statTileHtml('Recuperaciones', f.recoveries, typeBreakdownText(recoveryCounts(state.events))),
       ...distanceTilesHtml(d.saves.us, '% paradas', 'saved', 'onTarget', KEEPER_TARGETS)
     ].join('');
   }
@@ -5325,13 +5392,14 @@ span.att-foot { visibility: hidden; }
       const exact = (v) => String(roundHalfUp(v, 2)).replace('.', ',');
       const r = CONFIG.rating, b = r.possession, pts = (v) => exact(Math.abs(v) * POINTS_PER_GOAL), sign = (v) => `${v < 0 ? '−' : '+'}${pts(v)}`;
       const shot = (z) => { const p = preShotGoal(z), creation = z === '7M' ? 0 : r.shooterCreationShare * (p - b); return `${ZONES[z]}: gol ${sign(1 - p + creation)}, fallo ${sign(-p + creation)}`; };
-      const kw = weights.keeperWeight;
+      const kw = weights.keeperWeight, d = r.defence;
       return `<div class="model"><b>Cómo se puntúa.</b> Cada posesión vale lo que acabó dando (gol o no) menos lo que da una posesión media (${exact(b)} goles). Ese valor se reparte una sola vez: primero a quien la decide y lo que sobra entre los que estaban en pista. 1 gol aportado = ${POINTS_PER_GOAL} puntos.
         <b>Tiro:</b> ${['6M', '9M', '7M'].map(shot).join(' · ')} (con la mitad de la ocasión creada). <b>Creación:</b> 7 m provocado ${sign(weights.oneOnOne)}, asistencia ${sign(weights.assist)}, iniciar un contraataque ${sign(weights.starter)}.
-        <b>Balón:</b> pérdida ${sign(-b)} (de reglamento ${sign(-(b - weights.ruleFaultDiscount))}; más si acaba en contraataque rival). <b>Def. individual:</b> recuperación ${sign(b)}, blocaje ${sign(weights.blocRetained)}, 7 m cometido y 1x1 superado ${sign(-weights.oneOnOne)}.
+        <b>Balón:</b> pérdida ${sign(-b)} (de reglamento ${sign(-(b - weights.ruleFaultDiscount))}; más si acaba en contraataque rival). <b>Def. individual:</b> robo ${sign(b)}, falta en ataque provocada ${sign(b + d.offensiveFoulExtra)}, buena defensa (salida, golpe, dureza) ${sign(d.goodDefence)}, blocaje ${sign(weights.blocRetained)}, 7 m cometido y 1x1 superado ${sign(-weights.oneOnOne)}.
+        <b>Tu zona:</b> cada gol rival de juego (sin 7 m ni contraataques) va al defensor de su carril más cerca del lanzamiento ${sign(-d.zoneGoal)}; si tu zona encaja como mucho el ${Math.round(d.zoneFewerShare * PERCENT)}% de los goles que te tocaban (desde ${d.zoneMinGoals} goles) ${sign(d.zoneSolid)}.
         <b>Def. en pista:</b> lo que el rival consigue tirar a puerta mientras defiendes (lo que pasa después es cosa del portero), repartido entre los que estáis en pista. <b>Atq. en pista:</b> igual con nuestras posesiones.
         <b>Portería:</b> goles evitados frente a lo esperable, al ${Math.round(kw * PERCENT)}% (parar en 6 m ${sign(r.pOn['6M'] * kw)}, encajar ${sign(-(1 - r.pOn['6M']) * kw)}; parar un 7 m ${sign(r.pOn['7M'] * kw)}).
-        <b>Disciplina:</b> el 2' cuesta lo que se perdió con uno menos; roja: eso, la conducta y el resto del partido sin el jugador. <b>Momento decisivo:</b> desde el ${r.context.closeFrom / SECONDS_PER_MINUTE}' con ±${r.context.closeMargin} goles cada acción vale ×${exact(weights.closeFactor)}; desde el ${r.context.lateFrom / SECONDS_PER_MINUTE}' con ±${r.context.lateMargin} ×${exact(weights.lateFactor)}; para bien y para mal.
+        <b>Disciplina:</b> el 2' cuesta lo que se perdió con uno menos; roja: eso, la conducta y el resto del partido sin el jugador. <b>Momento decisivo:</b> desde el ${r.context.firstHalfCloseFrom / SECONDS_PER_MINUTE}' de la primera parte y desde el ${r.context.closeFrom / SECONDS_PER_MINUTE}' con ±${r.context.closeMargin} goles cada acción vale ×${exact(weights.closeFactor)}; desde el ${r.context.lateFrom / SECONDS_PER_MINUTE}' con ±${r.context.lateMargin} ×${exact(weights.lateFactor)}; para bien y para mal.
         <b>Resultado:</b> ±${pts(weights.result)} según la parte del partido jugada.
         <span class="bands"><b>Valoración:</b> ${CONFIG.rating.bands.map(([from, label]) => `<span><i style="background:${bandColour(from === -Infinity ? -100 : from)}"></i>${label}${from > -Infinity ? ` ≥ ${signedText(from)}` : ''}</span>`).join('')}</span></div>`;
     }
@@ -9130,7 +9198,7 @@ table { border-collapse: collapse; width: 100%; }
         <span class="last-who"><b>${esc(dateText(match.date))}</b>${match.venue ? `<small>${esc(match.venue)}</small>` : ''}</span>
         <span class="res-chip ${resultClass(row)}">${RESULT_LABEL[matchResult(row)]}</span>${ratingChipHtml(row.rating)}
         <strong class="last-score ${resultClass(row)}">${row.scoreUs}–${row.scoreThem}</strong></div></section>
-      ${figuresHtml(keeper ? gkFigures(row.facedList) : [...courtFigures(row), ...playerFigures(player, s)])}
+      ${figuresHtml(keeper ? gkFigures(row.facedList) : [...courtFigures(row), ...playerFigures(player, s, { detailed: true })])}
       ${maps}</div>`;
   }
   function showPlayerMatch(matchId) {

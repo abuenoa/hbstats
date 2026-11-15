@@ -776,19 +776,77 @@
   T('2 min to a player in both phases needs no stand-in', withManDown(() => { addSanction('p18', '2M'); if (standInsOut('ATK').size || standInsOut('DEF').size) throw new Error('stand-in for a two-way player'); }));
   T('2 min to a replaced goalkeeper sits a field player out in both phases', withManDown(() => { addSanction('p1', '2M'); state.gkId = 'p12'; if (standInsOut('ATK').size !== 1 || standInsOut('DEF').size !== 1) throw new Error('no stand-in'); state.gkId = 'p1'; if (standInsOut('ATK').size || standInsOut('DEF').size) throw new Error('keeper out already leaves them short'); }));
   T('a 2 min and a 7 m stop the clock; the 7 m throw restarts it; a yellow does not stop it', withManDown(() => { addSanction('p18', '2M'); if (isRunning()) throw new Error('2 min kept it running'); if (!$('hint').textContent.includes('reloj parado')) throw new Error('hint ' + $('hint').textContent); toggleClock(); addEvent('ACTION', { playerId: 'p8', action: 'PROV7' }); if (isRunning()) throw new Error('7 m kept it running'); addEvent('SHOT', { playerId: 'p8', from: '7M', zone: '7M', result: 'GOL' }); if (!isRunning()) throw new Error('throw did not restart it'); addSanction('p8', 'A'); if (!isRunning()) throw new Error('yellow stopped it'); addRivalSanction(null, '2M'); if (isRunning()) throw new Error('rival 2 min kept it running'); }));
-  T('panel shows only the current phase actions', withSample(() => { setPhase('ATK'); if (panelKeys() !== 'ASIST,PROV7,TURNOVER') throw new Error('ATK ' + panelKeys()); setPhase('DEF'); if (panelKeys() !== 'RECUP,BLOC,DEFFAULT') throw new Error('DEF ' + panelKeys()); if (document.querySelector('#acts [data-sanction], #acts [data-card]')) throw new Error('sanctions in panel'); }));
-  T('arm then tap: recovery by a bench player is logged and they come on', withSample(() => { setPhase('DEF'); document.querySelector('[data-panel-act="RECUP"]').click(); const glowing = document.querySelectorAll('#tokens-layer .tok.target').length; if (glowing !== Object.keys(lineup()).length - standInsOut('DEF').size) throw new Error('court glow ' + glowing); const b = document.querySelector('.bench-player[data-id="p21"]'); if (!b.classList.contains('target')) throw new Error('bench glow'); tapEl(b); const e = state.events.at(-1); if (e.kind !== 'ACTION' || e.action !== 'RECUP' || e.playerId !== 'p21') throw new Error(JSON.stringify(e)); if (state.phase !== 'ATK') throw new Error('phase'); if (!state.lineups.DEF.p21) throw new Error('not on court in DEF'); if (ui.armedAction) throw new Error('still armed'); }));
+  T('panel shows only the current phase actions', withSample(() => { setPhase('ATK'); if (panelKeys() !== 'ASIST,PROV7,TURNOVER') throw new Error('ATK ' + panelKeys()); setPhase('DEF'); if (panelKeys() !== 'RECUP,BLOC,GOODDEF,DEFFAULT') throw new Error('DEF ' + panelKeys()); if (document.querySelector('#acts [data-sanction], #acts [data-card]')) throw new Error('sanctions in panel'); }));
+  const stealBtn = () => document.querySelector(`#acts [data-panel-key="RECUP"][data-panel-sub="${RECOVERY_TYPES.STEAL}"]`);
+  T('arm then tap: recovery by a bench player is logged and they come on', withSample(() => { setPhase('DEF'); stealBtn().click(); const glowing = document.querySelectorAll('#tokens-layer .tok.target').length; if (glowing !== Object.keys(lineup()).length - standInsOut('DEF').size) throw new Error('court glow ' + glowing); const b = document.querySelector('.bench-player[data-id="p21"]'); if (!b.classList.contains('target')) throw new Error('bench glow'); tapEl(b); const e = state.events.at(-1); if (e.kind !== 'ACTION' || e.action !== 'RECUP' || e.subtype !== RECOVERY_TYPES.STEAL || e.playerId !== 'p21') throw new Error(JSON.stringify(e)); if (state.phase !== 'ATK') throw new Error('phase'); if (!state.lineups.DEF.p21) throw new Error('not on court in DEF'); if (ui.armedAction) throw new Error('still armed'); }));
   T('turnover types are a panel section: one tap arms the type', withSample(() => { setPhase('ATK'); if (document.querySelector('#acts [data-panel-act="TURNOVER"]')) throw new Error('still a chooser button'); const types = [...document.querySelectorAll('#acts [data-panel-key="TURNOVER"]')].map((b) => b.dataset.panelSub); if (types.join() !== CONFIG.turnoverGroups.flatMap((g) => g.types).join()) throw new Error(types.join()); document.querySelector('#acts [data-panel-sub="Pase"]').click(); if (!document.querySelector('.tok.target')) throw new Error('no glow'); if (document.querySelector('#acts [data-panel-sub="Pase"]').getAttribute('aria-pressed') !== 'true') throw new Error('not pressed'); tapEl(document.querySelector('#tokens-layer .tok[data-id="p8"]')); const e = state.events.at(-1); if (e.kind !== 'TURNOVER' || e.subtype !== 'Pase' || e.playerId !== 'p8') throw new Error(JSON.stringify(e)); }));
   T('defensive fault section: 7 m committed in, regulation foul out', withSample(() => { setPhase('DEF'); const subs = [...document.querySelectorAll('#acts [data-panel-sub]')].map((b) => b.dataset.panelSub); if (!subs.includes('PEN7C') || subs.includes('FALTA') || !subs.includes('BEATEN')) throw new Error(subs.join()); document.querySelector('#acts [data-panel-sub="PEN7C"]').click(); tapEl(document.querySelector('#tokens-layer .tok[data-id="p5"]')); if (state.events.at(-1).action !== 'PEN7C' || !ui.penalty || ui.penalty.team !== 'them') throw new Error('7 m committed did not leave a rival penalty'); cancelPenalty(); document.querySelector('#acts [data-panel-sub="BEATEN"]').click(); tapEl(document.querySelector('#tokens-layer .tok[data-id="p5"]')); const e = state.events.at(-1); if (e.kind !== 'ACTION' || e.action !== 'BEATEN' || e.playerId !== 'p5') throw new Error(JSON.stringify(e)); }));
-  T('goalkeeper glows only for Asistencia', withSample(() => { setPhase('ATK'); document.querySelector('[data-panel-act="ASIST"]').click(); if (!$('gk-card').classList.contains('target') || !document.querySelector('#tokens-layer .tok.gk.target')) throw new Error('gk not lit for assist'); disarmAction(); setPhase('DEF'); document.querySelector('[data-panel-act="RECUP"]').click(); if ($('gk-card').classList.contains('target') || document.querySelector('#tokens-layer .tok.gk.target')) throw new Error('gk lit for recovery'); const n = state.events.length; $('gk-card').click(); if (state.events.length !== n) throw new Error('gk got a recovery'); }));
+  T('goalkeeper glows only for Asistencia', withSample(() => { setPhase('ATK'); document.querySelector('[data-panel-act="ASIST"]').click(); if (!$('gk-card').classList.contains('target') || !document.querySelector('#tokens-layer .tok.gk.target')) throw new Error('gk not lit for assist'); disarmAction(); setPhase('DEF'); stealBtn().click(); if ($('gk-card').classList.contains('target') || document.querySelector('#tokens-layer .tok.gk.target')) throw new Error('gk lit for recovery'); const n = state.events.length; $('gk-card').click(); if (state.events.length !== n) throw new Error('gk got a recovery'); }));
   T('a 7 m provoked from the panel leaves a pending penalty', withSample(() => { setPhase('ATK'); const id = Object.keys(lineup()).find((x) => !ourOffCourt().has(x)); document.querySelector('[data-panel-act="PROV7"]').click(); tapEl(document.querySelector(`#tokens-layer .tok[data-id="${id}"]`)); if (!ui.penalty || ui.penalty.byId !== id) throw new Error('no penalty'); }));
   T('a failed exit is a defensive fault, not a turnover', () => { if (CONFIG.turnoverGroups.some((g) => g.types.includes('Salida fallada'))) throw new Error('still a turnover'); if (!TACTICAL_FAULTS.includes('BADEXIT')) throw new Error('missing in defence'); });
   T('lack of intensity is a team fault: one tap, no player', withSample(() => { setPhase('DEF'); document.querySelector('[data-panel-mode="acts"]').click(); if (document.querySelector('#acts [data-panel-sub="NOATK"]')) throw new Error('offered per player in the panel'); armAction('DEFFAULT', 'LATE'); const n = state.events.length; document.querySelector('#acts [data-team-fault="NOATK"]').click(); const e = state.events.at(-1); if (state.events.length !== n + 1 || e.kind !== 'ACTION' || e.action !== 'NOATK' || e.playerId !== null) throw new Error(JSON.stringify(e)); if (ui.armedAction) throw new Error('armed'); if (describe(e) !== 'Falta de contundencia · equipo') throw new Error(describe(e)); if (!defFaultCounts(state.events)['Falta de contundencia']) throw new Error('not counted for the team'); openPlayerPop('p5', { x: 10, y: 10 }); const inPop = document.querySelector('#pop [data-action="NOATK"]'); closePop(); if (inPop) throw new Error('offered in the player popup'); undo(); if (state.events.length !== n) throw new Error('undo'); }));
   T('the player popup has no regulation foul; past ones still count', withSample(() => { setPhase('DEF'); openPlayerPop('p5', { x: 10, y: 10 }); const falta = document.querySelector('#pop [data-action="FALTA"]'), pen = document.querySelector('#pop [data-action="PEN7C"]'); closePop(); if (falta) throw new Error('regulation foul offered'); if (!pen) throw new Error('7 m committed missing'); if (!pen.classList.contains('c-act-bad') || !document.querySelector('#acts [data-panel-sub="PEN7C"]').classList.contains('c-act-bad')) throw new Error('7 m committed not red'); addEvent('ACTION', { playerId: 'p5', action: 'FALTA' }); if (!defFaultCounts(state.events)[ACTIONS.FALTA.label] || playerStats('p5').FALTA !== 1) throw new Error('past foul not counted'); undo(); }));
   T('a blocked shot is a purple turnover that still counts as blocked', withSample(() => { setPhase('ATK'); document.querySelector('[data-panel-mode="acts"]').click(); const b = document.querySelector('#acts [data-panel-sub="Bloqueado"]'); if (!b || !b.classList.contains('c-act-rival')) throw new Error('no purple Bloqueado'); const before = { p: playerStats('p8').blocked, live: liveStats().us.blocked, an: attackAnalysis('us').blocked, lost: liveStats().us.turnovers }; b.click(); tapEl(document.querySelector('#tokens-layer .tok[data-id="p8"]')); const e = state.events.at(-1); if (e.kind !== 'TURNOVER' || e.subtype !== 'Bloqueado' || e.playerId !== 'p8') throw new Error(JSON.stringify(e)); if (playerStats('p8').blocked !== before.p + 1 || liveStats().us.blocked !== before.live + 1 || attackAnalysis('us').blocked !== before.an + 1) throw new Error('blocked not counted'); if (liveStats().us.turnovers !== before.lost + 1) throw new Error('not a turnover'); }));
-  T('action colours: good green, good in defence blue, bad red, rule breaches orange, forced by the rival purple', withSample(() => { const want = { ASIST: 'act-good', PROV7: 'act-good', RECUP: 'act-def', BLOC: 'act-def', PEN7C: 'act-bad', BEATEN: 'act-bad', BADEXIT: 'act-bad', LATE: 'act-bad', HELP: 'act-bad', NOATK: 'act-rival', GOLPE: 'act-rule' }; const wrong = Object.entries(want).filter(([k, g]) => ACTIONS[k].group !== g); if (wrong.length) throw new Error('actions ' + wrong.map(([k]) => k).join()); const turnover = { Pase: 'c-act-bad', Recepción: 'c-act-bad', Bote: 'c-act-bad', Pasos: 'c-act-rule', Dobles: 'c-act-rule', Área: 'c-act-rule', Pasivo: 'c-act-rule', 'Falta ataque': 'c-act-rival', Bloqueado: 'c-act-rival' }; setPhase('ATK'); document.querySelector('[data-panel-mode="acts"]').click(); const bad = Object.entries(turnover).filter(([t, c]) => !document.querySelector(`#acts [data-panel-sub="${t}"]`).classList.contains(c)); if (bad.length) throw new Error('turnovers ' + bad.map(([t]) => t).join()); ['ASIST', 'PROV7'].forEach((k) => { if (!document.querySelector(`#acts [data-panel-act="${k}"]`).classList.contains('c-act-good')) throw new Error('panel ' + k); }); setPhase('DEF'); ['RECUP', 'BLOC'].forEach((k) => { if (!document.querySelector(`#acts [data-panel-act="${k}"]`).classList.contains('c-act-def')) throw new Error('panel ' + k); }); addEvent('TURNOVER', { playerId: 'p8', subtype: 'Pasos' }); const col = eventColor(state.events.at(-1)); undo(); if (col !== 'var(--act-rule)') throw new Error('strip colour ' + col); }));
+  T('action colours: good green, good in defence blue, bad red, rule breaches orange, forced by the rival purple', withSample(() => { const want = { ASIST: 'act-good', PROV7: 'act-good', RECUP: 'act-def', BLOC: 'act-def', GOODDEF: 'act-def', PEN7C: 'act-bad', BEATEN: 'act-bad', BADEXIT: 'act-bad', LATE: 'act-bad', HELP: 'act-bad', NOATK: 'act-rival', GOLPE: 'act-rule' }; const wrong = Object.entries(want).filter(([k, g]) => ACTIONS[k].group !== g); if (wrong.length) throw new Error('actions ' + wrong.map(([k]) => k).join()); const turnover = { Pase: 'c-act-bad', Recepción: 'c-act-bad', Bote: 'c-act-bad', Pasos: 'c-act-rule', Dobles: 'c-act-rule', Área: 'c-act-rule', Pasivo: 'c-act-rule', 'Falta ataque': 'c-act-rival', Bloqueado: 'c-act-rival' }; setPhase('ATK'); document.querySelector('[data-panel-mode="acts"]').click(); const bad = Object.entries(turnover).filter(([t, c]) => !document.querySelector(`#acts [data-panel-sub="${t}"]`).classList.contains(c)); if (bad.length) throw new Error('turnovers ' + bad.map(([t]) => t).join()); ['ASIST', 'PROV7'].forEach((k) => { if (!document.querySelector(`#acts [data-panel-act="${k}"]`).classList.contains('c-act-good')) throw new Error('panel ' + k); }); setPhase('DEF'); ['BLOC', 'GOODDEF'].forEach((k) => { if (!document.querySelector(`#acts [data-panel-act="${k}"]`).classList.contains('c-act-def')) throw new Error('panel ' + k); }); document.querySelectorAll('#acts [data-panel-key="RECUP"]').forEach((b) => { if (!b.classList.contains('c-act-def')) throw new Error('panel ' + b.dataset.panelSub); }); addEvent('TURNOVER', { playerId: 'p8', subtype: 'Pasos' }); const col = eventColor(state.events.at(-1)); undo(); if (col !== 'var(--act-rule)') throw new Error('strip colour ' + col); }));
   T('each kind of turnover or defensive fault has its own labelled row', withSample(() => { document.querySelector('[data-panel-mode="acts"]').click(); const rows = () => [...document.querySelectorAll('#acts .type-row')].map((r) => r.querySelector('span').textContent + ':' + r.querySelectorAll('button').length).join(); setPhase('ATK'); const atk = CONFIG.turnoverGroups.map((g) => g.label + ':' + g.types.length).join(); if (rows() !== atk) throw new Error('ATK ' + rows() + ' vs ' + atk); setPhase('DEF'); if (rows() !== 'Regla:2,Táctico:4,Equipo:1') throw new Error('DEF ' + rows()); }));
   T('a hit is an orange regulation fault, counted in the player Falta column', withSample(() => { setPhase('DEF'); document.querySelector('[data-panel-mode="acts"]').click(); const b = document.querySelector('#acts [data-panel-sub="GOLPE"]'); if (!b || !b.classList.contains('c-act-rule')) throw new Error('no orange Golpe'); if (!document.querySelector('#acts [data-team-fault="NOATK"]').classList.contains('c-act-rival')) throw new Error('team fault not purple'); const col = PLAYER_HEAD.indexOf('Falta'); const before = playerRow(playerById('p5'))[col]; b.click(); tapEl(document.querySelector('#tokens-layer .tok[data-id="p5"]')); const e = state.events.at(-1); if (e.kind !== 'ACTION' || e.action !== 'GOLPE' || e.playerId !== 'p5') throw new Error(JSON.stringify(e)); if (playerRow(playerById('p5'))[col] !== before + 1) throw new Error('not in Falta column'); if (!defFaultCounts(state.events).Golpe) throw new Error('not a team defensive fault'); openPlayerPop('p5', { x: 10, y: 10 }); const inPop = document.querySelector('#pop [data-action="GOLPE"]'); closePop(); if (!inPop || !inPop.classList.contains('c-act-rule')) throw new Error('not in the player popup'); }));
+  T('recovery types: one tap each in the panel and in the player popup', withSample(() => {
+    setPhase('DEF'); document.querySelector('[data-panel-mode="acts"]').click();
+    const types = [...document.querySelectorAll('#acts [data-panel-key="RECUP"]')].map((b) => b.dataset.panelSub);
+    if (types.join() !== Object.values(RECOVERY_TYPES).join()) throw new Error('panel types ' + types.join());
+    document.querySelector(`#acts [data-panel-sub="${RECOVERY_TYPES.OFFENSIVE_FOUL}"]`).click();
+    if (!$('acts').textContent.includes(`${RECOVERY_TYPES.OFFENSIVE_FOUL} · toca al jugador`)) throw new Error('arm note');
+    tapEl(document.querySelector('#tokens-layer .tok[data-id="p5"]'));
+    const e = state.events.at(-1);
+    if (e.action !== 'RECUP' || e.subtype !== RECOVERY_TYPES.OFFENSIVE_FOUL || e.playerId !== 'p5') throw new Error(JSON.stringify(e));
+    if (describe(e) !== `Recuperación (falta en ataque) · #${playerById('p5').num} ${playerById('p5').name}`) throw new Error(describe(e));
+    setPhase('DEF'); openPlayerPop('p5', { x: 10, y: 10 });
+    const pop = [...document.querySelectorAll('#pop [data-action="RECUP"]')].map((b) => b.dataset.subtype);
+    if (pop.join() !== Object.values(RECOVERY_TYPES).join()) throw new Error('popup types ' + pop.join());
+    document.querySelector(`#pop [data-action="RECUP"][data-subtype="${RECOVERY_TYPES.STEAL}"]`).click();
+    const steal = state.events.at(-1);
+    if (steal.action !== 'RECUP' || steal.subtype !== RECOVERY_TYPES.STEAL || steal.playerId !== 'p5') throw new Error(JSON.stringify(steal));
+  }));
+  T('recovery types: an old recovery without a type counts as a steal and reads as before', () => {
+    const old = { kind: 'ACTION', action: 'RECUP', playerId: 'p10' }, s = sampleState();
+    if (recoveryType(old) !== RECOVERY_TYPES.STEAL || describe(old, s).includes('(')) throw new Error(describe(old, s));
+    const counts = recoveryCounts([old, { ...old, subtype: RECOVERY_TYPES.STEAL }, { ...old, subtype: RECOVERY_TYPES.OFFENSIVE_FOUL }, { kind: 'ACTION', action: 'BLOC', playerId: 'p10' }]);
+    if (counts[RECOVERY_TYPES.STEAL] !== 2 || counts[RECOVERY_TYPES.OFFENSIVE_FOUL] !== 1 || Object.keys(counts).length !== 2) throw new Error(JSON.stringify(counts));
+    if (typeBreakdownText(counts) !== `${RECOVERY_TYPES.STEAL} 2 · ${RECOVERY_TYPES.OFFENSIVE_FOUL} 1` || typeBreakdownText({}) !== '') throw new Error(typeBreakdownText(counts));
+  });
+  T('«Buena defensa»: a blue defensive action for one player, from the panel or the popup', withSample(() => {
+    setPhase('DEF'); document.querySelector('[data-panel-mode="acts"]').click();
+    const b = document.querySelector('#acts [data-panel-act="GOODDEF"]');
+    if (!b || !b.classList.contains('c-act-def') || b.textContent !== 'Buena defensa') throw new Error('panel button');
+    const top = [...document.querySelectorAll('#acts > .acts:first-child .act')].map((x) => x.getBoundingClientRect());
+    if (top.length !== Object.values(RECOVERY_TYPES).length + 2 || new Set(top.map((r) => Math.round(r.top))).size !== 1 || top.some((r) => r.width < 44 || r.height < 44)) throw new Error('the defence actions are not one row of 44 px targets');
+    b.click(); tapEl(document.querySelector('#tokens-layer .tok[data-id="p5"]'));
+    const e = state.events.at(-1);
+    if (e.kind !== 'ACTION' || e.action !== 'GOODDEF' || e.playerId !== 'p5' || 'subtype' in e) throw new Error(JSON.stringify(e));
+    if (state.phase !== 'DEF') throw new Error('a good defence does not end the possession');
+    if (playerStats('p5').GOODDEF !== 1 || eventColor(e) !== 'var(--act-def)') throw new Error('stats or colour');
+    openPlayerPop('p5', { x: 10, y: 10 }); document.querySelector('#pop [data-action="GOODDEF"]').click();
+    if (state.events.at(-1).action !== 'GOODDEF' || playerStats('p5').GOODDEF !== 2) throw new Error('popup');
+    const fig = playerFigures(playerById('p5'), state, { detailed: true }).find(([label]) => label === 'Buenas defensas');
+    if (!fig || fig[1] !== 2) throw new Error('not in the player card');
+    if (playerFigures(playerById('p5'), state).some(([label]) => label === 'Buenas defensas')) throw new Error('the compact figures (PDF) changed');
+  }));
+  T('turnovers and recoveries by type on the Hoja: player card, table cells and team figures', withSample(() => {
+    addEvent('TURNOVER', { playerId: 'p8', subtype: 'Pasos' }); addEvent('TURNOVER', { playerId: 'p8', subtype: 'Pasos' });
+    addEvent('ACTION', { playerId: 'p10', action: 'RECUP', subtype: RECOVERY_TYPES.OFFENSIVE_FOUL });
+    const sub = (p, label, opts) => playerFigures(playerById(p), state, opts).find(([l]) => l === label)[2];
+    if (sub('p8', 'Pérdidas', { detailed: true }) !== 'Pasos 2 · Falta ataque 1') throw new Error(sub('p8', 'Pérdidas', { detailed: true }));
+    if (sub('p10', 'Recuperaciones', { detailed: true }) !== `${RECOVERY_TYPES.STEAL} 1 · ${RECOVERY_TYPES.OFFENSIVE_FOUL} 1`) throw new Error(sub('p10', 'Recuperaciones', { detailed: true }));
+    if (sub('p8', 'Pérdidas') !== '' || sub('p10', 'Recuperaciones') !== '') throw new Error('compact figures carry no breakdown');
+    if (sub('p11', 'Pérdidas', { detailed: true }) !== '') throw new Error('no turnovers, no breakdown');
+    const team = teamFigures().find(([l]) => l === 'Recuperaciones');
+    if (team[2] !== `${RECOVERY_TYPES.STEAL} 1 · ${RECOVERY_TYPES.OFFENSIVE_FOUL} 1`) throw new Error('team ' + team[2]);
+    const html = sheetStatsHtml();
+    if (!html.includes('title="Pasos 2 · Falta ataque 1"') || !html.includes(`title="${RECOVERY_TYPES.STEAL} 1 · ${RECOVERY_TYPES.OFFENSIVE_FOUL} 1"`)) throw new Error('table cell titles');
+    const tiles = summaryTilesHtml(matchFigures());
+    if (!tiles.includes(`title="${typeBreakdownText(turnoverCounts(state.events))}"`) || !tiles.includes(`${RECOVERY_TYPES.STEAL} 1 · ${RECOVERY_TYPES.OFFENSIVE_FOUL} 1</small>`)) throw new Error('summary tiles');
+    if (!playerReportHtml(playerById('p8')).includes('Pasos 2 · Falta ataque 1')) throw new Error('player tab');
+  }));
   const dragTo = (from, to) => { const a = from.getBoundingClientRect(), b = to.getBoundingClientRect(); const at = (r) => ({ clientX: r.left + r.width / 2, clientY: r.top + r.height / 2 }); const o = { bubbles: true, pointerId: 9, pointerType: 'pen' }; from.dispatchEvent(new PointerEvent('pointerdown', { ...o, ...at(a) })); $('court').dispatchEvent(new PointerEvent('pointermove', { ...o, ...at(b) })); $('court').dispatchEvent(new PointerEvent('pointerup', { ...o, ...at(b) })); };
   T('a bench substitution on a player in both phases is made in both', withSample(() => { setPhase('DEF'); const atk = { ...state.lineups.ATK.p18 }, def = { ...state.lineups.DEF.p18 }; substituteFromBench('p21', 'p18'); const L = state.lineups; if (L.DEF.p18 || L.ATK.p18) throw new Error('p18 still on'); if (JSON.stringify(L.DEF.p21) !== JSON.stringify(def) || JSON.stringify(L.ATK.p21) !== JSON.stringify(atk)) throw new Error('p21 not in both spots'); }));
   T('a bench substitution on a one-phase player stays in that phase', withSample(() => { setPhase('DEF'); const atk = JSON.stringify(state.lineups.ATK); substituteFromBench('p21', 'p5'); if (!state.lineups.DEF.p21 || state.lineups.DEF.p5) throw new Error('DEF'); if (JSON.stringify(state.lineups.ATK) !== atk) throw new Error('ATK changed'); }));
@@ -1076,6 +1134,83 @@
     const ahead = [...rMany(7, (i) => rShot('b', '6M', 'GOL', 1900 + i)), rShot('a', '6M', 'GOL', 2500)];
     const blowout = playerRating(rateMatch(ahead, { clock }), fieldA);
     if (!nearTo(blowout.lines.clutch, (RW.context.blowoutFactor - 1) * early.moments[0].value * PPG)) throw new Error('blowout ×' + RW.context.blowoutFactor);
+  });
+  T('rating: the last minutes of the first half are a «Momento decisivo» too, with the same margin', () => {
+    const at = (abs, events = []) => playerRating(rateMatch([...events, rShot('a', '6M', 'GOL', abs)]), fieldA);
+    const base = at(100).moments[0].value * PPG, c = RW.context;
+    if (at(c.firstHalfCloseFrom - 1).lines.clutch !== 0) throw new Error('before the window');
+    if (!nearTo(at(c.firstHalfCloseFrom).lines.clutch, (RW.weights.closeFactor - 1) * base) || !nearTo(at(CONFIG.halfSeconds - 1).lines.clutch, (RW.weights.closeFactor - 1) * base)) throw new Error('first-half close ×' + RW.weights.closeFactor);
+    if (at(CONFIG.halfSeconds).lines.clutch !== 0) throw new Error('the second half starts plain until closeFrom');
+    const wide = rMany(c.closeMargin + 1, (i) => rShot('b', '6M', 'GOL', 10 + i));
+    if (at(c.firstHalfCloseFrom + 10, wide).lines.clutch !== 0) throw new Error('beyond the margin');
+    const tight = rMany(c.closeMargin, (i) => rShot('b', '6M', 'GOL', 10 + i));
+    if (!(at(c.firstHalfCloseFrom + 10, tight).lines.clutch > 0)) throw new Error('within the margin');
+    const tuned = { ...ratingWeights({}), closeFactor: 2 };
+    if (!nearTo(playerRating(rateMatch([rShot('a', '6M', 'GOL', c.firstHalfCloseFrom)]), fieldA, { weights: tuned }).lines.clutch, base)) throw new Error('not the closeFactor knob');
+  });
+  T('rating: a provoked offensive foul is worth at least a steal; an untyped recovery is a steal', () => {
+    const rec = (subtype) => ({ ...rAct('a', 'RECUP'), ...(subtype ? { subtype } : {}) });
+    const steal = ratingOf([rec(RECOVERY_TYPES.STEAL)]), foul = ratingOf([rec(RECOVERY_TYPES.OFFENSIVE_FOUL)]), old = ratingOf([rec(null)]);
+    if (!nearTo(steal.lines.defInd, B * PPG) || !nearTo(old.lines.defInd, steal.lines.defInd)) throw new Error('steal ' + steal.lines.defInd);
+    if (!nearTo(foul.lines.defInd, (B + RW.defence.offensiveFoulExtra) * PPG) || !(foul.lines.defInd >= steal.lines.defInd)) throw new Error('foul ' + foul.lines.defInd);
+    if (foul.moments[0].label !== 'Falta en ataque provocada' || old.moments[0].label !== 'Recuperación') throw new Error('labels');
+    const counter = (subtype) => playerRating(rateMatch([rec(subtype), rShot('b', 'CONTRA', 'GOL', 5)]), fieldA).lines.creacion;
+    if (!(counter(RECOVERY_TYPES.OFFENSIVE_FOUL) > 0) || !nearTo(counter(RECOVERY_TYPES.OFFENSIVE_FOUL), counter(RECOVERY_TYPES.STEAL))) throw new Error('both types start a fast break');
+  });
+  T('rating: «Buena defensa» raises the individual defence, a bit below a recovery', () => {
+    const d = RW.defence.goodDefence;
+    if (!(d > 0 && d <= B)) throw new Error('value ' + d);
+    const good = ratingOf([rAct('a', 'GOODDEF')]);
+    if (!good.rated || !nearTo(good.lines.defInd, d * PPG) || good.moments[0].label !== 'Buena defensa') throw new Error(JSON.stringify(good.lines));
+    const goal = { id: 'rg', abs: 10, kind: 'RIVAL_SHOT', gkId: 'g', zone: '6M', result: 'GOL', on: 0 };
+    const over = { court: [{ abs: 0, set: 0 }], courtSets: [['a', 'b', 'g']] };
+    const plain = matchRatings(rateMatch([goal], over)), withGood = matchRatings(rateMatch([rAct('a', 'GOODDEF', 5), goal], over));
+    const unit = (r) => r.get('a').lines.defUnit + r.get('b').lines.defUnit, total = (r) => sumOf(['a', 'b'], (id) => r.get(id).lines.defInd + r.get(id).lines.defUnit);
+    if (!nearTo(unit(withGood), unit(plain) - d * PPG) || !nearTo(total(withGood), total(plain))) throw new Error('a possession ended by a rival shot pays it from the unit');
+    const points = (r) => sumOf(Object.values(r.get('a').lines), (v) => v);
+    if (!(points(withGood) > points(plain)) || !withGood.get('a').rated) throw new Error('his rating does not go up');
+  });
+  // Zone defence: six defenders on the sample's DEF spots, stamped on court as set 0.
+  const zoneSix = ['a', 'b', 'c', 'd', 'e', 'f'], zoneSpots = { a: m(-7.6, 2.2), b: m(-5, 5.2), c: m(-1.8, 6.6), d: m(1.8, 6.6), e: m(5, 5.2), f: m(7.6, 2.2) };
+  const zoneMatch = (events, over = {}) => rateMatch(events, { players: [...zoneSix.map((id) => ({ id, pos: 'LAT' })), keeperG], lineups: { ATK: {}, DEF: zoneSpots }, court: [{ abs: 0, set: 0 }], courtSets: [[...zoneSix, 'g']], ...over });
+  const zoneGoal = (i, origin, extra = {}) => ({ id: 'zg' + i, abs: 10 + i, kind: 'RIVAL_SHOT', gkId: 'g', zone: '9M', result: 'GOL', origin, on: 0, ...extra });
+  const zoneCharges = (ratings, id) => ratings.get(id).moments.filter((x) => x.label === 'Gol en su zona');
+  T('zone defence: a field goal costs the defender of its lane nearest the shot a little', () => {
+    const r = matchRatings(zoneMatch([zoneGoal(1, m(-8, 2.5), { zone: '6M' })]));
+    if (zoneCharges(r, 'a').length !== 1 || zoneSix.slice(1).some((id) => zoneCharges(r, id).length)) throw new Error('charged to the wrong defender');
+    if (!nearTo(zoneCharges(r, 'a')[0].value, -RW.defence.zoneGoal)) throw new Error('value');
+    if (!(RW.defence.zoneGoal < 0.5 * RW.defence.goodDefence)) throw new Error('not modest');
+    const lane = zoneDefence(zoneMatch([zoneGoal(2, m(-5.2, 3.6))]));
+    if (laneOf(m(-5.2, 3.6)) !== laneOf(zoneSpots.a) || !lane.conceded.has('a')) throw new Error('the lane comes before the nearest spot: ' + [...lane.conceded.keys()]);
+    const centre = zoneDefence(zoneMatch([zoneGoal(3, m(0.5, 9))]));
+    if (!centre.conceded.has('d')) throw new Error('no defender in the lane: the nearest one ' + [...centre.conceded.keys()]);
+  });
+  T('zone defence: 7 m, counter-attacks, unstamped goals, no court log and spotless defenders are left out', () => {
+    const none = (events, over) => { const z = zoneDefence(zoneMatch(events, over)); return z.conceded.size === 0 && z.share.size === 0; };
+    if (!none([zoneGoal(1, m(0, 7), { zone: '7M' })])) throw new Error('7 m counted');
+    if (!none([zoneGoal(2, m(-3, 9), { contra: true })]) || !none([zoneGoal(3, m(-3, 9), { zone: 'CONTRA' })])) throw new Error('counter-attack counted');
+    const { on, ...unstamped } = zoneGoal(4, m(-3, 9));
+    if (!none([unstamped]) || !none([zoneGoal(5, m(-3, 9), { on: 9 })])) throw new Error('a goal with nobody stamped counted');
+    if (!none([zoneGoal(6, null)])) throw new Error('a goal without an origin counted');
+    if (!none([unstamped], { court: undefined, courtSets: undefined })) throw new Error('no court log');
+    if (!none([zoneGoal(7, m(-3, 9))], { lineups: undefined })) throw new Error('no DEF spots');
+    if (!none([zoneGoal(8, m(-3, 9), { result: 'PARADA' })])) throw new Error('a save counted');
+    const partial = zoneDefence(zoneMatch([zoneGoal(9, m(-8, 2.5))], { courtSets: [['x', 'c', 'g']], players: [{ id: 'x', pos: 'LAT' }, { id: 'c', pos: 'LAT' }, keeperG] }));
+    if (!partial.conceded.has('c') || partial.share.has('x')) throw new Error('a stamped defender with no spot is not a candidate');
+    const legacy = matchRatings(rateMatch([rAct('a', 'RECUP'), { id: 'rg', abs: 10, kind: 'RIVAL_SHOT', gkId: 'g', zone: '9M', result: 'GOL' }]));
+    if (!nearTo(legacy.get('a').lines.defInd, B * PPG)) throw new Error('an old match without a court log changed');
+  });
+  T('zone defence: a zone that conceded clearly fewer than its share gains a little', () => {
+    const d = RW.defence, wing = (n) => rMany(n, (i) => zoneGoal(i, m(-8, 2.5)));
+    const many = d.zoneMinGoals * zoneSix.length, r = matchRatings(zoneMatch(wing(many))), z = zoneDefence(zoneMatch(wing(many)));
+    if (!nearTo(z.share.get('b'), many / zoneSix.length) || z.conceded.get('a').length !== many) throw new Error('shares');
+    const defInd = (ratings, id) => ratings.get(id).lines.defInd;
+    if (zoneSix.slice(1).some((id) => !nearTo(defInd(r, id), d.zoneSolid * PPG))) throw new Error('the zones that held gain ' + zoneSix.map((id) => defInd(r, id)));
+    if (!(defInd(r, 'a') < 0)) throw new Error('the beaten zone ' + defInd(r, 'a'));
+    const few = matchRatings(zoneMatch(wing(many - zoneSix.length)));
+    if (zoneSix.slice(1).some((id) => defInd(few, id) !== 0)) throw new Error('below zoneMinGoals nobody gains');
+    const even = matchRatings(zoneMatch(zoneSix.flatMap((id, k) => rMany(d.zoneMinGoals, (i) => zoneGoal(k * 10 + i, zoneSpots[id])))));
+    if (zoneSix.some((id) => zoneCharges(even, id).length !== d.zoneMinGoals || !(defInd(even, id) < 0))) throw new Error('an even spread gives no bonus');
   });
   T('rating: the unit on court shares what each possession left, and adds up to it', () => {
     const six = ['a', 'b', 'c', 'd', 'e', 'f'], players = [...six.map((id) => ({ id, pos: 'LAT' })), keeperG];
@@ -1560,6 +1695,12 @@
     const snap = snapshot();
     try { state = makeState(); return new DOMParser().parseFromString(matchReportDocument(), 'text/html'); } finally { restore(snap); }
   };
+  T('report: the scoring note explains the defence values and both close windows from the config', () => {
+    const note = reportOf().querySelector('.model').textContent.replace(/\s+/g, ' '), d = CONFIG.rating.defence, pts = (v) => String(roundHalfUp(v * POINTS_PER_GOAL, 2)).replace('.', ',');
+    [`falta en ataque provocada +${pts(CONFIG.rating.possession + d.offensiveFoulExtra)}`, `buena defensa (salida, golpe, dureza) +${pts(d.goodDefence)}`, `−${pts(d.zoneGoal)}`, `+${pts(d.zoneSolid)}`,
+      'sin 7 m ni contraataques', `desde el ${CONFIG.rating.context.firstHalfCloseFrom / SECONDS_PER_MINUTE}' de la primera parte`, `desde el ${CONFIG.rating.context.closeFrom / SECONDS_PER_MINUTE}'`]
+      .forEach((text) => { if (!note.includes(text)) throw new Error(`no «${text}» in ${note}`); });
+  });
   T('report: five pages with every section the coach asked for, and no NaN', () => {
     ['sample', 'other'].forEach((name) => {
       const doc = reportOf(name === 'sample' ? sampleState : otherMatch), titles = [...doc.querySelectorAll('h2')].map((h) => h.firstChild.textContent.trim());

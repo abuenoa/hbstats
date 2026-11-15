@@ -37,7 +37,7 @@ from handball.
   that, plus its conduct (direct / 3rd 2' / last 30 s with a 7 m), plus the rest of the match without the player.
 - **Context.**
   - From 50' with a margin of ±2, every owned action is worth ×1.5; from 55' with ±1, ×2. This works both ways and
-    shows as «Momento decisivo».
+    shows as «Momento decisivo». Since 2026-11 the end of the first half (25'–30', ±2) weighs ×1.5 too.
   - A second-half blowout (6+) weighs ×0.75.
   - A small result line is shared by possessions played.
   - A comeback factor was tried and rejected by the coach.
@@ -47,6 +47,17 @@ from handball.
   factor.
 - **Calibration.** The keeper weight (65%) was set so that the Triana–Gades order matches the coach's MVP view:
   Diego, then Verdugo, then Jaime and Miguel close. Revisit it after 2–3 more matches.
+
+### Defence additions (2026-11, after a match the coach logged)
+
+- **Recovery types.** A recovery is a «Robo» (+b) or a «Falta en ataque» provoked (+b + 0.05). Recoveries logged
+  before the types count as steals.
+- **«Buena defensa»** (a good exit, a good hit, physical toughness): +0.30 goals to the player, a bit below a
+  recovery. When a rival shot ends that possession it comes out of the unit's share, as a block does.
+- **Zone defence.** A rival field goal (no 7 m, no counter-attack) costs −0.03 to the defender who covered it: the
+  nearest of its lane (`laneOf`) among the field players stamped on court with a DEF spot, else the nearest. A
+  defender whose zone conceded at most half his even share of those goals, once that share reaches 2, gains +0.10.
+  The spots are the current DEF lineup: a stamped defender who has since left the defence has none and is skipped.
 
 ## Match report
 
@@ -66,5 +77,4 @@ The report is a 5-page A4 dashboard: KPIs at half-time and full time, the runnin
 - The report is an image PDF: its text cannot be selected or searched.
 - The final screen builds the report as it opens, so a tablet may be busy for a few seconds there.
 - The +/− column still counts defence-only specialists badly; v5 does not use it.
-- Wanted logging, still to come: rival turnovers, offensive fouls drawn, who drew a rival 2', and subtypes for the
-  7 m and the red card.
+- Wanted logging, still to come: rival turnovers, who drew a rival 2', and subtypes for the 7 m and the red card.
