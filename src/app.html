@@ -106,6 +106,7 @@
   --ring: 0 0 0 1px rgba(0, 0, 0, .06), 0 1px 2px -1px rgba(0, 0, 0, .06), 0 2px 4px 0 rgba(0, 0, 0, .04);
   --ring-hover: 0 0 0 1px rgba(0, 0, 0, .08), 0 1px 2px -1px rgba(0, 0, 0, .08), 0 2px 4px 0 rgba(0, 0, 0, .06);
   --photo-outline: rgba(0, 0, 0, .1);
+  --scrim: rgba(0, 0, 0, .35);
   --dur-press: 150ms; --dur-state: 200ms; --dur-enter: 300ms; --dur-exit: 150ms;
   --ease-out: cubic-bezier(0.2, 0, 0, 1);
   --focus-ring: 2px solid var(--parada);
@@ -139,7 +140,7 @@
     --color-text-tertiary: #928d88;
     --color-success-text: #2fbf71; --color-warning-text: #f08a1c; --color-danger-text: #ef4444; --color-keeper: #71717a; --rate-tint: 45%;
     --color-top-text: #5b8cff; --color-mid-text: #f5c542;
-    --ring: 0 0 0 1px rgba(255, 255, 255, .08); --ring-hover: 0 0 0 1px rgba(255, 255, 255, .13); --photo-outline: rgba(255, 255, 255, .1);
+    --ring: 0 0 0 1px rgba(255, 255, 255, .08); --ring-hover: 0 0 0 1px rgba(255, 255, 255, .13); --photo-outline: rgba(255, 255, 255, .1); --scrim: rgba(0, 0, 0, .6);
     --rating-top: #5b8cff; --rating-ink-top: #0e0e10; --rating-good: #2fbf71; --rating-ink-good: #0e0e10; --rating-mid: #f5c542; --rating-ink-mid: #0e0e10;
     --rating-low: #ea7a2e; --rating-ink-low: #0e0e10; --rating-bad: #c53030; --rating-ink-bad: #ffffff;
     --dorsal-ink: #0e0e10;
@@ -161,7 +162,7 @@
   --color-text-tertiary: #928d88;
   --color-success-text: #2fbf71; --color-warning-text: #f08a1c; --color-danger-text: #ef4444; --color-keeper: #71717a; --rate-tint: 45%;
   --color-top-text: #5b8cff; --color-mid-text: #f5c542;
-  --ring: 0 0 0 1px rgba(255, 255, 255, .08); --ring-hover: 0 0 0 1px rgba(255, 255, 255, .13); --photo-outline: rgba(255, 255, 255, .1);
+  --ring: 0 0 0 1px rgba(255, 255, 255, .08); --ring-hover: 0 0 0 1px rgba(255, 255, 255, .13); --photo-outline: rgba(255, 255, 255, .1); --scrim: rgba(0, 0, 0, .6);
   --rating-top: #5b8cff; --rating-ink-top: #0e0e10; --rating-good: #2fbf71; --rating-ink-good: #0e0e10; --rating-mid: #f5c542; --rating-ink-mid: #0e0e10;
   --rating-low: #ea7a2e; --rating-ink-low: #0e0e10; --rating-bad: #c53030; --rating-ink-bad: #ffffff;
   --dorsal-ink: #0e0e10;
@@ -851,21 +852,90 @@ a:focus-visible, input:focus-visible, select:focus-visible, summary:focus-visibl
 .auth-brand { display: flex; gap: var(--space-4); align-items: center; }
 .app-mark { flex: none; width: 56px; height: 56px; border-radius: 50%; display: grid; place-items: center; background: var(--brand); color: var(--brand-ink); font-family: var(--font-display); font-weight: 800; font-size: 24px; box-shadow: 0 0 0 4px rgb(var(--brand-2-rgb)); }
 .field { display: grid; gap: var(--space-1); font: var(--type-caption); font-weight: 700; color: var(--muted); text-transform: uppercase; letter-spacing: .06em; }
-.team-accounts textarea { resize: vertical; font: var(--type-body); text-transform: none; letter-spacing: normal; -webkit-user-select: text; user-select: text; }
-.invite-plan, .invite-links { list-style: none; margin: var(--space-2) 0; padding: 0; display: grid; gap: var(--space-1); }
-.invite-plan li { display: block; }
-.account-list { list-style: none; margin: var(--space-2) 0; padding: 0; display: grid; gap: var(--space-1); }
-.account-list li { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: center; gap: var(--space-2); padding-block: var(--space-2); border-top: 1px solid var(--line); }
 .account-who { display: grid; min-width: 0; overflow-wrap: anywhere; }
 .account-who small { color: var(--muted); }
-.account-list .row-actions { justify-content: flex-end; }
-.account-list .btn { white-space: nowrap; }
-.team-accounts { display: grid; gap: var(--space-3); }
+.team-accounts { display: grid; gap: var(--space-4); }
 .team-accounts > :is(h3, p) { margin: 0; }
 .account-status { font-weight: 700; }
 .who-link { display: inline-flex; align-items: center; gap: var(--space-2); min-height: var(--target); padding: 0; border: 0; background: none; color: inherit; font: inherit; font-weight: 700; text-align: left; cursor: pointer; }
 .account-status:empty { display: none; }
-.invite-links li { display: flex; align-items: center; justify-content: space-between; gap: var(--space-2); }
+.invite-head { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: var(--space-3) var(--space-4); }
+.invite-sum { flex: 1 1 320px; display: grid; gap: var(--space-2); min-width: 0; }
+.invite-progress { margin: 0; color: var(--muted); }
+.invite-progress b { font-family: var(--font-display); font-weight: 800; font-size: 2.25rem; line-height: 1; color: var(--game-accent); }
+.invite-bar { display: flex; gap: 2px; height: var(--space-2); border-radius: var(--radius-full); overflow: hidden; background: var(--soft); }
+.invite-bar .st-in, .invite-key.st-in::before { background: var(--color-success-text); }
+.invite-bar .st-sent, .invite-key.st-sent::before { background: var(--color-top-text); }
+.invite-bar .st-expired, .invite-key.st-expired::before { background: var(--color-warning-text); }
+.invite-bar .st-ready, .invite-key.st-ready::before { background: var(--faint); }
+.invite-legend { display: flex; flex-wrap: wrap; gap: var(--space-1) var(--space-4); margin: 0; font: var(--type-caption); color: var(--muted); }
+.invite-key { display: inline-flex; align-items: center; gap: var(--space-1); }
+.invite-key::before { content: ""; width: var(--space-2); height: var(--space-2); border-radius: var(--radius-full); }
+.invite-group { display: grid; gap: var(--space-3); padding-top: var(--space-4); border-top: 1px solid var(--line); }
+.invite-group-head { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-2) var(--space-4); }
+.invite-group-head h4 { margin: 0; font-family: var(--font-display); font-size: 1.2rem; font-weight: 800; letter-spacing: .1em; text-transform: uppercase; }
+.invite-group-head h4 b { color: var(--game-accent); }
+.invite-group-head .note { flex: 1 1 200px; }
+.invite-group-head .btn { margin-left: auto; }
+.invite-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(164px, 1fr)); gap: var(--space-3); }
+.invite-card { position: relative; display: grid; justify-items: center; align-content: start; gap: var(--space-2); padding: var(--space-3); border: 2px solid transparent; border-radius: var(--radius-lg); background: var(--soft); text-align: center; min-width: 0; }
+.invite-card.picked { border-color: var(--game-accent); background: color-mix(in srgb, var(--game-accent) 10%, var(--soft)); }
+.invite-card > small { max-width: 100%; color: var(--muted); font: var(--type-caption); overflow-wrap: anywhere; }
+.invite-card > .btn { width: 100%; margin-top: auto; }
+.invite-card.st-none .disc { filter: grayscale(1); }
+.invite-face { display: grid; justify-items: center; gap: var(--space-2); width: 100%; min-height: var(--target); padding: 0; border: 0; background: none; color: var(--fg); font: inherit; }
+.invite-face b { max-width: 100%; font-weight: 700; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.invite-card .disc, .invite-sheet-who .disc { width: 72px; height: 72px; font-size: 28px; box-shadow: 0 0 0 3px var(--pos); }
+.invite-tick { position: absolute; top: var(--space-2); left: var(--space-2); display: grid; place-items: center; width: 28px; height: 28px; border: 2px solid var(--muted); border-radius: var(--radius-full); font-style: normal; font-weight: 800; }
+.invite-card.picked .invite-tick { border-color: var(--game-accent); background: var(--game-accent); color: var(--game-ink); }
+.invite-more { position: absolute; top: 0; right: 0; min-width: var(--target); min-height: var(--target); border: 0; background: none; color: var(--muted); font-size: 1.4rem; font-weight: 800; }
+.invite-badge { display: inline-flex; align-items: center; justify-content: center; gap: var(--space-1); max-width: 100%; box-sizing: border-box; padding: 2px var(--space-2); border: 1px solid currentColor; border-radius: var(--radius-full); font: var(--type-caption); font-weight: 700; text-align: center; }
+.invite-badge.st-none { border-style: dashed; color: var(--muted); }
+.invite-badge.st-sent { color: var(--color-top-text); }
+.invite-badge.st-expired { color: var(--color-warning-text); }
+.invite-badge.st-in { color: var(--color-success-text); }
+.invite-error { margin: 0; color: var(--color-danger-text); font: var(--type-caption); font-weight: 700; }
+.invite-in-faces { grid-template-columns: repeat(auto-fill, minmax(84px, 1fr)); }
+.invite-in { position: relative; }
+.invite-check { position: absolute; top: var(--space-1); left: var(--space-2); display: grid; place-items: center; width: 22px; height: 22px; border-radius: var(--radius-full); background: var(--color-success); color: var(--color-on-success); font-style: normal; font-size: .75rem; font-weight: 800; }
+.invite-others { display: grid; grid-template-columns: repeat(auto-fill, minmax(320px, 1fr)); gap: var(--space-2); }
+.invite-other { display: grid; grid-template-columns: auto minmax(0, 1fr); align-items: center; gap: var(--space-2) var(--space-3); padding: var(--space-2) var(--space-3); border-radius: var(--radius-lg); background: var(--soft); }
+.invite-other .row-actions { grid-column: 1 / -1; justify-content: flex-end; }
+.invite-other .row-actions:empty { display: none; }
+.invite-other .account-who { justify-items: start; gap: var(--space-1); }
+.invite-other .account-who b { max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.invite-initial { display: grid; place-items: center; width: 36px; height: 36px; border-radius: var(--radius-full); background: var(--surface); color: var(--game-accent); font-family: var(--font-display); font-weight: 800; font-size: 1.2rem; }
+.team-accounts.picking { padding-bottom: calc(var(--target) + var(--space-12)); }
+.invite-selection { position: fixed; z-index: 5; left: 50%; bottom: max(var(--space-4), env(safe-area-inset-bottom, 0px)); transform: translateX(-50%); display: flex; align-items: center; gap: var(--space-2); padding: var(--space-2) var(--space-2) var(--space-2) var(--space-4); border: 1px solid var(--game-accent); border-radius: var(--radius-lg); background: var(--surface); box-shadow: var(--pop-shadow); font-weight: 700; white-space: nowrap; }
+/* The sheets over the accounts card: a dialog on the tablet, from the bottom on a phone. */
+.home:has(.invite-sheet) { overflow: hidden; }
+.invite-scrim { position: fixed; inset: 0; z-index: 60; width: 100%; border: 0; padding: 0; background: var(--scrim); cursor: default; }
+.invite-sheet { position: fixed; inset: 0; z-index: 61; box-sizing: border-box; width: min(560px, calc(100% - 2 * var(--space-4))); height: fit-content; max-height: calc(100dvh - 2 * var(--space-4)); margin: auto; overflow-y: auto; overscroll-behavior: contain; display: grid; gap: var(--space-3); padding: var(--space-5); border: 1px solid var(--line); border-radius: var(--radius-xl); background: var(--surface); box-shadow: var(--pop-shadow); animation: enter var(--dur-enter) var(--ease-out); }
+.invite-sheet:focus { outline: none; }
+.invite-sheet h2 { margin: 0; font-family: var(--font-display); font-size: 1.6rem; font-weight: 800; letter-spacing: .04em; text-transform: uppercase; overflow-wrap: anywhere; }
+.invite-sheet .note { margin: 0; }
+.invite-sheet .in { font: var(--type-body); text-transform: none; letter-spacing: normal; }
+.invite-chips { display: flex; flex-wrap: wrap; gap: var(--space-2); }
+.invite-preview { margin: 0; padding: var(--space-3) var(--space-4); border: 1px solid var(--line); border-radius: var(--radius-lg); background: var(--soft); font: var(--type-body); overflow-wrap: anywhere; }
+.invite-preview mark { padding: 0 3px; border-radius: 3px; background: color-mix(in srgb, var(--game-accent) 22%, transparent); color: var(--game-accent); font-weight: 700; }
+.invite-sheet-actions { display: grid; grid-auto-flow: column; grid-auto-columns: minmax(0, 1fr); gap: var(--space-2); }
+.invite-sheet-actions .btn { white-space: normal; }
+.invite-sheet-who { display: flex; align-items: center; gap: var(--space-3); min-width: 0; }
+.invite-sheet-name { display: grid; flex: 1; min-width: 0; font: var(--type-heading); overflow-wrap: anywhere; }
+.invite-sheet-who small { color: var(--muted); font: var(--type-caption); }
+.invite-sheet-email { margin: 0; font-weight: 700; overflow-wrap: anywhere; }
+.invite-remove { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: var(--space-2) var(--space-3); padding-top: var(--space-3); border-top: 1px solid var(--line); }
+.invite-remove .note { flex: 1 1 160px; }
+@keyframes sheet-up { from { transform: translateY(100%); } to { transform: none; } }
+@media (max-width: 700px) {
+  .invite-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--space-2); }
+  .invite-in-faces { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+  .invite-others { grid-template-columns: minmax(0, 1fr); }
+  .invite-group-head .btn, .invite-head > .btn { width: 100%; margin-left: 0; }
+  .invite-selection { left: var(--space-4); right: var(--space-4); transform: none; }
+  .invite-selection span { flex: 1; }
+  .invite-sheet { inset: auto 0 0; width: 100%; max-height: 90dvh; margin: 0; padding-bottom: max(var(--space-5), env(safe-area-inset-bottom, 0px)); border-radius: var(--radius-xl) var(--radius-xl) 0 0; animation-name: sheet-up; }
+}
 .link { justify-self: start; display: inline-flex; align-items: center; min-height: var(--target); border: 0; background: none; padding: 0; color: var(--fg); text-decoration: underline; font: var(--type-body); cursor: pointer; }
 .home-status:empty { display: none; }
 .home-status { font: var(--type-body); color: var(--fg); }
@@ -956,8 +1026,6 @@ body:has(#home:not([hidden])) { overflow: hidden; }
   .home .app-bar .app-corner { grid-row: 1; grid-column: 3; }
   .my-stats-label { display: none; }
   .home .app-bar .app-actions { grid-row: 3; grid-column: 1 / -1; }
-  .account-list li { grid-template-columns: minmax(0, 1fr); }
-  .account-list .row-actions { justify-content: flex-start; }
   .home .app-bar .tabs button { padding-inline: var(--space-3); font-size: .9rem; }
   .next-body .next-what { flex: 1 1 100%; }
   .next-body .next-rival { overflow-wrap: normal; }
@@ -6300,7 +6368,7 @@ table { border-collapse: collapse; width: 100%; }
   let currentMatchId = null;
   let syncTimer = null;
   let attendanceSyncTimer = null;
-  const home = { view: 'loading', user: null, teams: [], roster: [], matches: [], season: null, templates: [], template: null, squad: new Set(), leaderMetric: 'goals', playerId: null, playerMatchId: null, playerEdit: false, playerDraft: null, offline: false, error: '', draft: null, crestDraft: undefined, armed: null, passwordChange: false, seasonOffline: false, sessions: null, fixtures: null, teamMatches: [], fixtureEdit: null, squadFixture: null, attendanceDate: null, attendanceMode: null, attendanceNoteFor: null, stateMatches: [], statsSort: null, statsMetric: 'goals', statsPlayer: null, callupDraft: null, callup: null, callupBusy: null, staffPhotoFor: null, staffId: null, inviteTeamId: null, inviteWho: '', inviteEmail: '', inviteLinks: [], inviteList: '', invitePlan: null, inviteBusy: false, accountStatus: '', accounts: null, weightsDraft: null, ratingCache: null };
+  const home = { view: 'loading', user: null, teams: [], roster: [], matches: [], season: null, templates: [], template: null, squad: new Set(), leaderMetric: 'goals', playerId: null, playerMatchId: null, playerEdit: false, playerDraft: null, offline: false, error: '', draft: null, crestDraft: undefined, armed: null, passwordChange: false, seasonOffline: false, sessions: null, fixtures: null, teamMatches: [], fixtureEdit: null, squadFixture: null, attendanceDate: null, attendanceMode: null, attendanceNoteFor: null, stateMatches: [], statsSort: null, statsMetric: 'goals', statsPlayer: null, callupDraft: null, callup: null, callupBusy: null, staffPhotoFor: null, staffId: null, inviteTeamId: null, inviteSelected: new Set(), inviteSheet: null, inviteDraft: null, inviteStaffEmail: '', inviteLinks: new Map(), inviteErrors: new Map(), inviteBusy: false, accountStatus: '', accounts: null, weightsDraft: null, ratingCache: null };
 
   // ---- Device storage ----
   function readJson(key) {
@@ -6341,10 +6409,11 @@ table { border-collapse: collapse; width: 100%; }
   const SESSION_GONE = 'la sesión ya no existe: recarga la asistencia';
   const byNewestSession = (a, b) => b.date.localeCompare(a.date) || a.kind.localeCompare(b.kind);
   const byWeekend = (a, b) => a.weekend.localeCompare(b.weekend) || a.round - b.round;
+  const NO_CONNECTION = 'sin conexión';
   const CLOUD_ERRORS = [
     [/invalid login credentials/i, 'email o contraseña incorrectos'],
     [/email not confirmed/i, 'falta aceptar la invitación del email'],
-    [/failed to fetch|networkerror|load failed/i, 'sin conexión'],
+    [/failed to fetch|networkerror|load failed/i, NO_CONNECTION],
     [/rival_templates_team_name/i, 'el equipo ya tiene una plantilla con ese nombre'],
     [/players_team_num_active|duplicate key/i, 'ese dorsal ya está en la plantilla'],
     [/password should be at least/i, `la contraseña necesita al menos ${MIN_PASSWORD_LENGTH} caracteres`],
@@ -6495,9 +6564,10 @@ table { border-collapse: collapse; width: 100%; }
     const check = (result) => { if (result.error) throw new Error(result.error.message); return result.data; };
     // A team the user creates or edits is theirs to run, so its role is the owner's unless listTeams says otherwise.
     // `playerId`: the roster player a player's account is, in that team.
-    const toTeam = (r, role = STAFF_ROLE, playerId = null) => ({ id: r.id, club: r.club, name: r.name, brand: r.brand, brand2: r.brand2, brandInk: r.brand_ink, crest: r.crest, ratingWeights: r.rating_weights, staff: r.staff || [], role, playerId });
+    const toTeam = (r, role = STAFF_ROLE, playerId = null) => ({ id: r.id, club: r.club, name: r.name, brand: r.brand, brand2: r.brand2, brandInk: r.brand_ink, crest: r.crest, ratingWeights: r.rating_weights, staff: r.staff || [], inviteMessage: r.invite_message || null, role, playerId });
     const teamRow = (t) => ({ club: t.club, name: t.name, brand: t.brand, brand2: t.brand2, brand_ink: t.brandInk, crest: t.crest,
-      ...(t.ratingWeights === undefined ? {} : { rating_weights: t.ratingWeights }), ...(t.staff === undefined ? {} : { staff: t.staff }) });
+      ...(t.ratingWeights === undefined ? {} : { rating_weights: t.ratingWeights }), ...(t.staff === undefined ? {} : { staff: t.staff }),
+      ...(t.inviteMessage === undefined ? {} : { invite_message: t.inviteMessage }) });
     const PLAYER_COLUMNS = 'id,num,name,pos,full_name,photo';
     // `name` is the short name shown on court; `fullName` is the one on the official card.
     const toPlayer = (r) => ({ id: r.id, num: r.num, name: r.name, pos: r.pos, fullName: r.full_name, photo: r.photo });
@@ -6530,9 +6600,17 @@ table { border-collapse: collapse; width: 100%; }
         if (error) throw new Error((await error.context?.json?.().catch(() => null))?.error || error.message);
         return data;
       },
-      // Who has an account in the team (staff only): { userId, role, playerId, email, signedIn, isMe }.
+      // Who has an account in the team (staff only): { userId, role, playerId, email, signedIn, isMe, invitedAt, invitedVia }.
       async listAccounts(teamId) {
-        return check(await client.rpc('team_accounts', { p_team: teamId })).map((r) => ({ userId: r.user_id, role: r.role, playerId: r.player_id, email: r.email, signedIn: r.signed_in, isMe: r.is_me }));
+        return check(await client.rpc('team_accounts', { p_team: teamId })).map((r) => ({ userId: r.user_id, role: r.role, playerId: r.player_id, email: r.email,
+          signedIn: r.signed_in, isMe: r.is_me, invitedAt: r.invited_at, invitedVia: r.invited_via }));
+      },
+      // The players' e-mails and phones (staff only): [{ playerId, email, phone }].
+      async listPlayerContacts(teamId) {
+        return check(await client.from('player_contacts').select('player_id,email,phone').eq('team_id', teamId)).map((r) => ({ playerId: r.player_id, email: r.email, phone: r.phone }));
+      },
+      async savePlayerContact(teamId, playerId, { email, phone }) {
+        check(await client.from('player_contacts').upsert({ player_id: playerId, team_id: teamId, email: email || null, phone: phone || null }, { onConflict: 'player_id' }));
       },
       // Takes the account off the team; an invite never used is cancelled and its link stops working.
       async removeAccount(teamId, userId) { check(await client.rpc('remove_team_account', { p_team: teamId, p_user: userId })); },
@@ -7116,51 +7194,115 @@ table { border-collapse: collapse; width: 100%; }
       ${teamRivalsHtml()}
       ${backend.needsLogin ? teamAccountsHtml() : ''}`;
   }
-  // ---- Player accounts: the coach invites a roster player by e-mail and shares the sign-in link by WhatsApp or mail ----
-  // Without a share sheet the link goes to WhatsApp, the coaches' channel with the players.
-  const WHATSAPP_URL = 'https://wa.me/?text=';
+  // ---- Player contacts (staff only): each player's e-mail and phone, for his invite and for anything sent to him ----
   const EMAIL_PATTERN = /^[^\s@,;]+@[^\s@,;]+\.[^\s@,;]+$/;
-  // The first choices of the invite: a coach, with the same full access as the owner, and a guest who only looks (another
-  // club's coach shown the team, say); the others are roster players.
+  // The clubs are Spanish: a number typed without its country code is a Spanish one.
+  const DEFAULT_COUNTRY_CODE = '34';
+  const INTERNATIONAL_PREFIX = '00';
+  // E.164: the country code and the number, 15 digits at most; fewer than 8 is no phone number (as player_contacts checks).
+  const PHONE_DIGITS = { min: 8, max: 15 };
+  const PHONE_SEPARATORS = /[\s().\-/]/g;
+  // A typed phone as it is stored, «+» and digits («600 11 12 22» → «+34600111222»): '' for none, null for no phone number.
+  function normalPhone(text) {
+    const typed = String(text || '').replace(PHONE_SEPARATORS, '');
+    if (!typed) return '';
+    const digits = typed.startsWith('+') ? typed.slice(1)
+      : typed.startsWith(INTERNATIONAL_PREFIX) ? typed.slice(INTERNATIONAL_PREFIX.length) : DEFAULT_COUNTRY_CODE + typed;
+    return /^[1-9]\d*$/.test(digits) && digits.length >= PHONE_DIGITS.min && digits.length <= PHONE_DIGITS.max ? `+${digits}` : null;
+  }
+  const WHATSAPP_URL = 'https://wa.me/';
+  // WhatsApp with the text ready to send: in that phone's own chat, or without a phone in WhatsApp's chat picker.
+  const whatsAppUrl = (phone, text) => `${WHATSAPP_URL}${phone ? phone.replace('+', '') : ''}?text=${encodeURIComponent(text)}`;
+  // Opens WhatsApp with the text: in the player's own chat when his phone is known, else the share sheet (the coach picks
+  // the chat), else WhatsApp's chat picker. Resolves to false when the coach closes the share sheet without sending.
+  async function openWhatsApp(phone, text) {
+    if (!phone && navigator.share) {
+      try { await navigator.share({ text }); } catch (err) { if (err.name === 'AbortError') return false; throw err; }
+      return true;
+    }
+    window.open(whatsAppUrl(phone, text), '_blank', 'noopener');
+    return true;
+  }
+  // The team's contacts as a Map playerId → { email, phone } ('' when missing). Read from the server every time: no
+  // address is kept on the device.
+  async function loadPlayerContacts(teamId) {
+    return new Map((await backend.listPlayerContacts(teamId)).map((c) => [c.playerId, { email: c.email || '', phone: c.phone || '' }]));
+  }
+
+  // ---- Team accounts: the staff invite the squad from their photo cards, by e-mail or by WhatsApp ----
+  // The other accounts: a coach, with the same full access as the owner, and a guest who only looks (another club's
+  // coach shown the team, say).
   const COACH_INVITE = 'coach';
-  // A pasted list (a WhatsApp message, say) holds each player's name and then his e-mail.
-  const LISTED_EMAIL = /[^\s@,;:<>()]+@[^\s@,;:<>()]+\.[^\s@,;:<>().]+/g;
-  // Shorter words («de», «la») tell nobody apart.
-  const MIN_NAME_WORD = 3;
-  const nameWords = (s) => new Set(normalName(s).split(' ').filter((w) => w.length >= MIN_NAME_WORD));
-  // The roster player a pasted name means: the one sharing most words with his full or court name, if nobody ties him.
-  function playerNamed(text) {
-    const words = nameWords(text);
-    const [best, next] = home.roster.map((p) => ({ p, shared: [...nameWords(`${p.fullName || ''} ${p.name}`)].filter((w) => words.has(w)).length }))
-      .sort((a, b) => b.shared - a.shared);
-    return best && best.shared > 0 && (!next || next.shared < best.shared) ? best.p : null;
-  }
-  // Each e-mail of the list with the player named before it (since the previous e-mail), or null.
-  function invitePlanOf(text) {
-    let from = 0;
-    return [...text.matchAll(LISTED_EMAIL)].map((m) => {
-      const named = text.slice(from, m.index);
-      from = m.index + m[0].length;
-      return { email: m[0].toLowerCase(), player: playerNamed(named) };
-    });
-  }
-  function invitePlanHtml() {
-    if (!home.invitePlan) return '';
-    const ready = home.invitePlan.filter((row) => row.player).length;
-    const rows = home.invitePlan.map(({ email, player }) => `<li>${player ? `<b>#${player.num} ${esc(player.name)}</b>` : '<b>Sin jugador</b> (invítalo arriba)'} · ${esc(email)}</li>`).join('');
-    return `<ul class="invite-plan">${rows}</ul>
-      <div class="row-actions"><button class="btn primary press" type="button" data-invite-list ${ready ? '' : 'disabled'}>Invitar a ${plural(ready, 'jugador', 'jugadores')}</button></div>`;
-  }
   const ACCOUNT_ROLES = { [STAFF_ROLE]: 'Dueño', [COACH_INVITE]: 'Entrenador', [PLAYER_ROLE]: 'Jugador', [VIEWER_ROLE]: 'Invitado' };
   // The staff take off players and guests; only the owner takes off a coach; nobody takes off the owner or themselves.
   const removableAccount = (a) => !a.isMe && a.role !== STAFF_ROLE && (a.role !== COACH_INVITE || team.role === STAFF_ROLE);
   // How an invite reaches someone: an e-mail from the server, or a sign-in link the coach shares.
   const INVITE_BY_EMAIL = 'email', INVITE_BY_LINK = 'link';
-  // What the card holds (typed e-mail, pasted list, links, its message) belongs to the team it was made for, and lives
-  // in state so a re-render (the account list arriving, a disarmed button) never wipes it.
+  const INVITE_CHANNEL_NAMES = { [INVITE_BY_EMAIL]: 'correo', [INVITE_BY_LINK]: 'WhatsApp' };
+  // How long an invite link works: Supabase's default e-mail link validity (24 h). The project's own setting is not
+  // known here; keep this in step with Authentication → «Email OTP Expiration».
+  const INVITE_TTL_MS = 24 * 60 * 60 * 1000;
+  // Where a player's invite stands: no e-mail yet, an e-mail and no invite, invited, invited and the link expired unused,
+  // signed in.
+  const INVITE_STATES = { NONE: 'none', READY: 'ready', SENT: 'sent', EXPIRED: 'expired', IN: 'in' };
+  const { NONE, READY, SENT, EXPIRED, IN } = INVITE_STATES;
+  // Each state reads as an icon and a word, never as a colour alone.
+  const INVITE_BADGES = {
+    [NONE]: { icon: '✉', label: 'Sin correo' }, [READY]: { icon: '○', label: 'Sin invitar' },
+    [SENT]: { icon: '→', label: 'Invitación enviada' }, [EXPIRED]: { icon: '!', label: 'Caducada' }, [IN]: { icon: '✓', label: 'Con acceso' },
+  };
+  // The squad grouped by what the coach has to do; inside a group the states in this order, then the bench order.
+  const INVITE_GROUPS = [
+    { key: 'invite', states: [READY, NONE], title: 'Por invitar', note: 'Toca las caras que quieras o invítalos a todos de una vez.' },
+    { key: 'waiting', states: [EXPIRED, SENT], title: 'Esperando a que entren', note: 'Tienen la invitación y aún no han puesto su contraseña.' },
+    { key: 'in', states: [IN], title: 'Con acceso', note: 'Ven partidos, estadísticas y asistencia, sin cambiar nada.' },
+  ];
+  function inviteStateOf(account, email, now) {
+    if (!account) return email ? READY : NONE;
+    if (account.signedIn) return IN;
+    // An invite from before its date was recorded cannot be known to have expired.
+    return now - Date.parse(account.invitedAt) >= INVITE_TTL_MS ? EXPIRED : SENT;
+  }
+  // Each roster player with his account, e-mail (the account's once there is one), phone and invite state.
+  function squadInvites(roster, accounts, contacts, now) {
+    const byPlayer = new Map(accounts.filter((a) => a.playerId).map((a) => [a.playerId, a]));
+    return roster.map((player) => {
+      const account = byPlayer.get(player.id) || null, contact = contacts.get(player.id) || { email: '', phone: '' };
+      const email = account ? account.email : contact.email;
+      return { player, account, email, phone: contact.phone, state: inviteStateOf(account, email, now) };
+    });
+  }
+  const inviteGroups = (rows) => INVITE_GROUPS.map((g) => ({ ...g, rows: rows.filter((r) => g.states.includes(r.state))
+    .sort((a, b) => g.states.indexOf(a.state) - g.states.indexOf(b.state) || benchOrder(a.player, b.player)) }));
+  // The accounts that are not a roster player: the owner, the coaches, the guests and players who left the roster.
+  const otherAccounts = (accounts, roster) => accounts.filter((a) => !a.playerId || !roster.some((p) => p.id === a.playerId));
+  const inviteDayText = (iso) => new Date(iso).toLocaleDateString('es-ES', { day: 'numeric', month: 'short' });
+  const invitedText = (account) => (account.invitedAt ? `${inviteDayText(account.invitedAt)} · ${INVITE_CHANNEL_NAMES[account.invitedVia] || INVITE_CHANNEL_NAMES[INVITE_BY_EMAIL]}` : '');
+  // The team's message: {nombre} and {equipo} are filled in per player, and the app appends his link after it.
+  const INVITE_PLACEHOLDERS = { name: '{nombre}', team: '{equipo}' };
+  const DEFAULT_INVITE_MESSAGE = `Hola, ${INVITE_PLACEHOLDERS.name}: ya tienes tu cuenta de ${APP_NAME} para ver los partidos, tus estadísticas y la asistencia de ${INVITE_PLACEHOLDERS.team}. Entra con este enlace y pon tu contraseña:`;
+  const inviteMessage = () => team.inviteMessage || DEFAULT_INVITE_MESSAGE;
+  const fillInviteMessage = (text, name, teamName) => text.replaceAll(INVITE_PLACEHOLDERS.name, name).replaceAll(INVITE_PLACEHOLDERS.team, teamName);
+  const PLACEHOLDER_SPLIT = new RegExp(`(${Object.values(INVITE_PLACEHOLDERS).map((t) => t.replace(/[{}]/g, '\\$&')).join('|')})`);
+  // The message as the player reads it, with what the app puts in marked.
+  function inviteMessageHtml(text, name, teamName) {
+    const filled = text.split(PLACEHOLDER_SPLIT).map((part) => (part === INVITE_PLACEHOLDERS.name ? `<mark>${esc(name)}</mark>`
+      : part === INVITE_PLACEHOLDERS.team ? `<mark>${esc(teamName)}</mark>` : esc(part))).join('');
+    return `${filled} <mark>enlace personal</mark>`;
+  }
+  // The line after a batch: what went out, who already had an account, and who failed and why.
+  function inviteSummary(mailed, linked, failed) {
+    const had = linked.length ? `${linked.join(', ')} ya ${linked.length === 1 ? 'tenía' : 'tenían'} cuenta: no hace falta invitación` : '';
+    const parts = [mailed ? plural(mailed, 'correo enviado', 'correos enviados') : '', had, failed.length ? `no se pudo con ${failed.join(', ')}` : ''];
+    return `${parts.filter(Boolean).join(' · ') || 'Nadie a quien invitar'}.`;
+  }
+
+  // What the card holds (the selection, the open sheet, typed fields, links, last errors) belongs to the team it was
+  // made for, and lives in state so a re-render (the account list arriving, a disarmed button) never wipes it.
   function inviteStateFor(teamId) {
     if (home.inviteTeamId === teamId) return;
-    Object.assign(home, { inviteTeamId: teamId, inviteWho: COACH_INVITE, inviteEmail: '', inviteList: '', invitePlan: null, inviteLinks: [], accountStatus: '' });
+    Object.assign(home, { inviteTeamId: teamId, inviteSelected: new Set(), inviteSheet: null, inviteDraft: null, inviteStaffEmail: '',
+      inviteLinks: new Map(), inviteErrors: new Map(), accountStatus: '' });
   }
   // The card's own message line, next to its buttons and brought into view: the page's status sits at the top.
   function accountStatus(text) {
@@ -7183,50 +7325,295 @@ table { border-collapse: collapse; width: 100%; }
     }
   }
   const busyAttr = () => (home.inviteBusy ? ' disabled' : '');
+  // Who has an account and the contacts, together: the cards need both.
   async function loadAccounts() {
     const teamId = team.id;
-    home.accounts = { teamId, rows: null };
+    home.accounts = { teamId, rows: null, contacts: null, error: '' };
     try {
-      const rows = await backend.listAccounts(teamId);
-      if (home.accounts?.teamId === teamId) home.accounts.rows = rows;
+      const [rows, contacts] = await Promise.all([backend.listAccounts(teamId), loadPlayerContacts(teamId)]);
+      if (home.accounts?.teamId === teamId) Object.assign(home.accounts, { rows, contacts });
     } catch (err) {
-      home.accounts = null;
-      accountStatus(`No se pudieron cargar las cuentas: ${cloudErrorText(err)}.`);
-      return;
+      if (home.accounts?.teamId === teamId) home.accounts.error = cloudErrorText(err);
     }
     if (home.view === 'team-edit') renderHome();
   }
-  function accountListHtml() {
-    if (!home.accounts || home.accounts.teamId !== team.id) { loadAccounts(); return '<p class="note">Cargando las cuentas…</p>'; }
-    if (!home.accounts.rows) return '<p class="note">Cargando las cuentas…</p>';
-    const rows = home.accounts.rows.map((a) => {
-      const player = a.playerId && rosterPlayer(a.playerId);
-      const who = player ? ` · #${player.num} ${esc(player.name)}` : '';
-      const resend = !a.signedIn && a.role !== STAFF_ROLE ? `<button class="btn primary press" type="button" data-account-resend="${a.userId}"${busyAttr()}>Reenviar correo</button>
-        <button class="btn press" type="button" data-account-link="${a.userId}"${busyAttr()}>Enlace</button>` : '';
-      const remove = removableAccount(a) ? armedButton(`account-${a.userId}`, a.signedIn ? 'Quitar' : 'Anular invitación', `data-account-remove="${a.userId}" aria-label="Quitar la cuenta de ${esc(a.email)}"${busyAttr()}`) : '';
-      return `<li><div class="account-who"><b>${ACCOUNT_ROLES[a.role]}${who}</b><small>${esc(a.email)} · ${a.signedIn ? 'activa' : '<i>sin entrar aún</i>'}</small></div><div class="row-actions">${resend}${remove}</div></li>`;
-    }).join('');
-    return `<h4>Con acceso</h4><ul class="account-list">${rows}</ul>`;
-  }
+  const accountsReady = () => Boolean(home.accounts?.teamId === team.id && home.accounts.rows && home.accounts.contacts);
+  const inviteRows = () => (accountsReady() ? squadInvites(home.roster, home.accounts.rows, home.accounts.contacts, Date.now()) : []);
+  const inviteRow = (playerId) => inviteRows().find((r) => r.player.id === playerId) || null;
   const accountOf = (userId) => home.accounts?.rows?.find((a) => a.userId === userId) || null;
-  // Someone who never used their invite (or lost it) gets a fresh one, by e-mail or as a link to share; the old one stops working.
+  // Only players with an e-mail can be picked, and a pick that has since been invited no longer counts.
+  const pickedRows = () => inviteRows().filter((r) => r.state === READY && home.inviteSelected.has(r.player.id));
+
+  const inviteBadgeHtml = (state) => `<span class="invite-badge st-${state}"><b aria-hidden="true">${INVITE_BADGES[state].icon}</b> ${INVITE_BADGES[state].label}</span>`;
+  function inviteCardHtml(r) {
+    const { player: p, state } = r, id = esc(p.id), name = esc(p.name), picked = home.inviteSelected.has(p.id);
+    const face = state === READY
+      ? `<button class="invite-face press" type="button" data-invite-pick="${id}" aria-pressed="${picked}" aria-label="Elegir a ${name}">${discHtml(p)}<b>${name}</b><i class="invite-tick" aria-hidden="true">${picked ? '✓' : ''}</i></button>
+        <button class="invite-more press" type="button" data-invite-open="${id}" aria-label="Ficha de ${name}">⋯</button>`
+      : `<button class="invite-face press" type="button" data-invite-open="${id}" aria-label="Ficha de ${name}">${discHtml(p)}<b>${name}</b></button>`;
+    const detail = state === NONE ? 'Falta su correo' : state === READY ? esc(r.email) : invitedText(r.account) || esc(r.email);
+    const action = state === NONE ? `<button class="btn press" type="button" data-invite-open="${id}" data-invite-focus="email">＋ Añadir correo</button>`
+      : state === READY ? `<button class="btn press" type="button" data-invite-send="${id}"${busyAttr()}>Invitar</button>`
+        : `<button class="btn${state === EXPIRED ? ' primary' : ''} press" type="button" data-invite-send="${id}"${busyAttr()}>Reenviar</button>`;
+    const error = home.inviteErrors.get(p.id);
+    return `<article class="invite-card st-${state}${picked ? ' picked' : ''}" style="--pos:${posOf(p).color}">${face}${inviteBadgeHtml(state)}<small>${detail}</small>${error ? `<small class="invite-error">${esc(error)}</small>` : ''}${action}</article>`;
+  }
+  const inviteInFaceHtml = (r) => `<button class="face invite-in press" type="button" data-invite-open="${esc(r.player.id)}" style="--pos:${posOf(r.player).color}" aria-label="Ficha de ${esc(r.player.name)}, con acceso">${discHtml(r.player)}<i class="invite-check" aria-hidden="true">✓</i><span>${esc(r.player.name)}</span></button>`;
+  function inviteGroupHtml(g) {
+    if (!g.rows.length) return '';
+    const ready = g.rows.filter((r) => r.state === READY).length;
+    const action = g.key === 'invite' && ready ? `<button class="btn primary press" type="button" data-invite-send-ready${busyAttr()}>${ready === 1 ? 'Invitar al que tiene correo' : `Invitar a los ${ready} con correo`}</button>`
+      : g.key === 'waiting' && g.rows.length > 1 ? `<button class="btn press" type="button" data-invite-remind${busyAttr()}>Recordar a los ${g.rows.length}</button>` : '';
+    const body = g.key === 'in' ? `<div class="faces invite-in-faces">${g.rows.map(inviteInFaceHtml).join('')}</div>` : `<div class="invite-grid">${g.rows.map(inviteCardHtml).join('')}</div>`;
+    return `<section class="invite-group grp-${g.key}"><div class="invite-group-head"><h4>${g.title} <b>${g.rows.length}</b></h4><p class="note">${g.note}</p>${action}</div>${body}</section>`;
+  }
+  // The header's bar and legend, in this order: [state, states counted, one, many].
+  const INVITE_PROGRESS = [[IN, [IN], 'con acceso', 'con acceso'], [SENT, [SENT], 'esperando', 'esperando'],
+    [EXPIRED, [EXPIRED], 'caducada', 'caducadas'], [READY, [READY, NONE], 'por invitar', 'por invitar']];
+  function inviteHeadHtml(rows) {
+    const count = (states) => rows.filter((r) => states.includes(r.state)).length;
+    const parts = INVITE_PROGRESS.map(([state, states, one, many]) => ({ state, n: count(states), label: plural(count(states), one, many) }));
+    const legend = parts.map(({ state, label }) => `<span class="invite-key st-${state}">${label}</span>`).join('');
+    const bar = parts.map(({ state, n }) => (n ? `<span class="st-${state}" style="flex-grow:${n}"></span>` : '')).join('');
+    return `<h3>Cuentas del equipo</h3><div class="invite-head"><div class="invite-sum">
+        <p class="invite-progress"><b>${count([IN])} de ${rows.length}</b> jugadores ya entran en ${APP_NAME}</p>
+        <div class="invite-bar" aria-hidden="true">${bar}</div><p class="invite-legend">${legend}</p></div></div>`;
+  }
+  // The owner, the coaches and the guests: who they are, where their invite stands, and what can be done with it.
+  function otherAccountsHtml(others) {
+    const rows = others.map((a) => {
+      const state = a.signedIn ? IN : inviteStateOf(a, a.email, Date.now());
+      const link = home.inviteLinks.has(a.userId) ? `<button class="btn go press" type="button" data-invite-share="${a.userId}"${busyAttr()}>Compartir enlace</button>`
+        : `<button class="btn press" type="button" data-account-link="${a.userId}"${busyAttr()}>Enlace</button>`;
+      const resend = !a.signedIn && a.role !== STAFF_ROLE ? `<button class="btn press" type="button" data-account-resend="${a.userId}"${busyAttr()}>Reenviar</button>${link}` : '';
+      const remove = removableAccount(a) ? armedButton(`account-${a.userId}`, a.signedIn ? 'Quitar' : 'Anular', `data-account-remove="${a.userId}" aria-label="Quitar la cuenta de ${esc(a.email)}"${busyAttr()}`) : '';
+      const role = a.playerId ? 'Jugador que ya no está en la plantilla' : ACCOUNT_ROLES[a.role];
+      return `<div class="invite-other"><span class="invite-initial" aria-hidden="true">${esc(a.email[0].toUpperCase())}</span>
+        <div class="account-who"><b>${esc(a.email)}${a.isMe ? ' (tú)' : ''}</b><small>${role}</small>${inviteBadgeHtml(state)}</div><div class="row-actions">${resend}${remove}</div></div>`;
+    }).join('');
+    return `<section class="invite-group grp-staff"><div class="invite-group-head"><h4>Cuerpo técnico e invitados <b>${others.length}</b></h4>
+      <p class="note">Un entrenador puede hacer lo mismo que tú; un invitado solo mira.</p></div>
+      <div class="invite-others">${rows}</div>
+      <div class="row-actions"><button class="btn press" type="button" data-invite-staff="${COACH_INVITE}"${busyAttr()}>＋ Entrenador</button><button class="btn press" type="button" data-invite-staff="${VIEWER_ROLE}"${busyAttr()}>＋ Invitado</button></div></section>`;
+  }
+  const OFFLINE_ACCOUNTS_NOTE = 'Sin conexión: las cuentas se gestionan con internet.';
+  function invitesBodyHtml() {
+    if (!navigator.onLine) return `<h3>Cuentas del equipo</h3><p class="note">${OFFLINE_ACCOUNTS_NOTE}</p>`;
+    if (!home.accounts || home.accounts.teamId !== team.id) { loadAccounts(); return '<h3>Cuentas del equipo</h3><p class="note">Cargando las cuentas…</p>'; }
+    if (home.accounts.error) {
+      const why = home.accounts.error === NO_CONNECTION ? OFFLINE_ACCOUNTS_NOTE : `No se pudieron cargar las cuentas: ${esc(home.accounts.error)}.`;
+      return `<h3>Cuentas del equipo</h3><p class="note">${why}</p><div class="row-actions"><button class="btn press" type="button" data-invite-retry>Reintentar</button></div>`;
+    }
+    if (!accountsReady()) return '<h3>Cuentas del equipo</h3><p class="note">Cargando las cuentas…</p>';
+    const rows = inviteRows(), picked = pickedRows().length;
+    const squad = rows.length ? inviteGroups(rows).map(inviteGroupHtml).join('') : '<p class="note">Añade jugadores a la plantilla para invitarlos.</p>';
+    const selection = picked && !home.inviteSheet ? `<div class="invite-selection glass" role="region" aria-label="Jugadores elegidos"><span>${plural(picked, 'elegido', 'elegidos')}</span>
+      <button class="btn press" type="button" data-invite-clear>Ninguno</button><button class="btn primary press" type="button" data-invite-send-selected${busyAttr()}>Invitar (${picked})</button></div>` : '';
+    return `${inviteHeadHtml(rows)}<p class="account-status" id="account-status" role="status" aria-live="polite">${esc(home.accountStatus)}</p>
+      ${squad}${otherAccountsHtml(otherAccounts(home.accounts.rows, home.roster))}${selection}`;
+  }
+  function teamAccountsHtml() {
+    inviteStateFor(team.id);
+    return `<section class="sheet-card team-accounts${pickedRows().length ? ' picking' : ''}">${invitesBodyHtml()}</section>`;
+  }
+
+  // ---- The sheets over the card: a dialog on the tablet, a sheet from the bottom on a phone ----
+  function openInviteSheet(sheet) {
+    home.inviteSheet = sheet;
+    home.armed = null;
+    renderHome();
+    const field = sheet.focus && $(sheet.focus);
+    (field || document.querySelector('.invite-sheet')).focus();
+  }
+  function closeInviteSheet() {
+    home.inviteSheet = null;
+    home.inviteDraft = null;
+    renderHome();
+  }
+  // The close comes first: Escape and the system back press it before the page's own way back.
+  const inviteSheetFrame = (title, body) => `<button class="invite-scrim" type="button" data-nav-leading data-invite-close aria-label="Cerrar" tabindex="-1"></button>
+    <section class="invite-sheet" role="dialog" aria-modal="true" aria-labelledby="invite-sheet-title" tabindex="-1"><h2 id="invite-sheet-title">${title}</h2>${body}</section>`;
+  const inviteChipHtml = (p) => `<span class="face-chip">${discHtml(p)}${esc(p.name)}</span>`;
+  // Who is invited: players with an e-mail, never one already in.
+  const sendableIds = (ids) => ids.filter((id) => [READY, SENT, EXPIRED].includes(inviteRow(id)?.state));
+  function openInviteSend(ids) {
+    const sendable = sendableIds(ids);
+    if (sendable.length) openInviteSheet({ kind: 'send', ids: sendable });
+  }
+  function inviteSendHtml(sheet) {
+    const rows = sheet.ids.map(inviteRow).filter(Boolean), first = rows[0]?.player;
+    if (!first) { queueMicrotask(closeInviteSheet); return ''; }
+    const again = rows.some((r) => r.account) ? '<p class="note">Al reenviar, el enlace anterior deja de servir.</p>' : '';
+    const title = rows.length === 1 ? `Invitar a ${esc(first.name)}` : `Invitar a ${rows.length} jugadores`;
+    return inviteSheetFrame(title, `<div class="invite-chips">${rows.map((r) => inviteChipHtml(r.player)).join('')}</div>
+      <p class="note">Así le llega${rows.length > 1 ? ` (a ${esc(first.name)}, por ejemplo)` : ''}</p>
+      <p class="invite-preview">${inviteMessageHtml(inviteMessage(), first.name, team.name)}</p>${again}
+      <div class="invite-sheet-actions"><button class="btn press" type="button" data-invite-close>Cancelar</button>
+        <button class="btn primary press" type="button" data-invite-go${busyAttr()}>Enviar ${plural(rows.length, 'correo', 'correos')}</button></div>`);
+  }
+  function openInvitePlayer(playerId, focus) {
+    const r = inviteRow(playerId);
+    if (!r) return;
+    home.inviteDraft = { playerId, email: r.email, phone: r.phone };
+    openInviteSheet({ kind: 'player', playerId, focus: focus === 'email' ? 'invite-contact-email' : null });
+  }
+  function invitePlayerHtml(sheet) {
+    const r = inviteRow(sheet.playerId), draft = home.inviteDraft;
+    if (!r || !draft) { queueMicrotask(closeInviteSheet); return ''; }
+    const { player: p, account, state } = r, id = esc(p.id), pending = state === SENT || state === EXPIRED;
+    const about = {
+      [NONE]: () => 'Añade su correo para invitarle.',
+      [READY]: () => 'Aún no tiene invitación.',
+      [SENT]: () => `Invitación enviada${account.invitedAt ? ` · ${invitedText(account)}` : ''}. Si no le llega, reenvíasela.`,
+      [EXPIRED]: () => `Su enlace caducó sin usarlo · ${invitedText(account)}. Al reenviar, el enlace anterior deja de servir.`,
+      [IN]: () => `Ya entra en ${APP_NAME}: ve partidos, estadísticas y asistencia.`,
+    }[state]();
+    const error = home.inviteErrors.get(p.id);
+    const send = pending ? `<button class="btn primary press" type="button" data-invite-resend="${id}"${busyAttr()}>✉ Reenviar por correo</button>` : '';
+    const email = state === IN ? `<p class="invite-sheet-email">${esc(r.email)}</p>`
+      : `<label class="field">Correo${pending ? ' (puedes corregirlo)' : ''}<input class="in" id="invite-contact-email" type="email" inputmode="email" autocomplete="off" placeholder="nombre@correo.es" value="${esc(draft.email)}"></label>
+        ${pending ? '<p class="note">Si lo cambias, se anula esta invitación y se envía otra a la nueva dirección.</p>' : ''}`;
+    const phone = `<label class="field">Teléfono (WhatsApp)<input class="in" id="invite-contact-phone" type="tel" inputmode="tel" autocomplete="off" placeholder="600 11 22 33" value="${esc(draft.phone)}"></label>`;
+    const save = `<button class="btn press" type="button" data-invite-contact-save="${id}"${busyAttr()}>Guardar</button>${state === NONE || state === READY ? `<button class="btn primary press" type="button" data-invite-contact-invite="${id}"${busyAttr()}>Guardar e invitar</button>` : ''}`;
+    const remove = account && removableAccount(account) ? `<div class="invite-remove"><p class="note">${state === IN ? 'Deja de ver el equipo; su correo se queda para invitarle otra vez.' : 'Su enlace dejará de servir.'}</p>
+      ${armedButton(`account-${account.userId}`, state === IN ? 'Quitar acceso' : 'Anular invitación', `data-account-remove="${account.userId}"${busyAttr()}`)}</div>` : '';
+    return inviteSheetFrame(esc(p.name), `<div class="invite-sheet-who">${discHtml(p)}<span class="invite-sheet-name">${esc(p.fullName || p.name)}<small>${esc(r.email || 'Sin correo')}</small></span>${inviteBadgeHtml(state)}</div>
+      <p class="note">${about}</p>${error ? `<p class="invite-error">${esc(error)}</p>` : ''}
+      ${send ? `<div class="invite-sheet-actions">${send}</div>` : ''}
+      ${email}${phone}<div class="invite-sheet-actions">${save}</div>${remove}
+      <button class="btn press invite-done" type="button" data-invite-close>Cerrar</button>`);
+  }
+  function openStaffInvite(role) {
+    home.inviteStaffEmail = '';
+    openInviteSheet({ kind: 'staff', role, focus: 'invite-staff-email' });
+  }
+  function inviteStaffHtml(sheet) {
+    const coach = sheet.role === COACH_INVITE;
+    return inviteSheetFrame(coach ? 'Invitar a un entrenador' : 'Invitar a un invitado', `<p class="note">${coach ? 'Un entrenador puede hacer lo mismo que tú: partidos, plantilla, asistencia y cuentas.' : 'Un invitado ve los partidos, las estadísticas y la asistencia, sin cambiar nada.'} Le llega un correo para entrar y poner su contraseña.</p>
+      <label class="field">Correo<input class="in" id="invite-staff-email" type="email" inputmode="email" autocomplete="off" placeholder="nombre@correo.es" value="${esc(home.inviteStaffEmail)}"></label>
+      <div class="invite-sheet-actions"><button class="btn press" type="button" data-invite-close>Cancelar</button><button class="btn primary press" type="button" data-invite-staff-go${busyAttr()}>Enviar invitación</button></div>`);
+  }
+  const INVITE_SHEETS = { send: inviteSendHtml, player: invitePlayerHtml, staff: inviteStaffHtml };
+  const inviteSheetHtml = () => (home.inviteSheet && accountsReady() ? INVITE_SHEETS[home.inviteSheet.kind](home.inviteSheet) : '');
+
+  // ---- Sending ----
+  // An invite through the invite-player function; the list is asked again afterwards. Resolves to its { link, sent }.
+  async function inviteAccount(member, email, delivery = INVITE_BY_EMAIL) {
+    const result = await backend.inviteMember(team.id, { ...member, delivery }, email);
+    home.accounts = null;
+    return result;
+  }
+  const playerMember = (p) => ({ role: PLAYER_ROLE, playerId: p.id, message: fillInviteMessage(inviteMessage(), p.name, team.name) });
+  // By e-mail, one at a time, so a failure names its player and the others still go.
+  function invitePlayers(ids) {
+    const rows = sendableIds(ids).map(inviteRow);
+    return inviteTask(async () => {
+      const linked = [], failed = [];
+      let mailed = 0;
+      for (const [i, { player, email }] of rows.entries()) {
+        accountStatus(rows.length > 1 ? `Invitando ${i + 1} de ${rows.length}…` : `Invitando a ${player.name}…`);
+        try {
+          const { sent } = await inviteAccount(playerMember(player), email);
+          if (sent) mailed += 1; else linked.push(player.name);
+          home.inviteErrors.delete(player.id);
+        } catch (err) {
+          home.inviteErrors.set(player.id, cloudErrorText(err));
+          failed.push(`${player.name} (${cloudErrorText(err)})`);
+        }
+      }
+      home.inviteSelected.clear();
+      accountStatus(inviteSummary(mailed, linked, failed));
+    });
+  }
+  function sendInviteSheet() {
+    const { ids } = home.inviteSheet;
+    home.inviteSheet = null;
+    return invitePlayers(ids);
+  }
+  function toggleInvitePick(playerId) {
+    if (!home.inviteSelected.delete(playerId)) home.inviteSelected.add(playerId);
+    renderHome();
+  }
+  // The contact as typed in the player's sheet. A new address for a pending invite cancels it and invites the new one.
+  function saveInviteContact(playerId, andInvite) {
+    const r = inviteRow(playerId), draft = home.inviteDraft;
+    if (!r || !draft) return Promise.resolve();
+    const email = r.state === IN ? r.email : draft.email.trim().toLowerCase(), phone = normalPhone(draft.phone);
+    if (email && !EMAIL_PATTERN.test(email)) { accountStatus('Escribe un correo válido.'); return Promise.resolve(); }
+    if (phone === null) { accountStatus('Escribe el teléfono con su prefijo si no es español, por ejemplo +351 912 345 678.'); return Promise.resolve(); }
+    if (andInvite && !email) { accountStatus('Falta el correo para invitarle.'); return Promise.resolve(); }
+    const readdress = r.account && !r.account.signedIn && email !== r.email.toLowerCase();
+    if (readdress && !email) { accountStatus('Para anular la invitación sin otra nueva, usa «Anular invitación».'); return Promise.resolve(); }
+    let saved = false;
+    return inviteTask(async () => {
+      accountStatus('Guardando…');
+      try {
+        await backend.savePlayerContact(team.id, playerId, { email, phone });
+        home.accounts.contacts.set(playerId, { email, phone });
+        if (readdress) {
+          await backend.removeAccount(team.id, r.account.userId);
+          await inviteAccount(playerMember(r.player), email);
+        }
+      } catch (err) {
+        home.accounts = null;
+        accountStatus(`No se pudo guardar: ${cloudErrorText(err)}.`);
+        return;
+      }
+      saved = true;
+      home.inviteSheet = null;
+      accountStatus(readdress ? `Invitación anulada; correo enviado a ${email}.` : `Datos de ${r.player.name} guardados.`);
+    }).then(() => { if (saved && andInvite) openInviteSend([playerId]); });
+  }
+  function inviteStaff() {
+    const { role } = home.inviteSheet, email = home.inviteStaffEmail.trim().toLowerCase();
+    if (!EMAIL_PATTERN.test(email)) { accountStatus('Escribe un correo válido.'); return Promise.resolve(); }
+    home.inviteSheet = null;
+    return inviteTask(async () => {
+      accountStatus(`Invitando a ${email}…`);
+      try {
+        const { sent } = await inviteAccount({ role }, email);
+        accountStatus(sent ? `Correo de invitación enviado a ${email}.` : `${email} ya tenía cuenta en ${APP_NAME}: no hace falta correo, ya ve el equipo al entrar.`);
+      } catch (err) {
+        accountStatus(`No se pudo invitar a ${email}: ${cloudErrorText(err)}.`);
+      }
+    });
+  }
+  // A coach or a guest who never used the invite gets a fresh one, by e-mail or as a link to share; the old one stops working.
   function resendInvite(userId, delivery) {
     const account = accountOf(userId);
     if (!account) return Promise.resolve();
-    const player = account.playerId && rosterPlayer(account.playerId), name = player ? player.name : account.email;
-    const member = account.playerId ? { role: PLAYER_ROLE, playerId: account.playerId } : { role: account.role };
     return inviteTask(async () => {
       accountStatus(delivery === INVITE_BY_EMAIL ? `Enviando el correo a ${account.email}…` : 'Creando un enlace nuevo…');
       try {
-        await inviteAccount(member, account.email, name, delivery);
-        accountStatus(delivery === INVITE_BY_EMAIL ? `Correo enviado a ${account.email}.` : `Enlace nuevo para ${name}: compártelo.`);
+        const member = account.playerId ? { role: PLAYER_ROLE, playerId: account.playerId } : { role: account.role };
+        const { link } = await inviteAccount(member, account.email, delivery);
+        accountStatus(delivery === INVITE_BY_EMAIL ? `Correo enviado a ${account.email}.` : `Enlace nuevo para ${account.email}: compártelo.`);
+        if (link) await keepInviteLink(userId, `Entra en ${APP_NAME} con ${team.name}: ${link}`, '');
       } catch (err) {
-        // The row may be out of date (the player has entered since): the list is asked again.
+        // The row may be out of date (they have entered since): the list is asked again.
         home.accounts = null;
         accountStatus(`No se pudo invitar a ${account.email}: ${cloudErrorText(err)}.`);
       }
     });
+  }
+  // A link is personal and shared once: it waits here (by player or account) until the coach sends it.
+  async function shareInviteLink(key) {
+    const kept = home.inviteLinks.get(key);
+    if (!kept) return false;
+    try {
+      if (!(await openWhatsApp(kept.phone, kept.text))) return false;
+    } catch (err) {
+      accountStatus(`No se pudo compartir: ${err.message}.`);
+      return false;
+    }
+    home.inviteLinks.delete(key);
+    return true;
+  }
+  // Sharing needs the tap that asked for it, and a slow server can outlast it: the link then waits for another tap.
+  const tapStillActive = () => navigator.userActivation?.isActive ?? true;
+  async function keepInviteLink(key, text, phone) {
+    home.inviteLinks.set(key, { text, phone });
+    return tapStillActive() && shareInviteLink(key);
   }
   function removeAccount(userId) {
     const account = accountOf(userId);
@@ -7239,83 +7626,12 @@ table { border-collapse: collapse; width: 100%; }
         accountStatus(`No se pudo quitar: ${cloudErrorText(err)}.`);
         return;
       }
+      // A player goes back to «Por invitar» with the address he was invited at.
+      if (account.playerId && home.accounts?.contacts) home.accounts.contacts.set(account.playerId, { ...(home.accounts.contacts.get(account.playerId) || { phone: '' }), email: account.email });
       if (home.accounts?.rows) home.accounts.rows = home.accounts.rows.filter((a) => a.userId !== userId);
+      if (home.inviteSheet?.kind === 'player') home.inviteSheet = null;
       accountStatus(account.signedIn ? `${account.email} ya no tiene acceso al equipo.` : `Invitación de ${account.email} anulada: su enlace ya no sirve.`);
     });
-  }
-  function teamAccountsHtml() {
-    inviteStateFor(team.id);
-    const option = (value, label) => `<option value="${esc(value)}"${home.inviteWho === value ? ' selected' : ''}>${esc(label)}</option>`;
-    const options = [option(COACH_INVITE, 'Entrenador · acceso total'), option(VIEWER_ROLE, 'Invitado · solo ver'),
-      ...home.roster.slice().sort(benchOrder).map((p) => option(p.id, `Jugador · #${p.num} ${p.name}`))].join('');
-    const links = home.inviteLinks.length ? `<p class="note">Comparte a cada uno su enlace: lo abre una vez para entrar y poner su contraseña.</p>
-      <ul class="invite-links">${home.inviteLinks.map(({ name }, i) => `<li><b>${esc(name)}</b><button class="btn primary press" type="button" data-invite-share="${i}">Compartir enlace</button></li>`).join('')}</ul>` : '';
-    return `<section class="sheet-card team-accounts"><h3>Cuentas del equipo</h3>
-      <p class="note">Un entrenador puede hacer lo mismo que tú. Un jugador o un invitado ve los partidos, las estadísticas y la asistencia de todo el equipo, sin poder cambiar nada. Cada uno recibe un correo para entrar y poner su contraseña; si no le llega, pulsa «Enlace» junto a su nombre y compártelo por WhatsApp.</p>
-      <div class="row-actions"><label class="field">Cuenta para<select class="in" id="invite-who">${options}</select></label>
-        <label class="field">Correo<input class="in" id="invite-email" type="email" inputmode="email" autocomplete="off" placeholder="nombre@correo.es" value="${esc(home.inviteEmail)}"></label>
-        <button class="btn press" type="button" data-invite${busyAttr()}>Invitar</button></div>
-      <label class="field">Varios jugadores a la vez: pega la lista, con el nombre y luego el correo de cada uno<textarea class="in" id="invite-list" rows="4">${esc(home.inviteList)}</textarea></label>
-      <div class="row-actions"><button class="btn press" type="button" data-invite-list-check${busyAttr()}>Revisar lista</button></div>${invitePlanHtml()}
-      <p class="account-status" id="account-status" role="status" aria-live="polite">${esc(home.accountStatus)}</p>${links}${accountListHtml()}</section>`;
-  }
-  // Links the account and keeps the sign-in link to share, if one came; returns whether an invite went out (an
-  // account already in use is linked without one).
-  async function inviteAccount(member, email, name, delivery = INVITE_BY_EMAIL) {
-    const { link, sent } = await backend.inviteMember(team.id, { ...member, delivery }, email);
-    home.accounts = null;
-    if (link) home.inviteLinks.push({ name, url: link });
-    return Boolean(link || sent);
-  }
-  function inviteMember() {
-    const who = home.inviteWho, email = home.inviteEmail.trim(), player = rosterPlayer(who);
-    if (who !== COACH_INVITE && who !== VIEWER_ROLE && !player) return Promise.resolve();
-    if (!EMAIL_PATTERN.test(email)) { accountStatus('Escribe un correo válido.'); return Promise.resolve(); }
-    const name = player ? player.name : email;
-    return inviteTask(async () => {
-      accountStatus(`Invitando a ${email}…`);
-      try {
-        const fresh = await inviteAccount(player ? { role: PLAYER_ROLE, playerId: player.id } : { role: who }, email, name);
-        home.inviteEmail = '';
-        accountStatus(fresh ? `Correo de invitación enviado a ${email}.` : `${email} ya tenía cuenta en ${APP_NAME}: no hace falta correo, ya ve el equipo al entrar.`);
-      } catch (err) {
-        accountStatus(`No se pudo invitar a ${email}: ${cloudErrorText(err)}.`);
-      }
-    });
-  }
-  function checkInviteList() {
-    home.invitePlan = invitePlanOf(home.inviteList);
-    renderHome();
-    accountStatus(home.invitePlan.length ? 'Revisa a quién va cada correo antes de invitar.' : 'La lista no tiene ningún correo.');
-  }
-  // One at a time, so a failure names its player and the others still go.
-  function inviteList() {
-    const rows = (home.invitePlan || []).filter((row) => row.player);
-    return inviteTask(async () => {
-      const failed = [];
-      let linked = 0;
-      for (const [i, { email, player }] of rows.entries()) {
-        accountStatus(`Invitando ${i + 1} de ${rows.length}…`);
-        try {
-          if (!(await inviteAccount({ role: PLAYER_ROLE, playerId: player.id }, email, player.name))) linked += 1;
-        } catch (err) {
-          failed.push(`${player.name} (${cloudErrorText(err)})`);
-        }
-      }
-      Object.assign(home, { invitePlan: null, inviteList: failed.length ? home.inviteList : '' });
-      const done = rows.length - failed.length, mailed = done - linked;
-      accountStatus([plural(done, 'jugador invitado', 'jugadores invitados'), mailed ? plural(mailed, 'correo enviado', 'correos enviados') : '',
-        linked ? `${linked} ${linked === 1 ? 'ya tenía' : 'ya tenían'} cuenta` : '', failed.length ? `no se pudo con ${failed.join(', ')}` : ''].filter(Boolean).join(' · ') + '.');
-    });
-  }
-  async function shareInviteLink(index) {
-    const { url } = home.inviteLinks[index], text = `Entra en ${APP_NAME} con ${team.name}:`;
-    try {
-      if (navigator.share) { await navigator.share({ title: APP_NAME, text, url }); return; }
-      window.open(`${WHATSAPP_URL}${encodeURIComponent(`${text} ${url}`)}`, '_blank', 'noopener');
-    } catch (err) {
-      if (err && err.name !== 'AbortError') accountStatus(`No se pudo compartir: ${err.message}.`);
-    }
   }
   function calendarRowHtml() {
     const latest = home.fixtures && home.fixtures.length ? home.fixtures[home.fixtures.length - 1].season : null;
@@ -7380,6 +7696,7 @@ table { border-collapse: collapse; width: 100%; }
       actions: `<button class="btn press" type="button" data-tune="reset">Restablecer</button><button class="btn primary press" type="button" id="tune-save" data-tune="save"${tuneDirty() ? '' : ' disabled'}>Guardar</button>`,
     }),
   };
+  const HOME_SHEETS = { 'team-edit': inviteSheetHtml };
   const HOME_VIEWS = { team: teamPageHtml, player: playerPageHtml, 'player-match': playerMatchHtml, staff: staffPageHtml, 'team-edit': teamEditHtml, template: templateHtml, matches: matchesHtml, stats: teamStatsHtml, squad: squadHtml, attendance: attendanceHtml, 'rating-tune': ratingTuneHtml };
 
   // ---- Profile: the first screen after signing in (teams; the account in the corner menu) ----
@@ -7466,10 +7783,11 @@ table { border-collapse: collapse; width: 100%; }
     }
     else if (PROFILE_VIEWS[v]) body = `${profileHeadHtml()}<main class="home-body">${PROFILE_VIEWS[v]()}</main>`;
     else {
-      // The page first: a bar may read state its view sets up (the tuning draft).
+      // The page first: a bar may read state its view sets up (the tuning draft). A sheet over the page comes before the
+      // bar, so its close is the leading control that Escape and the system back press.
       const page = HOME_VIEWS[v](), bar = HOME_BARS[v](), mainTab = !bar.leading && !bar.title;
       const own = bar.task ? bar : { ...bar, actions: '' };
-      body = `<header class="top-bar glass">${appBarHtml(!bar.leading, bar.task ? '' : bar.actions)}${mainTab ? '' : pageBarHtml(own)}</header><main class="home-body">${page}</main>`;
+      body = `${HOME_SHEETS[v] ? HOME_SHEETS[v]() : ''}<header class="top-bar glass">${appBarHtml(!bar.leading, bar.task ? '' : bar.actions)}${mainTab ? '' : pageBarHtml(own)}</header><main class="home-body">${page}</main>`;
     }
     $('home').innerHTML = `<div class="home-wrap${AUTH_VIEWS.includes(v) ? ' centred' : ''}">${body}</div>`;
     stripStaffControls($('home'));
@@ -7482,6 +7800,7 @@ table { border-collapse: collapse; width: 100%; }
     home.armed = null;
     // Who has entered changes while the coach is away: the accounts card always asks again.
     if (moved && view === 'team-edit') home.accounts = null;
+    if (moved) home.inviteSheet = null;
     renderHome();
     // A new screen starts at its top, not where the last one was scrolled to.
     if (moved) $('home').scrollTop = 0;
@@ -9578,10 +9897,22 @@ table { border-collapse: collapse; width: 100%; }
     if (b.hasAttribute('data-app-exit')) { exitApp(); return; }
     if (b.dataset.att) { tapAttendance(b.dataset.att); return; }
     if (b.dataset.callupPick) { toggleCallupPick(b.dataset.callupPick); return; }
-    if (b.hasAttribute('data-invite')) { inviteMember(); return; }
-    if (b.hasAttribute('data-invite-share')) { shareInviteLink(Number(b.dataset.inviteShare)); return; }
-    if (b.hasAttribute('data-invite-list-check')) { checkInviteList(); return; }
-    if (b.hasAttribute('data-invite-list')) { inviteList(); return; }
+    if (b.hasAttribute('data-invite-close')) { closeInviteSheet(); return; }
+    if (b.dataset.invitePick) { toggleInvitePick(b.dataset.invitePick); return; }
+    if (b.dataset.inviteOpen) { openInvitePlayer(b.dataset.inviteOpen, b.dataset.inviteFocus); return; }
+    if (b.dataset.inviteSend) { openInviteSend([b.dataset.inviteSend]); return; }
+    if (b.hasAttribute('data-invite-send-selected')) { openInviteSend(pickedRows().map((r) => r.player.id)); return; }
+    if (b.hasAttribute('data-invite-send-ready')) { openInviteSend(inviteRows().filter((r) => r.state === READY).map((r) => r.player.id)); return; }
+    if (b.hasAttribute('data-invite-remind')) { openInviteSend(inviteRows().filter((r) => r.state === SENT || r.state === EXPIRED).map((r) => r.player.id)); return; }
+    if (b.hasAttribute('data-invite-clear')) { home.inviteSelected.clear(); renderHome(); return; }
+    if (b.hasAttribute('data-invite-go')) { sendInviteSheet(); return; }
+    if (b.hasAttribute('data-invite-retry')) { home.accounts = null; renderHome(); return; }
+    if (b.dataset.inviteResend) { home.inviteSheet = null; invitePlayers([b.dataset.inviteResend]); return; }
+    if (b.dataset.inviteContactSave) { saveInviteContact(b.dataset.inviteContactSave, false); return; }
+    if (b.dataset.inviteContactInvite) { saveInviteContact(b.dataset.inviteContactInvite, true); return; }
+    if (b.dataset.inviteStaff) { openStaffInvite(b.dataset.inviteStaff); return; }
+    if (b.hasAttribute('data-invite-staff-go')) { inviteStaff(); return; }
+    if (b.dataset.inviteShare) { shareInviteLink(b.dataset.inviteShare).then(renderHome); return; }
     if (b.hasAttribute('data-account-resend')) { resendInvite(b.dataset.accountResend, INVITE_BY_EMAIL); return; }
     if (b.hasAttribute('data-account-link')) { resendInvite(b.dataset.accountLink, INVITE_BY_LINK); return; }
     if (b.hasAttribute('data-callup-share')) { shareCallup(); return; }
@@ -9653,7 +9984,6 @@ table { border-collapse: collapse; width: 100%; }
   $('home').addEventListener('change', (ev) => {
     const el = ev.target;
     if (el.id === 'tpl-name') { home.template.name = el.value; return; }
-    if (el.id === 'invite-who') { home.inviteWho = el.value; return; }
     if (el.dataset.knob) { homeStatus(Number.isFinite(parseKnobText(el.value)) || el.type === 'range' ? '' : KNOB_NUMBER_HINT); setKnobControl(el, home.weightsDraft[el.dataset.knob]); return; }
     if (el.id === 'att-date') { openAttendanceDay(el.value); return; }
     if (el.id === 'callup-fixture') { chooseCallupFixture(el.value); return; }
@@ -9667,8 +9997,9 @@ table { border-collapse: collapse; width: 100%; }
   });
   // A note is kept as it is typed, so no tap can lose it.
   $('home').addEventListener('input', (ev) => {
-    if (ev.target.id === 'invite-email') home.inviteEmail = ev.target.value;
-    if (ev.target.id === 'invite-list') home.inviteList = ev.target.value;
+    if (ev.target.id === 'invite-staff-email') home.inviteStaffEmail = ev.target.value;
+    if (ev.target.id === 'invite-contact-email' && home.inviteDraft) home.inviteDraft.email = ev.target.value;
+    if (ev.target.id === 'invite-contact-phone' && home.inviteDraft) home.inviteDraft.phone = ev.target.value;
     if (ev.target.dataset.attNoteInput) saveAttendanceNote(ev.target.dataset.attNoteInput, ev.target.value);
     if (ev.target.dataset.knob) tuneKnob(ev.target);
   });

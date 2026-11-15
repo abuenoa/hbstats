@@ -3619,143 +3619,292 @@
         }
       } finally { team.role = role; }
     }));
-    await TA('invite list: each e-mail goes to the player named before it, then all are invited', async () => {
-      const keep = { roster: home.roster, inviteLinks: home.inviteLinks, invitePlan: home.invitePlan, inviteList: home.inviteList }, real = backend;
-      home.roster = [
-        { id: 'k', num: 3, name: 'Kike', fullName: 'Enrique García Abadía', pos: 'PIV' },
-        { id: 'j', num: 14, name: 'Jenrri', fullName: 'José Enrique Muñoz Galloso', pos: 'EXT' },
-        { id: 'r7', num: 7, name: 'Raulito', fullName: 'Raúl Gallego de la Sacristina', pos: 'EXT' },
-        { id: 'r82', num: 82, name: 'Raúl', fullName: 'Raúl Araque Partido', pos: 'CEN' },
-        { id: 'ja', num: 12, name: 'Jose', fullName: 'José Arias Rivas', pos: 'POR' },
-        { id: 'aa', num: 27, name: 'Adri', fullName: 'Adrián Arias Rivas', pos: 'PIV' },
-        { id: 'm', num: 28, name: 'Marcos', fullName: 'Marcos Carraco', pos: 'CEN' },
-      ];
-      try {
-        // As pasted from WhatsApp: a title, bullets, the e-mail on the same line or the next, a typo in a surname.
-        home.invitePlan = invitePlanOf('*Plantilla 2026*\n- Enrique García kike@x.es\n- Raúl Gallego \nraul@x.es\n   • Marcos Carrasco\nMarcos@X.es\n• José Arias Rivas \njose@x.es\n- Jose Enrique Muñoz\njenri@x.es\n- Arias Rivas ar@x.es\n- Nadie Conocido nadie@x.es');
-        const got = home.invitePlan.map((r) => `${r.email}:${r.player ? r.player.id : '-'}`).join(' ');
-        if (got !== 'kike@x.es:k raul@x.es:r7 marcos@x.es:m jose@x.es:ja jenri@x.es:j ar@x.es:- nadie@x.es:-') throw new Error(got);
-        if (!/Invitar a 5 jugadores/.test(invitePlanHtml())) throw new Error('the button does not count the matched players');
-        const calls = [];
-        backend = { ...real, inviteMember: async (teamId, member, email) => {
-          calls.push(`${member.role}:${member.playerId}:${member.delivery}`);
-          if (email === 'raul@x.es') throw new Error('este jugador ya tiene cuenta');
-          return { link: null, sent: email !== 'jose@x.es' };
-        } };
-        home.inviteLinks = [];
-        await inviteList();
-        // The list goes by e-mail: nothing is left to share by hand.
-        if (calls.join(' ') !== 'player:k:email player:r7:email player:m:email player:ja:email player:j:email') throw new Error(calls.join(' '));
-        if (home.inviteLinks.length || home.invitePlan !== null) throw new Error(JSON.stringify(home.inviteLinks));
-        const status = home.accountStatus;
-        if (!/4 jugadores invitados/.test(status) || !/3 correos enviados/.test(status) || !/1 ya tenía cuenta/.test(status) || !/Raulito/.test(status)) throw new Error(status);
-      } finally { backend = real; Object.assign(home, keep); }
+    // ---- Team accounts: the squad's invite cards (backend stubbed like the other account tests) ----
+    const HOUR_MS = 60 * 60 * 1000;
+    const invitePlayer = (id, num, name, pos = 'LAT') => ({ id, num, name, fullName: `${name} Pérez`, pos });
+    const INVITE_ROSTER = [invitePlayer('pm', 8, 'Manu'), invitePlayer('pn', 9, 'Nacho', 'PIV'), invitePlayer('pl', 12, 'Lolo', 'EXT'),
+      invitePlayer('pd', 10, 'Dani'), invitePlayer('pc', 5, 'Curro', 'CEN'), invitePlayer('pj', 1, 'Javi', 'POR')];
+    const inviteAccountsAt = (now) => [
+      { userId: 'own', role: 'owner', playerId: null, email: 'dueno@x.es', signedIn: true, isMe: true, invitedAt: null, invitedVia: null },
+      { userId: 'co', role: 'coach', playerId: null, email: 'coach@x.es', signedIn: true, isMe: false, invitedAt: null, invitedVia: null },
+      { userId: 'gv', role: 'viewer', playerId: null, email: 'guest@x.es', signedIn: false, isMe: false, invitedAt: new Date(now - HOUR_MS).toISOString(), invitedVia: 'email' },
+      { userId: 'ud', role: 'player', playerId: 'pd', email: 'dani@x.es', signedIn: false, isMe: false, invitedAt: new Date(now - 3 * 24 * HOUR_MS).toISOString(), invitedVia: 'email' },
+      { userId: 'uc', role: 'player', playerId: 'pc', email: 'curro@x.es', signedIn: false, isMe: false, invitedAt: new Date(now - HOUR_MS).toISOString(), invitedVia: 'link' },
+      { userId: 'uj', role: 'player', playerId: 'pj', email: 'javi@x.es', signedIn: true, isMe: false, invitedAt: null, invitedVia: null },
+    ];
+    const INVITE_CONTACTS = [{ playerId: 'pm', email: 'manu@x.es', phone: null }, { playerId: 'pn', email: 'nacho@x.es', phone: '+34600111222' },
+      { playerId: 'pd', email: 'old-dani@x.es', phone: null }];
+    // «Editar equipo» of a signed-in owner with the roster above; `over` replaces backend calls. Restores everything after.
+    const withInviteCard = async (over, fn) => {
+      const keep = { roster: home.roster, accounts: home.accounts, view: home.view, armed: home.armed, inviteTeamId: home.inviteTeamId, accountStatus: home.accountStatus }, real = backend;
+      const keepTeam = { id: team.id, role: team.role, name: team.name, inviteMessage: team.inviteMessage };
+      const calls = [];
+      backend = { ...real, needsLogin: true,
+        listAccounts: async () => inviteAccountsAt(Date.now()), listPlayerContacts: async () => INVITE_CONTACTS.map((c) => ({ ...c })),
+        inviteMember: async (t, member, email) => { calls.push({ member, email }); return { link: null, sent: true }; },
+        savePlayerContact: async (t, playerId, contact) => { calls.push({ contact: { playerId, ...contact } }); },
+        removeAccount: async (t, userId) => { calls.push({ removed: userId }); }, ...over(calls) };
+      Object.assign(team, { id: 'inv-team', role: 'owner', name: 'Triana', inviteMessage: null });
+      Object.assign(home, { roster: INVITE_ROSTER.slice(), accounts: null, armed: null, inviteTeamId: null });
+      // The runner's browser may report itself offline; the coach's tablet is online.
+      const online = Object.getOwnPropertyDescriptor(navigator, 'onLine');
+      Object.defineProperty(navigator, 'onLine', { value: true, configurable: true });
+      try { showHomeView('team-edit'); await settleInvites(); await fn(calls); }
+      finally {
+        if (online) Object.defineProperty(navigator, 'onLine', online); else delete navigator.onLine;
+        backend = real; Object.assign(team, keepTeam); Object.assign(home, keep); home.inviteSheet = null; renderHome();
+      }
+    };
+    const settleInvites = async () => { for (let i = 0; i < 6; i++) await tick0(); };
+    const card = (playerId) => [...document.querySelectorAll('.invite-card')].find((c) => c.querySelector(`[data-invite-pick="${playerId}"], [data-invite-open="${playerId}"], [data-invite-send="${playerId}"]`));
+    const groupNames = (key) => [...document.querySelectorAll(`.invite-group.grp-${key} .invite-face b, .invite-group.grp-${key} .invite-in > span:not(.disc)`)].map((el) => el.textContent).join();
+    const sheet = () => document.querySelector('.invite-sheet');
+    const tapInvite = async (selector) => { const el = $('home').querySelector(selector); if (!el) throw new Error(`no ${selector}`); el.click(); await settleInvites(); };
+    const typeInto = (id, value) => { const el = $(id); el.value = value; el.dispatchEvent(new Event('input', { bubbles: true })); };
+    await TA('invites: each player\'s state, the expiry boundary and the account\'s e-mail', async () => {
+      const now = Date.UTC(2026, 10, 14, 12);
+      const at = (msAgo) => new Date(now - msAgo).toISOString();
+      const account = (over) => ({ userId: 'u', role: 'player', playerId: 'p', email: 'p@x.es', signedIn: false, invitedAt: at(HOUR_MS), invitedVia: 'email', ...over });
+      if (inviteStateOf(null, '', now) !== 'none' || inviteStateOf(null, 'a@x.es', now) !== 'ready') throw new Error('no account');
+      if (inviteStateOf(account({ signedIn: true, invitedAt: at(10 * INVITE_TTL_MS) }), 'p@x.es', now) !== 'in') throw new Error('a signed-in player is never expired');
+      if (inviteStateOf(account({ invitedAt: at(INVITE_TTL_MS - 1) }), 'p@x.es', now) !== 'sent') throw new Error('expired a millisecond early');
+      if (inviteStateOf(account({ invitedAt: at(INVITE_TTL_MS) }), 'p@x.es', now) !== 'expired') throw new Error('not expired at the TTL');
+      if (inviteStateOf(account({ invitedAt: null }), 'p@x.es', now) !== 'sent') throw new Error('an invite without a date reads expired');
+      if (INVITE_TTL_MS !== 24 * HOUR_MS) throw new Error(`TTL ${INVITE_TTL_MS}`);
+      const rows = squadInvites(INVITE_ROSTER, inviteAccountsAt(now), new Map([['pd', { email: 'old-dani@x.es', phone: '' }], ['pm', { email: 'manu@x.es', phone: '+34600111222' }]]), now);
+      const of = (id) => rows.find((r) => r.player.id === id);
+      if (rows.map((r) => r.state).join() !== 'ready,none,none,expired,sent,in') throw new Error(rows.map((r) => r.state).join());
+      if (of('pd').email !== 'dani@x.es') throw new Error('the contact beats the account e-mail');
+      if (of('pm').phone !== '+34600111222' || of('pl').phone !== '' || of('pl').email !== '') throw new Error('contact defaults');
     });
-    await TA('team accounts: the staff list them and take off players, guests and unused invites', async () => {
-      const keep = { roster: home.roster, accounts: home.accounts, view: home.view, armed: home.armed }, real = backend, role = team.role, teamId = team.id;
-      const rows = [
-        { userId: 'me', role: 'coach', playerId: null, email: 'yo@x.es', signedIn: true, isMe: true },
-        { userId: 'own', role: 'owner', playerId: null, email: 'dueno@x.es', signedIn: true, isMe: false },
-        { userId: 'co', role: 'coach', playerId: null, email: 'coach@x.es', signedIn: true, isMe: false },
-        { userId: 'pk', role: 'player', playerId: 'k', email: 'kike@x.es', signedIn: false, isMe: false },
-        { userId: 'gv', role: 'viewer', playerId: null, email: 'guest@x.es', signedIn: true, isMe: false },
-      ];
-      const removed = [];
-      backend = { ...real, listAccounts: async () => rows.map((r) => ({ ...r })), removeAccount: async (t, userId) => {
-        if (userId === 'gv') throw new Error('sin conexión');
-        removed.push(userId);
-      } };
-      Object.assign(home, { roster: [{ id: 'k', num: 3, name: 'Kike', fullName: 'Enrique García', pos: 'PIV' }], accounts: null, view: 'team-edit', armed: null });
-      Object.assign(team, { id: 'acc-team', role: 'coach' });
-      try {
-        accountListHtml();
-        for (let i = 0; i < 3; i++) await tick0();
-        const html = accountListHtml(), buttons = [...html.matchAll(/data-account-remove="(\w+)"/g)].map((m) => m[1]);
-        // A coach takes off the player and the guest, not the owner, another coach or himself.
-        if (buttons.join(' ') !== 'pk gv' || !/#3 Kike/.test(html) || !/Anular invitación/.test(html) || !/sin entrar aún/.test(html)) throw new Error(buttons.join(' ') + html);
-        // Kike never signed in: a fresh link to share, for the same player and e-mail.
-        const invited = [], links = home.inviteLinks;
-        backend.inviteMember = async (t, member, email) => {
-          invited.push(`${member.role}:${member.playerId}:${email}:${member.delivery}`);
-          return member.delivery === INVITE_BY_LINK ? { link: 'https://example.test/new', sent: false } : { link: null, sent: true };
-        };
-        home.inviteLinks = [];
-        if ((html.match(/data-account-resend="(\w+)"/g) || []).join() !== 'data-account-resend="pk"') throw new Error('resend offered to signed-in accounts');
-        await resendInvite('pk', INVITE_BY_EMAIL);
-        if (!/Correo enviado a kike@x.es/.test(home.accountStatus) || home.inviteLinks.length) throw new Error(home.accountStatus);
-        accountListHtml();
-        for (let i = 0; i < 3; i++) await tick0();
-        await resendInvite('pk', INVITE_BY_LINK);
-        const fresh = home.inviteLinks.map((l) => l.name).join();
-        home.inviteLinks = links;
-        if (invited.join() !== 'player:k:kike@x.es:email,player:k:kike@x.es:link' || fresh !== 'Kike' || !/Enlace nuevo para Kike/.test(home.accountStatus)) throw new Error(invited.join() + fresh);
-        if (home.accounts !== null) throw new Error('the list was not refreshed after the invite');
-        // Kike has entered since the list came: the server refuses, and the stale row is asked again.
-        accountListHtml();
-        for (let i = 0; i < 3; i++) await tick0();
-        backend.inviteMember = async () => { throw new Error('ese correo ya es del equipo'); };
-        await resendInvite('pk', INVITE_BY_EMAIL);
-        if (home.accounts !== null || !/ya es del equipo/.test(home.accountStatus)) throw new Error('a refused resend kept the stale list');
-        // Opening «Editar equipo» again asks who has entered meanwhile.
-        accountListHtml();
-        for (let i = 0; i < 3; i++) await tick0();
-        showHomeView('team');
-        showHomeView('team-edit');
-        if (home.accounts?.rows) throw new Error('the accounts card reused the old list');
-        // Taps on the page itself, as the coach does: arm, then confirm.
-        backend.needsLogin = true;
-        const settle = async () => { for (let i = 0; i < 5; i++) await tick0(); };
-        const tap = async (userId) => { $('home').querySelector(`[data-account-remove="${userId}"]`).click(); await settle(); };
-        showHomeView('team-edit');
-        await settle();
-        await tap('pk');
-        if (removed.length || !/¿Seguro/.test($('home').querySelector('[data-account-remove="pk"]').textContent)) throw new Error('the first tap did not arm');
-        await tap('pk');
-        // The message shows in the accounts card itself, where the coach is looking.
-        const cardStatus = () => document.querySelector('.team-accounts #account-status')?.textContent || '';
-        if (removed.join() !== 'pk' || $('home').querySelector('[data-account-remove="pk"]') || !/anulada/.test(cardStatus())) throw new Error(`removed ${removed} · ${cardStatus()}`);
-        await tap('gv'); await tap('gv');
-        if (!$('home').querySelector('[data-account-remove="gv"]') || !/No se pudo quitar: .*sin conexión/.test(cardStatus())) throw new Error(cardStatus());
-        team.role = 'owner';
-        if (![...accountListHtml().matchAll(/data-account-remove="(\w+)"/g)].some((m) => m[1] === 'co')) throw new Error('the owner cannot take off a coach');
-      } finally { backend = real; Object.assign(team, { id: teamId, role }); Object.assign(home, keep); renderHome(); }
+    await TA('invites: grouped by what the coach has to do, in bench order inside a group', async () => {
+      const now = Date.now(), row = (player, state) => ({ player, state });
+      const [manu, nacho, lolo, dani, curro, javi] = INVITE_ROSTER;
+      const groups = inviteGroups([row(lolo, 'none'), row(javi, 'in'), row(nacho, 'ready'), row(curro, 'sent'), row(manu, 'ready'), row(dani, 'expired')]);
+      const names = groups.map((g) => `${g.key}:${g.rows.map((r) => r.player.name).join('+')}`).join(' ');
+      // E-mail first in «Por invitar» (Manu LAT before Nacho PIV by position), the expired first in «Esperando».
+      if (names !== 'invite:Manu+Nacho+Lolo waiting:Dani+Curro in:Javi') throw new Error(names);
+      if (inviteGroups([]).some((g) => g.rows.length)) throw new Error('an empty squad has rows');
+      const others = otherAccounts(inviteAccountsAt(now), INVITE_ROSTER.filter((p) => p.id !== 'pj'));
+      if (others.map((a) => a.userId).join() !== 'own,co,gv,uj') throw new Error('a player gone from the roster must stay reachable: ' + others.map((a) => a.userId).join());
     });
-    await TA('team accounts: an invite error shows in the card, a double tap sends once, typing survives a re-render', async () => {
-      const keep = { roster: home.roster, accounts: home.accounts, view: home.view, armed: home.armed, inviteTeamId: home.inviteTeamId }, real = backend, teamId = team.id, role = team.role;
-      let calls = 0, release;
-      backend = { ...real, needsLogin: true, listAccounts: async () => [], inviteMember: async () => {
-        calls += 1;
-        await new Promise((resolve) => { release = resolve; });
-        throw new Error('no se pudo enviar el correo: Error sending invite email');
-      } };
-      Object.assign(team, { id: 'acc-err', role: 'owner' });
-      Object.assign(home, { roster: [], accounts: null, armed: null, inviteTeamId: null });
-      const settle = async () => { for (let i = 0; i < 5; i++) await tick0(); };
+    await TA('invites: the message fills {nombre} and {equipo} and marks them, escaped', async () => {
+      const text = 'Hola {nombre}, {nombre}: {equipo} te espera.';
+      if (fillInviteMessage(text, 'Manu', 'Triana') !== 'Hola Manu, Manu: Triana te espera.') throw new Error(fillInviteMessage(text, 'Manu', 'Triana'));
+      if (fillInviteMessage('Sin huecos', 'Manu', 'Triana') !== 'Sin huecos') throw new Error('a text without placeholders changed');
+      if (fillInviteMessage('{NOMBRE} {nombre', 'Manu', 'T') !== '{NOMBRE} {nombre') throw new Error('only the exact placeholders are filled');
+      const html = inviteMessageHtml(text, '<b>Ana</b>', 'A & B');
+      if (html !== 'Hola <mark>&lt;b&gt;Ana&lt;/b&gt;</mark>, <mark>&lt;b&gt;Ana&lt;/b&gt;</mark>: <mark>A &amp; B</mark> te espera. <mark>enlace personal</mark>') throw new Error(html);
+      const keep = team.inviteMessage;
       try {
-        showHomeView('team-edit');
-        await settle();
-        const email = $('invite-email');
-        email.value = 'nuevo@x.es';
-        email.dispatchEvent(new Event('input', { bubbles: true }));
+        team.inviteMessage = null;
+        if (inviteMessage() !== DEFAULT_INVITE_MESSAGE || !DEFAULT_INVITE_MESSAGE.includes(INVITE_PLACEHOLDERS.name) || !DEFAULT_INVITE_MESSAGE.includes(INVITE_PLACEHOLDERS.team)) throw new Error('default');
+        team.inviteMessage = 'Propio {nombre}';
+        if (inviteMessage() !== 'Propio {nombre}') throw new Error('the team message is not used');
+      } finally { team.inviteMessage = keep; }
+      if (inviteSummary(3, ['Rafa'], []) !== '3 correos enviados · Rafa ya tenía cuenta: no hace falta invitación.') throw new Error(inviteSummary(3, ['Rafa'], []));
+      if (inviteSummary(0, ['A', 'B'], ['C (sin conexión)']) !== 'A, B ya tenían cuenta: no hace falta invitación · no se pudo con C (sin conexión).') throw new Error(inviteSummary(0, ['A', 'B'], ['C (sin conexión)']));
+      if (inviteSummary(0, [], []) !== 'Nadie a quien invitar.') throw new Error('empty summary');
+    });
+    await TA('contacts: a typed phone becomes +country digits; anything else is refused', async () => {
+      const cases = [['600 11 12 22', '+34600111222'], ['600-111-222', '+34600111222'], ['(+34) 600.111.222', '+34600111222'], ['+351 912 345 678', '+351912345678'],
+        ['0044 7911 123456', '+447911123456'], ['', ''], ['   ', ''], [null, ''], ['+34 600', null], ['abc', null], ['+0034600111222', null], ['+1234567890123456', null], ['600x111222', null]];
+      const wrong = cases.filter(([typed, want]) => normalPhone(typed) !== want).map(([typed, want]) => `${typed}→${normalPhone(typed)} (want ${want})`);
+      if (wrong.length) throw new Error(wrong.join('; '));
+      if (normalPhone('+123456789012345') !== '+123456789012345' || normalPhone('+1234567') !== null) throw new Error('E.164 bounds');
+    });
+    await TA('contacts: wa.me opens the player\'s chat, or the picker without a phone; the text is encoded', async () => {
+      const text = 'Hola, Manu: entra & mira?\nhttps://x.supabase.co/auth/v1/verify?token=a&type=invite 🤾';
+      const url = whatsAppUrl('+34600111222', text);
+      if (url !== `https://wa.me/34600111222?text=${encodeURIComponent(text)}`) throw new Error(url);
+      if (decodeURIComponent(new URL(url).searchParams.get('text')) !== text && new URL(url).searchParams.get('text') !== text) throw new Error('text not recoverable');
+      if (whatsAppUrl('', 'Hola') !== 'https://wa.me/?text=Hola' || whatsAppUrl(null, 'a b') !== 'https://wa.me/?text=a%20b') throw new Error('picker url');
+      const real = backend;
+      backend = { ...real, listPlayerContacts: async (teamId) => (teamId === 't1' ? [{ playerId: 'a', email: 'a@x.es', phone: null }, { playerId: 'b', email: null, phone: '+34600111222' }] : []) };
+      try {
+        const contacts = await loadPlayerContacts('t1');
+        if (!(contacts instanceof Map) || JSON.stringify([...contacts]) !== '[["a",{"email":"a@x.es","phone":""}],["b",{"email":"","phone":"+34600111222"}]]') throw new Error(JSON.stringify([...contacts]));
+        if ((await loadPlayerContacts('t2')).size) throw new Error('another team\'s contacts');
+      } finally { backend = real; }
+    });
+    await TA('invites: Supabase maps the invite columns, the contacts and the team message', async () => {
+      const calls = []; let next = { data: [], error: null };
+      const query = () => new Proxy({}, { get: (t, k) => (k === 'then' ? (ok) => ok(next) : (...a) => { calls.push([k, ...a]); return query(); }) });
+      const fakeClient = { from: (tbl) => { calls.push(['from', tbl]); return query(); }, rpc: (fn, args) => { calls.push(['rpc', fn, args]); return query(); } };
+      const savedLib = window.supabase; window.supabase = { createClient: () => fakeClient };
+      try {
+        const cloud = await supabaseBackend({ url: 'https://x.supabase.co', anonKey: 'k' });
+        next = { data: [{ user_id: 'u', role: 'player', player_id: 'p', email: 'p@x.es', signed_in: false, is_me: false, invited_at: '2026-11-12T10:00:00Z', invited_via: 'link' }], error: null };
+        const [acc] = await cloud.listAccounts('t1');
+        if (acc.invitedAt !== '2026-11-12T10:00:00Z' || acc.invitedVia !== 'link' || acc.playerId !== 'p' || acc.signedIn !== false) throw new Error(JSON.stringify(acc));
+        next = { data: [{ player_id: 'p', email: 'p@x.es', phone: null }], error: null }; calls.length = 0;
+        const contacts = await cloud.listPlayerContacts('t1');
+        if (contacts[0].playerId !== 'p' || calls[0][1] !== 'player_contacts' || !calls.some((c) => c[0] === 'eq' && c[1] === 'team_id' && c[2] === 't1')) throw new Error(JSON.stringify(calls));
+        next = { data: null, error: null }; calls.length = 0;
+        await cloud.savePlayerContact('t1', 'p', { email: '', phone: '+34600111222' });
+        const up = calls.find((c) => c[0] === 'upsert');
+        if (JSON.stringify(up[1]) !== '{"player_id":"p","team_id":"t1","email":null,"phone":"+34600111222"}' || up[2].onConflict !== 'player_id') throw new Error(JSON.stringify(up));
+        next = { data: null, error: { message: 'new row violates row-level security policy for table "player_contacts"' } };
+        let msg = ''; try { await cloud.savePlayerContact('t1', 'p', { email: 'p@x.es', phone: '' }); } catch (e) { msg = e.message; }
+        if (!/row-level security/.test(msg)) throw new Error('a refused contact did not throw: ' + msg);
+        next = { data: { id: 't1', club: 'C', name: 'N', brand: '#000000', brand2: '#ffffff', brand_ink: '#ffffff', crest: null, invite_message: 'Hola {nombre}' }, error: null }; calls.length = 0;
+        const saved = await cloud.updateTeam('t1', { inviteMessage: 'Hola {nombre}' });
+        if (calls.find((c) => c[0] === 'update')[1].invite_message !== 'Hola {nombre}' || saved.inviteMessage !== 'Hola {nombre}') throw new Error('invite_message mapping');
+        calls.length = 0; await cloud.updateTeam('t1', { club: 'C', name: 'N' });
+        if ('invite_message' in calls.find((c) => c[0] === 'update')[1]) throw new Error('a team edit must not send the message');
+      } finally { window.supabase = savedLib; }
+    });
+    await TA('invite cards: the groups, the header and the staff rows as the owner sees them', async () => withInviteCard(() => ({}), async () => {
+      const text = document.querySelector('.team-accounts').textContent.replace(/\s+/g, ' ');
+      if (!/1 de 6 jugadores ya entran en Zona6/.test(text)) throw new Error('header: ' + text.slice(0, 200));
+      if (!/1 con acceso/.test(text) || !/1 esperando/.test(text) || !/1 caducada/.test(text) || !/3 por invitar/.test(text)) throw new Error('legend: ' + text.slice(0, 300));
+      if (groupNames('invite') !== 'Manu,Nacho,Lolo' || groupNames('waiting') !== 'Dani,Curro' || groupNames('in') !== 'Javi') throw new Error(`${groupNames('invite')} | ${groupNames('waiting')} | ${groupNames('in')}`);
+      // States are a word and an icon, and only players with an e-mail can be picked.
+      if (!/Sin correo/.test(card('pl').textContent) || card('pl').querySelector('[data-invite-pick]') || !card('pm').querySelector('[data-invite-pick]')) throw new Error('Lolo has no e-mail');
+      if (!/Caducada/.test(card('pd').textContent) || !card('pd').querySelector('[data-invite-send].primary') || !/Invitación enviada/.test(card('pc').textContent) || !/WhatsApp/.test(card('pc').textContent)) throw new Error('waiting cards');
+      if (!/Invitar a los 2 con correo/.test(text) || !/Recordar a los 2/.test(text)) throw new Error('group actions');
+      // The owner takes off a coach and a guest, never himself.
+      const removable = [...document.querySelectorAll('.invite-others [data-account-remove]')].map((b) => b.dataset.accountRemove).join();
+      if (removable !== 'co,gv' || !/dueno@x\.es \(tú\)/.test(text)) throw new Error('staff rows: ' + removable);
+      team.role = 'coach';
+      renderHome();
+      if ([...document.querySelectorAll('.invite-others [data-account-remove]')].map((b) => b.dataset.accountRemove).join() !== 'gv') throw new Error('a coach can take off another coach');
+      const small = [...document.querySelectorAll('.team-accounts button')].filter((b) => { const r = b.getBoundingClientRect(); return r.width && (r.width < 44 || r.height < 44); });
+      if (small.length) throw new Error('targets under 44 px: ' + small.map((b) => b.textContent.trim() || b.className).join());
+    }));
+    await TA('invite cards: pick two, send by e-mail; a refusal stays on its card, an existing account is named', async () => withInviteCard((calls) => ({
+      inviteMember: async (t, member, email) => {
+        calls.push({ member, email });
+        if (member.playerId === 'pn') throw new Error('ese correo es el del dueño del equipo');
+        return { link: null, sent: member.playerId !== 'pd' };
+      } }), async (calls) => {
+      await tapInvite('[data-invite-pick="pm"]');
+      await tapInvite('[data-invite-pick="pn"]');
+      if (!card('pm').classList.contains('picked') || card('pm').querySelector('[data-invite-pick]').getAttribute('aria-pressed') !== 'true') throw new Error('not marked as picked');
+      if (!/Invitar \(2\)/.test(document.querySelector('.invite-selection')?.textContent || '')) throw new Error('no selection bar');
+      await tapInvite('[data-invite-pick="pn"]');
+      await tapInvite('[data-invite-pick="pn"]');
+      await tapInvite('[data-invite-send-selected]');
+      if (!sheet() || !/Invitar a 2 jugadores/.test(sheet().textContent) || sheet().querySelectorAll('.face-chip').length !== 2) throw new Error('send sheet');
+      if (!/Hola, Manu: ya tienes tu cuenta de Zona6/.test(sheet().querySelector('.invite-preview').textContent) || !/enlace personal/.test(sheet().textContent)) throw new Error('preview: ' + sheet().textContent);
+      if (document.querySelector('.invite-selection')) throw new Error('the selection bar shows over the sheet');
+      if (calls.length) throw new Error('sent before confirming');
+      // Dani is waiting: «Recordar» adds him to the same batch flow; here he goes alone after the pair.
+      await tapInvite('[data-invite-go]');
+      await settleInvites();
+      const sent = calls.map((c) => `${c.member.playerId}:${c.email}:${c.member.delivery}:${c.member.role}`).join(' ');
+      if (sent !== 'pm:manu@x.es:email:player pn:nacho@x.es:email:player') throw new Error(sent);
+      if (calls[0].member.message !== fillInviteMessage(DEFAULT_INVITE_MESSAGE, 'Manu', 'Triana')) throw new Error('message: ' + calls[0].member.message);
+      const status = $('account-status').textContent;
+      if (!/1 correo enviado/.test(status) || !/no se pudo con Nacho \(ese correo es el del dueño del equipo\)/.test(status)) throw new Error(status);
+      if (!/ese correo es el del dueño/.test(card('pn').querySelector('.invite-error')?.textContent || '')) throw new Error('the refusal is not on Nacho\'s card');
+      if (sheet() || document.querySelector('.invite-selection') || home.inviteSelected.size) throw new Error('the batch left the sheet or the picks');
+      calls.length = 0;
+      await tapInvite('[data-invite-send="pd"]');
+      if (!/el enlace anterior deja de servir/.test(sheet().textContent)) throw new Error('a re-send does not warn');
+      await tapInvite('[data-invite-go]');
+      if (calls.map((c) => c.member.playerId).join() !== 'pd' || !/Dani ya tenía cuenta: no hace falta invitación/.test($('account-status').textContent)) throw new Error($('account-status').textContent);
+    }));
+    await TA('invite cards: one tap sends once, «Invitar a los n con correo» skips players without e-mail', async () => withInviteCard((calls) => {
+      let release;
+      return { inviteMember: async (t, member, email) => { calls.push({ member, email }); await new Promise((resolve) => { release = resolve; calls.release = () => release(); }); return { link: null, sent: true }; } };
+    }, async (calls) => {
+      await tapInvite('[data-invite-send-ready]');
+      if (sheet().querySelectorAll('.face-chip').length !== 2 || /Lolo/.test(sheet().textContent)) throw new Error('Lolo has no e-mail and is in the batch');
+      $('home').querySelector('[data-invite-go]').click();
+      await settleInvites();
+      if (!$('home').querySelector('[data-invite-send-ready]').disabled) throw new Error('buttons stay live while sending');
+      $('home').querySelector('[data-invite-send-ready]').click();
+      await settleInvites();
+      if (!/Invitando 1 de 2/.test($('account-status').textContent)) throw new Error('progress: ' + $('account-status').textContent);
+      calls.release(); await settleInvites();
+      if (!/Invitando 2 de 2/.test($('account-status').textContent)) throw new Error('progress: ' + $('account-status').textContent);
+      calls.release(); await settleInvites();
+      if (calls.length !== 2 || sheet()) throw new Error(`${calls.length} requests`);
+    }));
+    await TA('player sheet: add an e-mail and a phone, refuse bad ones, save and invite', async () => withInviteCard(() => ({}), async (calls) => {
+      await tapInvite('.invite-card [data-invite-open="pl"][data-invite-focus]');
+      if (!sheet() || document.activeElement !== $('invite-contact-email') || !/Lolo/.test(sheet().querySelector('h2').textContent)) throw new Error('the sheet does not open on the e-mail field');
+      typeInto('invite-contact-email', 'lolo@');
+      await tapInvite('[data-invite-contact-save="pl"]');
+      if (calls.length || !/correo válido/.test($('account-status').textContent)) throw new Error('a bad e-mail was saved');
+      typeInto('invite-contact-email', ' Lolo@X.es ');
+      typeInto('invite-contact-phone', '12');
+      await tapInvite('[data-invite-contact-save="pl"]');
+      if (calls.length || !/teléfono/.test($('account-status').textContent)) throw new Error('a bad phone was saved');
+      // A re-render (an armed button disarmed) keeps what was typed.
+      renderHome();
+      if ($('invite-contact-phone').value !== '12') throw new Error('typing lost on re-render');
+      typeInto('invite-contact-phone', '611 22 33 44');
+      await tapInvite('[data-invite-contact-invite="pl"]');
+      if (JSON.stringify(calls[0].contact) !== '{"playerId":"pl","email":"lolo@x.es","phone":"+34611223344"}') throw new Error(JSON.stringify(calls));
+      if (!sheet() || !/Invitar a Lolo/.test(sheet().textContent)) throw new Error('«Guardar e invitar» does not lead to the send sheet');
+      if (!/Por invitar/.test(card('pl').closest('.invite-group').textContent) || !card('pl').querySelector('[data-invite-pick]')) throw new Error('Lolo is not ready after saving');
+      // Escape closes the sheet, not the page.
+      pressEscape();
+      await settleInvites();
+      if (sheet() || home.view !== 'team-edit') throw new Error('Escape left the page');
+    }));
+    await TA('player sheet: a new address cancels the pending invite and invites it; «Anular» and «Quitar acceso» take two taps', async () => withInviteCard(() => ({}), async (calls) => {
+      await tapInvite('[data-invite-open="pd"]');
+      if (!/caducó sin usarlo/.test(sheet().textContent) || $('invite-contact-email').value !== 'dani@x.es') throw new Error('expired sheet: ' + sheet().textContent);
+      typeInto('invite-contact-email', 'dani.bueno@x.es');
+      await tapInvite('[data-invite-contact-save="pd"]');
+      const order = calls.map((c) => c.contact ? `save:${c.contact.email}` : c.removed ? `remove:${c.removed}` : `invite:${c.email}`).join(' ');
+      if (order !== 'save:dani.bueno@x.es remove:ud invite:dani.bueno@x.es' || !/correo enviado a dani\.bueno@x\.es/.test($('account-status').textContent)) throw new Error(order + ' · ' + $('account-status').textContent);
+      calls.length = 0;
+      await settleInvites();
+      await tapInvite('[data-invite-open="pc"]');
+      await tapInvite('[data-account-remove="uc"]');
+      if (calls.length || !/¿Seguro/.test($('home').querySelector('[data-account-remove="uc"]').textContent)) throw new Error('the first tap did not arm');
+      await tapInvite('[data-account-remove="uc"]');
+      if (calls.map((c) => c.removed).join() !== 'uc' || sheet() || !/anulada/.test($('account-status').textContent)) throw new Error('cancel: ' + $('account-status').textContent);
+      if (!card('pc')?.querySelector('[data-invite-pick="pc"]')) throw new Error('Curro is not back in «Por invitar» with his e-mail');
+      await tapInvite('[data-invite-open="pj"]');
+      if (!/Ya entra en Zona6/.test(sheet().textContent) || $('invite-contact-email')) throw new Error('a signed-in player\'s e-mail is editable');
+      await tapInvite('[data-account-remove="uj"]'); await tapInvite('[data-account-remove="uj"]');
+      if (!/javi@x\.es ya no tiene acceso/.test($('account-status').textContent) || groupNames('in')) throw new Error('remove access: ' + $('account-status').textContent);
+    }));
+    await TA('invite cards: staff invites and links; a link waits for a tap when the first one has expired', async () => withInviteCard((calls) => ({
+      inviteMember: async (t, member, email) => { calls.push({ member, email }); return member.delivery === INVITE_BY_LINK ? { link: 'https://example.test/l', sent: false } : { link: null, sent: true }; },
+    }), async (calls) => {
+      await tapInvite(`[data-invite-staff="${COACH_INVITE}"]`);
+      if (document.activeElement !== $('invite-staff-email')) throw new Error('the staff sheet does not focus the e-mail');
+      typeInto('invite-staff-email', 'nuevo');
+      await tapInvite('[data-invite-staff-go]');
+      if (calls.length || !/correo válido/.test($('account-status').textContent)) throw new Error('a bad e-mail went out');
+      typeInto('invite-staff-email', 'Nuevo@X.es');
+      await tapInvite('[data-invite-staff-go]');
+      if (JSON.stringify(calls[0].member) !== '{"role":"coach","delivery":"email"}' || calls[0].email !== 'nuevo@x.es' || !/Correo de invitación enviado/.test($('account-status').textContent)) throw new Error(JSON.stringify(calls));
+      const own = (key) => Object.getOwnPropertyDescriptor(navigator, key), saved = { userActivation: own('userActivation'), share: own('share') };
+      const shared = [];
+      Object.defineProperty(navigator, 'userActivation', { value: { isActive: false }, configurable: true });
+      Object.defineProperty(navigator, 'share', { value: async (data) => { shared.push(data.text); }, configurable: true });
+      try {
+        await tapInvite('[data-account-link="gv"]');
+        if (shared.length || !$('home').querySelector('[data-invite-share="gv"]')) throw new Error('shared without a live tap, or no button to share');
+        await tapInvite('[data-invite-share="gv"]');
+        if (shared.join() !== 'Entra en Zona6 con Triana: https://example.test/l' || $('home').querySelector('[data-invite-share="gv"]')) throw new Error(shared.join());
+      } finally { ['userActivation', 'share'].forEach((key) => { if (saved[key]) Object.defineProperty(navigator, key, saved[key]); else delete navigator[key]; }); }
+    }));
+    await TA('invite cards: offline, a load error and another team start clean', async () => withInviteCard(() => ({ listAccounts: async () => { throw new TypeError('Failed to fetch'); } }), async () => {
+      if (!/Sin conexión: las cuentas se gestionan con internet/.test(document.querySelector('.team-accounts').textContent) || document.querySelector('.invite-card')) throw new Error('offline load');
+      backend.listAccounts = async () => { throw new Error('solo los entrenadores ven las cuentas'); };
+      await tapInvite('[data-invite-retry]');
+      if (!/No se pudieron cargar las cuentas: solo los entrenadores/.test(document.querySelector('.team-accounts').textContent)) throw new Error('error: ' + document.querySelector('.team-accounts').textContent);
+      backend.listAccounts = async () => inviteAccountsAt(Date.now());
+      await tapInvite('[data-invite-retry]');
+      await tapInvite('[data-invite-pick="pm"]');
+      Object.defineProperty(navigator, 'onLine', { value: false, configurable: true });
+      try {
         renderHome();
-        if ($('invite-email').value !== 'nuevo@x.es') throw new Error('a re-render wiped the typed e-mail');
-        $('home').querySelector('[data-invite]').click();
-        await settle();
-        if (!$('home').querySelector('[data-invite]').disabled) throw new Error('«Invitar» stays live while the invite runs');
-        $('home').querySelector('[data-invite]').click();
-        await settle();
-        release();
-        await settle();
-        const status = document.querySelector('.team-accounts #account-status')?.textContent || '';
-        if (calls !== 1) throw new Error(`${calls} requests for one invite`);
-        if (!/No se pudo invitar a nuevo@x.es: no se pudo enviar el correo/.test(status)) throw new Error(`status in the card: «${status}»`);
-        if ($('home').querySelector('[data-invite]').disabled) throw new Error('«Invitar» stays disabled after the error');
-        // The draft belongs to its team: another team starts clean.
-        team.id = 'acc-other';
-        renderHome();
-        if ($('invite-email').value || home.accountStatus) throw new Error('team A draft shown in team B');
-      } finally { backend = real; Object.assign(team, { id: teamId, role }); Object.assign(home, keep); renderHome(); }
-    });
+        if (!/Sin conexión/.test(document.querySelector('.team-accounts').textContent) || document.querySelector('.invite-card, .invite-selection')) throw new Error('offline render shows the cards');
+      } finally { Object.defineProperty(navigator, 'onLine', { value: true, configurable: true }); }
+      team.id = 'inv-other';
+      home.accounts = null;
+      renderHome();
+      if (home.inviteSelected.size || home.accountStatus) throw new Error('team A picks shown in team B');
+    }));
     await TA('nav: Escape on attendance, a main tab, goes back to Mis equipos', async () => withNavHome(async () => {
       showHomeView('attendance');
       pressEscape();
