@@ -2852,6 +2852,26 @@
         if (!copies.offline || copies.matches.map((x) => x.id).join() !== 'sd1' || !copies.matches[0].state) throw new Error(copies.matches.map((x) => x.id).join());
       } finally { backend = real; team.id = savedId; ['sd1', 'sd2', 'sd3'].forEach((id) => removeKey(MATCH_KEY_PREFIX + id)); }
     });
+    await TA('season: reloads when stale on a team page, never while fresh, in a match or hidden', async () => {
+      const real = backend, savedId = team.id, savedView = home.view, homeHidden = $('home').hidden;
+      team.id = 'season-refresh-team';
+      let calls = 0;
+      try {
+        backend = { listMatchStates: async () => { calls += 1; return [seasonRow('r1', { date: '2026-09-01' })]; } };
+        await loadSeason(); calls = 0;
+        home.view = 'team'; $('home').hidden = false;
+        if (refreshSeasonIfStale(Date.now()) || calls) throw new Error('reloaded a fresh season');
+        const later = Date.now() + SEASON_REFRESH_MS + 1;
+        $('home').hidden = true;
+        if (refreshSeasonIfStale(later)) throw new Error('reloaded under a match');
+        $('home').hidden = false; home.view = 'attendance';
+        if (refreshSeasonIfStale(later)) throw new Error('reloaded on a page without the season');
+        home.view = 'team';
+        if (!refreshSeasonIfStale(later)) throw new Error('stale season kept');
+        await syncRun; await new Promise((r) => setTimeout(r, 0));
+        if (calls !== 1 || !home.season || home.season[0].id !== 'r1') throw new Error('not reloaded: ' + calls);
+      } finally { backend = real; team.id = savedId; home.view = savedView; $('home').hidden = homeHidden; }
+    });
     await TA('season: rows without a state are skipped, not fatal', async () => {
       const real = backend, savedId = team.id;
       team.id = 'season-null-team';

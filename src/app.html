@@ -8913,6 +8913,7 @@ table { border-collapse: collapse; width: 100%; }
     const all = withLocalChanges(list, (m) => ({ state: m.state })).filter((m) => m.state && !m.state.sample);
     const matches = all.filter((m) => SEASON_STATUSES.includes(m.status));
     home.season = matches;
+    seasonLoadedAt = Date.now();
     home.stateMatches = all;
     home.teamMatches = all.map(({ state, ...summary }) => summary);
     persistLinks();
@@ -9652,7 +9653,19 @@ table { border-collapse: collapse; width: 100%; }
       home.seasonOffline = false;
       console.warn(`Season not available: ${cloudErrorText(err)}`);
     }
-    if (['team', 'stats', 'player', 'player-match', 'rating-tune'].includes(home.view)) renderHome();
+    if (SEASON_VIEWS.includes(home.view)) renderHome();
+  }
+  // Another device (the coach's tablet at the final whistle) may have changed the season since it loaded here: coming
+  // back to the app, and every SEASON_REFRESH_MS while a team page stays open, it loads again.
+  const SEASON_VIEWS = ['team', 'stats', 'player', 'player-match', 'rating-tune'];
+  const SEASON_REFRESH_MS = 60 * 1000;
+  let seasonLoadedAt = 0;
+  function refreshSeasonIfStale(now = Date.now()) {
+    if (!backend || !team || home.season === null || $('home').hidden || document.visibilityState !== 'visible') return false;
+    if (!SEASON_VIEWS.includes(home.view) || home.view === 'rating-tune' || now - seasonLoadedAt < SEASON_REFRESH_MS) return false;
+    home.season = null;
+    ensureSeason();
+    return true;
   }
   // The attendance sessions feed the rates of the team page and the player card; they load once per team.
   async function ensureSessions() {
@@ -11082,7 +11095,8 @@ table { border-collapse: collapse; width: 100%; }
   // Safari ignores the viewport's zoom lock; its pinch gestures are stopped here.
   ['gesturestart', 'gesturechange'].forEach((type) => document.addEventListener(type, (ev) => ev.preventDefault()));
   window.addEventListener('pagehide', save);
-  document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'hidden') save(); });
+  document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'hidden') save(); else refreshSeasonIfStale(); });
+  setInterval(refreshSeasonIfStale, SEASON_REFRESH_MS);
   initTheme();
   $('court-floor').innerHTML = courtFloorSvg('court-clip');
   $('goal-net').innerHTML = GOAL_NET_SVG;
