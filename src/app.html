@@ -388,9 +388,11 @@ button.rex-chip { border: 0; cursor: pointer; position: relative; }
 .panel-section { display: flex; flex-direction: column; gap: 6px; }
 .panel-section .type-row { display: flex; flex-direction: column; gap: 3px; }
 .panel-section .type-row > span { font-size: 10px; font-weight: 800; letter-spacing: .08em; text-transform: uppercase; }
-.panel-acts .acts.types { grid-template-columns: none; grid-auto-flow: column; grid-auto-columns: 1fr; gap: 6px; }
-.panel-acts .acts.types .act { min-height: 44px; font-size: 13px; padding: 0 4px; }
-.panel-acts .acts:not(.types) .act { font-size: 16px; }
+/* A top row with more actions than its two columns (defence) packs them in one compact row, as the type rows. */
+.panel-acts .acts.types, .panel-acts .acts.compact { grid-template-columns: none; grid-auto-flow: column; grid-auto-columns: 1fr; gap: 6px; }
+.panel-acts .acts.types .act, .panel-acts .acts.compact .act { min-height: 44px; font-size: 13px; padding: 0 4px; }
+.panel-acts .acts.compact { grid-auto-columns: auto; }
+.panel-acts .acts:not(.types):not(.compact) .act { font-size: 16px; }
 .tok.target .body { stroke: var(--gold); stroke-width: 10; }
 .bench-player.target .disc, .gk-card.target { box-shadow: 0 0 0 4px var(--gold); }
 .goal-frame-hot { fill: none; stroke: var(--gold); stroke-width: 22; stroke-linejoin: round; pointer-events: none; filter: drop-shadow(0 0 6px var(--gold)); }
@@ -1503,6 +1505,8 @@ span.att-foot { visibility: hidden; }
     // knobs (tuning view): keeperWeight scales the keeper's save and goal values; oneOnOne is 7 m provoked (+), 1x1
     // beaten and 7 m committed (−); closeFactor / lateFactor multiply what happens late and close (context: the
     // end of the first half from firstHalfCloseFrom and the second from closeFrom, both within closeMargin).
+    // defence: goodDefence is a «Buena defensa» (good exit, hit, physical duel); offensiveFoulExtra is what a
+    // provoked offensive foul adds to a recovery.
     // Bands: lower bound in points, label and chip class (the --rating-<band> tokens), best first.
     rating: {
       pointsPerGoal: 3, decimals: 1, minPossessions: 5, shrinkPossessions: 15, mvpFullShare: 2 / 3,
@@ -1512,6 +1516,7 @@ span.att-foot { visibility: hidden; }
       shooterCreationShare: 0.5, exclusionSeconds: 120, lastSecondsWindow: 30, sameMomentSeconds: 2, playerLossPerMatch: 0.5,
       windows: { provoked7: 90, fastBreakStart: 10, assist: 15, counterAfterTurnover: 15 },
       context: { firstHalfCloseFrom: 1500, closeFrom: 3000, closeMargin: 2, lateFrom: 3300, lateMargin: 1, blowoutMargin: 6, blowoutFactor: 0.75 },
+      defence: { goodDefence: 0.30, offensiveFoulExtra: 0.05 },
       weights: {
         keeperWeight: 0.65, assist: 0.15, starter: 0.14, oneOnOne: 0.20, ruleFaultDiscount: 0.10, blocRetained: 0.12,
         minorFault: -0.07, teamFaultField: -0.05, teamFaultKeeper: -0.02, result: 0.25, yellow: -0.10,
@@ -1588,6 +1593,7 @@ span.att-foot { visibility: hidden; }
     PROV7: { label: 'Provoca 7 m', group: 'act-good' },
     RECUP: { label: 'Recuperación', group: 'act-def' },
     BLOC: { label: 'Blocaje', group: 'act-def' },
+    GOODDEF: { label: 'Buena defensa', group: 'act-def' },
     FALTA: { label: 'Falta regl.', group: 'act-rule' },
     PEN7C: { label: '7 m cometido', group: 'act-bad' },
     GOLPE: { label: 'Golpe', group: 'act-rule' },
@@ -1597,6 +1603,9 @@ span.att-foot { visibility: hidden; }
     LATE: { label: 'Llega tarde', group: 'act-bad' },
     HELP: { label: 'Ayuda innec.', group: 'act-bad' }
   };
+  // A recovery is a steal or an offensive foul we provoke; one logged before the types existed is a steal.
+  const RECOVERY_TYPES = { STEAL: 'Robo', OFFENSIVE_FOUL: 'Falta en ataque' };
+  const recoveryType = (e) => e.subtype || RECOVERY_TYPES.STEAL;
   const DEFENSIVE_FAULTS = CONFIG.defFaultGroups.flatMap((g) => g.actions);
   const TACTICAL_FAULTS = CONFIG.defFaultGroups.find((g) => g.label === 'Táctico').actions;
   const BLOCKED_TURNOVER = 'Bloqueado';
@@ -2038,7 +2047,7 @@ span.att-foot { visibility: hidden; }
     const who = p ? ` #${p.num} ${p.name}` : '';
     switch (e.kind) {
       case 'SHOT': return `${RESULTS[e.result].label} ${ZONES[e.zone]} ·${who}`;
-      case 'ACTION': return `${ACTIONS[e.action].label} ·${who || ' equipo'}`;
+      case 'ACTION': return `${ACTIONS[e.action].label}${e.subtype ? ` (${e.subtype.toLowerCase()})` : ''} ·${who || ' equipo'}`;
       case 'TURNOVER': return `Pérdida ${e.subtype.toLowerCase()} ·${who}`;
       case 'SANCTION': return `${SANCTIONS[e.card].label} ·${who}`;
       case 'RIVAL_SANCTION': return `${rivalTeamLabel(e.rivalId, s)}: ${SANCTIONS[e.card].label}`;
@@ -2513,11 +2522,17 @@ span.att-foot { visibility: hidden; }
         if (x.action === 'PEN7C') { own(x.playerId, 'defInd', -weights.oneOnOne, x, '7 m cometido'); value += weights.oneOnOne; }
         else if (x.action === 'BEATEN') { own(x.playerId, 'defInd', -weights.oneOnOne, x, 'Superado 1x1'); value += weights.oneOnOne; }
         else if (x.action === 'BLOC') { own(x.playerId, 'defInd', weights.blocRetained, x, 'Blocaje'); value -= weights.blocRetained; }
+        else if (x.action === 'GOODDEF') value -= r.defence.goodDefence;
         else if (MINOR_DEFENSIVE_FAULTS.includes(x.action)) { own(x.playerId, 'defInd', weights.minorFault, x, ACTIONS[x.action].label); value -= weights.minorFault; }
       });
       defencePool.push({ set, value, abs: e.abs });
     });
-    events.filter((e) => isAction(e, 'RECUP')).forEach((e) => own(e.playerId, 'defInd', stateBaselines(s, courtSetBefore(s, e.abs), e.abs).def, e, 'Recuperación'));
+    events.filter((e) => isAction(e, 'RECUP')).forEach((e) => {
+      const foul = recoveryType(e) === RECOVERY_TYPES.OFFENSIVE_FOUL, base = stateBaselines(s, courtSetBefore(s, e.abs), e.abs).def;
+      own(e.playerId, 'defInd', base + (foul ? r.defence.offensiveFoulExtra : 0), e, foul ? 'Falta en ataque provocada' : 'Recuperación');
+    });
+    // A good defence is owned whatever ends the possession; when a rival shot ends it, it comes out of the unit's share.
+    events.filter((e) => isAction(e, 'GOODDEF')).forEach((e) => own(e.playerId, 'defInd', r.defence.goodDefence, e, ACTIONS.GOODDEF.label));
     events.filter((e) => e.kind === 'SCORE_FIX' && e.team === 'them' && e.delta > 0)
       .forEach((e) => defencePool.push({ set: courtSetBefore(s, e.abs), value: r.possession - r.pOn['6M'], abs: e.abs }));
     events.filter((e) => e.kind === 'ACTION' && TEAM_FAULTS.includes(e.action)).forEach((e) => {
@@ -3224,10 +3239,11 @@ span.att-foot { visibility: hidden; }
           g.types.map((t) => `<button class="act big ${g.cls}" type="button" data-turnover="${esc(t)}">${esc(t)}</button>`).join(''))).join('')}`;
     }
     const actBtn = (k) => `<button class="act c-${ACTIONS[k].group}" type="button" data-action="${k}">${ACTIONS[k].label}</button>`;
+    const typedBtns = (k) => PANEL_SPLIT[k].map((t) => `<button class="act c-${ACTIONS[k].group}" type="button" data-action="${k}" data-subtype="${esc(t)}">${esc(t)}</button>`).join('');
     // The popup only offers what can happen in the current phase.
     if (state.phase === 'DEF') {
       return `${head}
-        ${group('Bien', 't-act-def', actBtn('RECUP') + actBtn('BLOC'))}
+        ${group('Bien', 't-act-def', typedBtns('RECUP') + actBtn('BLOC') + actBtn('GOODDEF'))}
         ${CONFIG.defFaultGroups.filter((g) => !g.team).map((g) => group(g.label, `t-${g.cls.slice(2)}`,
           g.actions.filter((k) => !RETIRED_FAULTS.includes(k)).map(actBtn).join(''))).join('')}
         ${sanctionGroup()}`;
@@ -3494,7 +3510,11 @@ span.att-foot { visibility: hidden; }
 
   // ===================== Actions panel: action first, then the player =====================
   // TURNOVER and DEFFAULT are a section of their types: one tap on a type arms it.
-  const PANEL_ACTIONS = { ATK: ['ASIST', 'PROV7', 'TURNOVER'], DEF: ['RECUP', 'BLOC', 'DEFFAULT'] };
+  const PANEL_ACTIONS = { ATK: ['ASIST', 'PROV7', 'TURNOVER'], DEF: ['RECUP', 'BLOC', 'GOODDEF', 'DEFFAULT'] };
+  // Actions logged with a type: one button per type, so they still take a single tap.
+  const PANEL_SPLIT = { RECUP: Object.values(RECOVERY_TYPES) };
+  const typedFields = (key, sub) => (PANEL_SPLIT[key] && sub ? { subtype: sub } : {});
+  const PANEL_TOP_COLUMNS = 2;
   // One row per group of types; team groups log at once, without a player.
   const PANEL_TYPED = {
     TURNOVER: { label: 'Pérdida', groups: () => CONFIG.turnoverGroups.map((g) => ({ label: g.label, cls: g.cls, subs: g.types.map((t) => [t, t, g.cls]) })) },
@@ -3525,7 +3545,11 @@ span.att-foot { visibility: hidden; }
     const row = (key) => (g) => `<div class="type-row"><span class="t-${g.cls.slice(2)}">${esc(g.label)}</span><div class="acts types">${g.subs.map(typeButton(key, g)).join('')}</div></div>`;
     const section = (key) => `<div class="panel-section"><h3>${PANEL_TYPED[key].label}</h3>${PANEL_TYPED[key].groups().map(row(key)).join('')}</div>`;
     const note = a ? `${a.sub ? esc(subLabel(a)) : panelLabel(a.key)} · toca al jugador` : 'Toca la acción y luego al jugador';
-    $('acts').innerHTML = `<div class="acts">${keys.filter((k) => !PANEL_TYPED[k]).map((k) => `<button class="act c-${ACTIONS[k].group}" type="button" data-panel-act="${k}" aria-pressed="${armed(k)}">${panelLabel(k)}</button>`).join('')}</div>
+    const topButtons = (k) => (PANEL_SPLIT[k]
+      ? PANEL_SPLIT[k].map((sub) => `<button class="act c-${ACTIONS[k].group}" type="button" data-panel-key="${k}" data-panel-sub="${esc(sub)}" aria-pressed="${armed(k, sub)}">${esc(sub)}</button>`).join('')
+      : `<button class="act c-${ACTIONS[k].group}" type="button" data-panel-act="${k}" aria-pressed="${armed(k)}">${panelLabel(k)}</button>`);
+    const top = keys.filter((k) => !PANEL_TYPED[k]), topCount = sumOf(top, (k) => (PANEL_SPLIT[k] ? PANEL_SPLIT[k].length : 1));
+    $('acts').innerHTML = `<div class="acts${topCount > PANEL_TOP_COLUMNS ? ' compact' : ''}">${top.map(topButtons).join('')}</div>
       <p class="arm-note">${note}</p>${keys.filter((k) => PANEL_TYPED[k]).map(section).join('')}`;
   }
   function logTeamFault(action) {
@@ -3563,7 +3587,7 @@ span.att-foot { visibility: hidden; }
     disarmAction();
     const result = key === 'TURNOVER'
       ? addEvent('TURNOVER', { playerId, subtype: sub }, { bringOn: playerId })
-      : addEvent('ACTION', { playerId, action: key === 'DEFFAULT' ? sub : key }, { bringOn: playerId });
+      : addEvent('ACTION', { playerId, action: key === 'DEFFAULT' ? sub : key, ...typedFields(key, sub) }, { bringOn: playerId });
     hint(withBenchNote(`${describe(state.events.at(-1))} · ↶ deshacer`, result));
     return true;
   }
@@ -3584,7 +3608,7 @@ span.att-foot { visibility: hidden; }
     if (b.hasAttribute('data-back')) { v.sub = null; openPop(playerPopHtml(playerById(v.playerId), v), v.anchor); return; }
     if (b.dataset.sub) { v.sub = b.dataset.sub; openPop(playerPopHtml(playerById(v.playerId), v), v.anchor); return; }
     if (b.hasAttribute('data-arm')) { closePop(); armShooter(v.playerId); return; }
-    if (b.dataset.action) { closePop(); addEvent('ACTION', { playerId: v.playerId, action: b.dataset.action }); return; }
+    if (b.dataset.action) { closePop(); addEvent('ACTION', { playerId: v.playerId, action: b.dataset.action, ...typedFields(b.dataset.action, b.dataset.subtype) }); return; }
     if (b.dataset.turnover) { closePop(); addEvent('TURNOVER', { playerId: v.playerId, subtype: b.dataset.turnover }); return; }
     if (b.dataset.sanction && v.type === 'rivalSanction') { closePop(); addRivalSanction(null, b.dataset.sanction); return; }
     if (b.dataset.sanction) { closePop(); addSanction(v.playerId, b.dataset.sanction); return; }
@@ -5232,10 +5256,10 @@ span.att-foot { visibility: hidden; }
       const exact = (v) => String(roundHalfUp(v, 2)).replace('.', ',');
       const r = CONFIG.rating, b = r.possession, pts = (v) => exact(Math.abs(v) * POINTS_PER_GOAL), sign = (v) => `${v < 0 ? '−' : '+'}${pts(v)}`;
       const shot = (z) => { const p = preShotGoal(z), creation = z === '7M' ? 0 : r.shooterCreationShare * (p - b); return `${ZONES[z]}: gol ${sign(1 - p + creation)}, fallo ${sign(-p + creation)}`; };
-      const kw = weights.keeperWeight;
+      const kw = weights.keeperWeight, d = r.defence;
       return `<div class="model"><b>Cómo se puntúa.</b> Cada posesión vale lo que acabó dando (gol o no) menos lo que da una posesión media (${exact(b)} goles). Ese valor se reparte una sola vez: primero a quien la decide y lo que sobra entre los que estaban en pista. 1 gol aportado = ${POINTS_PER_GOAL} puntos.
         <b>Tiro:</b> ${['6M', '9M', '7M'].map(shot).join(' · ')} (con la mitad de la ocasión creada). <b>Creación:</b> 7 m provocado ${sign(weights.oneOnOne)}, asistencia ${sign(weights.assist)}, iniciar un contraataque ${sign(weights.starter)}.
-        <b>Balón:</b> pérdida ${sign(-b)} (de reglamento ${sign(-(b - weights.ruleFaultDiscount))}; más si acaba en contraataque rival). <b>Def. individual:</b> recuperación ${sign(b)}, blocaje ${sign(weights.blocRetained)}, 7 m cometido y 1x1 superado ${sign(-weights.oneOnOne)}.
+        <b>Balón:</b> pérdida ${sign(-b)} (de reglamento ${sign(-(b - weights.ruleFaultDiscount))}; más si acaba en contraataque rival). <b>Def. individual:</b> robo ${sign(b)}, falta en ataque provocada ${sign(b + d.offensiveFoulExtra)}, buena defensa (salida, golpe, dureza) ${sign(d.goodDefence)}, blocaje ${sign(weights.blocRetained)}, 7 m cometido y 1x1 superado ${sign(-weights.oneOnOne)}.
         <b>Def. en pista:</b> lo que el rival consigue tirar a puerta mientras defiendes (lo que pasa después es cosa del portero), repartido entre los que estáis en pista. <b>Atq. en pista:</b> igual con nuestras posesiones.
         <b>Portería:</b> goles evitados frente a lo esperable, al ${Math.round(kw * PERCENT)}% (parar en 6 m ${sign(r.pOn['6M'] * kw)}, encajar ${sign(-(1 - r.pOn['6M']) * kw)}; parar un 7 m ${sign(r.pOn['7M'] * kw)}).
         <b>Disciplina:</b> el 2' cuesta lo que se perdió con uno menos; roja: eso, la conducta y el resto del partido sin el jugador. <b>Momento decisivo:</b> desde el ${r.context.firstHalfCloseFrom / SECONDS_PER_MINUTE}' de la primera parte y desde el ${r.context.closeFrom / SECONDS_PER_MINUTE}' con ±${r.context.closeMargin} goles cada acción vale ×${exact(weights.closeFactor)}; desde el ${r.context.lateFrom / SECONDS_PER_MINUTE}' con ±${r.context.lateMargin} ×${exact(weights.lateFactor)}; para bien y para mal.
