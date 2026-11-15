@@ -2876,6 +2876,8 @@ span.att-foot { visibility: hidden; }
     state.finished = true;
     alarm(SOUND_ALARM);
     commit();
+    // The final figures go up now, not after the usual pause, so everyone with access sees them at once.
+    syncMatches();
     openFinal();
   }
   const TIMEOUT_KEYS = { us: 'timeoutsUsed', them: 'timeoutsUsedThem' };

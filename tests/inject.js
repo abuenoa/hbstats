@@ -2889,6 +2889,15 @@
         storeLocalMatch(id, state, true); await syncMatches();
       }
     });
+    await TA('finishing the match uploads it at once, without the usual pause', async () => {
+      const snap = snapshot(), real = backend.saveMatch, sent = [];
+      backend.saveMatch = async (...args) => { sent.push(args[1]); return real(...args); };
+      try {
+        await syncRun; clearTimeout(syncTimer); sent.length = 0;
+        finishMatch(); await syncRun;
+        if (!sent.includes(currentMatchId) || localMatch(currentMatchId).dirty) throw new Error('not uploaded on finishing: ' + sent);
+      } finally { backend.saveMatch = real; hideFinal(); restore(snap); }
+    });
     await TA('failed upload keeps the match pending until the connection is back', async () => { const real = backend.saveMatch; backend.saveMatch = async () => { throw new Error('Failed to fetch'); }; addEvent('TURNOVER', { playerId: state.players.find((p) => p.pos !== 'POR').id, subtype: 'Pasos' }); await syncMatches(); const pending = localMatch(currentMatchId).dirty; backend.saveMatch = real; if (!pending) throw new Error('marked clean'); if (!withLocalChanges([]).some((x) => x.id === currentMatchId && x.pending)) throw new Error('not listed as pending'); await syncMatches(); if (localMatch(currentMatchId).dirty) throw new Error('not uploaded later'); });
     await TA('offline: the match list comes from the device copy', async () => { leaveMatch(); const real = backend.listMatches; backend.listMatches = async () => { throw new Error('Failed to fetch'); }; await showMatches(); backend.listMatches = real; if (!home.offline || !home.matches.length || !$('home').textContent.includes('Sin conexión')) throw new Error('offline list'); });
     await TA('restarting a match asks twice and keeps the setup with an empty log', async () => { await showMatches(); const row = home.matches.find((x) => x.status !== 'setup'); const id = row.id; const before = await loadLatestMatch(id); if (!before.state.events.length) throw new Error('nothing to restart'); document.querySelector(`[data-restart-match="${id}"]`).click(); if ((await loadLatestMatch(id)).state.events.length !== before.state.events.length) throw new Error('restarted on first tap'); document.querySelector(`[data-restart-match="${id}"]`).click(); for (let i = 0; i < 5; i++) await tick0(); const after = (await loadLatestMatch(id)).state; if (after.events.length || after.history.length || after.finished || after.clock.elapsedMs || after.clock.period !== 1 || after.timeoutsUsed) throw new Error(JSON.stringify(after.clock)); if (after.them !== before.state.them || after.players.length !== before.state.players.length || !after.setupDone) throw new Error('setup lost'); const listed = home.matches.find((x) => x.id === id); if (listed.scoreUs || listed.scoreThem || !$('home-status').textContent.includes('reiniciado')) throw new Error(JSON.stringify(listed)); if (document.querySelector('[data-restart-match]') && home.matches.some((x) => x.status === 'setup' && document.querySelector(`[data-restart-match="${x.id}"]`))) throw new Error('offered on a match not started'); });
