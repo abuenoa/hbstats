@@ -42,6 +42,20 @@ where t.name = 'Triana' and u.email = 'second.coach@example.com';
 A coach can create more teams with *+ Equipo* and switches between them from the home screen. Only a team's
 owner (whoever created it) can delete it, which also deletes its roster and matches.
 
+## Invitation e-mail
+
+The staff invite players from «Editar equipo» through the `invite-player` edge function. A player's invite carries
+the team's message, already filled in with his name and the team's, as user metadata. In **Authentication → Emails →
+Invite user**, print it above the button:
+
+```html
+{{ if .Data.message }}<p>{{ .Data.message }}</p>{{ end }}
+```
+
+(`{{ .Data.player_name }}` and `{{ .Data.team_name }}` are there too.) The app shows an invite unused for longer than
+`INVITE_TTL_MS` (24 h, Supabase's default) as «Caducada»: if the project's e-mail link validity is changed, change
+that constant to match.
+
 ## Data
 
 | Table | What it holds |
