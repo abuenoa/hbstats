@@ -1276,6 +1276,14 @@ span.att-foot { visibility: hidden; }
 .loss-bar { display: flex; height: var(--space-3); border-radius: var(--radius-full); background: var(--soft); overflow: hidden; }
 .loss-bar i { display: block; height: 100%; }
 .loss-row b { text-align: right; font-variant-numeric: tabular-nums; }
+/* A match's counts by exact type (turnovers, defensive faults), the rating's lines and the key moments */
+.loss-row.type-row { grid-template-columns: minmax(6rem, 10rem) minmax(0, 1fr) 2.5ch; }
+.type-row small { color: var(--muted); }
+.rating-head { display: flex; align-items: center; gap: var(--space-2); margin: 0 0 var(--space-3); }
+.spell-bars.rating-bars li { grid-template-columns: minmax(6rem, 9rem) minmax(0, 1fr) 56px; }
+.key-moments li span { min-width: 0; overflow-wrap: anywhere; }
+.key-moments li > b { font-variant-numeric: tabular-nums; white-space: nowrap; }
+.stat-tiles.zone-tiles { grid-template-columns: repeat(auto-fit, minmax(96px, 1fr)); }
 .stats-details summary { min-height: var(--target); display: flex; align-items: center; gap: var(--space-2); font: var(--type-caption); font-weight: 700; cursor: pointer; }
 .stats-details summary::after { content: "▾"; }
 .stats-details[open] summary::after { content: "▴"; }
@@ -2318,7 +2326,9 @@ span.att-foot { visibility: hidden; }
   const MATCH_SECONDS = 2 * CONFIG.halfSeconds;
   const minutesText = (sec) => (sec == null ? '–' : String(Math.floor(sec / SECONDS_PER_MINUTE)));
   const plusMinusText = (v) => (v == null ? '–' : v > 0 ? `+${v}` : v < 0 ? `−${-v}` : '0');
-  const courtFigures = (row) => [['Minutos', minutesText(row.seconds), ''], ['+/−', plusMinusText(row.plusMinus), 'goles a favor menos en contra', plusMinusTone(row.plusMinus)]];
+  // `means` (teamMeans) adds the team's mean minutes under the player's.
+  const courtFigures = (row, means = null) => [['Minutos', minutesText(row.seconds), means && means.seconds != null ? teamMeanText(minutesText(means.seconds)) : ''],
+    ['+/−', plusMinusText(row.plusMinus), 'goles a favor menos en contra', plusMinusTone(row.plusMinus)]];
   // The minutes and the +/− of one player; null for what the match cannot tell.
   function courtFiguresOf(s, id) {
     const minutes = minutesOnCourt(s), balance = plusMinus(s);
@@ -2593,15 +2603,25 @@ span.att-foot { visibility: hidden; }
     const hot = pick((a, b) => a > b), cold = pick((a, b) => a < b);
     return { hot: hot && hot.points >= minPoints ? hot : null, cold: cold && cold.points <= -minPoints ? cold : null };
   }
-  // A player's average points per rated match in each block of the match (0'–10', 10'–20', …).
-  function seasonSpellBlocks(matches, ratingsOf, player) {
-    const size = CONFIG.spells.windowSeconds, count = Math.ceil(MATCH_SECONDS / size);
-    const played = matches.map((m) => ratingsOf(m).get(player.id)).filter((x) => x && x.value != null);
+  // The points of a player's own rated actions (the moments of matchRatings) in each block of `size` seconds of the
+  // match; anything after the last block (extra time) counts in it.
+  function momentBlocks(moments, size = CONFIG.scoreIntervalSeconds) {
+    const count = Math.ceil(MATCH_SECONDS / size);
     return Array.from({ length: count }, (_, i) => ({
       from: i * size, to: (i + 1) * size,
-      points: played.length ? sumOf(played, (x) => sumOf(x.moments.filter((mo) => Math.min(Math.floor(mo.abs / size), count - 1) === i), (mo) => mo.value)) * POINTS_PER_GOAL / played.length : 0
+      points: sumOf(moments.filter((mo) => Math.min(Math.floor(mo.abs / size), count - 1) === i), (mo) => mo.value) * POINTS_PER_GOAL
     }));
   }
+  // A player's average points per rated match in each block of the match (0'–10', 10'–20', …).
+  function seasonSpellBlocks(matches, ratingsOf, player) {
+    const size = CONFIG.spells.windowSeconds;
+    const played = matches.map((m) => ratingsOf(m).get(player.id)).filter((x) => x && x.value != null).map((x) => momentBlocks(x.moments, size));
+    return momentBlocks([], size).map((b, i) => ({ ...b, points: played.length ? sumOf(played, (blocks) => blocks[i].points) / played.length : 0 }));
+  }
+  // The moments that moved a player's rating most, in match order; the ones under RATING_LINE_MIN_POINTS are left out.
+  const KEY_MOMENTS_SHOWN = 8;
+  const keyMomentsOf = (moments, limit = KEY_MOMENTS_SHOWN) => moments.filter((x) => Math.abs(x.value * POINTS_PER_GOAL) >= RATING_LINE_MIN_POINTS)
+    .sort((a, b) => Math.abs(b.value) - Math.abs(a.value)).slice(0, limit).sort((a, b) => a.abs - b.abs);
   const spellLineHtml = (label, spell, tone) => `<p class="spell ${tone}"><span>${label}</span><b>${minuteRangeText(spell.from, spell.to)}</b><span>${signedText(spell.points)} · ${plural(spell.actions, 'acción', 'acciones')}</span></p>`;
   // «Racha»: the hot and cold stretches of a match, or why there are none.
   function spellsCardHtml(s, player) {
@@ -2614,10 +2634,21 @@ span.att-foot { visibility: hidden; }
   const RATING_NONE_BAND = 'rt-none';
   const signedText = (v) => (v < 0 ? `−${decimalText(-v)}` : `+${decimalText(v)}`);
   const ratingText = (value) => (value == null ? 'S/C' : signedText(value));
+  const pointsText = (v) => signedText(roundHalfUp(v, CONFIG.rating.decimals));
   const ratingBandOf = (value) => (value == null ? null : CONFIG.rating.bands.find(([from]) => value >= from));
   const ratingBand = (value) => (value == null ? RATING_NONE_BAND : ratingBandOf(value)[2]);
   const ratingBandLabel = (value) => (value == null ? 'Sin calificar' : ratingBandOf(value)[1]);
   const ratingChipHtml = (value) => `<span class="rating-chip ${ratingBand(value)}" title="${esc(ratingBandLabel(value))}">${ratingText(value)}</span>`;
+  // The colour token of a band's chip class (rt-good → --rating-good).
+  const ratingToken = (cls) => `--${cls.replace('rt-', 'rating-')}`;
+  // Every line of a rating with its points, rounded as shown, in the order of RATING_LINES.
+  const ratingLineRows = (rating) => RATING_LINES.map((l) => ({ ...l, points: roundHalfUp(rating.lines[l.key], CONFIG.rating.decimals) }));
+  const RATING_UNRATED_NOTE = `Sin calificar: menos de ${CONFIG.rating.minPossessions} posesiones en pista y ninguna acción propia.`;
+  const NO_KEY_MOMENTS = 'Sin acciones que movieran la valoración.';
+  const BLOCKS_TITLE = "Puntos de sus acciones cada 5'";
+  const TEAM_MEAN_NOTE = 'Equipo: media de los jugadores de campo que jugaron el partido.';
+  const FIGURES_TITLE = 'En el partido, frente a la media del equipo';
+  const momentClock = (mo) => `${Math.floor(mo.abs / SECONDS_PER_MINUTE)}'`;
 
   // ---- Match MVP and the end-of-match ratings ----
   const ratingValue = (ratings, player) => ratings.get(player.id)?.value ?? null;
@@ -4127,25 +4158,65 @@ span.att-foot { visibility: hidden; }
       ["Exclusiones 2'", `${exclusionEvents().length}–${rivalExclusionEvents().length}`, `${state.us}–${state.them}`, balanceTone(rivalExclusionEvents().length, exclusionEvents().length)]
     ];
   }
-  function playerFigures(p, s = state) {
-    const stats = playerStats(p.id, s.events);
-    const shots = ourShots(s.events).filter((e) => e.playerId === p.id);
-    const c = countGroups(shots);
-    const faults = DEFENSIVE_FAULTS.reduce((n, k) => n + stats[k], 0);
+  // A field player's own counts in a match, the ones his page sets against the team's mean.
+  function playerCounts(p, s = state) {
+    const stats = playerStats(p.id, s.events), c = countGroups(ourShots(s.events).filter((e) => e.playerId === p.id));
+    return {
+      goals: c.GOL, shots: c.GOL + c.PARADA + c.FALLO, saved: c.PARADA, missed: c.FALLO, ASIST: stats.ASIST, PROV7: stats.PROV7,
+      RECUP: stats.RECUP, BLOC: stats.BLOC, TURNOVER: stats.TURNOVER, faults: DEFENSIVE_FAULTS.reduce((n, k) => n + stats[k], 0)
+    };
+  }
+  // The field players who took part: on court for a moment when the match logged the court, else with an event of their own.
+  function matchParticipants(s = state) {
+    const seconds = minutesOnCourt(s);
+    return s.players.filter((p) => p.pos !== 'POR' && (seconds ? (seconds.get(p.id) || 0) > 0 : s.events.some((e) => e.playerId === p.id)));
+  }
+  // The mean of every playerCounts figure over the participants, and their mean seconds (null without a court log);
+  // null when nobody took part.
+  function teamMeans(s = state) {
+    const players = matchParticipants(s);
+    if (!players.length) return null;
+    const counts = players.map((p) => playerCounts(p, s)), seconds = minutesOnCourt(s);
+    const means = Object.fromEntries(Object.keys(counts[0]).map((k) => [k, sumOf(counts, (c) => c[k]) / counts.length]));
+    return { ...means, seconds: seconds ? sumOf(players, (p) => seconds.get(p.id) || 0) / players.length : null };
+  }
+  const TEAM_MEAN_PREFIX = 'Equipo';
+  const teamMeanText = (text) => `${TEAM_MEAN_PREFIX} ${text}`;
+  const countMeanText = (means, key) => (means ? teamMeanText(decimalText(means[key])) : '');
+  // `means` (teamMeans) puts the team's mean of each count under the player's.
+  function playerFigures(p, s = state, means = null) {
+    const stats = playerStats(p.id, s.events), c = playerCounts(p, s);
     const cards = Object.entries(SANCTIONS).filter(([k]) => stats[k]).map(([k, v]) => `${stats[k]} ${v.short}`).join(' · ') || '–';
+    const withMean = (text, key) => [countMeanText(means, key), text].filter(Boolean).join(' · ');
     return [
-      ['Goles', `${c.GOL}/${shots.length}`, shots.length ? `${pctText(pct(c.GOL, shots.length))} de acierto` : 'sin lanzamientos', ratioTone(c.GOL, shots.length, 'shooting')],
-      ['Parados', c.PARADA, 'por el portero rival'],
-      ['Fallados', c.FALLO, 'fuera · palo · bloqueado'],
-      ['Pases de gol', stats.ASIST, ''],
-      ['Provoca 7 m', stats.PROV7, ''],
-      ['Recuperaciones', stats.RECUP, ''],
-      ['Blocajes', stats.BLOC, ''],
-      ['Pérdidas', stats.TURNOVER, ''],
-      ['Fallos defensivos', faults, ''],
+      ['Goles', `${c.goals}/${c.shots}`, withMean(c.shots ? `${pctText(pct(c.goals, c.shots))} de acierto` : 'sin lanzamientos', 'goals'), ratioTone(c.goals, c.shots, 'shooting')],
+      ['Parados', c.saved, withMean('por el portero rival', 'saved')],
+      ['Fallados', c.missed, withMean('fuera · palo · bloqueado', 'missed')],
+      ['Pases de gol', c.ASIST, countMeanText(means, 'ASIST')],
+      ['Provoca 7 m', c.PROV7, countMeanText(means, 'PROV7')],
+      ['Recuperaciones', c.RECUP, countMeanText(means, 'RECUP')],
+      ['Blocajes', c.BLOC, countMeanText(means, 'BLOC')],
+      ['Pérdidas', c.TURNOVER, countMeanText(means, 'TURNOVER')],
+      ['Fallos defensivos', c.faults, countMeanText(means, 'faults')],
       ['Sanciones', cards, '']
     ];
   }
+  // Goals out of shots from each zone, as tiles ([label, value, note, tone]) coloured by the zone's target.
+  const zoneTiles = (shots) => SHEET_ZONES.map((z) => {
+    const list = shots.filter((e) => e.zone === z), goals = goalsIn(list);
+    return [ZONES[z], `${goals}/${list.length}`, list.length ? `${pctText(pct(goals, list.length))} de gol` : 'sin lanzamientos', ratioTone(goals, list.length, z)];
+  });
+  // Counts by exact type in the order of their groups, each with its group's label and colour class (`cls`); types no
+  // group lists (older matches) follow in OTHER_TYPE_GROUP. Types never counted are left out.
+  const OTHER_TYPE_GROUP = { label: 'Otras', cls: 'c-act-bad' };
+  function typeBreakdown(groups, typesOf, counts, labelOf = (type) => type) {
+    const listed = groups.flatMap((g) => typesOf(g).map((type) => ({ type, g })));
+    const others = Object.keys(counts).filter((type) => !listed.some((x) => x.type === type)).map((type) => ({ type, g: OTHER_TYPE_GROUP }));
+    return [...listed, ...others].filter((x) => counts[x.type]).map(({ type, g }) => ({ type: labelOf(type), group: g.label, cls: g.cls, n: counts[type] }));
+  }
+  const turnoverBreakdown = (events) => typeBreakdown(CONFIG.turnoverGroups, (g) => g.types, turnoverCounts(events));
+  const defFaultBreakdown = (events) => typeBreakdown(CONFIG.defFaultGroups, (g) => g.actions,
+    countBy(events.filter((e) => e.kind === 'ACTION' && DEFENSIVE_FAULTS.includes(e.action)), (e) => e.action), (action) => ACTIONS[action].label);
   const sanctionRows = () => state.events.filter((e) => e.kind === 'SANCTION' || e.kind === 'RIVAL_SANCTION')
     .map((e) => [absToClock(e.abs), exclusionTargetLabel(e), SANCTIONS[e.card].label]);
   // Score at the end of every 5' block played so far, from the goal times (no manual note needed).
@@ -4406,19 +4477,46 @@ span.att-foot { visibility: hidden; }
       <p class="note">Carriles vistos desde el atacante. 6 m = penetración; 9 m = lanzamiento exterior; los 7 m van aparte.</p>`;
   }
   // One player's page of the match, as the PDF draws it. A goalkeeper has the maps and grids of the «Portero» tab.
+  // Bars of counts by exact type (turnoverBreakdown, defFaultBreakdown) in their group's colour.
+  function typeBarsHtml(rows, empty) {
+    if (!rows.length) return `<p class="note">${esc(empty)}</p>`;
+    const peak = Math.max(...rows.map((r) => r.n));
+    return `<div class="loss-list">${rows.map((r) => `<div class="loss-row type-row"><span class="loss-name">${esc(r.type)} <small>${esc(r.group)}</small></span>
+      <span class="loss-bar"><i class="${r.cls}" style="width:${(r.n / peak) * PERCENT}%"></i></span><b>${r.n}</b></div>`).join('')}</div>`;
+  }
+  // Signed bars ({ label, points }): green adds, red takes away, all on the scale of the largest.
+  function signedBarsHtml(rows, cls = '') {
+    const scale = Math.max(...rows.map((r) => Math.abs(r.points))) || 1;
+    return `<ol class="spell-bars${cls ? ` ${cls}` : ''}">${rows.map((r) => `<li><span>${esc(r.label)}</span><i style="--w:${(Math.abs(r.points) / scale) * PERCENT}%" class="${r.points < 0 ? 'neg' : r.points > 0 ? 'pos' : ''}"></i>
+      <b class="${r.points < 0 ? 'r-bad' : r.points > 0 ? 'r-good' : ''}">${signedText(r.points)}</b></li>`).join('')}</ol>`;
+  }
+  // The rating of one match: the chip, its band, and a bar for every line of RATING_LINES.
+  function ratingBreakdownHtml(rating) {
+    const value = rating && rating.rated ? rating.value : null;
+    const head = `<p class="rating-head">${ratingChipHtml(value)}<b>${esc(ratingBandLabel(value))}</b></p>`;
+    return `<section class="sheet-card rating-breakdown"><h3>Valoración</h3>${head}
+      ${value == null ? `<p class="note">${esc(RATING_UNRATED_NOTE)}</p>` : signedBarsHtml(ratingLineRows(rating), 'rating-bars')}</section>`;
+  }
+  // The points of a player's own actions in each 5' block, and the moments that moved his rating most.
+  const blocksCardHtml = (blocks) => card(BLOCKS_TITLE, signedBarsHtml(blocks.map((b) => ({ label: minuteRangeText(b.from, b.to), points: roundHalfUp(b.points, CONFIG.rating.decimals) }))));
+  const keyMomentsHtml = (moments) => card('Momentos clave', moments.length
+    ? `<ul class="key-moments">${moments.map((mo) => { const v = mo.value * POINTS_PER_GOAL; return `<li><span><b>${momentClock(mo)}</b> ${esc(mo.label)}</span><b class="${v > 0 ? 'r-good' : 'r-bad'}">${pointsText(v)}</b></li>`; }).join('')}</ul>`
+    : `<p class="note">${NO_KEY_MOMENTS}</p>`);
+  // One player's page of the match, with what the PDF draws. A goalkeeper has the maps and grids of the «Portero» tab.
   function playerReportHtml(p) {
     const report = playerReport(p);
     const heading = `<h3 class="acta-h">#${p.num} ${esc(p.name)} · ${posOf(p).label}</h3>`;
+    const rating = `<div class="sheet-grid">${ratingBreakdownHtml(report.rating)}${blocksCardHtml(report.blocks)}${keyMomentsHtml(report.keyMoments)}</div>`;
     if (report.keeper) {
       const maps = MAP_GROUPS.map(([group, title]) => { const list = report.shots.filter((e) => groupOf(e.result) === group); return card(`${title} · ${list.length}`, shotMapSvg(list, 'GK', null)); }).join('');
-      return `${heading}${figuresHtml(report.figures)}${spellsCardHtml(state, p)}
+      return `${heading}${figuresHtml(report.figures)}${rating}${spellsCardHtml(state, p)}
         <div class="match-grid">${maps}</div>
         ${tableHtml(report.zoneHead, report.zoneRows, gkZoneTone(), PHONE_COLUMNS.gkZones)}
         <div class="sheet-grid">${goalGridHtml(report.shots, 'PARADA', 'Detenidos por zona de portería', 'GK')}${goalGridHtml(report.shots, 'GOL', 'Encajados por zona de portería', 'GK')}</div>`;
     }
-    return `${heading}${figuresHtml(report.figures)}${spellsCardHtml(state, p)}
+    return `${heading}${figuresHtml(report.figures)}<p class="note">${esc(TEAM_MEAN_NOTE)}</p>${rating}${spellsCardHtml(state, p)}
       <div class="match-grid">${card(`Tiros · ${report.shots.length}`, shotMapSvg(report.shots, 'US', null))}${card('Por zona', tableHtml(report.zoneHead, report.zoneRows, shotZoneTone, PHONE_COLUMNS.shotZones))}</div>
-      <div class="sheet-grid">${card('Pérdidas por tipo', tableHtml(['Tipo', 'N'], report.turnoverRows))}${card('Fallos defensivos', tableHtml(['Tipo', 'N'], report.faultRows))}</div>
+      <div class="sheet-grid">${card('Pérdidas por tipo', typeBarsHtml(report.turnovers, 'Sin pérdidas.'))}${card('Fallos defensivos', typeBarsHtml(report.faults, 'Sin fallos.'))}</div>
       ${card('Cronología', tableHtml(['Min', 'Acción'], report.timeline.length ? report.timeline : [['–', 'Sin acciones']]))}`;
   }
   function sheetPlayerHtml() {
@@ -4472,6 +4570,8 @@ span.att-foot { visibility: hidden; }
         <div class="summary-col">${summaryChartHtml('Tiros rivales · % de paradas por zona', 'zone-map', onGoal(theirs), () => zoneMapSvg(theirs, isSave, CARD_ZONE_COLOURS.keeper, onTarget, KEEPER_TARGETS))}
           ${summaryChartHtml('Dónde paramos', 'goal-chart', onGoal(theirs), () => goalRateSvg(theirs, isSave, KEEPER_TARGETS[GOAL_RATE]))}</div>
       </div>
+      <div class="sheet-grid">${card('Tiro por zona', `<div class="stat-tiles zone-tiles">${zoneTiles(ours).map((t) => statTileHtml(...t)).join('')}</div>`)}
+        ${card('Pérdidas por tipo', typeBarsHtml(turnoverBreakdown(state.events), 'Sin pérdidas.'))}</div>
       <section class="sheet-card"><h3>Jugadores</h3><div class="player-strip">${players}</div></section>`;
   }
   // The strip's card leads to that player's PDF in the list of the «Informes PDF» tab.
@@ -4840,7 +4940,6 @@ span.att-foot { visibility: hidden; }
   }
   // The screen's tone (a figure's fourth item) has no column here.
   const figuresTable = (doc, figures, startY, left, width) => pdfTable(doc, { head: ['Dato', 'Valor', ''], body: figures.map(([label, value, sub]) => [label, value, sub]), startY, left, width });
-  const countRows = (counts) => (Object.keys(counts).length ? Object.entries(counts) : [['Ninguno', 0]]);
   // Points at a fixed distance from the goal segment (the 6 m and 9 m lines), in court units.
   function areaLine(metres) {
     const r = metres * UNITS_PER_M;
@@ -4942,41 +5041,221 @@ span.att-foot { visibility: hidden; }
     y = Math.max(yA, yB);
     return y;
   }
-  // Everything one player's page shows, from the events of any saved match. A goalkeeper has only the shots he faced.
-  // The turnover, fault and timeline rows of a goalkeeper are not drawn by the PDF.
-  function playerReport(p, s = state) {
+  // Everything one player's page shows, from the events of any saved match. A goalkeeper has only the shots he faced;
+  // the team means, zone tiles, turnovers, faults and timeline of a goalkeeper are not drawn.
+  function playerReport(p, s = state, ratings = matchRatings(s)) {
     const keeper = p.pos === 'POR';
     const mine = eventsOf(p.id, s.events);
     const shots = keeper ? gkShots(p.id, s.events) : ourShots(mine);
+    const rating = ratings.get(p.id) || null, moments = rating ? rating.moments : [], court = courtFiguresOf(s, p.id);
+    const means = keeper ? null : teamMeans(s);
     return {
       keeper,
       shots,
-      figures: keeper ? gkFigures(shots) : playerFigures(p, s),
+      rating,
+      court,
+      figures: keeper ? gkFigures(shots) : [...courtFigures(court, means), ...playerFigures(p, s, means)],
       zoneHead: keeper ? GK_ZONE_HEAD : SHOT_ZONE_HEAD,
       zoneRows: keeper ? gkZoneRows(shots) : shotZoneRows(shots),
-      turnoverRows: countRows(turnoverCounts(mine)),
-      faultRows: countRows(defFaultCounts(mine)),
+      zoneTiles: zoneTiles(shots),
+      turnovers: turnoverBreakdown(mine),
+      faults: defFaultBreakdown(mine),
+      blocks: momentBlocks(moments),
+      keyMoments: keyMomentsOf(moments),
       timeline: mine.slice().sort((a, b) => a.abs - b.abs).map((e) => [absToClock(e.abs), describe(e, s).split(' ·')[0]])
     };
   }
-  function pdfPlayer(doc, p) {
-    const report = playerReport(p);
+  // ---- One player's PDF page: drawing helpers in mm, laid out on the A4 landscape page of PDF_PAGE ----
+  const PDF_PLAYER = {
+    gap: 4, titleFont: 10, titleH: 4.5, labelFont: 7, smallFont: 6, tileLabelFont: 5.5, rowH: 4.4, barH: 2.6, swatch: 2.4,
+    tileH: 14, zoneTileH: 13, tileValueFont: 12, tilePad: 2, tileStripe: 1, figureCols: 6,
+    chipW: 24, chipH: 11, chipRadius: 1.5, chipFont: 14, bandFont: 11, ratingLabelW: 25, ratingValueW: 10, minRatingScale: 1,
+    countLabelW: 34, countValueW: 6, momentClockW: 7, momentValueW: 10, blockLabelH: 4
+  };
+  const PDF_BOTTOM = PDF_PAGE.h - PDF_PAGE.margin;
+  const PDF_WHITE = [255, 255, 255];
+  // The light-theme colours the page reads: the rating bands and the action groups, as [r, g, b].
+  const ratingInkToken = (cls) => ratingToken(cls).replace('--rating-', '--rating-ink-');
+  const PDF_PALETTE_TOKENS = [...new Set([...CONFIG.rating.bands.flatMap(([, , cls]) => [ratingToken(cls), ratingInkToken(cls)]),
+    ...[...CONFIG.turnoverGroups, ...CONFIG.defFaultGroups, OTHER_TYPE_GROUP].map((g) => `--${g.cls.slice(2)}`)])];
+  function pdfPalette() {
+    const tokens = lightTokens(PDF_PALETTE_TOKENS);
+    const rgb = (name) => (/^#[0-9a-f]{6}$/i.test(tokens[name] || '') ? hexToRgb(tokens[name]) : PDF_RGB.muted);
+    return {
+      band: (value) => (value == null ? PDF_RGB.muted : rgb(ratingToken(ratingBand(value)))),
+      bandInk: (value) => (value == null ? PDF_WHITE : rgb(ratingInkToken(ratingBand(value)))),
+      group: (cls) => rgb(`--${cls.slice(2)}`),
+      plus: rgb(ratingToken('rt-good')), minus: rgb(ratingToken('rt-bad'))
+    };
+  }
+  // The four target tones as ink, the same as the match report's.
+  function pdfToneRgb(tone) {
+    const hex = { 'r-top': REPORT_COLOURS.topInk, 'r-good': REPORT_COLOURS.goodInk, 'r-warn': REPORT_COLOURS.warnInk, 'r-bad': REPORT_COLOURS.bad }[tone];
+    return hex ? hexToRgb(hex) : null;
+  }
+  // The text cut to a width, ending in an ellipsis when it had to be cut.
+  function pdfFit(doc, text, width) {
+    let out = pdfText(text);
+    if (doc.getTextWidth(out) <= width) return out;
+    while (out.length > 1 && doc.getTextWidth(`${out}…`) > width) out = out.slice(0, -1);
+    return `${out}…`;
+  }
+  function pdfFont(doc, size, style = 'normal', colour = PDF_RGB.ink) {
+    doc.setFont('helvetica', style);
+    doc.setFontSize(size);
+    doc.setTextColor(...colour);
+  }
+  // A section title; returns the y its content starts at.
+  function pdfSectionTitle(doc, title, x, y) {
+    pdfFont(doc, PDF_PLAYER.titleFont, 'bold');
+    doc.text(pdfText(title), x, y + PDF_PLAYER.titleH - 1);
+    return y + PDF_PLAYER.titleH + 1;
+  }
+  // Tiles as on the screen ([label, value, note, tone]): the value in its tone's colour, with a stripe of it on the left.
+  function pdfTiles(doc, tiles, { x, y, w, cols, h = PDF_PLAYER.tileH }) {
+    const P = PDF_PLAYER, gap = P.gap / 2, tw = (w - gap * (cols - 1)) / cols, inner = tw - 2 * P.tilePad;
+    tiles.forEach(([label, value, note, tone], i) => {
+      const tx = x + (i % cols) * (tw + gap), ty = y + Math.floor(i / cols) * (h + gap), toneRgb = pdfToneRgb(tone);
+      doc.setFillColor(...PDF_RGB.soft);
+      doc.rect(tx, ty, tw, h, 'F');
+      if (toneRgb) { doc.setFillColor(...toneRgb); doc.rect(tx, ty, P.tileStripe, h, 'F'); }
+      pdfFont(doc, P.tileLabelFont, 'bold', PDF_RGB.muted);
+      doc.text(pdfFit(doc, String(label).toUpperCase(), inner), tx + P.tilePad, ty + 3.6);
+      pdfFont(doc, P.tileValueFont, 'bold', toneRgb || PDF_RGB.ink);
+      doc.text(pdfFit(doc, String(value), inner), tx + P.tilePad, ty + h / 2 + 2.4);
+      if (note) { pdfFont(doc, P.smallFont, 'normal', PDF_RGB.muted); doc.text(pdfFit(doc, note, inner), tx + P.tilePad, ty + h - 1.6); }
+    });
+    return y + Math.ceil(tiles.length / cols) * (h + gap) - gap;
+  }
+  // A bar from the zero line at `cx`, to the right when positive; `half` is the length of a value of `scale`.
+  function pdfSignedBar(doc, cx, y, half, value, scale, palette) {
+    doc.setDrawColor(...PDF_RGB.net);
+    doc.setLineWidth(0.2);
+    doc.line(cx, y - 0.6, cx, y + PDF_PLAYER.barH + 0.6);
+    const len = (Math.abs(value) / scale) * half;
+    if (!len) return;
+    doc.setFillColor(...(value > 0 ? palette.plus : palette.minus));
+    doc.rect(value > 0 ? cx : cx - len, y, len, PDF_PLAYER.barH, 'F');
+  }
+  // The rating: the chip in its band's colour, the band and `detail`, then a bar for every line of RATING_LINES.
+  function pdfRatingBlock(doc, rating, palette, { x, y, w, detail }) {
+    const P = PDF_PLAYER, value = rating && rating.rated ? rating.value : null;
+    let top = pdfSectionTitle(doc, 'Valoración', x, y);
+    doc.setFillColor(...palette.band(value));
+    doc.roundedRect(x, top, P.chipW, P.chipH, P.chipRadius, P.chipRadius, 'F');
+    pdfFont(doc, P.chipFont, 'bold', palette.bandInk(value));
+    doc.text(pdfText(ratingText(value)), x + P.chipW / 2, top + P.chipH / 2 + 1.8, { align: 'center' });
+    pdfFont(doc, P.bandFont, 'bold');
+    doc.text(pdfText(ratingBandLabel(value)), x + P.chipW + P.gap, top + 4.5);
+    pdfFont(doc, P.labelFont, 'normal', PDF_RGB.muted);
+    doc.text(pdfFit(doc, detail, w - P.chipW - P.gap), x + P.chipW + P.gap, top + 9);
+    top += P.chipH + 3;
+    if (value == null) {
+      doc.text(pdfFit(doc, RATING_UNRATED_NOTE, w), x, top + P.barH);
+      return top + P.rowH;
+    }
+    const lines = ratingLineRows(rating), rows = Math.ceil(lines.length / 2), colW = (w - P.gap) / 2, barW = colW - P.ratingLabelW - P.ratingValueW;
+    const scale = Math.max(P.minRatingScale, ...lines.map((l) => Math.abs(l.points)));
+    lines.forEach((l, i) => {
+      const cx = x + Math.floor(i / rows) * (colW + P.gap), ry = top + (i % rows) * P.rowH;
+      pdfFont(doc, P.labelFont);
+      doc.text(pdfFit(doc, l.label, P.ratingLabelW - 1), cx, ry + P.barH);
+      pdfSignedBar(doc, cx + P.ratingLabelW + barW / 2, ry, barW / 2 - 1, l.points, scale, palette);
+      pdfFont(doc, P.labelFont, 'bold', l.points > 0 ? palette.plus : l.points < 0 ? palette.minus : PDF_RGB.muted);
+      doc.text(pdfText(signedText(l.points)), cx + colW, ry + P.barH, { align: 'right' });
+    });
+    return top + rows * P.rowH;
+  }
+  // Counts by type ({ type, group, cls, n }) as bars in their group's colour, or `empty` when there are none.
+  function pdfCountBars(doc, rows, palette, { x, y, w, empty }) {
+    const P = PDF_PLAYER;
+    if (!rows.length) { pdfFont(doc, P.labelFont, 'normal', PDF_RGB.muted); doc.text(pdfText(empty), x, y + P.barH); return y + P.rowH; }
+    const peak = Math.max(...rows.map((r) => r.n)), barW = w - P.countLabelW - P.countValueW;
+    rows.forEach((r, i) => {
+      const ry = y + i * P.rowH, colour = palette.group(r.cls);
+      doc.setFillColor(...colour);
+      doc.rect(x, ry, P.swatch, P.swatch, 'F');
+      pdfFont(doc, P.labelFont);
+      doc.text(pdfFit(doc, `${r.type} · ${r.group}`, P.countLabelW - P.swatch - 2), x + P.swatch + 1.5, ry + P.barH);
+      doc.setFillColor(...PDF_RGB.soft);
+      doc.rect(x + P.countLabelW, ry, barW, P.barH, 'F');
+      doc.setFillColor(...colour);
+      doc.rect(x + P.countLabelW, ry, (r.n / peak) * barW, P.barH, 'F');
+      pdfFont(doc, P.labelFont, 'bold');
+      doc.text(String(r.n), x + w, ry + P.barH, { align: 'right' });
+    });
+    return y + rows.length * P.rowH;
+  }
+  // The key moments: minute, what happened and its points, green when it added and red when it took away.
+  function pdfMomentRows(doc, moments, palette, { x, y, w }) {
+    const P = PDF_PLAYER;
+    if (!moments.length) { pdfFont(doc, P.labelFont, 'normal', PDF_RGB.muted); doc.text(pdfText(NO_KEY_MOMENTS), x, y + P.barH); return y + P.rowH; }
+    moments.forEach((mo, i) => {
+      const ry = y + i * P.rowH + P.barH, points = mo.value * POINTS_PER_GOAL;
+      pdfFont(doc, P.labelFont, 'bold', PDF_RGB.muted);
+      doc.text(momentClock(mo), x, ry);
+      pdfFont(doc, P.labelFont);
+      doc.text(pdfFit(doc, mo.label, w - P.momentClockW - P.momentValueW), x + P.momentClockW, ry);
+      pdfFont(doc, P.labelFont, 'bold', points > 0 ? palette.plus : palette.minus);
+      doc.text(pdfText(pointsText(points)), x + w, ry, { align: 'right' });
+    });
+    return y + moments.length * P.rowH;
+  }
+  // The points of each block as columns up (added) and down (taken away) from the zero line, its last minute below.
+  function pdfBlockChart(doc, blocks, palette, { x, y, w, h }) {
+    const P = PDF_PLAYER, chartH = h - P.blockLabelH, zero = y + chartH / 2, colW = w / blocks.length;
+    const scale = Math.max(P.minRatingScale, ...blocks.map((b) => Math.abs(b.points)));
+    doc.setFillColor(...PDF_RGB.soft);
+    doc.rect(x, y, w, chartH, 'F');
+    doc.setDrawColor(...PDF_RGB.net);
+    doc.setLineWidth(0.2);
+    doc.line(x, zero, x + w, zero);
+    blocks.forEach((b, i) => {
+      const len = (Math.abs(b.points) / scale) * (chartH / 2 - 1);
+      if (len) {
+        doc.setFillColor(...(b.points > 0 ? palette.plus : palette.minus));
+        doc.rect(x + i * colW + colW / 4, b.points > 0 ? zero - len : zero, colW / 2, len, 'F');
+      }
+      pdfFont(doc, P.smallFont, 'normal', PDF_RGB.muted);
+      doc.text(`${Math.floor(b.to / SECONDS_PER_MINUTE)}'`, x + (i + 1) * colW, y + h - 0.5, { align: 'right' });
+    });
+    return y + h;
+  }
+  // Minutes, +/− and the possessions the rating counted, beside the rating chip.
+  function playerDetailText(report) {
+    const parts = [`Min ${minutesText(report.court.seconds)}`, `+/− ${plusMinusText(report.court.plusMinus)}`];
+    if (report.rating) parts.push(`${report.rating.possessions.attack} pos. en ataque · ${report.rating.possessions.defence} en defensa`);
+    return parts.join(' · ');
+  }
+  // One page: a goalkeeper keeps his shot map and tables, with the rating under the map. A field player has the map,
+  // his tiles by zone and his 5' points on the left; the rating, his figures against the team, his turnovers by
+  // type, the key moments and his defensive faults on the right.
+  function pdfPlayer(doc, p, ratings = matchRatings(state)) {
+    const report = playerReport(p, state, ratings), palette = pdfPalette(), P = PDF_PLAYER;
+    const left = { x: PDF_PAGE.margin, w: PDF_PAGE.chartW }, right = { x: PDF_PAGE.rightX, w: PDF_PAGE.w - PDF_PAGE.rightX - PDF_PAGE.margin };
+    const detail = playerDetailText(report);
     pdfHeader(doc, `#${p.num} ${p.name}`, posOf(p).label);
     if (report.keeper) {
-      pdfShotChart(doc, PDF_PAGE.margin, PDF_PAGE.top, PDF_PAGE.chartW, report.shots, 'GK', true);
+      const yChart = pdfShotChart(doc, left.x, PDF_PAGE.top, left.w, report.shots, 'GK', true);
+      pdfRatingBlock(doc, report.rating, palette, { ...left, detail, y: yChart });
       const y = figuresTable(doc, report.figures, PDF_PAGE.top + 4, PDF_PAGE.rightX);
       pdfGkBlock(doc, report.shots, y);
       return;
     }
-    pdfShotChart(doc, PDF_PAGE.margin, PDF_PAGE.top, PDF_PAGE.chartW, report.shots, 'US');
-    const half = (PDF_PAGE.w - PDF_PAGE.rightX - PDF_PAGE.margin - 6) / 2;
-    const yFig = figuresTable(doc, report.figures, PDF_PAGE.top + 4, PDF_PAGE.rightX, half);
-    const yZone = pdfTable(doc, { title: 'Por zona', head: report.zoneHead, body: report.zoneRows, startY: PDF_PAGE.top + 4, left: PDF_PAGE.rightX + half + 6, width: half });
-    let y = Math.max(yFig, yZone);
-    const yT = pdfTable(doc, { title: 'Pérdidas por tipo', head: ['Tipo', 'N'], body: report.turnoverRows, startY: y, left: PDF_PAGE.rightX, width: half });
-    const yD = pdfTable(doc, { title: 'Fallos defensivos', head: ['Tipo', 'N'], body: report.faultRows, startY: y, left: PDF_PAGE.rightX + half + 6, width: half });
-    y = Math.max(yT, yD);
-    pdfTable(doc, { title: 'Cronología', head: ['Min', 'Acción'], body: report.timeline.length ? report.timeline : [[PDF_EMPTY, 'Sin acciones']], startY: y, left: PDF_PAGE.rightX });
+    const yChart = pdfShotChart(doc, left.x, PDF_PAGE.top, left.w, report.shots, 'US');
+    let yLeft = pdfSectionTitle(doc, 'Tiro por zona', left.x, yChart - P.gap / 2);
+    yLeft = pdfTiles(doc, report.zoneTiles, { ...left, y: yLeft, cols: SHEET_ZONES.length, h: P.zoneTileH });
+    yLeft = pdfSectionTitle(doc, BLOCKS_TITLE, left.x, yLeft + P.gap / 2);
+    pdfBlockChart(doc, report.blocks, palette, { ...left, y: yLeft, h: PDF_BOTTOM - yLeft });
+    let yRight = pdfRatingBlock(doc, report.rating, palette, { ...right, detail, y: PDF_PAGE.top + 2 });
+    yRight = pdfSectionTitle(doc, FIGURES_TITLE, right.x, yRight + P.gap / 2);
+    yRight = pdfTiles(doc, report.figures, { ...right, y: yRight, cols: P.figureCols });
+    const half = (right.w - P.gap) / 2, second = right.x + half + P.gap;
+    const yTurnovers = pdfSectionTitle(doc, 'Pérdidas por tipo', right.x, yRight + P.gap);
+    pdfCountBars(doc, report.turnovers, palette, { x: right.x, y: yTurnovers, w: half, empty: 'Sin pérdidas.' });
+    const yMoments = pdfMomentRows(doc, report.keyMoments, palette, { x: second, y: pdfSectionTitle(doc, 'Momentos clave', second, yRight + P.gap), w: half });
+    const yFaults = pdfSectionTitle(doc, 'Fallos defensivos', second, yMoments + P.gap / 2);
+    pdfCountBars(doc, report.faults, palette, { x: second, y: yFaults, w: half, empty: 'Sin fallos.' });
   }
   // ---- Match report: a 5-page A4 dashboard in HTML, drawn in an isolated frame and rasterised page by page ----
   // The report always prints light: the map tokens and the rating bands are read from the light theme. Our colour is the
@@ -5010,8 +5289,8 @@ span.att-foot { visibility: hidden; }
   // The whole report as one HTML document for the current match (`state`).
   function matchReportDocument() {
     const C = { ...REPORT_COLOURS, us: team.brand }, s = state, half = CONFIG.halfSeconds, block = CONFIG.scoreIntervalSeconds;
-    const tokens = lightTokens([...REPORT_MAP_TOKENS, ...CONFIG.rating.bands.map(([, , cls]) => `--${cls.replace('rt-', 'rating-')}`)]);
-    const bandColour = (value) => (value == null ? C.faint : tokens[`--${ratingBand(value).replace('rt-', 'rating-')}`]);
+    const tokens = lightTokens([...REPORT_MAP_TOKENS, ...CONFIG.rating.bands.map(([, , cls]) => ratingToken(cls))]);
+    const bandColour = (value) => (value == null ? C.faint : tokens[ratingToken(ratingBand(value))]);
     // The same figures over a part of the match: liveStats reads `state`, so it runs on a copy with only those events.
     const statsOf = (keep) => { const saved = state; state = { ...saved, events: saved.events.filter(keep) }; try { return liveStats(); } finally { state = saved; } };
     const firstHalf = (e) => e.abs < half, secondHalf = (e) => e.abs >= half, wholeMatch = () => true;
@@ -5409,17 +5688,21 @@ table { border-collapse: collapse; width: 100%; }
       frame.remove();
     }
   }
+  const matchFileSlug = () => `${slug(state.us)}-${slug(state.them)}`;
   async function buildPdf(kind) {
-    const match = `${slug(state.us)}-${slug(state.them)}`;
-    if (kind === 'match') return { doc: await matchReportPdf(), filename: `informe-${match}.pdf` };
-    const doc = pdfNewDoc();
+    if (kind === 'match') return { doc: await matchReportPdf(), filename: `informe-${matchFileSlug()}.pdf` };
+    return playerPagesPdf(kind);
+  }
+  // The player pages, drawn at once: `kind` is 'players' (every player, one page each) or one player's id.
+  function playerPagesPdf(kind) {
+    const match = matchFileSlug(), doc = pdfNewDoc(), ratings = matchRatings(state);
     if (kind === 'players') {
-      [...fieldPlayers(), ...goalkeepers()].forEach((p, i) => { if (i) doc.addPage(); pdfPlayer(doc, p); });
+      [...fieldPlayers(), ...goalkeepers()].forEach((p, i) => { if (i) doc.addPage(); pdfPlayer(doc, p, ratings); });
       return { doc, filename: `jugadores-${match}.pdf` };
     }
     const p = playerById(kind);
     if (!p) throw new Error('jugador no encontrado');
-    pdfPlayer(doc, p);
+    pdfPlayer(doc, p, ratings);
     return { doc, filename: `${p.num}-${slug(p.name)}-${match}.pdf` };
   }
   async function exportPdf(kind) {
@@ -9021,7 +9304,7 @@ table { border-collapse: collapse; width: 100%; }
     const row = match && player && playerMatchRow(match, player);
     // The match or the player is gone (a reload, a deleted match): go back to the card, or to the team page without a player.
     if (!row) { queueMicrotask(() => showPlayer(home.playerId)); return ''; }
-    const keeper = player.pos === 'POR', s = match.state;
+    const keeper = player.pos === 'POR', s = match.state, means = keeper ? null : teamMeans(s);
     const gridView = keeper ? 'GK' : 'US';
     const mapCard = (title, list, colours) => card(`${title} · ${list.length}`, shotMapSvg(list, gridView, null, { s, colours }));
     const maps = keeper
@@ -9035,7 +9318,9 @@ table { border-collapse: collapse; width: 100%; }
         <span class="last-who"><b>${esc(dateText(match.date))}</b>${match.venue ? `<small>${esc(match.venue)}</small>` : ''}</span>
         <span class="res-chip ${resultClass(row)}">${RESULT_LABEL[matchResult(row)]}</span>${ratingChipHtml(row.rating)}
         <strong class="last-score ${resultClass(row)}">${row.scoreUs}–${row.scoreThem}</strong></div></section>
-      ${figuresHtml(keeper ? gkFigures(row.facedList) : [...courtFigures(row), ...playerFigures(player, s)])}
+      ${figuresHtml(keeper ? gkFigures(row.facedList) : [...courtFigures(row, means), ...playerFigures(player, s, means)])}
+      ${keeper ? '' : `<p class="note">${esc(TEAM_MEAN_NOTE)}</p>`}
+      <div class="sheet-grid">${ratingBreakdownHtml(playerRating(s, player))}${keeper ? '' : card('Pérdidas por tipo', typeBarsHtml(turnoverBreakdown(eventsOf(player.id, s.events)), 'Sin pérdidas.'))}</div>
       ${maps}</div>`;
   }
   function showPlayerMatch(matchId) {

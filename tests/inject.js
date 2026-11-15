@@ -1234,7 +1234,7 @@
     if (Object.keys(SHEET_TABS)[0] !== 'summary' || SHEET_TABS.summary !== 'Resumen' || SHEET_TABS.stats !== 'Tablas') throw new Error(JSON.stringify(SHEET_TABS));
     const first = document.querySelector('#sheet .tabs button');
     if (first.textContent !== 'Resumen' || first.getAttribute('aria-pressed') !== 'true') throw new Error('first tab');
-    const labels = statTiles().map((t) => labelText(t));
+    const labels = statTiles().filter((t) => t.closest('.summary-tiles')).map((t) => labelText(t));
     if (labels.join('|') !== SUMMARY_KPI_LABELS.join('|')) throw new Error(labels.join('|'));
     if ($('sheet').querySelectorAll('.zone-map svg').length !== 2 || $('sheet').querySelectorAll('.goal-chart svg').length !== 2) throw new Error('maps and goal grids');
     const strip = [...$('sheet').querySelectorAll('[data-sheet-open-player]')];
@@ -1391,23 +1391,42 @@
   });
 
   // ---- Drill-down: the per-match drawing helpers work over any saved state (M0c) ----
-  // Runs buildPdf(kind) with the drawing primitives replaced by recorders, so the pages can be compared as data.
+  // A jsPDF stand-in: every call it does not know is a no-op; texts and the extent of texts, shapes and lines are kept
+  // (across, only below the full-width header band).
+  const FAKE_CHAR_MM = 1.2;
+  const fakeDrawingDoc = (own = {}) => {
+    const doc = { texts: [], maxX: 0, maxY: 0, lastAutoTable: { finalY: 0 }, getTextWidth: (t) => String(t).length * FAKE_CHAR_MM };
+    const reach = (top, right, bottom) => { if (top >= PDF_PAGE.top) doc.maxX = Math.max(doc.maxX, right); doc.maxY = Math.max(doc.maxY, bottom); };
+    Object.assign(doc, {
+      text: (t, x, y) => { doc.texts.push(String(t)); reach(y, x, y); },
+      rect: (x, y, w, h) => reach(y, x + Math.max(w, 0), y + Math.max(h, 0)),
+      roundedRect: (x, y, w, h) => reach(y, x + w, y + h),
+      line: (x1, y1, x2, y2) => reach(Math.min(y1, y2), Math.max(x1, x2), Math.max(y1, y2))
+    }, own);
+    return new Proxy(doc, { get: (target, key) => (key in target ? target[key] : () => {}) });
+  };
+  // Runs playerPagesPdf(kind) with the drawing primitives replaced by recorders, so the pages can be compared as data.
   const recordPdfCalls = (kind, makeState = sampleState) => {
     const saved = { pdfNewDoc, pdfHeader, pdfTable, pdfShotChart };
     const calls = [];
     const ids = (shots) => shots.map((e) => `${e.abs}:${e.zone}:${e.result}`);
-    pdfNewDoc = () => ({ addPage: () => calls.push(['page']) });
+    pdfNewDoc = () => fakeDrawingDoc({ addPage: () => calls.push(['page']) });
     pdfHeader = (doc, title, subtitle) => calls.push(['header', title, subtitle]);
     pdfTable = (doc, opts) => { calls.push(['table', opts]); return opts.startY + 10; };
     pdfShotChart = (doc, x, y, w, shots, viewKey, dorsals = false) => { calls.push(['chart', x, y, w, ids(shots), viewKey, dorsals]); return y + 50; };
     const snap = snapshot();
-    // The player reports draw synchronously: buildPdf has no await before them.
-    try { state = makeState(); buildPdf(kind); } finally { ({ pdfNewDoc, pdfHeader, pdfTable, pdfShotChart } = saved); restore(snap); }
+    try { state = makeState(); playerPagesPdf(kind); } finally { ({ pdfNewDoc, pdfHeader, pdfTable, pdfShotChart } = saved); restore(snap); }
     return calls;
   };
-  const recordPlayerPages = () => JSON.stringify(recordPdfCalls('players'));
-  // Recorded from the code before the report refactor (sample match): the player pages must not change.
-  const PDF_PLAYERS_SNAPSHOT = [["header","#3 Raulito","Extremo"],["chart",12,26,120,[],"US",false],["table",{"head":["Dato","Valor",""],"body":[["Goles","0/0","sin lanzamientos"],["Parados",0,"por el portero rival"],["Fallados",0,"fuera · palo · bloqueado"],["Pases de gol",0,""],["Provoca 7 m",0,""],["Recuperaciones",0,""],["Blocajes",0,""],["Pérdidas",0,""],["Fallos defensivos",0,""],["Sanciones","–",""]],"startY":30,"left":140,"width":69.5}],["table",{"title":"Por zona","head":["Zona","Lanz.","Goles","Parados","Fallados","% gol"],"body":[["6 m",0,0,0,0,"–"],["9 m",0,0,0,0,"–"],["+11 m",0,0,0,0,"–"],["Contra",0,0,0,0,"–"],["7 m",0,0,0,0,"–"],["Total",0,0,0,0,"–"]],"startY":30,"left":215.5,"width":69.5}],["table",{"title":"Pérdidas por tipo","head":["Tipo","N"],"body":[["Ninguno",0]],"startY":40,"left":140,"width":69.5}],["table",{"title":"Fallos defensivos","head":["Tipo","N"],"body":[["Ninguno",0]],"startY":40,"left":215.5,"width":69.5}],["table",{"title":"Cronología","head":["Min","Acción"],"body":[["–","Sin acciones"]],"startY":50,"left":140}],["page"],["header","#5 Marcos","Lateral"],["chart",12,26,120,[],"US",false],["table",{"head":["Dato","Valor",""],"body":[["Goles","0/0","sin lanzamientos"],["Parados",0,"por el portero rival"],["Fallados",0,"fuera · palo · bloqueado"],["Pases de gol",0,""],["Provoca 7 m",0,""],["Recuperaciones",0,""],["Blocajes",0,""],["Pérdidas",1,""],["Fallos defensivos",0,""],["Sanciones","–",""]],"startY":30,"left":140,"width":69.5}],["table",{"title":"Por zona","head":["Zona","Lanz.","Goles","Parados","Fallados","% gol"],"body":[["6 m",0,0,0,0,"–"],["9 m",0,0,0,0,"–"],["+11 m",0,0,0,0,"–"],["Contra",0,0,0,0,"–"],["7 m",0,0,0,0,"–"],["Total",0,0,0,0,"–"]],"startY":30,"left":215.5,"width":69.5}],["table",{"title":"Pérdidas por tipo","head":["Tipo","N"],"body":[["Pasos",1]],"startY":40,"left":140,"width":69.5}],["table",{"title":"Fallos defensivos","head":["Tipo","N"],"body":[["Ninguno",0]],"startY":40,"left":215.5,"width":69.5}],["table",{"title":"Cronología","head":["Min","Acción"],"body":[["05:20","Pérdida pasos"]],"startY":50,"left":140}],["page"],["header","#8 Alex","Lateral"],["chart",12,26,120,["80:9M:GOL","690:9M:FUERA"],"US",false],["table",{"head":["Dato","Valor",""],"body":[["Goles","1/2","50% de acierto"],["Parados",0,"por el portero rival"],["Fallados",1,"fuera · palo · bloqueado"],["Pases de gol",0,""],["Provoca 7 m",0,""],["Recuperaciones",0,""],["Blocajes",0,""],["Pérdidas",1,""],["Fallos defensivos",0,""],["Sanciones","–",""]],"startY":30,"left":140,"width":69.5}],["table",{"title":"Por zona","head":["Zona","Lanz.","Goles","Parados","Fallados","% gol"],"body":[["6 m",0,0,0,0,"–"],["9 m",2,1,0,1,"50%"],["+11 m",0,0,0,0,"–"],["Contra",0,0,0,0,"–"],["7 m",0,0,0,0,"–"],["Total",2,1,0,1,"50%"]],"startY":30,"left":215.5,"width":69.5}],["table",{"title":"Pérdidas por tipo","head":["Tipo","N"],"body":[["Falta ataque",1]],"startY":40,"left":140,"width":69.5}],["table",{"title":"Fallos defensivos","head":["Tipo","N"],"body":[["Ninguno",0]],"startY":40,"left":215.5,"width":69.5}],["table",{"title":"Cronología","head":["Min","Acción"],"body":[["01:20","Gol 9 m"],["10:50","Pérdida falta ataque"],["11:30","Fuera 9 m"]],"startY":50,"left":140}],["page"],["header","#10 Juni","Pivote"],["chart",12,26,120,[],"US",false],["table",{"head":["Dato","Valor",""],"body":[["Goles","0/0","sin lanzamientos"],["Parados",0,"por el portero rival"],["Fallados",0,"fuera · palo · bloqueado"],["Pases de gol",0,""],["Provoca 7 m",0,""],["Recuperaciones",1,""],["Blocajes",0,""],["Pérdidas",0,""],["Fallos defensivos",0,""],["Sanciones","–",""]],"startY":30,"left":140,"width":69.5}],["table",{"title":"Por zona","head":["Zona","Lanz.","Goles","Parados","Fallados","% gol"],"body":[["6 m",0,0,0,0,"–"],["9 m",0,0,0,0,"–"],["+11 m",0,0,0,0,"–"],["Contra",0,0,0,0,"–"],["7 m",0,0,0,0,"–"],["Total",0,0,0,0,"–"]],"startY":30,"left":215.5,"width":69.5}],["table",{"title":"Pérdidas por tipo","head":["Tipo","N"],"body":[["Ninguno",0]],"startY":40,"left":140,"width":69.5}],["table",{"title":"Fallos defensivos","head":["Tipo","N"],"body":[["Ninguno",0]],"startY":40,"left":215.5,"width":69.5}],["table",{"title":"Cronología","head":["Min","Acción"],"body":[["07:50","Recuperación"]],"startY":50,"left":140}],["page"],["header","#11 Bokiki","Central"],["chart",12,26,120,[],"US",false],["table",{"head":["Dato","Valor",""],"body":[["Goles","0/0","sin lanzamientos"],["Parados",0,"por el portero rival"],["Fallados",0,"fuera · palo · bloqueado"],["Pases de gol",0,""],["Provoca 7 m",0,""],["Recuperaciones",0,""],["Blocajes",0,""],["Pérdidas",0,""],["Fallos defensivos",0,""],["Sanciones","–",""]],"startY":30,"left":140,"width":69.5}],["table",{"title":"Por zona","head":["Zona","Lanz.","Goles","Parados","Fallados","% gol"],"body":[["6 m",0,0,0,0,"–"],["9 m",0,0,0,0,"–"],["+11 m",0,0,0,0,"–"],["Contra",0,0,0,0,"–"],["7 m",0,0,0,0,"–"],["Total",0,0,0,0,"–"]],"startY":30,"left":215.5,"width":69.5}],["table",{"title":"Pérdidas por tipo","head":["Tipo","N"],"body":[["Ninguno",0]],"startY":40,"left":140,"width":69.5}],["table",{"title":"Fallos defensivos","head":["Tipo","N"],"body":[["Ninguno",0]],"startY":40,"left":215.5,"width":69.5}],["table",{"title":"Cronología","head":["Min","Acción"],"body":[["–","Sin acciones"]],"startY":50,"left":140}],["page"],["header","#13 Kike","Pivote"],["chart",12,26,120,[],"US",false],["table",{"head":["Dato","Valor",""],"body":[["Goles","0/0","sin lanzamientos"],["Parados",0,"por el portero rival"],["Fallados",0,"fuera · palo · bloqueado"],["Pases de gol",0,""],["Provoca 7 m",0,""],["Recuperaciones",0,""],["Blocajes",0,""],["Pérdidas",0,""],["Fallos defensivos",0,""],["Sanciones","1 2'",""]],"startY":30,"left":140,"width":69.5}],["table",{"title":"Por zona","head":["Zona","Lanz.","Goles","Parados","Fallados","% gol"],"body":[["6 m",0,0,0,0,"–"],["9 m",0,0,0,0,"–"],["+11 m",0,0,0,0,"–"],["Contra",0,0,0,0,"–"],["7 m",0,0,0,0,"–"],["Total",0,0,0,0,"–"]],"startY":30,"left":215.5,"width":69.5}],["table",{"title":"Pérdidas por tipo","head":["Tipo","N"],"body":[["Ninguno",0]],"startY":40,"left":140,"width":69.5}],["table",{"title":"Fallos defensivos","head":["Tipo","N"],"body":[["Ninguno",0]],"startY":40,"left":215.5,"width":69.5}],["table",{"title":"Cronología","head":["Min","Acción"],"body":[["11:40","Exclusión 2'"]],"startY":50,"left":140}],["page"],["header","#14 Achi","Pivote"],["chart",12,26,120,[],"US",false],["table",{"head":["Dato","Valor",""],"body":[["Goles","0/0","sin lanzamientos"],["Parados",0,"por el portero rival"],["Fallados",0,"fuera · palo · bloqueado"],["Pases de gol",0,""],["Provoca 7 m",0,""],["Recuperaciones",0,""],["Blocajes",0,""],["Pérdidas",0,""],["Fallos defensivos",0,""],["Sanciones","–",""]],"startY":30,"left":140,"width":69.5}],["table",{"title":"Por zona","head":["Zona","Lanz.","Goles","Parados","Fallados","% gol"],"body":[["6 m",0,0,0,0,"–"],["9 m",0,0,0,0,"–"],["+11 m",0,0,0,0,"–"],["Contra",0,0,0,0,"–"],["7 m",0,0,0,0,"–"],["Total",0,0,0,0,"–"]],"startY":30,"left":215.5,"width":69.5}],["table",{"title":"Pérdidas por tipo","head":["Tipo","N"],"body":[["Ninguno",0]],"startY":40,"left":140,"width":69.5}],["table",{"title":"Fallos defensivos","head":["Tipo","N"],"body":[["Ninguno",0]],"startY":40,"left":215.5,"width":69.5}],["table",{"title":"Cronología","head":["Min","Acción"],"body":[["–","Sin acciones"]],"startY":50,"left":140}],["page"],["header","#17 Jenny","Extremo"],["chart",12,26,120,["130:6M:PARADA","745:6M:GOL"],"US",false],["table",{"head":["Dato","Valor",""],"body":[["Goles","1/2","50% de acierto"],["Parados",1,"por el portero rival"],["Fallados",0,"fuera · palo · bloqueado"],["Pases de gol",0,""],["Provoca 7 m",0,""],["Recuperaciones",0,""],["Blocajes",0,""],["Pérdidas",0,""],["Fallos defensivos",0,""],["Sanciones","–",""]],"startY":30,"left":140,"width":69.5}],["table",{"title":"Por zona","head":["Zona","Lanz.","Goles","Parados","Fallados","% gol"],"body":[["6 m",2,1,1,0,"50%"],["9 m",0,0,0,0,"–"],["+11 m",0,0,0,0,"–"],["Contra",0,0,0,0,"–"],["7 m",0,0,0,0,"–"],["Total",2,1,1,0,"50%"]],"startY":30,"left":215.5,"width":69.5}],["table",{"title":"Pérdidas por tipo","head":["Tipo","N"],"body":[["Ninguno",0]],"startY":40,"left":140,"width":69.5}],["table",{"title":"Fallos defensivos","head":["Tipo","N"],"body":[["Ninguno",0]],"startY":40,"left":215.5,"width":69.5}],["table",{"title":"Cronología","head":["Min","Acción"],"body":[["02:10","Parada 6 m"],["12:25","Gol 6 m"]],"startY":50,"left":140}],["page"],["header","#18 Iker","Lateral"],["chart",12,26,120,["190:9M:GOL"],"US",false],["table",{"head":["Dato","Valor",""],"body":[["Goles","1/1","100% de acierto"],["Parados",0,"por el portero rival"],["Fallados",0,"fuera · palo · bloqueado"],["Pases de gol",0,""],["Provoca 7 m",0,""],["Recuperaciones",0,""],["Blocajes",1,""],["Pérdidas",0,""],["Fallos defensivos",0,""],["Sanciones","–",""]],"startY":30,"left":140,"width":69.5}],["table",{"title":"Por zona","head":["Zona","Lanz.","Goles","Parados","Fallados","% gol"],"body":[["6 m",0,0,0,0,"–"],["9 m",1,1,0,0,"100%"],["+11 m",0,0,0,0,"–"],["Contra",0,0,0,0,"–"],["7 m",0,0,0,0,"–"],["Total",1,1,0,0,"100%"]],"startY":30,"left":215.5,"width":69.5}],["table",{"title":"Pérdidas por tipo","head":["Tipo","N"],"body":[["Ninguno",0]],"startY":40,"left":140,"width":69.5}],["table",{"title":"Fallos defensivos","head":["Tipo","N"],"body":[["Ninguno",0]],"startY":40,"left":215.5,"width":69.5}],["table",{"title":"Cronología","head":["Min","Acción"],"body":[["03:10","Gol 9 m"],["12:15","Blocaje"]],"startY":50,"left":140}],["page"],["header","#19 Gonzalo","Central"],["chart",12,26,120,[],"US",false],["table",{"head":["Dato","Valor",""],"body":[["Goles","0/0","sin lanzamientos"],["Parados",0,"por el portero rival"],["Fallados",0,"fuera · palo · bloqueado"],["Pases de gol",1,""],["Provoca 7 m",0,""],["Recuperaciones",0,""],["Blocajes",0,""],["Pérdidas",0,""],["Fallos defensivos",0,""],["Sanciones","–",""]],"startY":30,"left":140,"width":69.5}],["table",{"title":"Por zona","head":["Zona","Lanz.","Goles","Parados","Fallados","% gol"],"body":[["6 m",0,0,0,0,"–"],["9 m",0,0,0,0,"–"],["+11 m",0,0,0,0,"–"],["Contra",0,0,0,0,"–"],["7 m",0,0,0,0,"–"],["Total",0,0,0,0,"–"]],"startY":30,"left":215.5,"width":69.5}],["table",{"title":"Pérdidas por tipo","head":["Tipo","N"],"body":[["Ninguno",0]],"startY":40,"left":140,"width":69.5}],["table",{"title":"Fallos defensivos","head":["Tipo","N"],"body":[["Ninguno",0]],"startY":40,"left":215.5,"width":69.5}],["table",{"title":"Cronología","head":["Min","Acción"],"body":[["06:40","Pase de gol"]],"startY":50,"left":140}],["page"],["header","#21 Jaime","Lateral"],["chart",12,26,120,["401:CONTRA:GOL"],"US",false],["table",{"head":["Dato","Valor",""],"body":[["Goles","1/1","100% de acierto"],["Parados",0,"por el portero rival"],["Fallados",0,"fuera · palo · bloqueado"],["Pases de gol",0,""],["Provoca 7 m",0,""],["Recuperaciones",0,""],["Blocajes",0,""],["Pérdidas",0,""],["Fallos defensivos",0,""],["Sanciones","–",""]],"startY":30,"left":140,"width":69.5}],["table",{"title":"Por zona","head":["Zona","Lanz.","Goles","Parados","Fallados","% gol"],"body":[["6 m",0,0,0,0,"–"],["9 m",0,0,0,0,"–"],["+11 m",0,0,0,0,"–"],["Contra",1,1,0,0,"100%"],["7 m",0,0,0,0,"–"],["Total",1,1,0,0,"100%"]],"startY":30,"left":215.5,"width":69.5}],["table",{"title":"Pérdidas por tipo","head":["Tipo","N"],"body":[["Ninguno",0]],"startY":40,"left":140,"width":69.5}],["table",{"title":"Fallos defensivos","head":["Tipo","N"],"body":[["Ninguno",0]],"startY":40,"left":215.5,"width":69.5}],["table",{"title":"Cronología","head":["Min","Acción"],"body":[["06:41","Gol Contra"]],"startY":50,"left":140}],["page"],["header","#22 Diego","Extremo"],["chart",12,26,120,["480:CONTRA:GOL"],"US",false],["table",{"head":["Dato","Valor",""],"body":[["Goles","1/1","100% de acierto"],["Parados",0,"por el portero rival"],["Fallados",0,"fuera · palo · bloqueado"],["Pases de gol",0,""],["Provoca 7 m",0,""],["Recuperaciones",0,""],["Blocajes",0,""],["Pérdidas",0,""],["Fallos defensivos",0,""],["Sanciones","–",""]],"startY":30,"left":140,"width":69.5}],["table",{"title":"Por zona","head":["Zona","Lanz.","Goles","Parados","Fallados","% gol"],"body":[["6 m",0,0,0,0,"–"],["9 m",0,0,0,0,"–"],["+11 m",0,0,0,0,"–"],["Contra",1,1,0,0,"100%"],["7 m",0,0,0,0,"–"],["Total",1,1,0,0,"100%"]],"startY":30,"left":215.5,"width":69.5}],["table",{"title":"Pérdidas por tipo","head":["Tipo","N"],"body":[["Ninguno",0]],"startY":40,"left":140,"width":69.5}],["table",{"title":"Fallos defensivos","head":["Tipo","N"],"body":[["Ninguno",0]],"startY":40,"left":215.5,"width":69.5}],["table",{"title":"Cronología","head":["Min","Acción"],"body":[["08:00","Gol Contra"]],"startY":50,"left":140}],["page"],["header","#25 Nacho","Extremo"],["chart",12,26,120,[],"US",false],["table",{"head":["Dato","Valor",""],"body":[["Goles","0/0","sin lanzamientos"],["Parados",0,"por el portero rival"],["Fallados",0,"fuera · palo · bloqueado"],["Pases de gol",0,""],["Provoca 7 m",0,""],["Recuperaciones",0,""],["Blocajes",0,""],["Pérdidas",0,""],["Fallos defensivos",0,""],["Sanciones","–",""]],"startY":30,"left":140,"width":69.5}],["table",{"title":"Por zona","head":["Zona","Lanz.","Goles","Parados","Fallados","% gol"],"body":[["6 m",0,0,0,0,"–"],["9 m",0,0,0,0,"–"],["+11 m",0,0,0,0,"–"],["Contra",0,0,0,0,"–"],["7 m",0,0,0,0,"–"],["Total",0,0,0,0,"–"]],"startY":30,"left":215.5,"width":69.5}],["table",{"title":"Pérdidas por tipo","head":["Tipo","N"],"body":[["Ninguno",0]],"startY":40,"left":140,"width":69.5}],["table",{"title":"Fallos defensivos","head":["Tipo","N"],"body":[["Ninguno",0]],"startY":40,"left":215.5,"width":69.5}],["table",{"title":"Cronología","head":["Min","Acción"],"body":[["–","Sin acciones"]],"startY":50,"left":140}],["page"],["header","#77 Sergio","Lateral"],["chart",12,26,120,["590:7M:GOL"],"US",false],["table",{"head":["Dato","Valor",""],"body":[["Goles","1/1","100% de acierto"],["Parados",0,"por el portero rival"],["Fallados",0,"fuera · palo · bloqueado"],["Pases de gol",0,""],["Provoca 7 m",0,""],["Recuperaciones",0,""],["Blocajes",0,""],["Pérdidas",0,""],["Fallos defensivos",0,""],["Sanciones","–",""]],"startY":30,"left":140,"width":69.5}],["table",{"title":"Por zona","head":["Zona","Lanz.","Goles","Parados","Fallados","% gol"],"body":[["6 m",0,0,0,0,"–"],["9 m",0,0,0,0,"–"],["+11 m",0,0,0,0,"–"],["Contra",0,0,0,0,"–"],["7 m",1,1,0,0,"100%"],["Total",1,1,0,0,"100%"]],"startY":30,"left":215.5,"width":69.5}],["table",{"title":"Pérdidas por tipo","head":["Tipo","N"],"body":[["Ninguno",0]],"startY":40,"left":140,"width":69.5}],["table",{"title":"Fallos defensivos","head":["Tipo","N"],"body":[["Ninguno",0]],"startY":40,"left":215.5,"width":69.5}],["table",{"title":"Cronología","head":["Min","Acción"],"body":[["09:50","Gol 7 m"]],"startY":50,"left":140}],["page"],["header","#1 Jose","Portero"],["chart",12,26,120,["45:9M:GOL","160:6M:PARADA","230:6M:GOL","350:9M:GOL","450:9M:PARADA","540:7M:GOL","630:6M:PARADA","670:9M:FUERA","720:6M:GOL"],"GK",true],["table",{"head":["Dato","Valor",""],"body":[["Paradas","38%","3/8 a puerta"],["Detenidos",3,""],["Encajados",5,""],["Fuera · palo · bloq.",1,"sin ir a puerta"],["7 m parados","0/1",""]],"startY":30,"left":140}],["table",{"title":"Por zona de lanzamiento","head":["Zona","Recibidos","A puerta","Detenidos","Encajados","% paradas"],"body":[["6 m",4,4,2,2,"50%"],["9 m",3,2,1,1,"50%"],["+11 m",0,0,0,0,"–"],["Contra",1,1,0,1,"0%"],["7 m",1,1,0,1,"0%"],["Total",9,8,3,5,"38%"]],"startY":40,"left":140}],["table",{"title":"Detenidos (vista del lanzador)","head":["","Izq.","Centro","Der."],"body":[["Arriba",1,0,0],["Medio",0,1,0],["Abajo",1,0,0]],"startY":50,"left":140,"width":69.5}],["table",{"title":"Encajados (vista del lanzador)","head":["","Izq.","Centro","Der."],"body":[["Arriba",1,0,2],["Medio",0,0,0],["Abajo",1,0,1]],"startY":50,"left":215.5,"width":69.5}],["page"],["header","#12 Verdugo","Portero"],["chart",12,26,120,[],"GK",true],["table",{"head":["Dato","Valor",""],"body":[["Paradas","–","0/0 a puerta"],["Detenidos",0,""],["Encajados",0,""],["Fuera · palo · bloq.",0,"sin ir a puerta"],["7 m parados","0/0",""]],"startY":30,"left":140}],["table",{"title":"Por zona de lanzamiento","head":["Zona","Recibidos","A puerta","Detenidos","Encajados","% paradas"],"body":[["6 m",0,0,0,0,"–"],["9 m",0,0,0,0,"–"],["+11 m",0,0,0,0,"–"],["Contra",0,0,0,0,"–"],["7 m",0,0,0,0,"–"],["Total",0,0,0,0,"–"]],"startY":40,"left":140}],["table",{"title":"Detenidos (vista del lanzador)","head":["","Izq.","Centro","Der."],"body":[["Arriba",0,0,0],["Medio",0,0,0],["Abajo",0,0,0]],"startY":50,"left":140,"width":69.5}],["table",{"title":"Encajados (vista del lanzador)","head":["","Izq.","Centro","Der."],"body":[["Arriba",0,0,0],["Medio",0,0,0],["Abajo",0,0,0]],"startY":50,"left":215.5,"width":69.5}]];
+  // Draws the player pages for real on a stand-in for jsPDF that keeps every text and how far down and across anything went.
+  const recordPlayerPage = (kind, makeState = sampleState) => {
+    const saved = pdfNewDoc, calls = [];
+    const doc = fakeDrawingDoc({ addPage: () => calls.push(['page']), autoTable(opts) { calls.push(['table', opts]); this.lastAutoTable = { finalY: opts.startY + 10 }; } });
+    pdfNewDoc = () => doc;
+    const snap = snapshot();
+    try { state = makeState(); playerPagesPdf(kind); } finally { pdfNewDoc = saved; restore(snap); }
+    return { calls, texts: doc.texts, maxX: doc.maxX, maxY: doc.maxY };
+  };
   // A different match from the sample: shifted dorsals, other team names and other events (shots, a turnover, a 2 min with its early
   // return, a rival sanction), so a helper that reads the global state instead of its argument gives a different answer.
   const SHIFTED_DORSAL = 100;
@@ -1467,9 +1486,82 @@
     if (!field.timeline.length || !field.timeline.every(([clock, text]) => clock && text && !text.includes(' ·'))) throw new Error('timeline ' + JSON.stringify(field.timeline));
     if (live === sampleOwn) throw new Error('the check cannot tell the two states apart');
   });
-  T('pdf: player pages unchanged after the report refactor', () => {
-    const now = recordPlayerPages();
-    if (now !== JSON.stringify(PDF_PLAYERS_SNAPSHOT)) { const i = [...now].findIndex((c, k) => c !== JSON.stringify(PDF_PLAYERS_SNAPSHOT)[k]); throw new Error('differs at ' + i + ': ' + now.slice(i - 60, i + 60)); }
+  T('pdf: a player page has the rating, figures, zones, 5\' points, turnovers, moments and faults', () => {
+    const page = recordPlayerPage('p8');
+    const titles = page.texts.join('|');
+    ['Valoración', 'Tiro por zona', BLOCKS_TITLE, FIGURES_TITLE, 'Pérdidas por tipo', 'Momentos clave', 'Fallos defensivos'].forEach((t) => { if (!titles.includes(t)) throw new Error(`no «${t}»: ${titles}`); });
+    RATING_LINES.forEach((l) => { if (!page.texts.some((t) => t.startsWith(pdfText(l.label).slice(0, 6)))) throw new Error('no line ' + l.label); });
+    const rating = matchRatings(state).get('p8');
+    if (!page.texts.includes(pdfText(ratingText(rating.value))) || !page.texts.includes(ratingBandLabel(rating.value))) throw new Error('rating chip ' + rating.value);
+    if (!page.texts.some((t) => t.startsWith('Falta ataque · Riv'))) throw new Error('turnover type and group');
+    if (page.texts.filter((t) => /^\d+'$/.test(t)).length < MATCH_SECONDS / CONFIG.scoreIntervalSeconds) throw new Error('5\' axis');
+    if (!page.texts.some((t) => t.startsWith(TEAM_MEAN_PREFIX))) throw new Error('no team mean');
+  });
+  T('pdf: every player fits one page, nothing drawn below the margin, even with every type logged', () => {
+    const busy = () => {
+      const s = sampleState(), p = 'p8';
+      CONFIG.turnoverGroups.flatMap((g) => g.types).forEach((t, i) => s.events.push({ id: `bt${i}`, abs: 100 + i, kind: 'TURNOVER', playerId: p, subtype: t }));
+      DEFENSIVE_FAULTS.forEach((a, i) => s.events.push({ id: `bf${i}`, abs: 200 + i, kind: 'ACTION', playerId: p, action: a }));
+      s.events.push({ id: 'bx', abs: 300, kind: 'TURNOVER', playerId: p, subtype: 'Tipo antiguo' });
+      return s;
+    };
+    [[sampleState, 'players'], [otherMatch, 'players'], [busy, 'p8']].forEach(([make, kind]) => {
+      const page = recordPlayerPage(kind, make);
+      const pages = page.calls.filter(([k]) => k === 'page').length, players = make().players.length;
+      if (pages !== (kind === 'players' ? players - 1 : 0)) throw new Error(`${kind}: ${pages + 1} pages for ${kind === 'players' ? players : 1} players`);
+      if (page.maxY > PDF_PAGE.h - PDF_PAGE.margin + 0.01) throw new Error(`${kind}: drawn down to ${page.maxY} mm`);
+      if (page.maxX > PDF_PAGE.w - PDF_PAGE.margin + 0.01) throw new Error(`${kind}: drawn across to ${page.maxX} mm`);
+    });
+    const page = recordPlayerPage('p8', busy);
+    const types = [...CONFIG.turnoverGroups.flatMap((g) => g.types), 'Tipo antiguo'];
+    types.forEach((t) => { if (!page.texts.some((x) => x.startsWith(pdfText(t).slice(0, 5)))) throw new Error('turnover type missing: ' + t); });
+    DEFENSIVE_FAULTS.forEach((a) => { if (!page.texts.some((x) => x.startsWith(pdfText(ACTIONS[a].label).slice(0, 5)))) throw new Error('fault missing: ' + a); });
+  });
+  T('turnover breakdown: exact types in group order with their group, unknown types last, none when empty', () => {
+    const ev = (subtype, i) => ({ id: `tb${i}`, abs: i, kind: 'TURNOVER', playerId: 'p8', subtype });
+    const rows = turnoverBreakdown(['Falta ataque', 'Pase', 'Tipo antiguo', 'Pase', 'Pasos'].map(ev));
+    if (JSON.stringify(rows.map((r) => [r.type, r.group, r.cls, r.n])) !== JSON.stringify([['Pase', 'Balón', 'c-act-bad', 2], ['Pasos', 'Regla', 'c-act-rule', 1], ['Falta ataque', 'Rival', 'c-act-rival', 1], ['Tipo antiguo', OTHER_TYPE_GROUP.label, OTHER_TYPE_GROUP.cls, 1]])) throw new Error(JSON.stringify(rows));
+    if (turnoverBreakdown([]).length) throw new Error('rows without turnovers');
+    const faults = defFaultBreakdown([{ id: 'f1', abs: 1, kind: 'ACTION', playerId: 'p8', action: 'LATE' }, { id: 'f2', abs: 2, kind: 'ACTION', playerId: 'p8', action: 'RECUP' }]);
+    if (faults.length !== 1 || faults[0].type !== ACTIONS.LATE.label || faults[0].group !== 'Táctico') throw new Error(JSON.stringify(faults));
+  });
+  T('player tab and summary: turnovers by exact type drawn as coloured bars', () => {
+    const keep = { tab: ui.sheetTab, player: ui.sheetPlayer }, snap = snapshot();
+    try {
+      state = sampleState();
+      Object.assign(ui, { sheetTab: 'player', sheetPlayer: 'p8' }); renderSheet();
+      const row = $('sheet').querySelector('.type-row');
+      if (!row || !row.textContent.includes('Falta ataque') || !row.querySelector('.loss-bar i.c-act-rival')) throw new Error('player bars ' + (row && row.outerHTML));
+      if (!$('sheet').querySelector('.rating-breakdown .rating-bars') || $('sheet').querySelectorAll('.rating-bars li').length !== RATING_LINES.length) throw new Error('rating breakdown');
+      Object.assign(ui, { sheetTab: 'summary' }); renderSheet();
+      const types = [...$('sheet').querySelectorAll('.type-row .loss-name')].map((n) => n.firstChild.textContent.trim());
+      if (types.join() !== turnoverBreakdown(state.events).map((r) => r.type).join() || !types.length) throw new Error('summary types ' + types);
+      if ($('sheet').querySelectorAll('.zone-tiles .stat-tile').length !== SHEET_ZONES.length) throw new Error('zone tiles');
+    } finally { Object.assign(ui, { sheetTab: keep.tab, sheetPlayer: keep.player }); restore(snap); renderSheet(); }
+  });
+  T('moment blocks: 5\' blocks of points, extra time in the last, keys moments in match order', () => {
+    const size = CONFIG.scoreIntervalSeconds, mo = (abs, value) => ({ abs, value, label: 'x' });
+    const blocks = momentBlocks([mo(10, 1), mo(size + 1, -0.5), mo(MATCH_SECONDS + 30, 0.25)]);
+    if (blocks.length !== MATCH_SECONDS / size || blocks[0].points !== POINTS_PER_GOAL || blocks[1].points !== -0.5 * POINTS_PER_GOAL || blocks.at(-1).points !== 0.25 * POINTS_PER_GOAL) throw new Error(JSON.stringify(blocks));
+    const keys = keyMomentsOf([mo(50, 0.1), mo(10, -1), mo(30, 0.5), mo(20, 0.001)], 2);
+    if (keys.map((k) => k.abs).join() !== '10,30') throw new Error(JSON.stringify(keys));
+  });
+  T('team means: over the field players who took part, shown under the player\'s figures', () => {
+    const s = sampleState(), players = matchParticipants(s), means = teamMeans(s);
+    if (!players.length || players.some((p) => p.pos === 'POR')) throw new Error('participants');
+    const goals = sumOf(players, (p) => playerCounts(p, s).goals) / players.length;
+    if (Math.abs(means.goals - goals) > 1e-9) throw new Error(`${means.goals} vs ${goals}`);
+    const figures = playerFigures(s.players.find((p) => p.id === 'p8'), s, means);
+    if (!figures.find((f) => f[0] === 'Pérdidas')[2].startsWith(teamMeanText(decimalText(means.TURNOVER)))) throw new Error(JSON.stringify(figures));
+    if (teamMeans({ ...s, events: [], court: [] }) !== null) throw new Error('mean without participants');
+  });
+  T('pdf: an unrated player reads «S/C» with the reason, a keeper has his rating under the map', () => {
+    const quiet = state.players.find((p) => p.pos !== 'POR' && !matchRatings(state).get(p.id).rated);
+    if (!quiet) throw new Error('premise: the sample has no unrated field player');
+    const page = recordPlayerPage(quiet.id);
+    if (!page.texts.includes('S/C') || !page.texts.some((t) => t.startsWith('Sin calificar'))) throw new Error(page.texts.join('|'));
+    const keeper = recordPlayerPage('p1');
+    if (!keeper.texts.includes('Valoración') || !keeper.calls.some(([k]) => k === 'table')) throw new Error('keeper page');
   });
   // ---- PDF audit (M6): the row builders and the table helper run offline, over recorded drawing calls ----
   const tablesOf = (calls) => calls.filter(([kind]) => kind === 'table').map(([, opts]) => opts);
@@ -1577,9 +1669,9 @@
     if (REPORT_COLOURS.them.toLowerCase() === team.brand.toLowerCase()) throw new Error('same colour for both teams');
   });
   T('pdf: every table of the player reports is rectangular and prints no NaN or undefined', () => {
-    ['sample', 'other'].forEach((name) => ['players', 'p8'].forEach((kind) => {
+    ['sample', 'other'].forEach((name) => ['players', 'p1'].forEach((kind) => {
       const tables = tablesOf(recordPdfCalls(kind, name === 'sample' ? sampleState : otherMatch));
-      if (tables.length < 5) throw new Error(`${name} ${kind}: only ${tables.length} tables`);
+      if (tables.length < 3) throw new Error(`${name} ${kind}: only ${tables.length} tables`);
       tables.forEach((t) => {
         const label = `${name} ${kind} «${t.title || t.head.join('|')}»`;
         if (!t.body.length) throw new Error(label + ' has no rows, an empty table says so in a row');
