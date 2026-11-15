@@ -1663,6 +1663,455 @@
     s.events.push({ id: 'oy', abs: 1030, kind: 'SANCTION', playerId: 'p18', card: '2M' });
     if (stateBaselines(s, set, 1050).att !== r.possession) throw new Error('both short');
   });
+  // ---- «Completar jugadas»: plays added, edited, deleted and attributed after the whistle ----
+  const PLAYS_MATCH_ID = 'plays-test-match';
+  // A finished, court-logged match on the sample squad: the defence lineup with p1 in goal, then with p12 from the second
+  // half. A goal of p22 (pass of p19), a rival goal, a 2' of p5 (600–720), a goal of p17 and a rival save.
+  const playsMatch = () => {
+    const s = freshMatch(sampleState()), def = Object.keys(s.lineups.DEF);
+    const shot = (id, abs, playerId, zone, result, on) => ({ id, abs, kind: 'SHOT', playerId, origin: m(0, 6), target: gf(0.5, 0.5), from: zone, zone, result, on });
+    const rival = (id, abs, gkId, zone, result, on) => ({ id, abs, kind: 'RIVAL_SHOT', gkId, rivalId: null, origin: m(0, 6), target: gf(0.5, 0.5), zone, result, contra: false, on });
+    return Object.assign(s, {
+      setupDone: true, finished: true, them: 'BM Ribera', rivals: sampleState().rivals, clock: { ...FULL_MATCH_CLOCK },
+      courtSets: [[...def, 'p1'].sort(), [...def, 'p12'].sort()], court: [{ abs: 0, set: 0 }, { abs: CONFIG.halfSeconds, set: null }, { abs: CONFIG.halfSeconds, set: 1 }],
+      events: [{ id: 'pa1', abs: 295, kind: 'ACTION', playerId: 'p19', action: 'ASIST' }, shot('pg1', 300, 'p22', '6M', 'GOL', 0), rival('pr1', 400, 'p1', '9M', 'GOL', 0),
+        { id: 'px1', abs: 600, kind: 'SANCTION', playerId: 'p5', card: '2M' }, shot('pg2', 2000, 'p17', '6M', 'GOL', 1), rival('pr2', 2100, 'p12', '6M', 'PARADA', 1)]
+    });
+  };
+  const withPlays = (fn, over = {}) => () => {
+    const snap = snapshot(), keepId = currentMatchId;
+    try {
+      state = Object.assign(playsMatch(), over);
+      currentMatchId = PLAYS_MATCH_ID; ui.playsLast = null; ui.sharedLog = null;
+      commit(); fn();
+    } finally {
+      closePop(); hidePlays(); hideFinal(); currentMatchId = keepId; ui.playsLast = null; ui.sharedLog = null;
+      removeKey(MATCH_KEY_PREFIX + PLAYS_MATCH_ID); restore(snap);
+    }
+  };
+  // Logs past events where a live log would have them: in match order.
+  const logIn = (...events) => { events.forEach((e) => insertInMatchOrder(state.events, e)); commit(); };
+  const inPlays = (sel) => $('plays').querySelector(sel);
+  const tapIn = (sel) => { const el = inPlays(sel); if (!el) throw new Error('missing ' + sel); if (el.disabled) throw new Error('disabled ' + sel); el.click(); };
+  const inPop = (sel) => $('pop').querySelector(sel);
+  const tapPop = (sel) => { const el = inPop(sel); if (!el) throw new Error('missing in popup ' + sel); el.click(); };
+  // Adds a play through the composer: half, minute, seconds, team, tile, then the optional type, player and zone.
+  const composeIn = ({ half = 1, min, sec = 0, team: side = 'us', tile, sub, player, gk, rival, zone, again = false }) => {
+    tapIn(`[data-cmp-half="${half}"]`); tapIn(`[data-cmp-min="${min}"]`); tapIn(`[data-cmp-sec="${sec}"]`);
+    tapIn(`[data-cmp-team="${side}"]`); tapIn(`[data-cmp-tile="${tile}"]`);
+    if (sub) tapIn(`[data-cmp-sub="${sub}"]`);
+    if (player) tapIn(`[data-cmp-player="${player}"]`);
+    if (gk) tapIn(`[data-cmp-gk="${gk}"]`);
+    if (rival) tapIn(`[data-cmp-rival="${rival}"]`);
+    if (zone) tapIn(`[data-cmp-zone="${zone}"]`);
+    tapIn(again ? '[data-cmp-again]' : '[data-cmp-add]');
+  };
+  const addVia = (opts) => { openPlays('final'); tapIn('[data-plays-add]'); composeIn(opts); return state.events.filter((e) => e.late).at(-1); };
+  const inMatchOrder = () => state.events.every((e, i) => i === 0 || state.events[i - 1].abs <= e.abs);
+  const untouched = () => JSON.stringify({ clock: state.clock, lineups: state.lineups, phase: state.phase, gkId: state.gkId, court: state.court });
+  T('plays: entry points on the summaries, hidden for read-only roles, the sample and without a match', withPlays(() => {
+    openFinal();
+    const button = $('final').querySelector('[data-final-plays="final"]');
+    if (!button || !button.closest('.final-actions')) throw new Error('no button on the final summary');
+    button.click();
+    if ($('plays').hidden || !$('final').hidden || !inPlays('[data-plays-close]').textContent.includes(NAV_LABELS.final)) throw new Error('editor not open over the final summary');
+    if (!$('plays').textContent.includes('Completar jugadas') || !inPlays('.plays-score').textContent.includes('2 – 1')) throw new Error('header');
+    tapIn('[data-plays-close]');
+    if (!$('plays').hidden || $('final').hidden) throw new Error('not back on the final summary');
+    const role = team.role;
+    try { team.role = VIEWER_ROLE; openFinal(); if ($('final').querySelector('[data-final-plays]')) throw new Error('offered to a guest'); openPlays('final'); if (!$('plays').hidden) throw new Error('opened for a guest'); } finally { team.role = role; }
+    currentMatchId = null; openFinal();
+    if ($('final').querySelector('[data-final-plays]')) throw new Error('offered without a saved match (sample)');
+    currentMatchId = PLAYS_MATCH_ID;
+    state.finished = false; state.clock = { period: 1, elapsedMs: CONFIG.halfSeconds * 1000, runningSince: null }; openHalftime();
+    $('final').querySelector('[data-final-plays="halftime"]').click();
+    if (!inPlays('[data-plays-close]').textContent.includes(NAV_LABELS.halftime)) throw new Error('half-time back label');
+    tapIn('[data-plays-close]');
+    if ($('final').hidden || !$('final').textContent.includes('Descanso')) throw new Error('not back on the half-time summary');
+  }));
+  T('plays: the clock popup offers it with the clock stopped, the score popup says the fix can be assigned', withPlays(() => {
+    state.finished = false; state.clock = { period: 2, elapsedMs: 600 * 1000, runningSince: null };
+    openClockPop({ x: 10, y: 10 });
+    tapPop('[data-clock="plays"]');
+    if ($('plays').hidden || ui.plays.from !== 'live' || !inPlays('[data-plays-close]').textContent.includes(NAV_LABELS.liveMatch)) throw new Error('not opened from the clock');
+    tapIn('[data-plays-close]');
+    if (!$('plays').hidden || !$('final').hidden) throw new Error('did not return to the live screen');
+    state.clock.runningSince = Date.now();
+    openClockPop({ x: 10, y: 10 });
+    if (inPop('[data-clock="plays"]')) throw new Error('offered with the clock running');
+    closePop(); pauseClock();
+    openScorePop({ x: 10, y: 10 });
+    if (!$('pop').textContent.includes('Podrás asignarlo al descanso o al final')) throw new Error('score popup note');
+  }));
+  T('plays: a missing goal is added at its minute, stamped, ordered, and the clock and lineups stay', withPlays(() => {
+    const before = untouched(), seconds = JSON.stringify([...minutesOnCourt(state)]), n = state.history.length, rating = matchRatings(state).get('p18').value;
+    const e = addVia({ half: 1, min: 11, sec: 30, tile: 'SHOT:GOL', player: 'p18', zone: '6M' });
+    if (!e || e.kind !== 'SHOT' || e.abs !== 690 || e.result !== 'GOL' || e.from !== '6M' || e.zone !== '6M' || e.playerId !== 'p18' || e.origin || e.target) throw new Error(JSON.stringify(e));
+    if (!courtSetOf(e.on).includes('p18') || !courtSetOf(e.on).includes('p1') || courtSetOf(e.on).includes('p5')) throw new Error('stamp ' + courtSetOf(e.on));
+    if (untouched() !== before || JSON.stringify([...minutesOnCourt(state)]) !== seconds) throw new Error('clock, lineups, court log or minutes changed');
+    if (!inMatchOrder() || state.events.indexOf(e) !== 4) throw new Error('not in match order: ' + state.events.map((x) => x.abs));
+    if (state.history.length !== n + 1 || score().us !== 3) throw new Error('one operation, one more goal');
+    if (!(matchRatings(state).get('p18').value > rating)) throw new Error('rating not recomputed');
+    if (ui.plays.composer || !inPlays(`[data-play="${e.id}"] .play-tag.late`)) throw new Error('row not tagged «añadida»');
+    tapIn('[data-plays-undo]');
+    if (state.events.includes(e) || score().us !== 2) throw new Error('undo');
+    tapIn('[data-plays-redo]');
+    if (!state.events.some((x) => x.id === e.id) || !inMatchOrder()) throw new Error('redo');
+  }));
+  T('plays: every kind of play can be added, ours and the rival\'s', withPlays(() => {
+    openPlays('final'); tapIn('[data-plays-add]');
+    const add = (opts) => { composeIn({ ...opts, again: true }); return state.events.filter((e) => e.late).at(-1); };
+    const expect = (e, fields) => Object.entries(fields).forEach(([k, v]) => { if (e[k] !== v) throw new Error(`${k}: ${e[k]} (${JSON.stringify(e)})`); });
+    expect(add({ min: 2, tile: 'SHOT:PARADA', player: 'p17', zone: '9M' }), { kind: 'SHOT', result: 'PARADA', from: '9M' });
+    expect(add({ min: 3, tile: 'SHOT:FALLO', player: 'p17', zone: '11M' }), { kind: 'SHOT', result: 'FUERA', from: '11M' });
+    expect(add({ min: 3, sec: 15, tile: 'SHOT:FALLO', sub: 'PALO', player: 'p17', zone: '6M' }), { result: 'PALO' });
+    expect(add({ min: 4, tile: 'ACTION:ASIST', player: 'p19' }), { kind: 'ACTION', action: 'ASIST', playerId: 'p19' });
+    expect(add({ min: 4, sec: 15, tile: 'ACTION:PROV7', player: 'p14' }), { action: 'PROV7' });
+    expect(add({ min: 5, tile: 'TURNOVER', sub: 'Pasos', player: 'p18' }), { kind: 'TURNOVER', subtype: 'Pasos' });
+    expect(add({ min: 6, tile: 'ACTION:RECUP', player: 'p17' }), { action: 'RECUP' });
+    expect(add({ min: 6, sec: 15, tile: 'ACTION:BLOC', player: 'p18' }), { action: 'BLOC' });
+    expect(add({ min: 7, tile: 'DEFFAULT', sub: 'BEATEN', player: 'p14' }), { action: 'BEATEN' });
+    const team = add({ min: 7, sec: 30, tile: 'DEFFAULT', sub: 'NOATK' });
+    expect(team, { action: 'NOATK', playerId: null });
+    if (team.on == null || courtSetOf(team.on).length !== FIELD_PLAYERS_ON_COURT + 1) throw new Error('team fault stamp');
+    expect(add({ min: 8, tile: 'SANCTION', sub: 'A', player: 'p19' }), { kind: 'SANCTION', card: 'A' });
+    const r = sortedRivals()[1];
+    expect(add({ min: 9, team: 'them', tile: 'RIVAL_SHOT:GOL', rival: r.id, zone: '7M' }), { kind: 'RIVAL_SHOT', result: 'GOL', gkId: 'p1', rivalId: r.id, zone: '7M', contra: false });
+    expect(add({ min: 9, sec: 30, team: 'them', tile: 'RIVAL_SHOT:PARADA', zone: '6M' }), { result: 'PARADA', rivalId: null });
+    expect(add({ min: 10, team: 'them', tile: 'RIVAL_SHOT:FALLO', zone: '9M' }), { result: 'FUERA' });
+    expect(add({ min: 11, team: 'them', tile: 'RIVAL_SANCTION', sub: 'A', rival: r.id }), { kind: 'RIVAL_SANCTION', card: 'A', rivalId: r.id });
+    if (!ui.plays.composer || ui.plays.composer.abs !== 660 || ui.plays.composer.team !== 'them' || ui.plays.composer.tile) throw new Error('«Añadir y otra» keeps time and team only');
+    if (!inMatchOrder() || state.events.filter((e) => e.late).length !== 15) throw new Error('order or count');
+    if (state.clock.elapsedMs !== FULL_MATCH_CLOCK.elapsedMs || !state.finished) throw new Error('clock touched');
+  }));
+  T('plays: the counter-attack chip, and a 7 m never is one', withPlays(() => {
+    openPlays('final'); tapIn('[data-plays-add]');
+    tapIn('[data-cmp-half="1"]'); tapIn('[data-cmp-min="3"]'); tapIn('[data-cmp-tile="SHOT:GOL"]'); tapIn('[data-cmp-player="p22"]'); tapIn('[data-cmp-zone="6M"]'); tapIn('[data-cmp-contra]'); tapIn('[data-cmp-add]');
+    const e = state.events.filter((x) => x.late).at(-1);
+    if (e.from !== '6M' || e.zone !== 'CONTRA') throw new Error(JSON.stringify(e));
+    tapIn('[data-plays-add]'); tapIn('[data-cmp-tile="SHOT:GOL"]'); tapIn('[data-cmp-contra]'); tapIn('[data-cmp-zone="7M"]');
+    if (!inPlays('[data-cmp-contra]').disabled || ui.plays.composer.contra) throw new Error('a 7 m counter-attack');
+  }));
+  T('plays: the Qué tiles come from the action registry, so a new action shows up', withPlays(() => {
+    const keys = playTiles('us').map((t) => t.key);
+    const expected = Object.keys(ACTIONS).filter((k) => !DEFENSIVE_FAULTS.includes(k) && !RETIRED_FAULTS.includes(k)).map((k) => `ACTION:${k}`);
+    if (expected.some((k) => !keys.includes(k))) throw new Error(keys.join());
+    if (['SHOT:GOL', 'SHOT:PARADA', 'SHOT:FALLO', 'TURNOVER', 'DEFFAULT', 'SANCTION'].some((k) => !keys.includes(k))) throw new Error(keys.join());
+    if (playTiles('them').map((t) => t.key).join() !== 'RIVAL_SHOT:GOL,RIVAL_SHOT:PARADA,RIVAL_SHOT:FALLO,RIVAL_SANCTION') throw new Error('rival tiles');
+    if (playTiles('us').find((t) => t.key === 'SHOT:FALLO').subs[0].options.some(([r]) => r === 'BLOCADO')) throw new Error('a blocked shot offered as a result');
+    ACTIONS.TESTDEF = { label: 'Buena defensa', group: 'act-def' };
+    try {
+      openPlays('final'); tapIn('[data-plays-add]');
+      if (!inPlays('[data-cmp-tile="ACTION:TESTDEF"]')) throw new Error('a new action is not a tile');
+      tapIn('[data-cmp-tile="ACTION:TESTDEF"]'); tapIn('[data-cmp-player="p14"]'); tapIn('[data-cmp-add]');
+      if (state.events.filter((e) => e.late).at(-1).action !== 'TESTDEF') throw new Error('not added');
+    } finally { delete ACTIONS.TESTDEF; }
+  }));
+  T('plays: the minute grid keeps to the time played', withPlays(() => {
+    state.finished = false; state.clock = { period: 1, elapsedMs: CONFIG.halfSeconds * 1000, runningSince: null };
+    openPlays('halftime'); tapIn('[data-plays-add]');
+    if (!inPlays('[data-cmp-half="2"]').disabled || inPlays('[data-cmp-min="29"]').disabled || inPlays('[data-cmp-sec="45"]').disabled) throw new Error('half-time grid');
+    composerSetTime(ui.plays.composer, CONFIG.halfSeconds + 100);
+    if (ui.plays.composer.abs >= CONFIG.halfSeconds) throw new Error('second half at half-time: ' + ui.plays.composer.abs);
+    hidePlays();
+    state.clock = { period: 2, elapsedMs: (12 * 60 + 40) * 1000, runningSince: null };
+    openPlays('live'); tapIn('[data-plays-add]'); tapIn('[data-cmp-half="2"]'); tapIn('[data-cmp-min="12"]');
+    if (!inPlays('[data-cmp-min="13"]').disabled || !inPlays('[data-cmp-sec="45"]').disabled || inPlays('[data-cmp-sec="30"]').disabled) throw new Error('mid-half grid');
+    composerSetTime(ui.plays.composer, 3500);
+    if (ui.plays.composer.abs !== matchEndAbs()) throw new Error('not clamped to the clock: ' + ui.plays.composer.abs);
+  }));
+  T('plays: who was on court at that minute first, the bench below, nobody out of play for a shot', withPlays(() => {
+    openPlays('final'); tapIn('[data-plays-add]'); tapIn('[data-cmp-half="1"]'); tapIn('[data-cmp-min="10"]'); tapIn('[data-cmp-sec="45"]'); tapIn('[data-cmp-tile="SHOT:GOL"]');
+    const court = [...$('plays').querySelectorAll('.cmp-picks:not(.bench) [data-cmp-player]')].map((b) => b.dataset.cmpPlayer);
+    const bench = [...$('plays').querySelectorAll('.cmp-picks.bench [data-cmp-player]')].map((b) => b.dataset.cmpPlayer);
+    if (court.sort().join() !== courtSetOf(0).slice().sort().join() || !bench.includes('p21') || bench.includes('p22')) throw new Error(`court ${court} bench ${bench}`);
+    if (!$('plays').textContent.includes("Banquillo en el 10'")) throw new Error('bench label');
+    if (!inPlays('[data-cmp-player="p5"]').disabled || !inPlays('[data-cmp-player="p5"] em')) throw new Error('p5 serving a 2\' can shoot');
+    tapIn('[data-cmp-tile="SANCTION"]');
+    if (inPlays('[data-cmp-player="p5"]').disabled) throw new Error('a card refused to a player serving a 2\'');
+    tapIn('[data-cmp-player="p5"]');
+    if (!inPlays('[data-cmp-add]').disabled || !$('plays').textContent.includes("Ya cumplía 2'")) throw new Error('second 2\' accepted');
+    tapIn('[data-cmp-sub="A"]');
+    if (inPlays('[data-cmp-add]').disabled) throw new Error('yellow refused');
+    tapIn('[data-cmp-min="12"]'); tapIn('[data-cmp-sub="2M"]');
+    if (inPlays('[data-cmp-add]').disabled) throw new Error('a 2\' after the first one ended is refused');
+  }));
+  T('plays: a bench player at that minute is allowed, warned, stamped in, and his minutes stay', withPlays(() => {
+    const seconds = JSON.stringify([...minutesOnCourt(state)]);
+    openPlays('final'); tapIn('[data-plays-add]'); tapIn('[data-cmp-half="1"]'); tapIn('[data-cmp-min="5"]'); tapIn('[data-cmp-tile="SHOT:GOL"]'); tapIn('[data-cmp-player="p21"]');
+    if (!$('plays').textContent.includes("No estaba en pista en el 5' según los cambios")) throw new Error('no warning');
+    tapIn('[data-cmp-zone="9M"]'); tapIn('[data-cmp-add]');
+    const e = state.events.filter((x) => x.late).at(-1), on = courtSetOf(e.on);
+    if (!on.includes('p21') || on.length !== courtSetOf(0).length || on.includes('p5') && on.includes('p18')) throw new Error('stamp ' + on);
+    if (JSON.stringify([...minutesOnCourt(state)]) !== seconds) throw new Error('minutes changed');
+    if (plusMinus(state).get('p21') !== 1) throw new Error('his goal does not count for him');
+  }));
+  T('plays: the keeper in goal at that minute is preselected for a rival shot, both are offered', withPlays(() => {
+    openPlays('final'); tapIn('[data-plays-add]'); tapIn('[data-cmp-team="them"]'); tapIn('[data-cmp-tile="RIVAL_SHOT:PARADA"]');
+    tapIn('[data-cmp-half="1"]'); tapIn('[data-cmp-min="20"]');
+    if (ui.plays.composer.gkId !== 'p1' || inPlays('[data-cmp-gk="p1"]').getAttribute('aria-pressed') !== 'true') throw new Error('first half keeper ' + ui.plays.composer.gkId);
+    tapIn('[data-cmp-half="2"]');
+    if (ui.plays.composer.gkId !== 'p12') throw new Error('second half keeper ' + ui.plays.composer.gkId);
+    if (!inPlays('[data-cmp-gk="p1"]') || !$('plays').textContent.includes('Portero en el')) throw new Error('the other keeper is not offered');
+    tapIn('[data-cmp-gk="p1"]'); tapIn('[data-cmp-half="1"]');
+    if (ui.plays.composer.gkId !== 'p1') throw new Error('the coach\'s pick was overridden');
+    tapIn('[data-cmp-zone="9M"]'); tapIn('[data-cmp-add]');
+    const e = state.events.filter((x) => x.late).at(-1);
+    if (e.gkId !== 'p1' || !courtSetOf(e.on).includes('p1') || courtSetOf(e.on).includes('p12')) throw new Error(JSON.stringify(e));
+    if (keeperAt(state, 100) !== 'p1' || keeperAt(state, 2500) !== 'p12') throw new Error('keeperAt');
+  }));
+  T('plays: without a court log nobody is preselected in goal and the players are one list', withPlays(() => {
+    openPlays('final'); tapIn('[data-plays-add]'); tapIn('[data-cmp-team="them"]'); tapIn('[data-cmp-tile="RIVAL_SHOT:GOL"]');
+    if (ui.plays.composer.gkId !== null || goalkeepers().some((g) => !inPlays(`[data-cmp-gk="${g.id}"]`))) throw new Error('keeper preselected without a log');
+    tapIn('[data-cmp-team="us"]'); tapIn('[data-cmp-tile="SHOT:GOL"]');
+    if (inPlays('.cmp-picks.bench') || $('plays').querySelectorAll('[data-cmp-player]').length !== state.players.length) throw new Error('bench split without a log');
+    tapIn('[data-cmp-player="p8"]'); tapIn('[data-cmp-add]');
+    if ('on' in state.events.filter((x) => x.late).at(-1)) throw new Error('stamped without a log');
+  }, { court: [], courtSets: [] }));
+  T('plays: score fixes, assigned one by one as one undoable step, the score never moving', withPlays(() => {
+    logIn({ id: 'fu1', abs: 900, kind: 'SCORE_FIX', team: 'us', delta: 1 }, { id: 'ft1', abs: 1000, kind: 'SCORE_FIX', team: 'them', delta: 1 }, { id: 'fu2', abs: 2400, kind: 'SCORE_FIX', team: 'us', delta: 1 });
+    commit(); openFinal();
+    const banner = $('final').querySelector('.plays-gap');
+    if (!banner || !banner.textContent.includes('2 goles nuestros · 1 gol rival')) throw new Error('summary banner: ' + (banner && banner.textContent));
+    $('final').querySelector('[data-final-assign="final"]').click();
+    const c = ui.plays.composer, sc = score(), n = state.history.length;
+    if (!c || c.mode !== 'assign' || c.abs !== 900 || c.tile !== 'SHOT:GOL' || !$('plays').textContent.includes('1 de 3')) throw new Error('assign mode');
+    if (!inPlays('[data-cmp-team="them"]').disabled || $('plays').querySelectorAll('[data-cmp-tile]').length !== 1) throw new Error('type not locked');
+    if (!inPlays('[data-play="fu1"]').textContent.includes('se usa para este gol') || inPlays('[data-play="fu1"] .play-assign')) throw new Error('the fix in use is not named so');
+    tapIn('[data-cmp-min="14"]'); tapIn('[data-cmp-player="p22"]'); tapIn('[data-cmp-zone="9M"]'); tapIn('[data-cmp-add]');
+    const goal = state.events.filter((x) => x.late).at(-1);
+    if (state.events.some((x) => x.id === 'fu1') || goal.abs !== 840 || goal.playerId !== 'p22' || goal.from !== '9M') throw new Error('fix not replaced by the goal');
+    if (score().us !== sc.us || score().them !== sc.them || state.history.length !== n + 1) throw new Error('score moved or two steps');
+    const r = ui.plays.composer;
+    if (r.abs !== 1000 || r.team !== 'them' || r.gkId !== 'p1' || r.zone !== '9M') throw new Error('next: rival goal with the keeper and the last zone ' + JSON.stringify(r));
+    tapIn('[data-cmp-skip]');
+    if (ui.plays.composer.abs !== 2400) throw new Error('skip');
+    tapIn('[data-cmp-skip]');
+    if (ui.plays.composer) throw new Error('the run did not end');
+    if (!state.events.some((x) => x.id === 'ft1') || !inPlays('.plays-gap').textContent.includes('Asignar (2)')) throw new Error('skipped fixes are kept');
+    tapIn('[data-plays-undo]');
+    if (!state.events.some((x) => x.id === 'fu1') || state.events.includes(goal)) throw new Error('undo');
+    tapIn('[data-play="ft1"]'); tapPop('[data-pp-assign]');
+    if (ui.plays.composer.mode !== 'assign' || ui.plays.composer.fixIds.join() !== 'ft1') throw new Error('assign from the row');
+    tapIn('[data-cmp-zone="6M"]'); tapIn('[data-cmp-add]');
+    const conceded = state.events.filter((x) => x.late).at(-1);
+    if (conceded.kind !== 'RIVAL_SHOT' || conceded.result !== 'GOL' || conceded.gkId !== 'p1' || state.events.some((x) => x.id === 'ft1')) throw new Error(JSON.stringify(conceded));
+  }));
+  T('plays: a goal added while that team has an unassigned one uses it, unless told not to', withPlays(() => {
+    logIn({ id: 'fu1', abs: 900, kind: 'SCORE_FIX', team: 'us', delta: 1 });
+    openPlays('final'); tapIn('[data-plays-add]'); tapIn('[data-cmp-half="1"]'); tapIn('[data-cmp-min="6"]'); tapIn('[data-cmp-tile="SHOT:GOL"]'); tapIn('[data-cmp-player="p18"]');
+    const sw = inPlays('[data-cmp-usefix]');
+    if (!sw || sw.getAttribute('aria-checked') !== 'true' || !sw.textContent.includes('el marcador sigue 3 – 1')) throw new Error('switch: ' + (sw && sw.textContent));
+    tapIn('[data-cmp-add]');
+    if (state.events.some((x) => x.id === 'fu1') || score().us !== 3) throw new Error('fix not used');
+    tapIn('[data-plays-undo]');
+    tapIn('[data-plays-add]'); tapIn('[data-cmp-tile="SHOT:GOL"]'); tapIn('[data-cmp-player="p18"]'); tapIn('[data-cmp-usefix]');
+    if (!inPlays('[data-cmp-usefix]').textContent.includes('el marcador pasa a 4 – 1')) throw new Error('switch off text');
+    tapIn('[data-cmp-add]');
+    if (!state.events.some((x) => x.id === 'fu1') || score().us !== 4) throw new Error('fix used against the switch');
+    tapIn('[data-plays-add]'); tapIn('[data-cmp-tile="SHOT:PARADA"]');
+    if (inPlays('[data-cmp-usefix]')) throw new Error('switch for a save');
+  }));
+  T('plays: the −1 cancels the nearest earlier +1; a −1 left is a surplus goal, removed with its fix', withPlays(() => {
+    logIn({ id: 'fa', abs: 100, kind: 'SCORE_FIX', team: 'us', delta: 1 }, { id: 'fb', abs: 200, kind: 'SCORE_FIX', team: 'us', delta: 1 }, { id: 'fc', abs: 250, kind: 'SCORE_FIX', team: 'us', delta: -1 });
+    let g = scoreFixGaps();
+    if (g.us.open.map((e) => e.id).join() !== 'fa' || g.us.surplus.length || g.them.open.length) throw new Error('pairing ' + JSON.stringify(g.us));
+    state.events = state.events.filter((e) => !['fa', 'fb', 'fc'].includes(e.id));
+    logIn({ id: 'fm', abs: 1200, kind: 'SCORE_FIX', team: 'us', delta: -1 });
+    g = scoreFixGaps();
+    if (g.us.surplus.map((e) => e.id).join() !== 'fm') throw new Error('surplus');
+    openPlays('final');
+    if (!inPlays('.plays-gap').textContent.includes('1 gol nuestro de más')) throw new Error('surplus banner');
+    tapIn(`[data-plays-filter="${TEAM_GOALS_FILTER}us"]`);
+    const rows = [...$('plays').querySelectorAll('[data-play]')].map((b) => b.dataset.play);
+    if (rows.sort().join() !== 'fm,pg1,pg2') throw new Error('filtered rows ' + rows);
+    const sc = score();
+    tapIn('[data-play="pg2"]'); tapPop('[data-pp-delete]');
+    if (inPop('[data-pp-toggle="withFix"]').getAttribute('aria-checked') !== 'true' || !$('pop').textContent.includes('El marcador no cambia')) throw new Error('surplus offered');
+    tapPop('[data-pp-confirm]');
+    if (state.events.some((e) => e.id === 'pg2' || e.id === 'fm') || score().us !== sc.us) throw new Error('goal and −1 not removed together');
+    tapIn('[data-plays-undo]');
+    if (!state.events.some((e) => e.id === 'pg2') || !state.events.some((e) => e.id === 'fm')) throw new Error('undo');
+  }));
+  T('plays: editing keeps the id, marks it, is one undoable step and keeps the 2\' end pointing at it', withPlays(() => {
+    logIn({ id: 'pxe', abs: 650, kind: 'EXCLUSION_END', sanctionId: 'px1' });
+    openPlays('final');
+    tapIn('[data-play="pg1"]');
+    if (!inPop('[data-pp-edit]') || !$('pop').textContent.includes('Zona') || !$('pop').textContent.includes('Jugador')) throw new Error('fields');
+    tapPop('[data-pp-edit]');
+    const c = ui.plays.composer;
+    if (c.mode !== 'edit' || c.abs !== 300 || c.playerId !== 'p22' || c.zone !== '6M' || c.tile !== 'SHOT:GOL' || inPlays('[data-cmp-pass]')) throw new Error('prefill ' + JSON.stringify(c));
+    const n = state.history.length;
+    tapIn('[data-cmp-min="20"]'); tapIn('[data-cmp-zone="9M"]'); tapIn('[data-cmp-save]');
+    const e = state.events.find((x) => x.id === 'pg1');
+    if (!e.edited || e.abs !== 1200 || e.from !== '9M' || e.zone !== '9M' || !e.origin || state.history.length !== n + 1 || !inMatchOrder()) throw new Error(JSON.stringify(e));
+    if (!courtSetOf(e.on).includes('p22')) throw new Error('stamp');
+    if (!inPlays('[data-play="pg1"] .play-tag.late').textContent.includes('editada')) throw new Error('tag');
+    tapIn('[data-plays-undo]');
+    const back = state.events.find((x) => x.id === 'pg1');
+    if (back.edited || back.abs !== 300 || back.from !== '6M' || state.events.indexOf(back) !== 1) throw new Error('undo ' + JSON.stringify(back));
+    tapIn('[data-play="px1"]'); tapPop('[data-pp-edit]'); tapIn('[data-cmp-min="11"]'); tapIn('[data-cmp-save]');
+    const moved = state.events.find((x) => x.id === 'px1');
+    if (moved.abs !== 660 || earlyEndOf(moved).id !== 'pxe' || exclusionEnd(moved) !== 650 && exclusionEnd(moved) !== 660) throw new Error('2\' end lost');
+  }));
+  T('plays: deleting a goal offers its pass of goal, ticked; a sanction takes its early end along', withPlays(() => {
+    openPlays('final');
+    tapIn('[data-play="pg1"]'); tapPop('[data-pp-delete]');
+    const check = inPop('[data-pp-toggle="withAssist"]');
+    if (!check || check.getAttribute('aria-checked') !== 'true' || !check.textContent.includes('#19')) throw new Error('assist not offered');
+    if (!$('pop').textContent.includes('El marcador pasa a 1 – 1')) throw new Error('score note');
+    tapPop('[data-pp-confirm]');
+    if (state.events.some((e) => e.id === 'pg1' || e.id === 'pa1')) throw new Error('goal and pass not removed');
+    tapIn('[data-plays-undo]');
+    if (!state.events.some((e) => e.id === 'pg1') || !state.events.some((e) => e.id === 'pa1')) throw new Error('one undo brings both back');
+    tapIn('[data-play="pg1"]'); tapPop('[data-pp-delete]'); tapPop('[data-pp-toggle="withAssist"]'); tapPop('[data-pp-confirm]');
+    if (state.events.some((e) => e.id === 'pg1') || !state.events.some((e) => e.id === 'pa1')) throw new Error('pass removed although unticked');
+    logIn({ id: 'pxe', abs: 650, kind: 'EXCLUSION_END', sanctionId: 'px1' }); renderPlays();
+    tapIn('[data-play="px1"]'); tapPop('[data-pp-delete]');
+    if (!$('pop').textContent.includes('Vuelve antes de su 2')) throw new Error('end not announced');
+    tapPop('[data-pp-confirm]');
+    if (state.events.some((e) => e.id === 'px1' || e.id === 'pxe')) throw new Error('2\' end left orphaned');
+    logIn({ id: 'p7', abs: 1500, kind: 'SHOT', playerId: 'p8', from: '7M', zone: '7M', result: 'GOL' }); renderPlays();
+    tapIn('[data-play="p7"]'); tapPop('[data-pp-delete]');
+    if (!$('pop').textContent.includes('Provoca 7 m» se queda')) throw new Error('7 m note');
+  }));
+  T('plays: a 2\' stretched by a clock correction is tagged and restored, undoably', withPlays(() => {
+    state.events.find((e) => e.id === 'px1').clockShift = -300; commit();
+    openPlays('final');
+    if (!inPlays('[data-play="px1"]').textContent.includes("2' alterado") || !inPlays('[data-play="px1"]').textContent.includes('05:00 → 07:00')) throw new Error('tags: ' + inPlays('[data-play="px1"]').textContent);
+    tapIn('[data-play="pg1"]');
+    if (inPop('[data-pp-reset]')) throw new Error('offered on a goal');
+    closePop(); tapIn('[data-play="px1"]'); tapPop('[data-pp-reset]');
+    const e = state.events.find((x) => x.id === 'px1');
+    if ('clockShift' in e || !e.edited || exclusionEnd(e) !== 720 || state.events.indexOf(e) !== 3) throw new Error(JSON.stringify(e));
+    if (!state.fired.includes('ex-px1')) throw new Error('its alarm would ring');
+    tapIn('[data-plays-undo]');
+    if (state.events.find((x) => x.id === 'px1').clockShift !== -300) throw new Error('undo');
+  }));
+  T('plays: a late 2\' rings no alarm; one still running into the second half does', withPlays(() => {
+    checkTimers();
+    const e = addVia({ min: 20, tile: 'SANCTION', sub: '2M', player: 'p19' });
+    if (!state.fired.includes(`ex-${e.id}`)) throw new Error('alarm key missing');
+    const alerts = state.alerts.length; checkTimers();
+    if (state.alerts.length !== alerts) throw new Error('an alarm rang');
+    const r = addVia({ half: 2, min: 25, team: 'them', tile: 'RIVAL_SANCTION', sub: '2M' });
+    if (!state.fired.includes(`rex-${r.id}`)) throw new Error('rival alarm key missing');
+    hidePlays();
+    state.finished = false; state.clock = { period: 1, elapsedMs: CONFIG.halfSeconds * 1000, runningSince: null }; state.events = state.events.filter((x) => x.abs < CONFIG.halfSeconds); commit();
+    const late = addVia({ min: 29, tile: 'SANCTION', sub: '2M', player: 'p17' });
+    if (state.fired.includes(`ex-${late.id}`)) throw new Error('a 2\' still running was marked served');
+  }));
+  T('plays: a late card that sends a player off warns, and leaves the lineups only before the final whistle', withPlays(() => {
+    const lineups = JSON.stringify(state.lineups);
+    logIn({ id: 'px2', abs: 900, kind: 'SANCTION', playerId: 'p5', card: '2M' }, { id: 'pl', abs: 1500, kind: 'TURNOVER', playerId: 'p5', subtype: 'Pase' });
+    openPlays('final'); tapIn('[data-plays-add]'); tapIn('[data-cmp-half="1"]'); tapIn('[data-cmp-min="20"]'); tapIn('[data-cmp-tile="SANCTION"]'); tapIn('[data-cmp-player="p5"]');
+    if (!$('plays').textContent.includes("Descalificado desde el 20' · tiene 1 jugada posterior")) throw new Error('no warning: ' + inPlays('.composer footer').textContent);
+    tapIn('[data-cmp-add]');
+    if (!isDisqualified('p5') || JSON.stringify(state.lineups) !== lineups) throw new Error('lineups touched after the final whistle');
+    hidePlays();
+    state.finished = false; state.clock = { period: 1, elapsedMs: CONFIG.halfSeconds * 1000, runningSince: null };
+    undo(); state.events = state.events.filter((x) => x.id !== 'pl'); commit();
+    addVia({ min: 20, tile: 'SANCTION', sub: 'D', player: 'p19' });
+    if (state.lineups.DEF.p19 || state.lineups.ATK.p19) throw new Error('sent off at half-time but still in a lineup');
+  }));
+  T('plays: shots without a court spot are left off the maps and grids, and counted everywhere else', withPlays(() => {
+    addVia({ min: 12, tile: 'SHOT:GOL', player: 'p18', zone: '9M' });
+    addVia({ min: 13, team: 'them', tile: 'RIVAL_SHOT:PARADA', zone: '6M' });
+    hidePlays();
+    const keepView = { source: ui.source, show: ui.show };
+    try {
+      ui.source = 'US'; ui.show = new Set(['GOL', 'PARADA', 'FALLO']); renderShots();
+      if ($('shots-layer').querySelectorAll('line').length !== ourShots().length - 1) throw new Error('live map');
+    } finally { Object.assign(ui, keepView); renderShots(); }
+    const svgMap = shotMapSvg(ourShots(), 'US');
+    if ((svgMap.match(/opacity="\.9"/g) || []).length !== ourShots().length - 1) throw new Error('sheet map');
+    attackAnalysis('us'); attackAnalysis('them'); goalGrid(rivalShots(), 'PARADA'); goalRates(rivalShots(), onTarget);
+    const doc = new Proxy({ text: () => {}, getTextWidth: () => 10 }, { get: (target, key) => (key in target ? target[key] : () => {}) });
+    pdfShotChart(doc, 0, 0, 100, ourShots(), 'US', true);
+    if (distanceKpis().shooting.us.far.shots !== 1) throw new Error('the late 9 m shot is missing from the 9 m+ figures');
+    ui.sheetTab = 'stats'; renderSheet(); ui.sheetTab = 'analysis'; renderSheet(); ui.sheetTab = 'gk'; renderSheet();
+    if (/NaN|undefined/.test($('sheet').textContent)) throw new Error('sheet text');
+    $('sheet').hidden = true; ui.sheetTab = 'summary';
+  }));
+  T('plays: the timeline shows each half in 5\' blocks with the score, filters with counts, and ＋ at a block', withPlays(() => {
+    logIn({ id: 'fu1', abs: 900, kind: 'SCORE_FIX', team: 'us', delta: 1 });
+    addVia({ min: 2, tile: 'TURNOVER', sub: 'Pase', player: 'p18' }); tapIn('[data-plays-close]'); openPlays('final');
+    const halves = $('plays').querySelectorAll('.play-half');
+    if (halves.length !== 2 || !halves[0].querySelector('header').textContent.includes('2 – 1') || !halves[1].querySelector('header').textContent.includes('3 – 1')) throw new Error('half headers');
+    const labels = [...halves[0].querySelectorAll('.play-block span')].map((b) => b.textContent), scores = [...halves[0].querySelectorAll('.play-block b')].map((b) => b.textContent);
+    if (labels.length !== 6 || labels[0] !== "0' – 5'" || labels[5] !== "25' – 30'" || scores.join() !== '0 – 0,1 – 1,1 – 1,2 – 1,2 – 1,2 – 1') throw new Error(labels.join() + ' / ' + scores.join());
+    if (halves[1].querySelector('.play-block span').textContent !== "30' – 35'") throw new Error('second half blocks');
+    if (inPlays('[data-play="pg1"] .sc').textContent !== '1–0' || inPlays('[data-play="fu1"] .sc').textContent !== '2–1') throw new Error('running score');
+    if (!inPlays('[data-play="fu1"]').textContent.includes('sin asignar') || !inPlays('[data-play="fu1"] .play-assign')) throw new Error('fix row');
+    if (!inPlays('[data-play="px1"]').textContent.includes('10:00 → 12:00')) throw new Error('2\' window');
+    const chip = (key) => inPlays(`[data-plays-filter="${key}"]`);
+    if (chip('all').textContent.replace(/\s+/g, '') !== `Todo${state.events.length}` || !chip('goals').textContent.includes('3') || !chip('fixes').textContent.includes('1') || !chip('late').textContent.includes('1')) throw new Error('counts');
+    chip('goals').click();
+    const shown = [...$('plays').querySelectorAll('[data-play]')].map((b) => b.dataset.play);
+    if (shown.sort().join() !== 'pg1,pg2,pr1') throw new Error('goal filter ' + shown);
+    chip('goals').click();
+    if (ui.plays.filter !== 'all') throw new Error('a second tap does not clear the filter');
+    tapIn('[data-plays-half="1"]');
+    if (!halves.length || !$('plays').querySelectorAll('.play-half')[1].classList.contains('phone-hidden')) throw new Error('phone half switch');
+    tapIn('[data-plays-add-at="1200"]');
+    if (!ui.plays.composer || ui.plays.composer.abs !== 1200 || !inPlays('#play-here')) throw new Error('＋ at a block');
+  }));
+  T('plays: «Añadir otra después» presets the time, and the minute stays for the next play', withPlays(() => {
+    openPlays('final'); tapIn('[data-play="pr1"]'); tapPop('[data-pp-after]');
+    if (ui.plays.composer.abs !== 400) throw new Error('time not preset');
+    tapIn('[data-cmp-sec="15"]'); tapIn('[data-cmp-tile="ACTION:RECUP"]'); tapIn('[data-cmp-player="p17"]'); tapIn('[data-cmp-add]');
+    tapIn('[data-plays-add]');
+    if (ui.plays.composer.abs !== 375) throw new Error('minute not kept: ' + ui.plays.composer.abs);
+  }));
+  T('plays: Escape closes a play popup first, then goes back to the summary', withPlays(() => {
+    const escape = () => document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
+    openFinal(); $('final').querySelector('[data-final-plays]').click();
+    tapIn('[data-play="pg1"]');
+    escape();
+    if (!$('pop').hidden || $('plays').hidden) throw new Error('the popup did not close first');
+    escape();
+    if (!$('plays').hidden || $('final').hidden || $('plays').innerHTML) throw new Error('not back on the summary');
+  }));
+  T('plays: our goal with «＋ Pase» adds the pass of goal in the same step', withPlays(() => {
+    openPlays('final'); tapIn('[data-plays-add]'); tapIn('[data-cmp-half="1"]'); tapIn('[data-cmp-min="15"]'); tapIn('[data-cmp-tile="SHOT:GOL"]'); tapIn('[data-cmp-player="p22"]');
+    tapIn('[data-cmp-pass]');
+    if (inPlays('[data-cmp-passer="p22"]') || !inPlays('[data-cmp-passer="p19"]')) throw new Error('passers');
+    tapIn('[data-cmp-passer="p19"]');
+    if (!inPlays('[data-cmp-pass]').textContent.includes('Lolo') && !inPlays('[data-cmp-pass]').textContent.includes(playerById('p19').name)) throw new Error('chip');
+    const n = state.history.length;
+    tapIn('[data-cmp-add]');
+    const added = state.events.filter((e) => e.late);
+    if (added.length !== 2 || !added.some((e) => isAction(e, 'ASIST') && e.playerId === 'p19' && e.abs === 900) || state.history.length !== n + 1) throw new Error(JSON.stringify(added));
+    if (assistOf(added.find((e) => e.kind === 'SHOT')).playerId !== 'p19') throw new Error('not paired with the goal');
+  }));
+  T('plays: closing the editor rebuilds the final summary, and a shared report says it changed', withPlays(() => {
+    openFinal(); ui.sharedLog = sharedLogOf(state);
+    openFinal();
+    if ($('final-status').textContent.includes('Cambiado')) throw new Error('changed before any change');
+    $('final').querySelector('[data-final-plays]').click();
+    addVia({ min: 12, tile: 'SHOT:GOL', player: 'p18', zone: '6M' });
+    tapIn('[data-plays-close]');
+    if (!$('final').querySelector('.final-score').textContent.includes('3–1')) throw new Error('summary score not rebuilt');
+    if (!$('final-status').textContent.includes('Cambiado después de compartir')) throw new Error('no reshare note');
+  }));
+  T('plays: events go in at their second; a live play still lands last', () => {
+    const snap = snapshot();
+    try {
+      state.events = [{ id: 'o1', abs: 50, kind: 'NOTE', text: 'a' }, { id: 'o2', abs: 200, kind: 'NOTE', text: 'b' }];
+      applyOp({ added: [{ id: 'o3', abs: 100, kind: 'NOTE', text: 'c' }, { id: 'o4', abs: 200, kind: 'NOTE', text: 'd' }], removed: [] });
+      if (state.events.map((e) => e.id).join() !== 'o1,o3,o2,o4') throw new Error(state.events.map((e) => e.id).join());
+      state.clock = { period: 2, elapsedMs: 0, runningSince: null };
+      addNote('live');
+      if (state.events.at(-1).text !== 'live') throw new Error('live play not last');
+    } finally { restore(snap); }
+  });
+  T('plays: helpers read the match at a second', withPlays(() => {
+    if (courtSetAt(state, 0) !== 0 || courtSetAt(state, CONFIG.halfSeconds - 1) !== 0 || courtSetAt(state, CONFIG.halfSeconds) !== 1) throw new Error('courtSetAt');
+    if (!offCourtAt('SANCTION', 650).has('p5') || offCourtAt('SANCTION', 720).has('p5')) throw new Error('offCourtAt');
+    if (exclusionAt('SANCTION', 'p5', 600).id !== 'px1' || exclusionAt('SANCTION', 'p5', 599)) throw new Error('exclusionAt');
+    logIn({ id: 'pd', abs: 1000, kind: 'SANCTION', playerId: 'p18', card: 'D' });
+    if (offCourtAt('SANCTION', 999).has('p18') || !offCourtAt('SANCTION', 3000).has('p18')) throw new Error('send-off');
+  }));
   // ---- Accounts, team and saved matches (device backend; Supabase mapping through a fake client) ----
   const TA = async (name, fn) => { try { await fn(); __results.push('OK ' + name); } catch (e) { __results.push('FAIL ' + name + ': ' + (e && e.message || e) + ' ' + ((e && e.stack) || '').split('\n')[1]); } };
   const tick0 = () => new Promise((r) => setTimeout(r, 0));
@@ -2907,6 +3356,17 @@
         finishMatch(); await syncRun;
         if (!sent.includes(currentMatchId) || localMatch(currentMatchId).dirty) throw new Error('not uploaded on finishing: ' + sent);
       } finally { backend.saveMatch = real; hideFinal(); restore(snap); }
+    });
+    await TA('closing «Completar jugadas» uploads the match at once', async () => {
+      const snap = snapshot(), real = backend.saveMatch, sent = [];
+      backend.saveMatch = async (...args) => { sent.push(args[1]); return real(...args); };
+      try {
+        state.finished = true; openPlays('final');
+        addPastEvent('TURNOVER', { playerId: state.players.find((p) => p.pos !== 'POR').id, subtype: 'Pase' }, 0);
+        await syncRun; clearTimeout(syncTimer); sent.length = 0;
+        closePlays(); await syncRun;
+        if (!sent.includes(currentMatchId) || localMatch(currentMatchId).dirty) throw new Error('not uploaded on closing the editor: ' + sent);
+      } finally { backend.saveMatch = real; hidePlays(); hideFinal(); restore(snap); }
     });
     await TA('failed upload keeps the match pending until the connection is back', async () => { const real = backend.saveMatch; backend.saveMatch = async () => { throw new Error('Failed to fetch'); }; addEvent('TURNOVER', { playerId: state.players.find((p) => p.pos !== 'POR').id, subtype: 'Pasos' }); await syncMatches(); const pending = localMatch(currentMatchId).dirty; backend.saveMatch = real; if (!pending) throw new Error('marked clean'); if (!withLocalChanges([]).some((x) => x.id === currentMatchId && x.pending)) throw new Error('not listed as pending'); await syncMatches(); if (localMatch(currentMatchId).dirty) throw new Error('not uploaded later'); });
     await TA('offline: the match list comes from the device copy', async () => { leaveMatch(); const real = backend.listMatches; backend.listMatches = async () => { throw new Error('Failed to fetch'); }; await showMatches(); backend.listMatches = real; if (!home.offline || !home.matches.length || !$('home').textContent.includes('Sin conexión')) throw new Error('offline list'); });
