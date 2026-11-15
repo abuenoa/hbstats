@@ -21,7 +21,7 @@
     'tokens:p1': { x: 539.39, y: 293.29, w: 81.22, h: 77.84 },
     'tokens:p22': { x: 282.2, y: 323.74, w: 81.22, h: 77.84 },
     'tokens:p5': { x: 370.18, y: 413.09, w: 81.22, h: 90.02 },
-    'tokens:p14': { x: 478.48, y: 460.46, w: 81.22, h: 90.02 },
+    'tokens:p14': { x: 478.48, y: 459.11, w: 96.11, h: 91.37 },
     'tokens:p18': { x: 600.3, y: 472.65, w: 81.22, h: 77.84 },
     'tokens:p19': { x: 708.6, y: 425.27, w: 81.22, h: 77.84 },
     'tokens:p17': { x: 796.59, y: 323.74, w: 81.22, h: 77.84 },
@@ -38,7 +38,7 @@
       'tokens:p1': { x: 549.14, y: 246.97, w: 61.72, h: 59.15 },
       'tokens:p22': { x: 353.7, y: 270.12, w: 61.72, h: 59.15 },
       'tokens:p5': { x: 420.56, y: 338.01, w: 61.72, h: 68.41 },
-      'tokens:p14': { x: 502.85, y: 374.01, w: 61.72, h: 68.41 },
+      'tokens:p14': { x: 502.85, y: 372.98, w: 73.03, h: 69.43 },
       'tokens:p18': { x: 595.43, y: 383.27, w: 61.72, h: 59.15 },
       'tokens:p19': { x: 677.72, y: 347.27, w: 61.72, h: 59.15 },
       'tokens:p17': { x: 744.59, y: 270.12, w: 61.72, h: 59.15 },
@@ -314,7 +314,7 @@
   T('rival 2m: card then dorsal, chip shows the dorsal', () => { $('btn-rival-2m').click(); if (ui.popView.type !== 'rivalSanction' || ui.popView.card !== '2M') throw new Error('no pop'); if (document.querySelector('[data-card="2M"]').getAttribute('aria-pressed') !== 'true') throw new Error('2 min not preselected'); const r = sortedRivals()[0]; document.querySelector(`[data-rival-sanction="${r.id}"]`).click(); const e = state.events.at(-1); if (e.kind !== 'RIVAL_SANCTION' || e.card !== '2M' || e.rivalId !== r.id) throw new Error(JSON.stringify(e)); if (activeRivalExclusions().length !== 1) throw new Error('no rex'); if (!$('rex').textContent.includes(`#${r.num}`)) throw new Error('chip ' + $('rex').innerHTML); if (!$('rex').textContent.includes('×')) throw new Error('strength'); });
   T('clock down', () => { state.clockDown = true; renderClock(); const t = $('clock').textContent; if (t !== mmss(CONFIG.halfSeconds - periodSeconds())) throw new Error(t); state.clockDown = false; renderClock(); });
   T('clock pop mode', () => { openClockPop({ x: 100, y: 100 }); const b = document.querySelector('[data-clock-mode="down"]'); b.click(); if (!state.clockDown) throw new Error('mode'); if (!$('period').textContent.includes('↓')) throw new Error('arrow'); document.querySelector('[data-clock-mode="up"]').click(); closePop(); });
-  T('clock pop offers ±1, 5 and 10 s that add up', () => { const saved = state.clock; state.clock = { period: 1, elapsedMs: 60000, runningSince: null }; try { openClockPop({ x: 100, y: 100 }); const btns = [...document.querySelectorAll('[data-adjust]')]; const labels = btns.map((b) => b.textContent).join(' '); if (labels !== '−10s −5s −1s +1s +5s +10s') throw new Error(labels); ['10', '5', '1'].forEach((s) => document.querySelector(`[data-adjust="${s}"]`).click()); if (state.clock.elapsedMs !== 76000) throw new Error('elapsed ' + state.clock.elapsedMs); } finally { closePop(); state.clock = saved; commit(); } });
+  T('clock pop offers ±1, 5, 10 and 30 s that add up', () => { const saved = state.clock; state.clock = { period: 1, elapsedMs: 60000, runningSince: null }; try { openClockPop({ x: 100, y: 100 }); const btns = [...document.querySelectorAll('[data-adjust]')]; const labels = btns.map((b) => b.textContent).join(' '); if (labels !== '+1s +5s +10s +30s −1s −5s −10s −30s') throw new Error(labels); ['30', '10', '5', '1', '-30'].forEach((s) => document.querySelector(`[data-adjust="${s}"]`).click()); if (state.clock.elapsedMs !== 76000) throw new Error('elapsed ' + state.clock.elapsedMs); const plus = document.querySelector('[data-adjust="1"]'), minus = document.querySelector('[data-adjust="-1"]'); if (!plus.classList.contains('c-act-good') || !minus.classList.contains('c-act-bad')) throw new Error('step colours'); } finally { closePop(); state.clock = saved; commit(); } });
   T('frame detection', () => { if (!onGoalFrame({ x: 322, y: 150 })) throw new Error('post'); if (!onGoalFrame({ x: 500, y: 25 })) throw new Error('bar'); if (onGoalFrame({ x: 500, y: 150 })) throw new Error('face'); if (onGoalFrame({ x: 200, y: 150 })) throw new Error('outside'); });
   T('goal cell', () => { const c = goalCell({ x: 330, y: 30 }); const d = goalCell({ x: 670, y: 250 }); if (c.join() !== '0,0' || d.join() !== '2,2') throw new Error(c + ' ' + d); });
   T('zones by distance: 6 m, 9 m on the dashed line, +11 m', () => { const cases = [[m(0, 7), '6M'], [m(0, 8.6), '6M'], [m(0, 8.8), '9M'], [m(0, 10.9), '9M'], [m(0, 11.2), '11M'], [m(-6, 8), '9M']]; cases.forEach(([pt, z]) => { if (zoneFrom(pt) !== z) throw new Error(`${JSON.stringify(pt)} → ${zoneFrom(pt)}, expected ${z}`); }); });
@@ -767,19 +767,86 @@
   const tapEl = (el) => { const r = el.getBoundingClientRect(); const o = { bubbles: true, clientX: r.left + r.width / 2, clientY: r.top + r.height / 2, pointerId: 7, pointerType: 'pen' }; el.dispatchEvent(new PointerEvent('pointerdown', o)); el.dispatchEvent(new PointerEvent('pointerup', o)); };
   const panelKeys = () => [...new Set([...document.querySelectorAll('#acts [data-panel-act], #acts [data-panel-key]')].map((b) => b.dataset.panelAct || b.dataset.panelKey))].join();
   const withSample = (fn) => () => { const snap = snapshot(); try { state.lineups = sampleState().lineups; commit(); fn(); } finally { disarmAction(); cancelPenalty(); closePop(); restore(snap); } };
-  T('panel shows only the current phase actions', withSample(() => { setPhase('ATK'); if (panelKeys() !== 'ASIST,PROV7,TURNOVER') throw new Error('ATK ' + panelKeys()); setPhase('DEF'); if (panelKeys() !== 'RECUP,BLOC,DEFFAULT') throw new Error('DEF ' + panelKeys()); if (document.querySelector('#acts [data-sanction], #acts [data-card]')) throw new Error('sanctions in panel'); }));
-  T('arm then tap: recovery by a bench player is logged and they come on', withSample(() => { setPhase('DEF'); document.querySelector('[data-panel-act="RECUP"]').click(); const glowing = document.querySelectorAll('#tokens-layer .tok.target').length; if (glowing !== Object.keys(lineup()).length) throw new Error('court glow ' + glowing); const b = document.querySelector('.bench-player[data-id="p21"]'); if (!b.classList.contains('target')) throw new Error('bench glow'); tapEl(b); const e = state.events.at(-1); if (e.kind !== 'ACTION' || e.action !== 'RECUP' || e.playerId !== 'p21') throw new Error(JSON.stringify(e)); if (state.phase !== 'ATK') throw new Error('phase'); if (!state.lineups.DEF.p21) throw new Error('not on court in DEF'); if (ui.armedAction) throw new Error('still armed'); }));
+  // ---- Playing a man down: the stand-in, and the clock the referees stop ----
+  const withManDown = (fn) => () => { const snap = snapshot(); try { state = sampleState(); state.sample = false; state.court = []; state.courtSets = []; state.clock = { period: 1, elapsedMs: 1000 * 1000, runningSince: Date.now() }; commit(); fn(); } finally { closePop(); restore(snap); } };
+  T('2 min to a defence-only player sits an attack-only one out in attack', withManDown(() => { addSanction('p14', '2M'); const e = state.events.at(-1); setPhase('ATK'); const seated = standInsOut('ATK'); if (seated.size !== 1 || !seated.has('p13') || seated.get('p13').event !== e) throw new Error([...seated.keys()].join()); if (!ourOffCourt().has('p13')) throw new Error('stand-in can still play'); if (playingIds(state).length !== FIELD_PLAYERS_ON_COURT) throw new Error('playing ' + playingIds(state).length); if (standInsOut('DEF').size) throw new Error('defence already short'); if (!document.querySelector('#tokens-layer .tok.excluded[data-id="p13"]')) throw new Error('token not dimmed'); }));
+  T('stand-in is off the court log until the 2 min ends', withManDown(() => { addSanction('p14', '2M'); setPhase('ATK'); if (courtSetOf(state.court.at(-1).set).includes('p13')) throw new Error('stand-in logged on court'); state.clock.elapsedMs += CONFIG.exclusionSeconds * 1000; state.clock.runningSince = null; checkTimers(); commit(); if (standInsOut('ATK').size) throw new Error('still seated'); if (!courtSetOf(state.court.at(-1).set).includes('p13')) throw new Error('not back on the log'); }));
+  T('the coach can send another player out instead of the stand-in', withManDown(() => { addSanction('p14', '2M'); const e = state.events.at(-1); setPhase('ATK'); openPlayerPop('p13', { x: 10, y: 10 }); const btn = document.querySelector(`[data-stand-in="${e.id}:p8"]`); if (!btn) throw new Error('no choice'); btn.click(); const seated = standInsOut('ATK'); if (!seated.has('p8') || seated.has('p13')) throw new Error([...seated.keys()].join()); }));
+  T('moving the clock back before a served 2 min leaves it to come, not running, and keeps its length', withManDown(() => { addSanction('p18', '2M'); const e = state.events.at(-1); state.clock.elapsedMs = 1200 * 1000; checkTimers(); correctClock(900 * 1000); if (activeExclusions().some((x) => x.event === e)) throw new Error('later 2 min running'); if (e.clockShift) throw new Error('shifted ' + e.clockShift); correctClock(1000 * 1000); if (!activeExclusions().some((x) => x.event === e)) throw new Error('not running at its start'); }));
+  T('2 min to a player in both phases needs no stand-in', withManDown(() => { addSanction('p18', '2M'); if (standInsOut('ATK').size || standInsOut('DEF').size) throw new Error('stand-in for a two-way player'); }));
+  T('2 min to a replaced goalkeeper sits a field player out in both phases', withManDown(() => { addSanction('p1', '2M'); state.gkId = 'p12'; if (standInsOut('ATK').size !== 1 || standInsOut('DEF').size !== 1) throw new Error('no stand-in'); state.gkId = 'p1'; if (standInsOut('ATK').size || standInsOut('DEF').size) throw new Error('keeper out already leaves them short'); }));
+  T('a 2 min and a 7 m stop the clock; the 7 m throw restarts it; a yellow does not stop it', withManDown(() => { addSanction('p18', '2M'); if (isRunning()) throw new Error('2 min kept it running'); if (!$('hint').textContent.includes('reloj parado')) throw new Error('hint ' + $('hint').textContent); toggleClock(); addEvent('ACTION', { playerId: 'p8', action: 'PROV7' }); if (isRunning()) throw new Error('7 m kept it running'); addEvent('SHOT', { playerId: 'p8', from: '7M', zone: '7M', result: 'GOL' }); if (!isRunning()) throw new Error('throw did not restart it'); addSanction('p8', 'A'); if (!isRunning()) throw new Error('yellow stopped it'); addRivalSanction(null, '2M'); if (isRunning()) throw new Error('rival 2 min kept it running'); }));
+  T('panel shows only the current phase actions', withSample(() => { setPhase('ATK'); if (panelKeys() !== 'ASIST,PROV7,TURNOVER') throw new Error('ATK ' + panelKeys()); setPhase('DEF'); if (panelKeys() !== 'RECUP,BLOC,GOODDEF,DEFFAULT') throw new Error('DEF ' + panelKeys()); if (document.querySelector('#acts [data-sanction], #acts [data-card]')) throw new Error('sanctions in panel'); }));
+  const stealBtn = () => document.querySelector(`#acts [data-panel-key="RECUP"][data-panel-sub="${RECOVERY_TYPES.STEAL}"]`);
+  T('arm then tap: recovery by a bench player is logged and they come on', withSample(() => { setPhase('DEF'); stealBtn().click(); const glowing = document.querySelectorAll('#tokens-layer .tok.target').length; if (glowing !== Object.keys(lineup()).length - standInsOut('DEF').size) throw new Error('court glow ' + glowing); const b = document.querySelector('.bench-player[data-id="p21"]'); if (!b.classList.contains('target')) throw new Error('bench glow'); tapEl(b); const e = state.events.at(-1); if (e.kind !== 'ACTION' || e.action !== 'RECUP' || e.subtype !== RECOVERY_TYPES.STEAL || e.playerId !== 'p21') throw new Error(JSON.stringify(e)); if (state.phase !== 'ATK') throw new Error('phase'); if (!state.lineups.DEF.p21) throw new Error('not on court in DEF'); if (ui.armedAction) throw new Error('still armed'); }));
   T('turnover types are a panel section: one tap arms the type', withSample(() => { setPhase('ATK'); if (document.querySelector('#acts [data-panel-act="TURNOVER"]')) throw new Error('still a chooser button'); const types = [...document.querySelectorAll('#acts [data-panel-key="TURNOVER"]')].map((b) => b.dataset.panelSub); if (types.join() !== CONFIG.turnoverGroups.flatMap((g) => g.types).join()) throw new Error(types.join()); document.querySelector('#acts [data-panel-sub="Pase"]').click(); if (!document.querySelector('.tok.target')) throw new Error('no glow'); if (document.querySelector('#acts [data-panel-sub="Pase"]').getAttribute('aria-pressed') !== 'true') throw new Error('not pressed'); tapEl(document.querySelector('#tokens-layer .tok[data-id="p8"]')); const e = state.events.at(-1); if (e.kind !== 'TURNOVER' || e.subtype !== 'Pase' || e.playerId !== 'p8') throw new Error(JSON.stringify(e)); }));
   T('defensive fault section: 7 m committed in, regulation foul out', withSample(() => { setPhase('DEF'); const subs = [...document.querySelectorAll('#acts [data-panel-sub]')].map((b) => b.dataset.panelSub); if (!subs.includes('PEN7C') || subs.includes('FALTA') || !subs.includes('BEATEN')) throw new Error(subs.join()); document.querySelector('#acts [data-panel-sub="PEN7C"]').click(); tapEl(document.querySelector('#tokens-layer .tok[data-id="p5"]')); if (state.events.at(-1).action !== 'PEN7C' || !ui.penalty || ui.penalty.team !== 'them') throw new Error('7 m committed did not leave a rival penalty'); cancelPenalty(); document.querySelector('#acts [data-panel-sub="BEATEN"]').click(); tapEl(document.querySelector('#tokens-layer .tok[data-id="p5"]')); const e = state.events.at(-1); if (e.kind !== 'ACTION' || e.action !== 'BEATEN' || e.playerId !== 'p5') throw new Error(JSON.stringify(e)); }));
-  T('goalkeeper glows only for Asistencia', withSample(() => { setPhase('ATK'); document.querySelector('[data-panel-act="ASIST"]').click(); if (!$('gk-card').classList.contains('target') || !document.querySelector('#tokens-layer .tok.gk.target')) throw new Error('gk not lit for assist'); disarmAction(); setPhase('DEF'); document.querySelector('[data-panel-act="RECUP"]').click(); if ($('gk-card').classList.contains('target') || document.querySelector('#tokens-layer .tok.gk.target')) throw new Error('gk lit for recovery'); const n = state.events.length; $('gk-card').click(); if (state.events.length !== n) throw new Error('gk got a recovery'); }));
+  T('goalkeeper glows only for Asistencia', withSample(() => { setPhase('ATK'); document.querySelector('[data-panel-act="ASIST"]').click(); if (!$('gk-card').classList.contains('target') || !document.querySelector('#tokens-layer .tok.gk.target')) throw new Error('gk not lit for assist'); disarmAction(); setPhase('DEF'); stealBtn().click(); if ($('gk-card').classList.contains('target') || document.querySelector('#tokens-layer .tok.gk.target')) throw new Error('gk lit for recovery'); const n = state.events.length; $('gk-card').click(); if (state.events.length !== n) throw new Error('gk got a recovery'); }));
   T('a 7 m provoked from the panel leaves a pending penalty', withSample(() => { setPhase('ATK'); const id = Object.keys(lineup()).find((x) => !ourOffCourt().has(x)); document.querySelector('[data-panel-act="PROV7"]').click(); tapEl(document.querySelector(`#tokens-layer .tok[data-id="${id}"]`)); if (!ui.penalty || ui.penalty.byId !== id) throw new Error('no penalty'); }));
   T('a failed exit is a defensive fault, not a turnover', () => { if (CONFIG.turnoverGroups.some((g) => g.types.includes('Salida fallada'))) throw new Error('still a turnover'); if (!TACTICAL_FAULTS.includes('BADEXIT')) throw new Error('missing in defence'); });
   T('lack of intensity is a team fault: one tap, no player', withSample(() => { setPhase('DEF'); document.querySelector('[data-panel-mode="acts"]').click(); if (document.querySelector('#acts [data-panel-sub="NOATK"]')) throw new Error('offered per player in the panel'); armAction('DEFFAULT', 'LATE'); const n = state.events.length; document.querySelector('#acts [data-team-fault="NOATK"]').click(); const e = state.events.at(-1); if (state.events.length !== n + 1 || e.kind !== 'ACTION' || e.action !== 'NOATK' || e.playerId !== null) throw new Error(JSON.stringify(e)); if (ui.armedAction) throw new Error('armed'); if (describe(e) !== 'Falta de contundencia · equipo') throw new Error(describe(e)); if (!defFaultCounts(state.events)['Falta de contundencia']) throw new Error('not counted for the team'); openPlayerPop('p5', { x: 10, y: 10 }); const inPop = document.querySelector('#pop [data-action="NOATK"]'); closePop(); if (inPop) throw new Error('offered in the player popup'); undo(); if (state.events.length !== n) throw new Error('undo'); }));
   T('the player popup has no regulation foul; past ones still count', withSample(() => { setPhase('DEF'); openPlayerPop('p5', { x: 10, y: 10 }); const falta = document.querySelector('#pop [data-action="FALTA"]'), pen = document.querySelector('#pop [data-action="PEN7C"]'); closePop(); if (falta) throw new Error('regulation foul offered'); if (!pen) throw new Error('7 m committed missing'); if (!pen.classList.contains('c-act-bad') || !document.querySelector('#acts [data-panel-sub="PEN7C"]').classList.contains('c-act-bad')) throw new Error('7 m committed not red'); addEvent('ACTION', { playerId: 'p5', action: 'FALTA' }); if (!defFaultCounts(state.events)[ACTIONS.FALTA.label] || playerStats('p5').FALTA !== 1) throw new Error('past foul not counted'); undo(); }));
   T('a blocked shot is a purple turnover that still counts as blocked', withSample(() => { setPhase('ATK'); document.querySelector('[data-panel-mode="acts"]').click(); const b = document.querySelector('#acts [data-panel-sub="Bloqueado"]'); if (!b || !b.classList.contains('c-act-rival')) throw new Error('no purple Bloqueado'); const before = { p: playerStats('p8').blocked, live: liveStats().us.blocked, an: attackAnalysis('us').blocked, lost: liveStats().us.turnovers }; b.click(); tapEl(document.querySelector('#tokens-layer .tok[data-id="p8"]')); const e = state.events.at(-1); if (e.kind !== 'TURNOVER' || e.subtype !== 'Bloqueado' || e.playerId !== 'p8') throw new Error(JSON.stringify(e)); if (playerStats('p8').blocked !== before.p + 1 || liveStats().us.blocked !== before.live + 1 || attackAnalysis('us').blocked !== before.an + 1) throw new Error('blocked not counted'); if (liveStats().us.turnovers !== before.lost + 1) throw new Error('not a turnover'); }));
-  T('action colours: good green, good in defence blue, bad red, rule breaches orange, forced by the rival purple', withSample(() => { const want = { ASIST: 'act-good', PROV7: 'act-good', RECUP: 'act-def', BLOC: 'act-def', PEN7C: 'act-bad', BEATEN: 'act-bad', BADEXIT: 'act-bad', LATE: 'act-bad', HELP: 'act-bad', NOATK: 'act-rival', GOLPE: 'act-rule' }; const wrong = Object.entries(want).filter(([k, g]) => ACTIONS[k].group !== g); if (wrong.length) throw new Error('actions ' + wrong.map(([k]) => k).join()); const turnover = { Pase: 'c-act-bad', Recepción: 'c-act-bad', Bote: 'c-act-bad', Pasos: 'c-act-rule', Dobles: 'c-act-rule', Área: 'c-act-rule', Pasivo: 'c-act-rule', 'Falta ataque': 'c-act-rival', Bloqueado: 'c-act-rival' }; setPhase('ATK'); document.querySelector('[data-panel-mode="acts"]').click(); const bad = Object.entries(turnover).filter(([t, c]) => !document.querySelector(`#acts [data-panel-sub="${t}"]`).classList.contains(c)); if (bad.length) throw new Error('turnovers ' + bad.map(([t]) => t).join()); ['ASIST', 'PROV7'].forEach((k) => { if (!document.querySelector(`#acts [data-panel-act="${k}"]`).classList.contains('c-act-good')) throw new Error('panel ' + k); }); setPhase('DEF'); ['RECUP', 'BLOC'].forEach((k) => { if (!document.querySelector(`#acts [data-panel-act="${k}"]`).classList.contains('c-act-def')) throw new Error('panel ' + k); }); addEvent('TURNOVER', { playerId: 'p8', subtype: 'Pasos' }); const col = eventColor(state.events.at(-1)); undo(); if (col !== 'var(--act-rule)') throw new Error('strip colour ' + col); }));
+  T('action colours: good green, good in defence blue, bad red, rule breaches orange, forced by the rival purple', withSample(() => { const want = { ASIST: 'act-good', PROV7: 'act-good', RECUP: 'act-def', BLOC: 'act-def', GOODDEF: 'act-def', PEN7C: 'act-bad', BEATEN: 'act-bad', BADEXIT: 'act-bad', LATE: 'act-bad', HELP: 'act-bad', NOATK: 'act-rival', GOLPE: 'act-rule' }; const wrong = Object.entries(want).filter(([k, g]) => ACTIONS[k].group !== g); if (wrong.length) throw new Error('actions ' + wrong.map(([k]) => k).join()); const turnover = { Pase: 'c-act-bad', Recepción: 'c-act-bad', Bote: 'c-act-bad', Pasos: 'c-act-rule', Dobles: 'c-act-rule', Área: 'c-act-rule', Pasivo: 'c-act-rule', 'Falta ataque': 'c-act-rival', Bloqueado: 'c-act-rival' }; setPhase('ATK'); document.querySelector('[data-panel-mode="acts"]').click(); const bad = Object.entries(turnover).filter(([t, c]) => !document.querySelector(`#acts [data-panel-sub="${t}"]`).classList.contains(c)); if (bad.length) throw new Error('turnovers ' + bad.map(([t]) => t).join()); ['ASIST', 'PROV7'].forEach((k) => { if (!document.querySelector(`#acts [data-panel-act="${k}"]`).classList.contains('c-act-good')) throw new Error('panel ' + k); }); setPhase('DEF'); ['BLOC', 'GOODDEF'].forEach((k) => { if (!document.querySelector(`#acts [data-panel-act="${k}"]`).classList.contains('c-act-def')) throw new Error('panel ' + k); }); document.querySelectorAll('#acts [data-panel-key="RECUP"]').forEach((b) => { if (!b.classList.contains('c-act-def')) throw new Error('panel ' + b.dataset.panelSub); }); addEvent('TURNOVER', { playerId: 'p8', subtype: 'Pasos' }); const col = eventColor(state.events.at(-1)); undo(); if (col !== 'var(--act-rule)') throw new Error('strip colour ' + col); }));
   T('each kind of turnover or defensive fault has its own labelled row', withSample(() => { document.querySelector('[data-panel-mode="acts"]').click(); const rows = () => [...document.querySelectorAll('#acts .type-row')].map((r) => r.querySelector('span').textContent + ':' + r.querySelectorAll('button').length).join(); setPhase('ATK'); const atk = CONFIG.turnoverGroups.map((g) => g.label + ':' + g.types.length).join(); if (rows() !== atk) throw new Error('ATK ' + rows() + ' vs ' + atk); setPhase('DEF'); if (rows() !== 'Regla:2,Táctico:4,Equipo:1') throw new Error('DEF ' + rows()); }));
   T('a hit is an orange regulation fault, counted in the player Falta column', withSample(() => { setPhase('DEF'); document.querySelector('[data-panel-mode="acts"]').click(); const b = document.querySelector('#acts [data-panel-sub="GOLPE"]'); if (!b || !b.classList.contains('c-act-rule')) throw new Error('no orange Golpe'); if (!document.querySelector('#acts [data-team-fault="NOATK"]').classList.contains('c-act-rival')) throw new Error('team fault not purple'); const col = PLAYER_HEAD.indexOf('Falta'); const before = playerRow(playerById('p5'))[col]; b.click(); tapEl(document.querySelector('#tokens-layer .tok[data-id="p5"]')); const e = state.events.at(-1); if (e.kind !== 'ACTION' || e.action !== 'GOLPE' || e.playerId !== 'p5') throw new Error(JSON.stringify(e)); if (playerRow(playerById('p5'))[col] !== before + 1) throw new Error('not in Falta column'); if (!defFaultCounts(state.events).Golpe) throw new Error('not a team defensive fault'); openPlayerPop('p5', { x: 10, y: 10 }); const inPop = document.querySelector('#pop [data-action="GOLPE"]'); closePop(); if (!inPop || !inPop.classList.contains('c-act-rule')) throw new Error('not in the player popup'); }));
+  T('recovery types: one tap each in the panel and in the player popup', withSample(() => {
+    setPhase('DEF'); document.querySelector('[data-panel-mode="acts"]').click();
+    const types = [...document.querySelectorAll('#acts [data-panel-key="RECUP"]')].map((b) => b.dataset.panelSub);
+    if (types.join() !== Object.values(RECOVERY_TYPES).join()) throw new Error('panel types ' + types.join());
+    document.querySelector(`#acts [data-panel-sub="${RECOVERY_TYPES.OFFENSIVE_FOUL}"]`).click();
+    if (!$('acts').textContent.includes(`${RECOVERY_TYPES.OFFENSIVE_FOUL} · toca al jugador`)) throw new Error('arm note');
+    tapEl(document.querySelector('#tokens-layer .tok[data-id="p5"]'));
+    const e = state.events.at(-1);
+    if (e.action !== 'RECUP' || e.subtype !== RECOVERY_TYPES.OFFENSIVE_FOUL || e.playerId !== 'p5') throw new Error(JSON.stringify(e));
+    if (describe(e) !== `Recuperación (falta en ataque) · #${playerById('p5').num} ${playerById('p5').name}`) throw new Error(describe(e));
+    setPhase('DEF'); openPlayerPop('p5', { x: 10, y: 10 });
+    const pop = [...document.querySelectorAll('#pop [data-action="RECUP"]')].map((b) => b.dataset.subtype);
+    if (pop.join() !== Object.values(RECOVERY_TYPES).join()) throw new Error('popup types ' + pop.join());
+    document.querySelector(`#pop [data-action="RECUP"][data-subtype="${RECOVERY_TYPES.STEAL}"]`).click();
+    const steal = state.events.at(-1);
+    if (steal.action !== 'RECUP' || steal.subtype !== RECOVERY_TYPES.STEAL || steal.playerId !== 'p5') throw new Error(JSON.stringify(steal));
+  }));
+  T('recovery types: an old recovery without a type counts as a steal and reads as before', () => {
+    const old = { kind: 'ACTION', action: 'RECUP', playerId: 'p10' }, s = sampleState();
+    if (recoveryType(old) !== RECOVERY_TYPES.STEAL || describe(old, s).includes('(')) throw new Error(describe(old, s));
+    const counts = recoveryCounts([old, { ...old, subtype: RECOVERY_TYPES.STEAL }, { ...old, subtype: RECOVERY_TYPES.OFFENSIVE_FOUL }, { kind: 'ACTION', action: 'BLOC', playerId: 'p10' }]);
+    if (counts[RECOVERY_TYPES.STEAL] !== 2 || counts[RECOVERY_TYPES.OFFENSIVE_FOUL] !== 1 || Object.keys(counts).length !== 2) throw new Error(JSON.stringify(counts));
+    if (typeBreakdownText(counts) !== `${RECOVERY_TYPES.STEAL} 2 · ${RECOVERY_TYPES.OFFENSIVE_FOUL} 1` || typeBreakdownText({}) !== '') throw new Error(typeBreakdownText(counts));
+  });
+  T('«Buena defensa»: a blue defensive action for one player, from the panel or the popup', withSample(() => {
+    setPhase('DEF'); document.querySelector('[data-panel-mode="acts"]').click();
+    const b = document.querySelector('#acts [data-panel-act="GOODDEF"]');
+    if (!b || !b.classList.contains('c-act-def') || b.textContent !== 'Buena defensa') throw new Error('panel button');
+    const top = [...document.querySelectorAll('#acts > .acts:first-child .act')].map((x) => x.getBoundingClientRect());
+    if (top.length !== Object.values(RECOVERY_TYPES).length + 2 || new Set(top.map((r) => Math.round(r.top))).size !== 1 || top.some((r) => r.width < 44 || r.height < 44)) throw new Error('the defence actions are not one row of 44 px targets');
+    b.click(); tapEl(document.querySelector('#tokens-layer .tok[data-id="p5"]'));
+    const e = state.events.at(-1);
+    if (e.kind !== 'ACTION' || e.action !== 'GOODDEF' || e.playerId !== 'p5' || 'subtype' in e) throw new Error(JSON.stringify(e));
+    if (state.phase !== 'DEF') throw new Error('a good defence does not end the possession');
+    if (playerStats('p5').GOODDEF !== 1 || eventColor(e) !== 'var(--act-def)') throw new Error('stats or colour');
+    openPlayerPop('p5', { x: 10, y: 10 }); document.querySelector('#pop [data-action="GOODDEF"]').click();
+    if (state.events.at(-1).action !== 'GOODDEF' || playerStats('p5').GOODDEF !== 2) throw new Error('popup');
+    const fig = playerFigures(playerById('p5'), state, { detailed: true }).find(([label]) => label === 'Buenas defensas');
+    if (!fig || fig[1] !== 2) throw new Error('not in the player card');
+    if (playerFigures(playerById('p5'), state).some(([label]) => label === 'Buenas defensas')) throw new Error('the compact figures (PDF) changed');
+  }));
+  T('turnovers and recoveries by type on the Hoja: player card, table cells and team figures', withSample(() => {
+    addEvent('TURNOVER', { playerId: 'p8', subtype: 'Pasos' }); addEvent('TURNOVER', { playerId: 'p8', subtype: 'Pasos' });
+    addEvent('ACTION', { playerId: 'p10', action: 'RECUP', subtype: RECOVERY_TYPES.OFFENSIVE_FOUL });
+    const sub = (p, label, opts) => playerFigures(playerById(p), state, opts).find(([l]) => l === label)[2];
+    if (sub('p8', 'Pérdidas', { detailed: true }) !== 'Pasos 2 · Falta ataque 1') throw new Error(sub('p8', 'Pérdidas', { detailed: true }));
+    if (sub('p10', 'Recuperaciones', { detailed: true }) !== `${RECOVERY_TYPES.STEAL} 1 · ${RECOVERY_TYPES.OFFENSIVE_FOUL} 1`) throw new Error(sub('p10', 'Recuperaciones', { detailed: true }));
+    if (sub('p8', 'Pérdidas') !== '' || sub('p10', 'Recuperaciones') !== '') throw new Error('compact figures carry no breakdown');
+    if (sub('p11', 'Pérdidas', { detailed: true }) !== '') throw new Error('no turnovers, no breakdown');
+    const team = teamFigures().find(([l]) => l === 'Recuperaciones');
+    if (team[2] !== `${RECOVERY_TYPES.STEAL} 1 · ${RECOVERY_TYPES.OFFENSIVE_FOUL} 1`) throw new Error('team ' + team[2]);
+    const html = sheetStatsHtml();
+    if (!html.includes('title="Pasos 2 · Falta ataque 1"') || !html.includes(`title="${RECOVERY_TYPES.STEAL} 1 · ${RECOVERY_TYPES.OFFENSIVE_FOUL} 1"`)) throw new Error('table cell titles');
+    const tiles = summaryTilesHtml(matchFigures());
+    if (!tiles.includes(`title="${typeBreakdownText(turnoverCounts(state.events))}"`) || !tiles.includes(`${RECOVERY_TYPES.STEAL} 1 · ${RECOVERY_TYPES.OFFENSIVE_FOUL} 1</small>`)) throw new Error('summary tiles');
+    if (!playerReportHtml(playerById('p8')).includes('Pasos 2 · Falta ataque 1')) throw new Error('player tab');
+  }));
   const dragTo = (from, to) => { const a = from.getBoundingClientRect(), b = to.getBoundingClientRect(); const at = (r) => ({ clientX: r.left + r.width / 2, clientY: r.top + r.height / 2 }); const o = { bubbles: true, pointerId: 9, pointerType: 'pen' }; from.dispatchEvent(new PointerEvent('pointerdown', { ...o, ...at(a) })); $('court').dispatchEvent(new PointerEvent('pointermove', { ...o, ...at(b) })); $('court').dispatchEvent(new PointerEvent('pointerup', { ...o, ...at(b) })); };
   T('a bench substitution on a player in both phases is made in both', withSample(() => { setPhase('DEF'); const atk = { ...state.lineups.ATK.p18 }, def = { ...state.lineups.DEF.p18 }; substituteFromBench('p21', 'p18'); const L = state.lineups; if (L.DEF.p18 || L.ATK.p18) throw new Error('p18 still on'); if (JSON.stringify(L.DEF.p21) !== JSON.stringify(def) || JSON.stringify(L.ATK.p21) !== JSON.stringify(atk)) throw new Error('p21 not in both spots'); }));
   T('a bench substitution on a one-phase player stays in that phase', withSample(() => { setPhase('DEF'); const atk = JSON.stringify(state.lineups.ATK); substituteFromBench('p21', 'p5'); if (!state.lineups.DEF.p21 || state.lineups.DEF.p5) throw new Error('DEF'); if (JSON.stringify(state.lineups.ATK) !== atk) throw new Error('ATK changed'); }));
@@ -792,6 +859,22 @@
   T('tapping the armed type again disarms, another type switches', withSample(() => { setPhase('DEF'); const sub = (k) => document.querySelector(`#acts [data-panel-sub="${k}"]`); sub('LATE').click(); sub('HELP').click(); if (!ui.armedAction || ui.armedAction.sub !== 'HELP') throw new Error('no switch'); sub('HELP').click(); if (ui.armedAction || document.querySelector('.target')) throw new Error('not disarmed'); }));
   T('the actions panel fits without scrolling', withSample(() => { document.querySelector('[data-panel-mode="acts"]').click(); ['ATK', 'DEF'].forEach((ph) => { setPhase(ph); const box = $('acts').closest('.scroll'); if (box.scrollHeight > box.clientHeight) throw new Error(ph + ' scrolls by ' + (box.scrollHeight - box.clientHeight)); }); }));
   T('a pending penalty or armed action does not follow into another match', withSample(() => { setPhase('ATK'); addEvent('ACTION', { playerId: 'p8', action: 'PROV7' }); armAction('ASIST'); openSample(); if (ui.penalty || ui.armedAction || ui.armTimer || $('penalty-spot').getAttribute('visibility') === 'visible' || !$('armed-bar').hidden) throw new Error('carried over'); }));
+  T('assist suggestion: a wing gets it from his back, a back and the pivot from the centre, else the nearest', withSample(() => {
+    const team = state.lineups.ATK, mates = (id) => state.players.filter((p) => team[p.id] && p.id !== id);
+    const areaOf = (id) => courtArea(team[id]);
+    const byArea = (area) => Object.keys(team).find((id) => areaOf(id) === area);
+    const check = (scorerArea, wantArea) => { const scorer = byArea(scorerArea); if (!scorer) return; const got = suggestedPasserId(scorer, mates(scorer)); if (areaOf(got) !== wantArea) throw new Error(`${scorerArea} → ${got} (${areaOf(got)}), want ${wantArea}`); };
+    check('EXT-L', 'LAT-L'); check('EXT-R', 'LAT-R'); check('LAT-L', 'CEN'); check('LAT-R', 'CEN'); check('PIV', 'CEN');
+    const wing = byArea('EXT-L'), back = byArea('LAT-L');
+    const withoutBack = mates(wing).filter((p) => p.id !== back);
+    if (!suggestedPasserId(wing, withoutBack)) throw new Error('no fallback');
+    if (suggestedPasserId('p21', mates('p21')) !== null) throw new Error('suggested for a scorer off the lineup');
+    setPhase('ATK'); openAssistPop(wing, { x: 10, y: 10 });
+    const main = document.querySelector('.assist-main');
+    if (!main || main.dataset.assist !== back) throw new Error('main ' + (main && main.dataset.assist));
+    if (document.querySelectorAll(`[data-assist="${back}"]`).length !== 1) throw new Error('suggested twice');
+    if (getComputedStyle(document.querySelector('.pick-grid')).display !== 'grid') throw new Error('picks not a grid');
+  }));
   T('our goal asks for the pass of goal; one tap logs it, a 7 m or a pass already logged does not ask', () => {
     const snap = snapshot();
     try {
@@ -1052,6 +1135,83 @@
     const blowout = playerRating(rateMatch(ahead, { clock }), fieldA);
     if (!nearTo(blowout.lines.clutch, (RW.context.blowoutFactor - 1) * early.moments[0].value * PPG)) throw new Error('blowout ×' + RW.context.blowoutFactor);
   });
+  T('rating: the last minutes of the first half are a «Momento decisivo» too, with the same margin', () => {
+    const at = (abs, events = []) => playerRating(rateMatch([...events, rShot('a', '6M', 'GOL', abs)]), fieldA);
+    const base = at(100).moments[0].value * PPG, c = RW.context;
+    if (at(c.firstHalfCloseFrom - 1).lines.clutch !== 0) throw new Error('before the window');
+    if (!nearTo(at(c.firstHalfCloseFrom).lines.clutch, (RW.weights.closeFactor - 1) * base) || !nearTo(at(CONFIG.halfSeconds - 1).lines.clutch, (RW.weights.closeFactor - 1) * base)) throw new Error('first-half close ×' + RW.weights.closeFactor);
+    if (at(CONFIG.halfSeconds).lines.clutch !== 0) throw new Error('the second half starts plain until closeFrom');
+    const wide = rMany(c.closeMargin + 1, (i) => rShot('b', '6M', 'GOL', 10 + i));
+    if (at(c.firstHalfCloseFrom + 10, wide).lines.clutch !== 0) throw new Error('beyond the margin');
+    const tight = rMany(c.closeMargin, (i) => rShot('b', '6M', 'GOL', 10 + i));
+    if (!(at(c.firstHalfCloseFrom + 10, tight).lines.clutch > 0)) throw new Error('within the margin');
+    const tuned = { ...ratingWeights({}), closeFactor: 2 };
+    if (!nearTo(playerRating(rateMatch([rShot('a', '6M', 'GOL', c.firstHalfCloseFrom)]), fieldA, { weights: tuned }).lines.clutch, base)) throw new Error('not the closeFactor knob');
+  });
+  T('rating: a provoked offensive foul is worth at least a steal; an untyped recovery is a steal', () => {
+    const rec = (subtype) => ({ ...rAct('a', 'RECUP'), ...(subtype ? { subtype } : {}) });
+    const steal = ratingOf([rec(RECOVERY_TYPES.STEAL)]), foul = ratingOf([rec(RECOVERY_TYPES.OFFENSIVE_FOUL)]), old = ratingOf([rec(null)]);
+    if (!nearTo(steal.lines.defInd, B * PPG) || !nearTo(old.lines.defInd, steal.lines.defInd)) throw new Error('steal ' + steal.lines.defInd);
+    if (!nearTo(foul.lines.defInd, (B + RW.defence.offensiveFoulExtra) * PPG) || !(foul.lines.defInd >= steal.lines.defInd)) throw new Error('foul ' + foul.lines.defInd);
+    if (foul.moments[0].label !== 'Falta en ataque provocada' || old.moments[0].label !== 'Recuperación') throw new Error('labels');
+    const counter = (subtype) => playerRating(rateMatch([rec(subtype), rShot('b', 'CONTRA', 'GOL', 5)]), fieldA).lines.creacion;
+    if (!(counter(RECOVERY_TYPES.OFFENSIVE_FOUL) > 0) || !nearTo(counter(RECOVERY_TYPES.OFFENSIVE_FOUL), counter(RECOVERY_TYPES.STEAL))) throw new Error('both types start a fast break');
+  });
+  T('rating: «Buena defensa» raises the individual defence, a bit below a recovery', () => {
+    const d = RW.defence.goodDefence;
+    if (!(d > 0 && d <= B)) throw new Error('value ' + d);
+    const good = ratingOf([rAct('a', 'GOODDEF')]);
+    if (!good.rated || !nearTo(good.lines.defInd, d * PPG) || good.moments[0].label !== 'Buena defensa') throw new Error(JSON.stringify(good.lines));
+    const goal = { id: 'rg', abs: 10, kind: 'RIVAL_SHOT', gkId: 'g', zone: '6M', result: 'GOL', on: 0 };
+    const over = { court: [{ abs: 0, set: 0 }], courtSets: [['a', 'b', 'g']] };
+    const plain = matchRatings(rateMatch([goal], over)), withGood = matchRatings(rateMatch([rAct('a', 'GOODDEF', 5), goal], over));
+    const unit = (r) => r.get('a').lines.defUnit + r.get('b').lines.defUnit, total = (r) => sumOf(['a', 'b'], (id) => r.get(id).lines.defInd + r.get(id).lines.defUnit);
+    if (!nearTo(unit(withGood), unit(plain) - d * PPG) || !nearTo(total(withGood), total(plain))) throw new Error('a possession ended by a rival shot pays it from the unit');
+    const points = (r) => sumOf(Object.values(r.get('a').lines), (v) => v);
+    if (!(points(withGood) > points(plain)) || !withGood.get('a').rated) throw new Error('his rating does not go up');
+  });
+  // Zone defence: six defenders on the sample's DEF spots, stamped on court as set 0.
+  const zoneSix = ['a', 'b', 'c', 'd', 'e', 'f'], zoneSpots = { a: m(-7.6, 2.2), b: m(-5, 5.2), c: m(-1.8, 6.6), d: m(1.8, 6.6), e: m(5, 5.2), f: m(7.6, 2.2) };
+  const zoneMatch = (events, over = {}) => rateMatch(events, { players: [...zoneSix.map((id) => ({ id, pos: 'LAT' })), keeperG], lineups: { ATK: {}, DEF: zoneSpots }, court: [{ abs: 0, set: 0 }], courtSets: [[...zoneSix, 'g']], ...over });
+  const zoneGoal = (i, origin, extra = {}) => ({ id: 'zg' + i, abs: 10 + i, kind: 'RIVAL_SHOT', gkId: 'g', zone: '9M', result: 'GOL', origin, on: 0, ...extra });
+  const zoneCharges = (ratings, id) => ratings.get(id).moments.filter((x) => x.label === 'Gol en su zona');
+  T('zone defence: a field goal costs the defender of its lane nearest the shot a little', () => {
+    const r = matchRatings(zoneMatch([zoneGoal(1, m(-8, 2.5), { zone: '6M' })]));
+    if (zoneCharges(r, 'a').length !== 1 || zoneSix.slice(1).some((id) => zoneCharges(r, id).length)) throw new Error('charged to the wrong defender');
+    if (!nearTo(zoneCharges(r, 'a')[0].value, -RW.defence.zoneGoal)) throw new Error('value');
+    if (!(RW.defence.zoneGoal < 0.5 * RW.defence.goodDefence)) throw new Error('not modest');
+    const lane = zoneDefence(zoneMatch([zoneGoal(2, m(-5.2, 3.6))]));
+    if (laneOf(m(-5.2, 3.6)) !== laneOf(zoneSpots.a) || !lane.conceded.has('a')) throw new Error('the lane comes before the nearest spot: ' + [...lane.conceded.keys()]);
+    const centre = zoneDefence(zoneMatch([zoneGoal(3, m(0.5, 9))]));
+    if (!centre.conceded.has('d')) throw new Error('no defender in the lane: the nearest one ' + [...centre.conceded.keys()]);
+  });
+  T('zone defence: 7 m, counter-attacks, unstamped goals, no court log and spotless defenders are left out', () => {
+    const none = (events, over) => { const z = zoneDefence(zoneMatch(events, over)); return z.conceded.size === 0 && z.share.size === 0; };
+    if (!none([zoneGoal(1, m(0, 7), { zone: '7M' })])) throw new Error('7 m counted');
+    if (!none([zoneGoal(2, m(-3, 9), { contra: true })]) || !none([zoneGoal(3, m(-3, 9), { zone: 'CONTRA' })])) throw new Error('counter-attack counted');
+    const { on, ...unstamped } = zoneGoal(4, m(-3, 9));
+    if (!none([unstamped]) || !none([zoneGoal(5, m(-3, 9), { on: 9 })])) throw new Error('a goal with nobody stamped counted');
+    if (!none([zoneGoal(6, null)])) throw new Error('a goal without an origin counted');
+    if (!none([unstamped], { court: undefined, courtSets: undefined })) throw new Error('no court log');
+    if (!none([zoneGoal(7, m(-3, 9))], { lineups: undefined })) throw new Error('no DEF spots');
+    if (!none([zoneGoal(8, m(-3, 9), { result: 'PARADA' })])) throw new Error('a save counted');
+    const partial = zoneDefence(zoneMatch([zoneGoal(9, m(-8, 2.5))], { courtSets: [['x', 'c', 'g']], players: [{ id: 'x', pos: 'LAT' }, { id: 'c', pos: 'LAT' }, keeperG] }));
+    if (!partial.conceded.has('c') || partial.share.has('x')) throw new Error('a stamped defender with no spot is not a candidate');
+    const legacy = matchRatings(rateMatch([rAct('a', 'RECUP'), { id: 'rg', abs: 10, kind: 'RIVAL_SHOT', gkId: 'g', zone: '9M', result: 'GOL' }]));
+    if (!nearTo(legacy.get('a').lines.defInd, B * PPG)) throw new Error('an old match without a court log changed');
+  });
+  T('zone defence: a zone that conceded clearly fewer than its share gains a little', () => {
+    const d = RW.defence, wing = (n) => rMany(n, (i) => zoneGoal(i, m(-8, 2.5)));
+    const many = d.zoneMinGoals * zoneSix.length, r = matchRatings(zoneMatch(wing(many))), z = zoneDefence(zoneMatch(wing(many)));
+    if (!nearTo(z.share.get('b'), many / zoneSix.length) || z.conceded.get('a').length !== many) throw new Error('shares');
+    const defInd = (ratings, id) => ratings.get(id).lines.defInd;
+    if (zoneSix.slice(1).some((id) => !nearTo(defInd(r, id), d.zoneSolid * PPG))) throw new Error('the zones that held gain ' + zoneSix.map((id) => defInd(r, id)));
+    if (!(defInd(r, 'a') < 0)) throw new Error('the beaten zone ' + defInd(r, 'a'));
+    const few = matchRatings(zoneMatch(wing(many - zoneSix.length)));
+    if (zoneSix.slice(1).some((id) => defInd(few, id) !== 0)) throw new Error('below zoneMinGoals nobody gains');
+    const even = matchRatings(zoneMatch(zoneSix.flatMap((id, k) => rMany(d.zoneMinGoals, (i) => zoneGoal(k * 10 + i, zoneSpots[id])))));
+    if (zoneSix.some((id) => zoneCharges(even, id).length !== d.zoneMinGoals || !(defInd(even, id) < 0))) throw new Error('an even spread gives no bonus');
+  });
   T('rating: the unit on court shares what each possession left, and adds up to it', () => {
     const six = ['a', 'b', 'c', 'd', 'e', 'f'], players = [...six.map((id) => ({ id, pos: 'LAT' })), keeperG];
     const goals = rMany(4, (i) => ({ id: 'rg' + i, abs: 10 + i, kind: 'RIVAL_SHOT', gkId: 'g', zone: '6M', result: 'GOL', on: 0 }));
@@ -1234,7 +1394,7 @@
     if (Object.keys(SHEET_TABS)[0] !== 'summary' || SHEET_TABS.summary !== 'Resumen' || SHEET_TABS.stats !== 'Tablas') throw new Error(JSON.stringify(SHEET_TABS));
     const first = document.querySelector('#sheet .tabs button');
     if (first.textContent !== 'Resumen' || first.getAttribute('aria-pressed') !== 'true') throw new Error('first tab');
-    const labels = statTiles().map((t) => labelText(t));
+    const labels = statTiles().filter((t) => t.closest('.summary-tiles')).map((t) => labelText(t));
     if (labels.join('|') !== SUMMARY_KPI_LABELS.join('|')) throw new Error(labels.join('|'));
     if ($('sheet').querySelectorAll('.zone-map svg').length !== 2 || $('sheet').querySelectorAll('.goal-chart svg').length !== 2) throw new Error('maps and goal grids');
     const strip = [...$('sheet').querySelectorAll('[data-sheet-open-player]')];
@@ -1391,23 +1551,42 @@
   });
 
   // ---- Drill-down: the per-match drawing helpers work over any saved state (M0c) ----
-  // Runs buildPdf(kind) with the drawing primitives replaced by recorders, so the pages can be compared as data.
+  // A jsPDF stand-in: every call it does not know is a no-op; texts and the extent of texts, shapes and lines are kept
+  // (across, only below the full-width header band).
+  const FAKE_CHAR_MM = 1.2;
+  const fakeDrawingDoc = (own = {}) => {
+    const doc = { texts: [], maxX: 0, maxY: 0, lastAutoTable: { finalY: 0 }, getTextWidth: (t) => String(t).length * FAKE_CHAR_MM };
+    const reach = (top, right, bottom) => { if (top >= PDF_PAGE.top) doc.maxX = Math.max(doc.maxX, right); doc.maxY = Math.max(doc.maxY, bottom); };
+    Object.assign(doc, {
+      text: (t, x, y) => { doc.texts.push(String(t)); reach(y, x, y); },
+      rect: (x, y, w, h) => reach(y, x + Math.max(w, 0), y + Math.max(h, 0)),
+      roundedRect: (x, y, w, h) => reach(y, x + w, y + h),
+      line: (x1, y1, x2, y2) => reach(Math.min(y1, y2), Math.max(x1, x2), Math.max(y1, y2))
+    }, own);
+    return new Proxy(doc, { get: (target, key) => (key in target ? target[key] : () => {}) });
+  };
+  // Runs playerPagesPdf(kind) with the drawing primitives replaced by recorders, so the pages can be compared as data.
   const recordPdfCalls = (kind, makeState = sampleState) => {
     const saved = { pdfNewDoc, pdfHeader, pdfTable, pdfShotChart };
     const calls = [];
     const ids = (shots) => shots.map((e) => `${e.abs}:${e.zone}:${e.result}`);
-    pdfNewDoc = () => ({ addPage: () => calls.push(['page']) });
+    pdfNewDoc = () => fakeDrawingDoc({ addPage: () => calls.push(['page']) });
     pdfHeader = (doc, title, subtitle) => calls.push(['header', title, subtitle]);
     pdfTable = (doc, opts) => { calls.push(['table', opts]); return opts.startY + 10; };
     pdfShotChart = (doc, x, y, w, shots, viewKey, dorsals = false) => { calls.push(['chart', x, y, w, ids(shots), viewKey, dorsals]); return y + 50; };
     const snap = snapshot();
-    // The player reports draw synchronously: buildPdf has no await before them.
-    try { state = makeState(); buildPdf(kind); } finally { ({ pdfNewDoc, pdfHeader, pdfTable, pdfShotChart } = saved); restore(snap); }
+    try { state = makeState(); playerPagesPdf(kind); } finally { ({ pdfNewDoc, pdfHeader, pdfTable, pdfShotChart } = saved); restore(snap); }
     return calls;
   };
-  const recordPlayerPages = () => JSON.stringify(recordPdfCalls('players'));
-  // Recorded from the code before the report refactor (sample match): the player pages must not change.
-  const PDF_PLAYERS_SNAPSHOT = [["header","#3 Raulito","Extremo"],["chart",12,26,120,[],"US",false],["table",{"head":["Dato","Valor",""],"body":[["Goles","0/0","sin lanzamientos"],["Parados",0,"por el portero rival"],["Fallados",0,"fuera · palo · bloqueado"],["Pases de gol",0,""],["Provoca 7 m",0,""],["Recuperaciones",0,""],["Blocajes",0,""],["Pérdidas",0,""],["Fallos defensivos",0,""],["Sanciones","–",""]],"startY":30,"left":140,"width":69.5}],["table",{"title":"Por zona","head":["Zona","Lanz.","Goles","Parados","Fallados","% gol"],"body":[["6 m",0,0,0,0,"–"],["9 m",0,0,0,0,"–"],["+11 m",0,0,0,0,"–"],["Contra",0,0,0,0,"–"],["7 m",0,0,0,0,"–"],["Total",0,0,0,0,"–"]],"startY":30,"left":215.5,"width":69.5}],["table",{"title":"Pérdidas por tipo","head":["Tipo","N"],"body":[["Ninguno",0]],"startY":40,"left":140,"width":69.5}],["table",{"title":"Fallos defensivos","head":["Tipo","N"],"body":[["Ninguno",0]],"startY":40,"left":215.5,"width":69.5}],["table",{"title":"Cronología","head":["Min","Acción"],"body":[["–","Sin acciones"]],"startY":50,"left":140}],["page"],["header","#5 Marcos","Lateral"],["chart",12,26,120,[],"US",false],["table",{"head":["Dato","Valor",""],"body":[["Goles","0/0","sin lanzamientos"],["Parados",0,"por el portero rival"],["Fallados",0,"fuera · palo · bloqueado"],["Pases de gol",0,""],["Provoca 7 m",0,""],["Recuperaciones",0,""],["Blocajes",0,""],["Pérdidas",1,""],["Fallos defensivos",0,""],["Sanciones","–",""]],"startY":30,"left":140,"width":69.5}],["table",{"title":"Por zona","head":["Zona","Lanz.","Goles","Parados","Fallados","% gol"],"body":[["6 m",0,0,0,0,"–"],["9 m",0,0,0,0,"–"],["+11 m",0,0,0,0,"–"],["Contra",0,0,0,0,"–"],["7 m",0,0,0,0,"–"],["Total",0,0,0,0,"–"]],"startY":30,"left":215.5,"width":69.5}],["table",{"title":"Pérdidas por tipo","head":["Tipo","N"],"body":[["Pasos",1]],"startY":40,"left":140,"width":69.5}],["table",{"title":"Fallos defensivos","head":["Tipo","N"],"body":[["Ninguno",0]],"startY":40,"left":215.5,"width":69.5}],["table",{"title":"Cronología","head":["Min","Acción"],"body":[["05:20","Pérdida pasos"]],"startY":50,"left":140}],["page"],["header","#8 Alex","Lateral"],["chart",12,26,120,["80:9M:GOL","690:9M:FUERA"],"US",false],["table",{"head":["Dato","Valor",""],"body":[["Goles","1/2","50% de acierto"],["Parados",0,"por el portero rival"],["Fallados",1,"fuera · palo · bloqueado"],["Pases de gol",0,""],["Provoca 7 m",0,""],["Recuperaciones",0,""],["Blocajes",0,""],["Pérdidas",1,""],["Fallos defensivos",0,""],["Sanciones","–",""]],"startY":30,"left":140,"width":69.5}],["table",{"title":"Por zona","head":["Zona","Lanz.","Goles","Parados","Fallados","% gol"],"body":[["6 m",0,0,0,0,"–"],["9 m",2,1,0,1,"50%"],["+11 m",0,0,0,0,"–"],["Contra",0,0,0,0,"–"],["7 m",0,0,0,0,"–"],["Total",2,1,0,1,"50%"]],"startY":30,"left":215.5,"width":69.5}],["table",{"title":"Pérdidas por tipo","head":["Tipo","N"],"body":[["Falta ataque",1]],"startY":40,"left":140,"width":69.5}],["table",{"title":"Fallos defensivos","head":["Tipo","N"],"body":[["Ninguno",0]],"startY":40,"left":215.5,"width":69.5}],["table",{"title":"Cronología","head":["Min","Acción"],"body":[["01:20","Gol 9 m"],["10:50","Pérdida falta ataque"],["11:30","Fuera 9 m"]],"startY":50,"left":140}],["page"],["header","#10 Juni","Pivote"],["chart",12,26,120,[],"US",false],["table",{"head":["Dato","Valor",""],"body":[["Goles","0/0","sin lanzamientos"],["Parados",0,"por el portero rival"],["Fallados",0,"fuera · palo · bloqueado"],["Pases de gol",0,""],["Provoca 7 m",0,""],["Recuperaciones",1,""],["Blocajes",0,""],["Pérdidas",0,""],["Fallos defensivos",0,""],["Sanciones","–",""]],"startY":30,"left":140,"width":69.5}],["table",{"title":"Por zona","head":["Zona","Lanz.","Goles","Parados","Fallados","% gol"],"body":[["6 m",0,0,0,0,"–"],["9 m",0,0,0,0,"–"],["+11 m",0,0,0,0,"–"],["Contra",0,0,0,0,"–"],["7 m",0,0,0,0,"–"],["Total",0,0,0,0,"–"]],"startY":30,"left":215.5,"width":69.5}],["table",{"title":"Pérdidas por tipo","head":["Tipo","N"],"body":[["Ninguno",0]],"startY":40,"left":140,"width":69.5}],["table",{"title":"Fallos defensivos","head":["Tipo","N"],"body":[["Ninguno",0]],"startY":40,"left":215.5,"width":69.5}],["table",{"title":"Cronología","head":["Min","Acción"],"body":[["07:50","Recuperación"]],"startY":50,"left":140}],["page"],["header","#11 Bokiki","Central"],["chart",12,26,120,[],"US",false],["table",{"head":["Dato","Valor",""],"body":[["Goles","0/0","sin lanzamientos"],["Parados",0,"por el portero rival"],["Fallados",0,"fuera · palo · bloqueado"],["Pases de gol",0,""],["Provoca 7 m",0,""],["Recuperaciones",0,""],["Blocajes",0,""],["Pérdidas",0,""],["Fallos defensivos",0,""],["Sanciones","–",""]],"startY":30,"left":140,"width":69.5}],["table",{"title":"Por zona","head":["Zona","Lanz.","Goles","Parados","Fallados","% gol"],"body":[["6 m",0,0,0,0,"–"],["9 m",0,0,0,0,"–"],["+11 m",0,0,0,0,"–"],["Contra",0,0,0,0,"–"],["7 m",0,0,0,0,"–"],["Total",0,0,0,0,"–"]],"startY":30,"left":215.5,"width":69.5}],["table",{"title":"Pérdidas por tipo","head":["Tipo","N"],"body":[["Ninguno",0]],"startY":40,"left":140,"width":69.5}],["table",{"title":"Fallos defensivos","head":["Tipo","N"],"body":[["Ninguno",0]],"startY":40,"left":215.5,"width":69.5}],["table",{"title":"Cronología","head":["Min","Acción"],"body":[["–","Sin acciones"]],"startY":50,"left":140}],["page"],["header","#13 Kike","Pivote"],["chart",12,26,120,[],"US",false],["table",{"head":["Dato","Valor",""],"body":[["Goles","0/0","sin lanzamientos"],["Parados",0,"por el portero rival"],["Fallados",0,"fuera · palo · bloqueado"],["Pases de gol",0,""],["Provoca 7 m",0,""],["Recuperaciones",0,""],["Blocajes",0,""],["Pérdidas",0,""],["Fallos defensivos",0,""],["Sanciones","1 2'",""]],"startY":30,"left":140,"width":69.5}],["table",{"title":"Por zona","head":["Zona","Lanz.","Goles","Parados","Fallados","% gol"],"body":[["6 m",0,0,0,0,"–"],["9 m",0,0,0,0,"–"],["+11 m",0,0,0,0,"–"],["Contra",0,0,0,0,"–"],["7 m",0,0,0,0,"–"],["Total",0,0,0,0,"–"]],"startY":30,"left":215.5,"width":69.5}],["table",{"title":"Pérdidas por tipo","head":["Tipo","N"],"body":[["Ninguno",0]],"startY":40,"left":140,"width":69.5}],["table",{"title":"Fallos defensivos","head":["Tipo","N"],"body":[["Ninguno",0]],"startY":40,"left":215.5,"width":69.5}],["table",{"title":"Cronología","head":["Min","Acción"],"body":[["11:40","Exclusión 2'"]],"startY":50,"left":140}],["page"],["header","#14 Achi","Pivote"],["chart",12,26,120,[],"US",false],["table",{"head":["Dato","Valor",""],"body":[["Goles","0/0","sin lanzamientos"],["Parados",0,"por el portero rival"],["Fallados",0,"fuera · palo · bloqueado"],["Pases de gol",0,""],["Provoca 7 m",0,""],["Recuperaciones",0,""],["Blocajes",0,""],["Pérdidas",0,""],["Fallos defensivos",0,""],["Sanciones","–",""]],"startY":30,"left":140,"width":69.5}],["table",{"title":"Por zona","head":["Zona","Lanz.","Goles","Parados","Fallados","% gol"],"body":[["6 m",0,0,0,0,"–"],["9 m",0,0,0,0,"–"],["+11 m",0,0,0,0,"–"],["Contra",0,0,0,0,"–"],["7 m",0,0,0,0,"–"],["Total",0,0,0,0,"–"]],"startY":30,"left":215.5,"width":69.5}],["table",{"title":"Pérdidas por tipo","head":["Tipo","N"],"body":[["Ninguno",0]],"startY":40,"left":140,"width":69.5}],["table",{"title":"Fallos defensivos","head":["Tipo","N"],"body":[["Ninguno",0]],"startY":40,"left":215.5,"width":69.5}],["table",{"title":"Cronología","head":["Min","Acción"],"body":[["–","Sin acciones"]],"startY":50,"left":140}],["page"],["header","#17 Jenny","Extremo"],["chart",12,26,120,["130:6M:PARADA","745:6M:GOL"],"US",false],["table",{"head":["Dato","Valor",""],"body":[["Goles","1/2","50% de acierto"],["Parados",1,"por el portero rival"],["Fallados",0,"fuera · palo · bloqueado"],["Pases de gol",0,""],["Provoca 7 m",0,""],["Recuperaciones",0,""],["Blocajes",0,""],["Pérdidas",0,""],["Fallos defensivos",0,""],["Sanciones","–",""]],"startY":30,"left":140,"width":69.5}],["table",{"title":"Por zona","head":["Zona","Lanz.","Goles","Parados","Fallados","% gol"],"body":[["6 m",2,1,1,0,"50%"],["9 m",0,0,0,0,"–"],["+11 m",0,0,0,0,"–"],["Contra",0,0,0,0,"–"],["7 m",0,0,0,0,"–"],["Total",2,1,1,0,"50%"]],"startY":30,"left":215.5,"width":69.5}],["table",{"title":"Pérdidas por tipo","head":["Tipo","N"],"body":[["Ninguno",0]],"startY":40,"left":140,"width":69.5}],["table",{"title":"Fallos defensivos","head":["Tipo","N"],"body":[["Ninguno",0]],"startY":40,"left":215.5,"width":69.5}],["table",{"title":"Cronología","head":["Min","Acción"],"body":[["02:10","Parada 6 m"],["12:25","Gol 6 m"]],"startY":50,"left":140}],["page"],["header","#18 Iker","Lateral"],["chart",12,26,120,["190:9M:GOL"],"US",false],["table",{"head":["Dato","Valor",""],"body":[["Goles","1/1","100% de acierto"],["Parados",0,"por el portero rival"],["Fallados",0,"fuera · palo · bloqueado"],["Pases de gol",0,""],["Provoca 7 m",0,""],["Recuperaciones",0,""],["Blocajes",1,""],["Pérdidas",0,""],["Fallos defensivos",0,""],["Sanciones","–",""]],"startY":30,"left":140,"width":69.5}],["table",{"title":"Por zona","head":["Zona","Lanz.","Goles","Parados","Fallados","% gol"],"body":[["6 m",0,0,0,0,"–"],["9 m",1,1,0,0,"100%"],["+11 m",0,0,0,0,"–"],["Contra",0,0,0,0,"–"],["7 m",0,0,0,0,"–"],["Total",1,1,0,0,"100%"]],"startY":30,"left":215.5,"width":69.5}],["table",{"title":"Pérdidas por tipo","head":["Tipo","N"],"body":[["Ninguno",0]],"startY":40,"left":140,"width":69.5}],["table",{"title":"Fallos defensivos","head":["Tipo","N"],"body":[["Ninguno",0]],"startY":40,"left":215.5,"width":69.5}],["table",{"title":"Cronología","head":["Min","Acción"],"body":[["03:10","Gol 9 m"],["12:15","Blocaje"]],"startY":50,"left":140}],["page"],["header","#19 Gonzalo","Central"],["chart",12,26,120,[],"US",false],["table",{"head":["Dato","Valor",""],"body":[["Goles","0/0","sin lanzamientos"],["Parados",0,"por el portero rival"],["Fallados",0,"fuera · palo · bloqueado"],["Pases de gol",1,""],["Provoca 7 m",0,""],["Recuperaciones",0,""],["Blocajes",0,""],["Pérdidas",0,""],["Fallos defensivos",0,""],["Sanciones","–",""]],"startY":30,"left":140,"width":69.5}],["table",{"title":"Por zona","head":["Zona","Lanz.","Goles","Parados","Fallados","% gol"],"body":[["6 m",0,0,0,0,"–"],["9 m",0,0,0,0,"–"],["+11 m",0,0,0,0,"–"],["Contra",0,0,0,0,"–"],["7 m",0,0,0,0,"–"],["Total",0,0,0,0,"–"]],"startY":30,"left":215.5,"width":69.5}],["table",{"title":"Pérdidas por tipo","head":["Tipo","N"],"body":[["Ninguno",0]],"startY":40,"left":140,"width":69.5}],["table",{"title":"Fallos defensivos","head":["Tipo","N"],"body":[["Ninguno",0]],"startY":40,"left":215.5,"width":69.5}],["table",{"title":"Cronología","head":["Min","Acción"],"body":[["06:40","Pase de gol"]],"startY":50,"left":140}],["page"],["header","#21 Jaime","Lateral"],["chart",12,26,120,["401:CONTRA:GOL"],"US",false],["table",{"head":["Dato","Valor",""],"body":[["Goles","1/1","100% de acierto"],["Parados",0,"por el portero rival"],["Fallados",0,"fuera · palo · bloqueado"],["Pases de gol",0,""],["Provoca 7 m",0,""],["Recuperaciones",0,""],["Blocajes",0,""],["Pérdidas",0,""],["Fallos defensivos",0,""],["Sanciones","–",""]],"startY":30,"left":140,"width":69.5}],["table",{"title":"Por zona","head":["Zona","Lanz.","Goles","Parados","Fallados","% gol"],"body":[["6 m",0,0,0,0,"–"],["9 m",0,0,0,0,"–"],["+11 m",0,0,0,0,"–"],["Contra",1,1,0,0,"100%"],["7 m",0,0,0,0,"–"],["Total",1,1,0,0,"100%"]],"startY":30,"left":215.5,"width":69.5}],["table",{"title":"Pérdidas por tipo","head":["Tipo","N"],"body":[["Ninguno",0]],"startY":40,"left":140,"width":69.5}],["table",{"title":"Fallos defensivos","head":["Tipo","N"],"body":[["Ninguno",0]],"startY":40,"left":215.5,"width":69.5}],["table",{"title":"Cronología","head":["Min","Acción"],"body":[["06:41","Gol Contra"]],"startY":50,"left":140}],["page"],["header","#22 Diego","Extremo"],["chart",12,26,120,["480:CONTRA:GOL"],"US",false],["table",{"head":["Dato","Valor",""],"body":[["Goles","1/1","100% de acierto"],["Parados",0,"por el portero rival"],["Fallados",0,"fuera · palo · bloqueado"],["Pases de gol",0,""],["Provoca 7 m",0,""],["Recuperaciones",0,""],["Blocajes",0,""],["Pérdidas",0,""],["Fallos defensivos",0,""],["Sanciones","–",""]],"startY":30,"left":140,"width":69.5}],["table",{"title":"Por zona","head":["Zona","Lanz.","Goles","Parados","Fallados","% gol"],"body":[["6 m",0,0,0,0,"–"],["9 m",0,0,0,0,"–"],["+11 m",0,0,0,0,"–"],["Contra",1,1,0,0,"100%"],["7 m",0,0,0,0,"–"],["Total",1,1,0,0,"100%"]],"startY":30,"left":215.5,"width":69.5}],["table",{"title":"Pérdidas por tipo","head":["Tipo","N"],"body":[["Ninguno",0]],"startY":40,"left":140,"width":69.5}],["table",{"title":"Fallos defensivos","head":["Tipo","N"],"body":[["Ninguno",0]],"startY":40,"left":215.5,"width":69.5}],["table",{"title":"Cronología","head":["Min","Acción"],"body":[["08:00","Gol Contra"]],"startY":50,"left":140}],["page"],["header","#25 Nacho","Extremo"],["chart",12,26,120,[],"US",false],["table",{"head":["Dato","Valor",""],"body":[["Goles","0/0","sin lanzamientos"],["Parados",0,"por el portero rival"],["Fallados",0,"fuera · palo · bloqueado"],["Pases de gol",0,""],["Provoca 7 m",0,""],["Recuperaciones",0,""],["Blocajes",0,""],["Pérdidas",0,""],["Fallos defensivos",0,""],["Sanciones","–",""]],"startY":30,"left":140,"width":69.5}],["table",{"title":"Por zona","head":["Zona","Lanz.","Goles","Parados","Fallados","% gol"],"body":[["6 m",0,0,0,0,"–"],["9 m",0,0,0,0,"–"],["+11 m",0,0,0,0,"–"],["Contra",0,0,0,0,"–"],["7 m",0,0,0,0,"–"],["Total",0,0,0,0,"–"]],"startY":30,"left":215.5,"width":69.5}],["table",{"title":"Pérdidas por tipo","head":["Tipo","N"],"body":[["Ninguno",0]],"startY":40,"left":140,"width":69.5}],["table",{"title":"Fallos defensivos","head":["Tipo","N"],"body":[["Ninguno",0]],"startY":40,"left":215.5,"width":69.5}],["table",{"title":"Cronología","head":["Min","Acción"],"body":[["–","Sin acciones"]],"startY":50,"left":140}],["page"],["header","#77 Sergio","Lateral"],["chart",12,26,120,["590:7M:GOL"],"US",false],["table",{"head":["Dato","Valor",""],"body":[["Goles","1/1","100% de acierto"],["Parados",0,"por el portero rival"],["Fallados",0,"fuera · palo · bloqueado"],["Pases de gol",0,""],["Provoca 7 m",0,""],["Recuperaciones",0,""],["Blocajes",0,""],["Pérdidas",0,""],["Fallos defensivos",0,""],["Sanciones","–",""]],"startY":30,"left":140,"width":69.5}],["table",{"title":"Por zona","head":["Zona","Lanz.","Goles","Parados","Fallados","% gol"],"body":[["6 m",0,0,0,0,"–"],["9 m",0,0,0,0,"–"],["+11 m",0,0,0,0,"–"],["Contra",0,0,0,0,"–"],["7 m",1,1,0,0,"100%"],["Total",1,1,0,0,"100%"]],"startY":30,"left":215.5,"width":69.5}],["table",{"title":"Pérdidas por tipo","head":["Tipo","N"],"body":[["Ninguno",0]],"startY":40,"left":140,"width":69.5}],["table",{"title":"Fallos defensivos","head":["Tipo","N"],"body":[["Ninguno",0]],"startY":40,"left":215.5,"width":69.5}],["table",{"title":"Cronología","head":["Min","Acción"],"body":[["09:50","Gol 7 m"]],"startY":50,"left":140}],["page"],["header","#1 Jose","Portero"],["chart",12,26,120,["45:9M:GOL","160:6M:PARADA","230:6M:GOL","350:9M:GOL","450:9M:PARADA","540:7M:GOL","630:6M:PARADA","670:9M:FUERA","720:6M:GOL"],"GK",true],["table",{"head":["Dato","Valor",""],"body":[["Paradas","38%","3/8 a puerta"],["Detenidos",3,""],["Encajados",5,""],["Fuera · palo · bloq.",1,"sin ir a puerta"],["7 m parados","0/1",""]],"startY":30,"left":140}],["table",{"title":"Por zona de lanzamiento","head":["Zona","Recibidos","A puerta","Detenidos","Encajados","% paradas"],"body":[["6 m",4,4,2,2,"50%"],["9 m",3,2,1,1,"50%"],["+11 m",0,0,0,0,"–"],["Contra",1,1,0,1,"0%"],["7 m",1,1,0,1,"0%"],["Total",9,8,3,5,"38%"]],"startY":40,"left":140}],["table",{"title":"Detenidos (vista del lanzador)","head":["","Izq.","Centro","Der."],"body":[["Arriba",1,0,0],["Medio",0,1,0],["Abajo",1,0,0]],"startY":50,"left":140,"width":69.5}],["table",{"title":"Encajados (vista del lanzador)","head":["","Izq.","Centro","Der."],"body":[["Arriba",1,0,2],["Medio",0,0,0],["Abajo",1,0,1]],"startY":50,"left":215.5,"width":69.5}],["page"],["header","#12 Verdugo","Portero"],["chart",12,26,120,[],"GK",true],["table",{"head":["Dato","Valor",""],"body":[["Paradas","–","0/0 a puerta"],["Detenidos",0,""],["Encajados",0,""],["Fuera · palo · bloq.",0,"sin ir a puerta"],["7 m parados","0/0",""]],"startY":30,"left":140}],["table",{"title":"Por zona de lanzamiento","head":["Zona","Recibidos","A puerta","Detenidos","Encajados","% paradas"],"body":[["6 m",0,0,0,0,"–"],["9 m",0,0,0,0,"–"],["+11 m",0,0,0,0,"–"],["Contra",0,0,0,0,"–"],["7 m",0,0,0,0,"–"],["Total",0,0,0,0,"–"]],"startY":40,"left":140}],["table",{"title":"Detenidos (vista del lanzador)","head":["","Izq.","Centro","Der."],"body":[["Arriba",0,0,0],["Medio",0,0,0],["Abajo",0,0,0]],"startY":50,"left":140,"width":69.5}],["table",{"title":"Encajados (vista del lanzador)","head":["","Izq.","Centro","Der."],"body":[["Arriba",0,0,0],["Medio",0,0,0],["Abajo",0,0,0]],"startY":50,"left":215.5,"width":69.5}]];
+  // Draws the player pages for real on a stand-in for jsPDF that keeps every text and how far down and across anything went.
+  const recordPlayerPage = (kind, makeState = sampleState) => {
+    const saved = pdfNewDoc, calls = [];
+    const doc = fakeDrawingDoc({ addPage: () => calls.push(['page']), autoTable(opts) { calls.push(['table', opts]); this.lastAutoTable = { finalY: opts.startY + 10 }; } });
+    pdfNewDoc = () => doc;
+    const snap = snapshot();
+    try { state = makeState(); playerPagesPdf(kind); } finally { pdfNewDoc = saved; restore(snap); }
+    return { calls, texts: doc.texts, maxX: doc.maxX, maxY: doc.maxY };
+  };
   // A different match from the sample: shifted dorsals, other team names and other events (shots, a turnover, a 2 min with its early
   // return, a rival sanction), so a helper that reads the global state instead of its argument gives a different answer.
   const SHIFTED_DORSAL = 100;
@@ -1467,9 +1646,108 @@
     if (!field.timeline.length || !field.timeline.every(([clock, text]) => clock && text && !text.includes(' ·'))) throw new Error('timeline ' + JSON.stringify(field.timeline));
     if (live === sampleOwn) throw new Error('the check cannot tell the two states apart');
   });
-  T('pdf: player pages unchanged after the report refactor', () => {
-    const now = recordPlayerPages();
-    if (now !== JSON.stringify(PDF_PLAYERS_SNAPSHOT)) { const i = [...now].findIndex((c, k) => c !== JSON.stringify(PDF_PLAYERS_SNAPSHOT)[k]); throw new Error('differs at ' + i + ': ' + now.slice(i - 60, i + 60)); }
+  T('pdf: a player page has the rating, figures, zones, 5\' points, turnovers, moments and faults', () => {
+    const page = recordPlayerPage('p8');
+    const titles = page.texts.join('|');
+    ['Valoración', 'Tiro por zona', BLOCKS_TITLE, FIGURES_TITLE, 'Pérdidas por tipo', 'Momentos clave', 'Fallos defensivos'].forEach((t) => { if (!titles.includes(t)) throw new Error(`no «${t}»: ${titles}`); });
+    RATING_LINES.forEach((l) => { if (!page.texts.some((t) => t.startsWith(pdfText(l.label).slice(0, 6)))) throw new Error('no line ' + l.label); });
+    const rating = matchRatings(state).get('p8');
+    if (!page.texts.includes(pdfText(ratingText(rating.value))) || !page.texts.includes(ratingBandLabel(rating.value))) throw new Error('rating chip ' + rating.value);
+    if (!page.texts.some((t) => t.startsWith('Falta ataque · Riv'))) throw new Error('turnover type and group');
+    if (page.texts.filter((t) => /^\d+'$/.test(t)).length < MATCH_SECONDS / CONFIG.scoreIntervalSeconds) throw new Error('5\' axis');
+    if (!page.texts.some((t) => t.startsWith(TEAM_MEAN_PREFIX))) throw new Error('no team mean');
+  });
+  T('pdf: every player fits one page, nothing drawn below the margin, even with every type logged', () => {
+    const busy = () => {
+      const s = sampleState(), p = 'p8';
+      CONFIG.turnoverGroups.flatMap((g) => g.types).forEach((t, i) => s.events.push({ id: `bt${i}`, abs: 100 + i, kind: 'TURNOVER', playerId: p, subtype: t }));
+      DEFENSIVE_FAULTS.forEach((a, i) => s.events.push({ id: `bf${i}`, abs: 200 + i, kind: 'ACTION', playerId: p, action: a }));
+      s.events.push({ id: 'bx', abs: 300, kind: 'TURNOVER', playerId: p, subtype: 'Tipo antiguo' });
+      return s;
+    };
+    [[sampleState, 'players'], [otherMatch, 'players'], [busy, 'p8']].forEach(([make, kind]) => {
+      const page = recordPlayerPage(kind, make);
+      const pages = page.calls.filter(([k]) => k === 'page').length, players = make().players.length;
+      if (pages !== (kind === 'players' ? players - 1 : 0)) throw new Error(`${kind}: ${pages + 1} pages for ${kind === 'players' ? players : 1} players`);
+      if (page.maxY > PDF_PAGE.h - PDF_PAGE.margin + 0.01) throw new Error(`${kind}: drawn down to ${page.maxY} mm`);
+      if (page.maxX > PDF_PAGE.w - PDF_PAGE.margin + 0.01) throw new Error(`${kind}: drawn across to ${page.maxX} mm`);
+    });
+    const page = recordPlayerPage('p8', busy);
+    const types = [...CONFIG.turnoverGroups.flatMap((g) => g.types), 'Tipo antiguo'];
+    types.forEach((t) => { if (!page.texts.some((x) => x.startsWith(pdfText(t).slice(0, 5)))) throw new Error('turnover type missing: ' + t); });
+    DEFENSIVE_FAULTS.forEach((a) => { if (!page.texts.some((x) => x.startsWith(pdfText(ACTIONS[a].label).slice(0, 5)))) throw new Error('fault missing: ' + a); });
+  });
+  T('turnover breakdown: exact types in group order with their group, unknown types last, none when empty', () => {
+    const ev = (subtype, i) => ({ id: `tb${i}`, abs: i, kind: 'TURNOVER', playerId: 'p8', subtype });
+    const rows = turnoverBreakdown(['Falta ataque', 'Pase', 'Tipo antiguo', 'Pase', 'Pasos'].map(ev));
+    if (JSON.stringify(rows.map((r) => [r.type, r.group, r.cls, r.n])) !== JSON.stringify([['Pase', 'Balón', 'c-act-bad', 2], ['Pasos', 'Regla', 'c-act-rule', 1], ['Falta ataque', 'Rival', 'c-act-rival', 1], ['Tipo antiguo', OTHER_TYPE_GROUP.label, OTHER_TYPE_GROUP.cls, 1]])) throw new Error(JSON.stringify(rows));
+    if (turnoverBreakdown([]).length) throw new Error('rows without turnovers');
+    const faults = defFaultBreakdown([{ id: 'f1', abs: 1, kind: 'ACTION', playerId: 'p8', action: 'LATE' }, { id: 'f2', abs: 2, kind: 'ACTION', playerId: 'p8', action: 'RECUP' }]);
+    if (faults.length !== 1 || faults[0].type !== ACTIONS.LATE.label || faults[0].group !== 'Táctico') throw new Error(JSON.stringify(faults));
+  });
+  T('player tab and summary: turnovers by exact type drawn as coloured bars', () => {
+    const keep = { tab: ui.sheetTab, player: ui.sheetPlayer }, snap = snapshot();
+    try {
+      state = sampleState();
+      Object.assign(ui, { sheetTab: 'player', sheetPlayer: 'p8' }); renderSheet();
+      const row = $('sheet').querySelector('.type-row');
+      if (!row || !row.textContent.includes('Falta ataque') || !row.querySelector('.loss-bar i.c-act-rival')) throw new Error('player bars ' + (row && row.outerHTML));
+      if (!$('sheet').querySelector('.rating-breakdown .rating-bars') || $('sheet').querySelectorAll('.rating-bars li').length !== RATING_LINES.length) throw new Error('rating breakdown');
+      Object.assign(ui, { sheetTab: 'summary' }); renderSheet();
+      const types = [...$('sheet').querySelectorAll('.type-row .loss-name')].map((n) => n.firstChild.textContent.trim());
+      if (types.join() !== turnoverBreakdown(state.events).map((r) => r.type).join() || !types.length) throw new Error('summary types ' + types);
+      if ($('sheet').querySelectorAll('.zone-tiles .stat-tile').length !== SHEET_ZONES.length) throw new Error('zone tiles');
+    } finally { Object.assign(ui, { sheetTab: keep.tab, sheetPlayer: keep.player }); restore(snap); renderSheet(); }
+  });
+  T('moment blocks: 5\' blocks of points, extra time in the last, keys moments in match order', () => {
+    const size = CONFIG.scoreIntervalSeconds, mo = (abs, value) => ({ abs, value, label: 'x' });
+    const blocks = momentBlocks([mo(10, 1), mo(size + 1, -0.5), mo(MATCH_SECONDS + 30, 0.25)]);
+    if (blocks.length !== MATCH_SECONDS / size || blocks[0].points !== POINTS_PER_GOAL || blocks[1].points !== -0.5 * POINTS_PER_GOAL || blocks.at(-1).points !== 0.25 * POINTS_PER_GOAL) throw new Error(JSON.stringify(blocks));
+    const keys = keyMomentsOf([mo(50, 0.1), mo(10, -1), mo(30, 0.5), mo(20, 0.001)], 2);
+    if (keys.map((k) => k.abs).join() !== '10,30') throw new Error(JSON.stringify(keys));
+  });
+  T('team means: over the field players who took part, shown under the player\'s figures', () => {
+    const s = sampleState(), players = matchParticipants(s), means = teamMeans(s);
+    if (!players.length || players.some((p) => p.pos === 'POR')) throw new Error('participants');
+    const goals = sumOf(players, (p) => playerCounts(p, s).goals) / players.length;
+    if (Math.abs(means.goals - goals) > 1e-9) throw new Error(`${means.goals} vs ${goals}`);
+    const figures = playerFigures(s.players.find((p) => p.id === 'p8'), s, { means });
+    if (!figures.find((f) => f[0] === 'Pérdidas')[2].startsWith(teamMeanText(decimalText(means.TURNOVER)))) throw new Error(JSON.stringify(figures));
+    if (teamMeans({ ...s, events: [], court: [] }) !== null) throw new Error('mean without participants');
+  });
+  T('phone: a match\'s players are listed by rating, «S/C» last; the tablet keeps its order', () => {
+    const real = window.matchMedia, keep = { tab: ui.sheetTab, player: ui.sheetPlayer }, snap = snapshot();
+    const order = () => [...$('sheet').querySelectorAll('.player-strip [data-sheet-open-player]')].map((b) => b.dataset.sheetOpenPlayer);
+    try {
+      state = sampleState();
+      const ratings = matchRatings(state), value = (id) => ratingValue(ratings, playerById(id));
+      if (!state.players.some((p) => value(p.id) == null) || !state.players.some((p) => value(p.id) != null)) throw new Error('premise: rated and unrated players');
+      Object.assign(ui, { sheetTab: 'summary' });
+      window.matchMedia = (q) => (q === PHONE_QUERY ? { matches: false, media: q } : real.call(window, q));
+      renderSheet();
+      if (order().join() !== state.players.slice().sort(byPosition).map((p) => p.id).join()) throw new Error('tablet order changed');
+      window.matchMedia = (q) => (q === PHONE_QUERY ? { matches: true, media: q } : real.call(window, q));
+      renderSheet();
+      const values = order().map(value), firstNone = values.indexOf(null);
+      if (values.length !== state.players.length) throw new Error('players lost');
+      if (firstNone >= 0 && values.slice(firstNone).some((v) => v != null)) throw new Error('S/C not last ' + values);
+      const rated = values.filter((v) => v != null);
+      if (rated.some((v, i) => i && v > rated[i - 1])) throw new Error('not by rating ' + values);
+      Object.assign(ui, { sheetTab: 'stats' }); renderSheet();
+      const tableIds = [...$('sheet').querySelectorAll('.stats-table [data-sheet-open-player]')].map((b) => b.dataset.sheetOpenPlayer);
+      if (tableIds.join() !== rankedByRating(state, ratings, minutesOnCourt(state)).filter((p) => p.pos !== 'POR').map((p) => p.id).join()) throw new Error('table ' + tableIds);
+      Object.assign(ui, { sheetTab: 'player', sheetPlayer: null }); renderSheet();
+      const chips = [...$('sheet').querySelectorAll('[data-sheet-player]')].map((b) => b.dataset.sheetPlayer);
+      if (chips.join() !== rankedByRating(state, ratings, minutesOnCourt(state)).map((p) => p.id).join()) throw new Error('chips ' + chips);
+    } finally { window.matchMedia = real; Object.assign(ui, { sheetTab: keep.tab, sheetPlayer: keep.player }); restore(snap); renderSheet(); }
+  });
+  T('pdf: an unrated player reads «S/C» with the reason, a keeper has his rating under the map', () => {
+    const quiet = state.players.find((p) => p.pos !== 'POR' && !matchRatings(state).get(p.id).rated);
+    if (!quiet) throw new Error('premise: the sample has no unrated field player');
+    const page = recordPlayerPage(quiet.id);
+    if (!page.texts.includes('S/C') || !page.texts.some((t) => t.startsWith('Sin calificar'))) throw new Error(page.texts.join('|'));
+    const keeper = recordPlayerPage('p1');
+    if (!keeper.texts.includes('Valoración') || !keeper.calls.some(([k]) => k === 'table')) throw new Error('keeper page');
   });
   // ---- PDF audit (M6): the row builders and the table helper run offline, over recorded drawing calls ----
   const tablesOf = (calls) => calls.filter(([kind]) => kind === 'table').map(([, opts]) => opts);
@@ -1535,6 +1813,12 @@
     const snap = snapshot();
     try { state = makeState(); return new DOMParser().parseFromString(matchReportDocument(), 'text/html'); } finally { restore(snap); }
   };
+  T('report: the scoring note explains the defence values and both close windows from the config', () => {
+    const note = reportOf().querySelector('.model').textContent.replace(/\s+/g, ' '), d = CONFIG.rating.defence, pts = (v) => String(roundHalfUp(v * POINTS_PER_GOAL, 2)).replace('.', ',');
+    [`falta en ataque provocada +${pts(CONFIG.rating.possession + d.offensiveFoulExtra)}`, `buena defensa (salida, golpe, dureza) +${pts(d.goodDefence)}`, `−${pts(d.zoneGoal)}`, `+${pts(d.zoneSolid)}`,
+      'sin 7 m ni contraataques', `desde el ${CONFIG.rating.context.firstHalfCloseFrom / SECONDS_PER_MINUTE}' de la primera parte`, `desde el ${CONFIG.rating.context.closeFrom / SECONDS_PER_MINUTE}'`]
+      .forEach((text) => { if (!note.includes(text)) throw new Error(`no «${text}» in ${note}`); });
+  });
   T('report: five pages with every section the coach asked for, and no NaN', () => {
     ['sample', 'other'].forEach((name) => {
       const doc = reportOf(name === 'sample' ? sampleState : otherMatch), titles = [...doc.querySelectorAll('h2')].map((h) => h.firstChild.textContent.trim());
@@ -1577,9 +1861,9 @@
     if (REPORT_COLOURS.them.toLowerCase() === team.brand.toLowerCase()) throw new Error('same colour for both teams');
   });
   T('pdf: every table of the player reports is rectangular and prints no NaN or undefined', () => {
-    ['sample', 'other'].forEach((name) => ['players', 'p8'].forEach((kind) => {
+    ['sample', 'other'].forEach((name) => ['players', 'p1'].forEach((kind) => {
       const tables = tablesOf(recordPdfCalls(kind, name === 'sample' ? sampleState : otherMatch));
-      if (tables.length < 5) throw new Error(`${name} ${kind}: only ${tables.length} tables`);
+      if (tables.length < 3) throw new Error(`${name} ${kind}: only ${tables.length} tables`);
       tables.forEach((t) => {
         const label = `${name} ${kind} «${t.title || t.head.join('|')}»`;
         if (!t.body.length) throw new Error(label + ' has no rows, an empty table says so in a row');
