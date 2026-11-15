@@ -3646,6 +3646,7 @@
         removeAccount: async (t, userId) => { calls.push({ removed: userId }); }, ...over(calls) };
       Object.assign(team, { id: 'inv-team', role: 'owner', name: 'Triana', inviteMessage: null });
       Object.assign(home, { roster: INVITE_ROSTER.slice(), accounts: null, armed: null, inviteTeamId: null });
+      removeKey(INVITE_CHANNEL_KEY);
       // The runner's browser may report itself offline; the coach's tablet is online.
       const online = Object.getOwnPropertyDescriptor(navigator, 'onLine');
       Object.defineProperty(navigator, 'onLine', { value: true, configurable: true });
@@ -3887,6 +3888,103 @@
         if (shared.join() !== 'Entra en Zona6 con Triana: https://example.test/l' || $('home').querySelector('[data-invite-share="gv"]')) throw new Error(shared.join());
       } finally { ['userActivation', 'share'].forEach((key) => { if (saved[key]) Object.defineProperty(navigator, key, saved[key]); else delete navigator[key]; }); }
     }));
+    // WhatsApp stand-ins: window.open, the share sheet and the user activation, put back afterwards.
+    const withWhatsAppStubs = async ({ active = true, share = async () => {} } = {}, fn) => {
+      const own = (key) => Object.getOwnPropertyDescriptor(navigator, key), saved = { userActivation: own('userActivation'), share: own('share') }, open = window.open;
+      const opened = [], shared = [];
+      window.open = (url) => { opened.push(url); return null; };
+      Object.defineProperty(navigator, 'userActivation', { value: { isActive: active }, configurable: true });
+      Object.defineProperty(navigator, 'share', { value: async (data) => { shared.push(data.text); await share(data); }, configurable: true });
+      try { await fn({ opened, shared }); }
+      finally { window.open = open; ['userActivation', 'share'].forEach((key) => { if (saved[key]) Object.defineProperty(navigator, key, saved[key]); else delete navigator[key]; }); }
+    };
+    const LINK_OF = (playerId) => `https://example.test/verify?token=${playerId}&type=invite`;
+    const linkInvites = (calls) => ({ inviteMember: async (t, member, email) => {
+      calls.push({ member, email });
+      return member.delivery === INVITE_BY_LINK ? { link: LINK_OF(member.playerId), sent: false } : { link: null, sent: true };
+    } });
+    await TA('invite message: placeholders at the cursor, a live preview, the default stored as none', async () => withInviteCard((calls) => ({
+      updateTeam: async (id, fields) => { calls.push({ team: fields }); return { ...team, ...fields }; } }), async (calls) => {
+      await tapInvite('[data-invite-send-ready]');
+      await tapInvite('.invite-sheet [data-invite-message]');
+      const field = $('invite-message');
+      if (!field || document.activeElement !== field || field.value !== DEFAULT_INVITE_MESSAGE || field.maxLength !== 600) throw new Error('editor');
+      typeInto('invite-message', 'Hola : bienvenido a .');
+      field.setSelectionRange(5, 5);
+      await tapInvite('[data-invite-token="name"]');
+      if ($('invite-message') !== field) throw new Error('the editor re-rendered and lost the cursor');
+      field.setSelectionRange(field.value.length - 1, field.value.length - 1);
+      await tapInvite('[data-invite-token="team"]');
+      if (field.value !== 'Hola {nombre}: bienvenido a {equipo}.') throw new Error(field.value);
+      if ($('invite-message-preview').textContent !== 'Hola Manu: bienvenido a Triana. enlace personal') throw new Error('preview: ' + $('invite-message-preview').textContent);
+      home.inviteMessageDraft = 'x'.repeat(601);
+      await tapInvite('[data-invite-message-save]');
+      if (calls.length || !/no puede pasar de 600/.test($('account-status').textContent)) throw new Error('a long message was saved');
+      typeInto('invite-message', 'Hola {nombre}: bienvenido a {equipo}.');
+      await tapInvite('[data-invite-message-save]');
+      if (calls[0].team.inviteMessage !== 'Hola {nombre}: bienvenido a {equipo}.' || team.inviteMessage !== 'Hola {nombre}: bienvenido a {equipo}.') throw new Error(JSON.stringify(calls));
+      // Back in the send sheet, which now previews and sends the new text.
+      if (!/Hola Manu: bienvenido a Triana/.test(sheet()?.querySelector('.invite-preview')?.textContent || '')) throw new Error('not back to the send sheet');
+      await tapInvite('[data-invite-go]');
+      if (calls[1].member.message !== 'Hola Manu: bienvenido a Triana.' || calls[2].member.message !== 'Hola Nacho: bienvenido a Triana.') throw new Error(JSON.stringify(calls.slice(1)));
+      await tapInvite('[data-invite-message]');
+      await tapInvite('[data-invite-message-reset]');
+      if ($('invite-message').value !== DEFAULT_INVITE_MESSAGE) throw new Error('reset');
+      await tapInvite('[data-invite-message-save]');
+      if (calls[3].team.inviteMessage !== null || sheet()) throw new Error('the default is stored as text, or the sheet stays: ' + JSON.stringify(calls[3]));
+    }));
+    await TA('WhatsApp queue: one link per tap, the chat by phone or the share sheet; the unsent stay uninvited', async () => withInviteCard(linkInvites, async (calls) => withWhatsAppStubs({}, async ({ opened, shared }) => {
+      removeKey(INVITE_CHANNEL_KEY);
+      try {
+        await tapInvite('[data-invite-send-ready]');
+        await tapInvite(`[data-invite-channel="${INVITE_BY_LINK}"]`);
+        if (sheet().querySelector(`[data-invite-channel="${INVITE_BY_LINK}"]`).getAttribute('aria-pressed') !== 'true' || !/Preparar 2 enlaces/.test(sheet().textContent)) throw new Error('channel');
+        await tapInvite('[data-invite-go]');
+        if (calls.length || !/Envía a cada uno su enlace/.test(sheet().textContent) || !/Quedan 2/.test(sheet().textContent)) throw new Error('the queue made links up front');
+        await tapInvite('[data-invite-wa="pn"]');
+        const text = `${fillInviteMessage(DEFAULT_INVITE_MESSAGE, 'Nacho', 'Triana')} ${LINK_OF('pn')}`;
+        if (JSON.stringify(calls[0].member) !== JSON.stringify({ role: 'player', playerId: 'pn', message: fillInviteMessage(DEFAULT_INVITE_MESSAGE, 'Nacho', 'Triana'), delivery: 'link' })) throw new Error(JSON.stringify(calls[0]));
+        if (opened.join() !== whatsAppUrl('+34600111222', text) || shared.length) throw new Error('Nacho\'s chat: ' + opened.join());
+        if (!/Invitación enviada/.test(sheet().textContent) || !/Quedan 1/.test(sheet().textContent) || sheet().querySelector('[data-invite-wa="pn"]')) throw new Error('row not marked');
+        // Closed halfway: Manu got no link and stays to invite; the channel is remembered.
+        await tapInvite('.invite-sheet [data-invite-close]');
+        if (calls.length !== 1 || !card('pm')?.querySelector('[data-invite-pick="pm"]')) throw new Error('Manu was invited');
+        await tapInvite('[data-invite-send="pm"]');
+        if (sheet().querySelector(`[data-invite-channel="${INVITE_BY_LINK}"]`).getAttribute('aria-pressed') !== 'true') throw new Error('the channel is not remembered');
+        await tapInvite('[data-invite-go]');
+        await tapInvite('[data-invite-wa="pm"]');
+        if (shared.join() !== `${fillInviteMessage(DEFAULT_INVITE_MESSAGE, 'Manu', 'Triana')} ${LINK_OF('pm')}` || opened.length !== 1) throw new Error('no phone: the share sheet ' + shared.join());
+        if (!/Ya están todos/.test(sheet().textContent) || !/Listo/.test(sheet().querySelector('.invite-done').textContent)) throw new Error('queue end');
+      } finally { removeKey(INVITE_CHANNEL_KEY); }
+    })));
+    await TA('WhatsApp: a link outlasting the tap, or a closed share sheet, waits behind «Abrir WhatsApp»', async () => withInviteCard(linkInvites, async (calls) => {
+      let cancel = true;
+      await withWhatsAppStubs({ active: false, share: async () => { if (cancel) { cancel = false; throw new DOMException('closed', 'AbortError'); } } }, async ({ shared }) => {
+        await tapInvite('[data-invite-open="pd"]');
+        await tapInvite('[data-invite-wa="pd"]');
+        if (calls.map((c) => `${c.member.playerId}:${c.member.delivery}`).join() !== 'pd:link' || shared.length) throw new Error('shared without a live tap');
+        await tapInvite('[data-invite-share="pd"]');
+        if (shared.length !== 1 || !$('home').querySelector('[data-invite-share="pd"]')) throw new Error('a closed share sheet lost the link');
+        await tapInvite('[data-invite-share="pd"]');
+        if (shared.length !== 2 || $('home').querySelector('[data-invite-share="pd"]') || calls.length !== 1) throw new Error('the second share');
+        if (!/Dani/.test(shared[1]) || !shared[1].endsWith(LINK_OF('pd'))) throw new Error(shared[1]);
+      });
+    }));
+    await TA('WhatsApp: an account already in use needs no link; a failure stays on the card', async () => withInviteCard((calls) => ({
+      inviteMember: async (t, member) => { calls.push(member); if (member.playerId === 'pm') return { link: null, sent: false }; throw new Error('este jugador ya tiene cuenta'); },
+    }), async () => withWhatsAppStubs({}, async ({ opened, shared }) => {
+      writeJson(INVITE_CHANNEL_KEY, INVITE_BY_LINK);
+      try {
+        await tapInvite('[data-invite-send-ready]');
+        await tapInvite('[data-invite-go]');
+        await tapInvite('[data-invite-wa="pm"]');
+        if (opened.length || shared.length || !/Manu ya tenía cuenta/.test($('account-status').textContent)) throw new Error($('account-status').textContent);
+        await tapInvite('[data-invite-wa="pn"]');
+        if (!/No se pudo crear el enlace de Nacho: este jugador ya tiene cuenta/.test($('account-status').textContent) || !sheet().querySelector('[data-invite-wa="pn"]')) throw new Error($('account-status').textContent);
+        await tapInvite('.invite-sheet [data-invite-close]');
+        if (!/ya tiene cuenta/.test(card('pn').querySelector('.invite-error')?.textContent || '')) throw new Error('the failure is not on the card');
+      } finally { removeKey(INVITE_CHANNEL_KEY); }
+    })));
     await TA('invite cards: offline, a load error and another team start clean', async () => withInviteCard(() => ({ listAccounts: async () => { throw new TypeError('Failed to fetch'); } }), async () => {
       if (!/Sin conexión: las cuentas se gestionan con internet/.test(document.querySelector('.team-accounts').textContent) || document.querySelector('.invite-card')) throw new Error('offline load');
       backend.listAccounts = async () => { throw new Error('solo los entrenadores ven las cuentas'); };

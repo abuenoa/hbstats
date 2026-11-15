@@ -917,12 +917,23 @@ a:focus-visible, input:focus-visible, select:focus-visible, summary:focus-visibl
 .invite-sheet .in { font: var(--type-body); text-transform: none; letter-spacing: normal; }
 .invite-chips { display: flex; flex-wrap: wrap; gap: var(--space-2); }
 .invite-preview { margin: 0; padding: var(--space-3) var(--space-4); border: 1px solid var(--line); border-radius: var(--radius-lg); background: var(--soft); font: var(--type-body); overflow-wrap: anywhere; }
+.invite-channels { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--space-2); }
+.invite-channel { display: grid; gap: var(--space-1); min-height: var(--target); padding: var(--space-2) var(--space-3); border: 2px solid var(--line); border-radius: var(--radius-lg); background: var(--soft); color: var(--fg); font: inherit; text-align: center; }
+.invite-channel small { color: var(--muted); font: var(--type-caption); }
+.invite-channel[aria-pressed="true"] { border-color: var(--game-accent); background: color-mix(in srgb, var(--game-accent) 10%, var(--soft)); }
+.invite-preview-head { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: var(--space-2); }
+.invite-preview-head .link { font-weight: 700; }
+.invite-sheet textarea.in { min-height: 120px; padding: var(--space-2) var(--space-3); resize: vertical; -webkit-user-select: text; user-select: text; }
+.invite-queue { display: grid; gap: var(--space-2); }
+.invite-queue-row { display: flex; align-items: center; gap: var(--space-3); padding: var(--space-2) var(--space-3); border-radius: var(--radius-lg); background: var(--soft); }
+.invite-queue-row .disc { width: 44px; height: 44px; font-size: 18px; box-shadow: none; }
+.invite-queue-row .btn { flex: none; }
 .invite-preview mark { padding: 0 3px; border-radius: 3px; background: color-mix(in srgb, var(--game-accent) 22%, transparent); color: var(--game-accent); font-weight: 700; }
 .invite-sheet-actions { display: grid; grid-auto-flow: column; grid-auto-columns: minmax(0, 1fr); gap: var(--space-2); }
 .invite-sheet-actions .btn { white-space: normal; }
 .invite-sheet-who { display: flex; align-items: center; gap: var(--space-3); min-width: 0; }
 .invite-sheet-name { display: grid; flex: 1; min-width: 0; font: var(--type-heading); overflow-wrap: anywhere; }
-.invite-sheet-who small { color: var(--muted); font: var(--type-caption); }
+.invite-sheet-name small { color: var(--muted); font: var(--type-caption); }
 .invite-sheet-email { margin: 0; font-weight: 700; overflow-wrap: anywhere; }
 .invite-remove { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: var(--space-2) var(--space-3); padding-top: var(--space-3); border-top: 1px solid var(--line); }
 .invite-remove .note { flex: 1 1 160px; }
@@ -6368,7 +6379,7 @@ table { border-collapse: collapse; width: 100%; }
   let currentMatchId = null;
   let syncTimer = null;
   let attendanceSyncTimer = null;
-  const home = { view: 'loading', user: null, teams: [], roster: [], matches: [], season: null, templates: [], template: null, squad: new Set(), leaderMetric: 'goals', playerId: null, playerMatchId: null, playerEdit: false, playerDraft: null, offline: false, error: '', draft: null, crestDraft: undefined, armed: null, passwordChange: false, seasonOffline: false, sessions: null, fixtures: null, teamMatches: [], fixtureEdit: null, squadFixture: null, attendanceDate: null, attendanceMode: null, attendanceNoteFor: null, stateMatches: [], statsSort: null, statsMetric: 'goals', statsPlayer: null, callupDraft: null, callup: null, callupBusy: null, staffPhotoFor: null, staffId: null, inviteTeamId: null, inviteSelected: new Set(), inviteSheet: null, inviteDraft: null, inviteStaffEmail: '', inviteLinks: new Map(), inviteErrors: new Map(), inviteBusy: false, accountStatus: '', accounts: null, weightsDraft: null, ratingCache: null };
+  const home = { view: 'loading', user: null, teams: [], roster: [], matches: [], season: null, templates: [], template: null, squad: new Set(), leaderMetric: 'goals', playerId: null, playerMatchId: null, playerEdit: false, playerDraft: null, offline: false, error: '', draft: null, crestDraft: undefined, armed: null, passwordChange: false, seasonOffline: false, sessions: null, fixtures: null, teamMatches: [], fixtureEdit: null, squadFixture: null, attendanceDate: null, attendanceMode: null, attendanceNoteFor: null, stateMatches: [], statsSort: null, statsMetric: 'goals', statsPlayer: null, callupDraft: null, callup: null, callupBusy: null, staffPhotoFor: null, staffId: null, inviteTeamId: null, inviteSelected: new Set(), inviteSheet: null, inviteDraft: null, inviteStaffEmail: '', inviteLinks: new Map(), inviteErrors: new Map(), inviteMessageDraft: '', inviteBusy: false, accountStatus: '', accounts: null, weightsDraft: null, ratingCache: null };
 
   // ---- Device storage ----
   function readJson(key) {
@@ -7302,7 +7313,7 @@ table { border-collapse: collapse; width: 100%; }
   function inviteStateFor(teamId) {
     if (home.inviteTeamId === teamId) return;
     Object.assign(home, { inviteTeamId: teamId, inviteSelected: new Set(), inviteSheet: null, inviteDraft: null, inviteStaffEmail: '',
-      inviteLinks: new Map(), inviteErrors: new Map(), accountStatus: '' });
+      inviteLinks: new Map(), inviteErrors: new Map(), inviteMessageDraft: '', accountStatus: '' });
   }
   // The card's own message line, next to its buttons and brought into view: the page's status sits at the top.
   function accountStatus(text) {
@@ -7328,7 +7339,9 @@ table { border-collapse: collapse; width: 100%; }
   // Who has an account and the contacts, together: the cards need both.
   async function loadAccounts() {
     const teamId = team.id;
-    home.accounts = { teamId, rows: null, contacts: null, error: '' };
+    // While it reloads the card keeps showing the list it had, so an open sheet stays put.
+    const shown = home.accounts?.teamId === teamId && !home.accounts.error ? home.accounts : null;
+    home.accounts = { teamId, rows: shown?.rows || null, contacts: shown?.contacts || null, error: '', stale: false };
     try {
       const [rows, contacts] = await Promise.all([backend.listAccounts(teamId), loadPlayerContacts(teamId)]);
       if (home.accounts?.teamId === teamId) Object.assign(home.accounts, { rows, contacts });
@@ -7377,7 +7390,8 @@ table { border-collapse: collapse; width: 100%; }
     const bar = parts.map(({ state, n }) => (n ? `<span class="st-${state}" style="flex-grow:${n}"></span>` : '')).join('');
     return `<h3>Cuentas del equipo</h3><div class="invite-head"><div class="invite-sum">
         <p class="invite-progress"><b>${count([IN])} de ${rows.length}</b> jugadores ya entran en ${APP_NAME}</p>
-        <div class="invite-bar" aria-hidden="true">${bar}</div><p class="invite-legend">${legend}</p></div></div>`;
+        <div class="invite-bar" aria-hidden="true">${bar}</div><p class="invite-legend">${legend}</p></div>
+      <button class="btn press" type="button" data-invite-message${busyAttr()}>✎ Mensaje de invitación</button></div>`;
   }
   // The owner, the coaches and the guests: who they are, where their invite stands, and what can be done with it.
   function otherAccountsHtml(others) {
@@ -7399,7 +7413,7 @@ table { border-collapse: collapse; width: 100%; }
   const OFFLINE_ACCOUNTS_NOTE = 'Sin conexión: las cuentas se gestionan con internet.';
   function invitesBodyHtml() {
     if (!navigator.onLine) return `<h3>Cuentas del equipo</h3><p class="note">${OFFLINE_ACCOUNTS_NOTE}</p>`;
-    if (!home.accounts || home.accounts.teamId !== team.id) { loadAccounts(); return '<h3>Cuentas del equipo</h3><p class="note">Cargando las cuentas…</p>'; }
+    if (!home.accounts || home.accounts.teamId !== team.id || home.accounts.stale) loadAccounts();
     if (home.accounts.error) {
       const why = home.accounts.error === NO_CONNECTION ? OFFLINE_ACCOUNTS_NOTE : `No se pudieron cargar las cuentas: ${esc(home.accounts.error)}.`;
       return `<h3>Cuentas del equipo</h3><p class="note">${why}</p><div class="row-actions"><button class="btn press" type="button" data-invite-retry>Reintentar</button></div>`;
@@ -7445,11 +7459,85 @@ table { border-collapse: collapse; width: 100%; }
     if (!first) { queueMicrotask(closeInviteSheet); return ''; }
     const again = rows.some((r) => r.account) ? '<p class="note">Al reenviar, el enlace anterior deja de servir.</p>' : '';
     const title = rows.length === 1 ? `Invitar a ${esc(first.name)}` : `Invitar a ${rows.length} jugadores`;
+    const byEmail = inviteChannel() === INVITE_BY_EMAIL;
+    const channel = (value, label, hint) => `<button class="invite-channel press" type="button" data-invite-channel="${value}" aria-pressed="${inviteChannel() === value}"><b>${label}</b><small>${hint}</small></button>`;
     return inviteSheetFrame(title, `<div class="invite-chips">${rows.map((r) => inviteChipHtml(r.player)).join('')}</div>
-      <p class="note">Así le llega${rows.length > 1 ? ` (a ${esc(first.name)}, por ejemplo)` : ''}</p>
+      <div class="invite-channels" role="group" aria-label="Cómo le llega">${channel(INVITE_BY_EMAIL, '✉ Por correo', `${APP_NAME} lo envía por ti`)}${channel(INVITE_BY_LINK, 'Por WhatsApp', 'Tú envías a cada uno su enlace')}</div>
+      <div class="invite-preview-head"><p class="note">Así le llega${rows.length > 1 ? ` (a ${esc(first.name)}, por ejemplo)` : ''}</p><button class="link" type="button" data-invite-message>Cambiar mensaje</button></div>
       <p class="invite-preview">${inviteMessageHtml(inviteMessage(), first.name, team.name)}</p>${again}
       <div class="invite-sheet-actions"><button class="btn press" type="button" data-invite-close>Cancelar</button>
-        <button class="btn primary press" type="button" data-invite-go${busyAttr()}>Enviar ${plural(rows.length, 'correo', 'correos')}</button></div>`);
+        <button class="btn primary press" type="button" data-invite-go${busyAttr()}>${byEmail ? `Enviar ${plural(rows.length, 'correo', 'correos')}` : `Preparar ${plural(rows.length, 'enlace', 'enlaces')}`}</button></div>`);
+  }
+  // The channel last used is the next one offered.
+  const INVITE_CHANNEL_KEY = 'hbstats:invite-channel';
+  const inviteChannel = () => (readJson(INVITE_CHANNEL_KEY) === INVITE_BY_LINK ? INVITE_BY_LINK : INVITE_BY_EMAIL);
+  function chooseInviteChannel(channel) {
+    writeJson(INVITE_CHANNEL_KEY, channel === INVITE_BY_LINK ? INVITE_BY_LINK : INVITE_BY_EMAIL);
+    renderHome();
+  }
+  // Each link is personal, so WhatsApp goes one player at a time: his link is only made when his button is tapped,
+  // and whoever is not sent stays «Por invitar».
+  function inviteQueueHtml(sheet) {
+    const rows = sheet.ids.map(inviteRow).filter(Boolean), left = rows.filter((r) => !sheet.shared.includes(r.player.id)).length;
+    const row = ({ player: p, phone }) => {
+      const id = esc(p.id), name = esc(p.name);
+      const action = sheet.shared.includes(p.id) ? inviteBadgeHtml(SENT)
+        : home.inviteLinks.has(p.id) ? `<button class="btn go press" type="button" data-invite-share="${id}"${busyAttr()}>Abrir WhatsApp</button>`
+          : `<button class="btn go press" type="button" data-invite-wa="${id}"${busyAttr()}>Enviar a ${name}</button>`;
+      return `<div class="invite-queue-row">${discHtml(p)}<span class="invite-sheet-name">${name}<small>${phone ? 'Se abre su chat' : 'Eliges su chat'}</small></span>${action}</div>`;
+    };
+    return inviteSheetFrame('Envía a cada uno su enlace', `<p class="note">Cada enlace es personal: pulsa, elige su chat en WhatsApp si hace falta y vuelve aquí. ${left ? `Quedan ${left}.` : 'Ya están todos.'}</p>
+      <div class="invite-queue">${rows.map(row).join('')}</div>
+      <button class="btn press invite-done" type="button" data-invite-close>${left ? 'Seguir luego' : 'Listo'}</button>`);
+  }
+  // The team's message, written once for both channels; the link is appended by the app, so it cannot be deleted.
+  const MAX_INVITE_MESSAGE_LENGTH = 600;
+  const sampleInviteName = () => inviteRows()[0]?.player.name ?? INVITE_PLACEHOLDERS.name;
+  function openInviteMessage() {
+    home.inviteMessageDraft = inviteMessage();
+    openInviteSheet({ kind: 'message', back: home.inviteSheet, focus: 'invite-message' });
+  }
+  function inviteMessageEditHtml() {
+    const token = (key, label) => `<button class="chip press" type="button" data-invite-token="${key}">＋ ${label}</button>`;
+    return inviteSheetFrame('Mensaje de invitación', `<p class="note">Se escribe una vez y vale para todos, por correo y por WhatsApp. ${APP_NAME} pone el nombre, el equipo y el enlace de cada uno.</p>
+      <label class="field">Texto<textarea class="in" id="invite-message" rows="4" maxlength="${MAX_INVITE_MESSAGE_LENGTH}">${esc(home.inviteMessageDraft)}</textarea></label>
+      <div class="row-actions">${token('name', 'Nombre')}${token('team', 'Equipo')}</div>
+      <p class="note">Vista previa</p><p class="invite-preview" id="invite-message-preview">${inviteMessageHtml(home.inviteMessageDraft, sampleInviteName(), team.name)}</p>
+      <div class="invite-sheet-actions"><button class="btn press" type="button" data-invite-message-reset>Volver al original</button>
+        <button class="btn primary press" type="button" data-invite-message-save${busyAttr()}>Guardar</button></div>`);
+  }
+  function editInviteMessage(text) {
+    home.inviteMessageDraft = text;
+    const preview = $('invite-message-preview');
+    if (preview) preview.innerHTML = inviteMessageHtml(text, sampleInviteName(), team.name);
+  }
+  // A placeholder goes where the cursor is, and the cursor after it.
+  function insertInviteToken(key) {
+    const field = $('invite-message'), token = INVITE_PLACEHOLDERS[key];
+    if (!field || !token || field.value.length + token.length > MAX_INVITE_MESSAGE_LENGTH) return;
+    field.setRangeText(token, field.selectionStart, field.selectionEnd, 'end');
+    field.focus();
+    editInviteMessage(field.value);
+  }
+  function resetInviteMessage() {
+    const field = $('invite-message');
+    if (field) field.value = DEFAULT_INVITE_MESSAGE;
+    editInviteMessage(DEFAULT_INVITE_MESSAGE);
+  }
+  // Saved on the team; the default is stored as none, so a later change of the default reaches the team.
+  function saveInviteMessage() {
+    const text = home.inviteMessageDraft.trim(), back = home.inviteSheet?.back || null;
+    if (text.length > MAX_INVITE_MESSAGE_LENGTH) { accountStatus(`El mensaje no puede pasar de ${MAX_INVITE_MESSAGE_LENGTH} caracteres.`); return Promise.resolve(); }
+    return inviteTask(async () => {
+      try {
+        keepUpdatedTeam(await backend.updateTeam(team.id, { inviteMessage: !text || text === DEFAULT_INVITE_MESSAGE ? null : text }));
+      } catch (err) {
+        accountStatus(`No se pudo guardar el mensaje: ${cloudErrorText(err)}.`);
+        return;
+      }
+      home.inviteSheet = back;
+      accountStatus('Mensaje de invitación guardado.');
+    });
   }
   function openInvitePlayer(playerId, focus) {
     const r = inviteRow(playerId);
@@ -7469,7 +7557,9 @@ table { border-collapse: collapse; width: 100%; }
       [IN]: () => `Ya entra en ${APP_NAME}: ve partidos, estadísticas y asistencia.`,
     }[state]();
     const error = home.inviteErrors.get(p.id);
-    const send = pending ? `<button class="btn primary press" type="button" data-invite-resend="${id}"${busyAttr()}>✉ Reenviar por correo</button>` : '';
+    const send = pending ? `<button class="btn primary press" type="button" data-invite-resend="${id}"${busyAttr()}>✉ Reenviar por correo</button>
+      ${home.inviteLinks.has(p.id) ? `<button class="btn go press" type="button" data-invite-share="${id}"${busyAttr()}>Abrir WhatsApp</button>`
+        : `<button class="btn go press" type="button" data-invite-wa="${id}"${busyAttr()}>Enviar enlace por WhatsApp</button>`}` : '';
     const email = state === IN ? `<p class="invite-sheet-email">${esc(r.email)}</p>`
       : `<label class="field">Correo${pending ? ' (puedes corregirlo)' : ''}<input class="in" id="invite-contact-email" type="email" inputmode="email" autocomplete="off" placeholder="nombre@correo.es" value="${esc(draft.email)}"></label>
         ${pending ? '<p class="note">Si lo cambias, se anula esta invitación y se envía otra a la nueva dirección.</p>' : ''}`;
@@ -7493,14 +7583,14 @@ table { border-collapse: collapse; width: 100%; }
       <label class="field">Correo<input class="in" id="invite-staff-email" type="email" inputmode="email" autocomplete="off" placeholder="nombre@correo.es" value="${esc(home.inviteStaffEmail)}"></label>
       <div class="invite-sheet-actions"><button class="btn press" type="button" data-invite-close>Cancelar</button><button class="btn primary press" type="button" data-invite-staff-go${busyAttr()}>Enviar invitación</button></div>`);
   }
-  const INVITE_SHEETS = { send: inviteSendHtml, player: invitePlayerHtml, staff: inviteStaffHtml };
+  const INVITE_SHEETS = { send: inviteSendHtml, queue: inviteQueueHtml, message: inviteMessageEditHtml, player: invitePlayerHtml, staff: inviteStaffHtml };
   const inviteSheetHtml = () => (home.inviteSheet && accountsReady() ? INVITE_SHEETS[home.inviteSheet.kind](home.inviteSheet) : '');
 
   // ---- Sending ----
   // An invite through the invite-player function; the list is asked again afterwards. Resolves to its { link, sent }.
   async function inviteAccount(member, email, delivery = INVITE_BY_EMAIL) {
     const result = await backend.inviteMember(team.id, { ...member, delivery }, email);
-    home.accounts = null;
+    if (home.accounts) home.accounts.stale = true;
     return result;
   }
   const playerMember = (p) => ({ role: PLAYER_ROLE, playerId: p.id, message: fillInviteMessage(inviteMessage(), p.name, team.name) });
@@ -7527,8 +7617,34 @@ table { border-collapse: collapse; width: 100%; }
   }
   function sendInviteSheet() {
     const { ids } = home.inviteSheet;
+    if (inviteChannel() === INVITE_BY_LINK) {
+      home.inviteSelected.clear();
+      openInviteSheet({ kind: 'queue', ids, shared: [] });
+      return Promise.resolve();
+    }
     home.inviteSheet = null;
     return invitePlayers(ids);
+  }
+  // A player's link, made now and opened in WhatsApp: in his chat when his phone is known. One already in the team needs none.
+  function inviteByWhatsApp(playerId) {
+    const r = inviteRow(playerId);
+    if (!r || !r.email) return Promise.resolve();
+    return inviteTask(async () => {
+      accountStatus(`Creando el enlace de ${r.player.name}…`);
+      try {
+        const { link } = await inviteAccount(playerMember(r.player), r.email, INVITE_BY_LINK);
+        home.inviteErrors.delete(playerId);
+        if (!link) { markInviteShared(playerId); accountStatus(inviteSummary(0, [r.player.name], [])); return; }
+        accountStatus(`Enlace de ${r.player.name} listo.`);
+        if (await keepInviteLink(playerId, `${fillInviteMessage(inviteMessage(), r.player.name, team.name)} ${link}`, r.phone)) markInviteShared(playerId);
+      } catch (err) {
+        home.inviteErrors.set(playerId, cloudErrorText(err));
+        accountStatus(`No se pudo crear el enlace de ${r.player.name}: ${cloudErrorText(err)}.`);
+      }
+    });
+  }
+  function markInviteShared(key) {
+    if (home.inviteSheet?.kind === 'queue' && !home.inviteSheet.shared.includes(key)) home.inviteSheet.shared.push(key);
   }
   function toggleInvitePick(playerId) {
     if (!home.inviteSelected.delete(playerId)) home.inviteSelected.add(playerId);
@@ -9912,7 +10028,13 @@ table { border-collapse: collapse; width: 100%; }
     if (b.dataset.inviteContactInvite) { saveInviteContact(b.dataset.inviteContactInvite, true); return; }
     if (b.dataset.inviteStaff) { openStaffInvite(b.dataset.inviteStaff); return; }
     if (b.hasAttribute('data-invite-staff-go')) { inviteStaff(); return; }
-    if (b.dataset.inviteShare) { shareInviteLink(b.dataset.inviteShare).then(renderHome); return; }
+    if (b.dataset.inviteShare) { const key = b.dataset.inviteShare; shareInviteLink(key).then((shared) => { if (shared) markInviteShared(key); renderHome(); }); return; }
+    if (b.dataset.inviteWa) { inviteByWhatsApp(b.dataset.inviteWa); return; }
+    if (b.dataset.inviteChannel) { chooseInviteChannel(b.dataset.inviteChannel); return; }
+    if (b.hasAttribute('data-invite-message')) { openInviteMessage(); return; }
+    if (b.dataset.inviteToken) { insertInviteToken(b.dataset.inviteToken); return; }
+    if (b.hasAttribute('data-invite-message-reset')) { resetInviteMessage(); return; }
+    if (b.hasAttribute('data-invite-message-save')) { saveInviteMessage(); return; }
     if (b.hasAttribute('data-account-resend')) { resendInvite(b.dataset.accountResend, INVITE_BY_EMAIL); return; }
     if (b.hasAttribute('data-account-link')) { resendInvite(b.dataset.accountLink, INVITE_BY_LINK); return; }
     if (b.hasAttribute('data-callup-share')) { shareCallup(); return; }
@@ -9998,6 +10120,7 @@ table { border-collapse: collapse; width: 100%; }
   // A note is kept as it is typed, so no tap can lose it.
   $('home').addEventListener('input', (ev) => {
     if (ev.target.id === 'invite-staff-email') home.inviteStaffEmail = ev.target.value;
+    if (ev.target.id === 'invite-message') editInviteMessage(ev.target.value);
     if (ev.target.id === 'invite-contact-email' && home.inviteDraft) home.inviteDraft.email = ev.target.value;
     if (ev.target.id === 'invite-contact-phone' && home.inviteDraft) home.inviteDraft.phone = ev.target.value;
     if (ev.target.dataset.attNoteInput) saveAttendanceNote(ev.target.dataset.attNoteInput, ev.target.value);

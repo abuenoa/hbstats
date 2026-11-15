@@ -121,6 +121,8 @@ MATRIX_SCENES = {
     "invites": "await seedInvites();",
     "invites-send": "const ids = await seedInvites(); ['p18', 'p5', 'p77'].forEach((id) => home.inviteSelected.add(ids.get(id))); openInviteSend([...home.inviteSelected]);",
     "invites-player": "const ids = await seedInvites(); openInvitePlayer(ids.get('p17'));",
+    "invites-message": "await seedInvites(); openInviteMessage();",
+    "invites-queue": "const ids = await seedInvites(); const queued = ['p18', 'p5', 'p77'].map((id) => ids.get(id)); openInviteSheet({ kind: 'queue', ids: queued, shared: [queued[0]] });",
     "sheet-summary": SHEET_SUMMARY,
     "sheet-summary-court": SHEET_SUMMARY_COURT,
     "sheet-stats": SHEET_STATS,
