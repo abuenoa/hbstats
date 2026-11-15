@@ -42,12 +42,27 @@ where t.name = 'Triana' and u.email = 'second.coach@example.com';
 A coach can create more teams with *+ Equipo* and switches between them from the home screen. Only a team's
 owner (whoever created it) can delete it, which also deletes its roster and matches.
 
+## Invitation e-mail
+
+The staff invite players from «Editar equipo» through the `invite-player` edge function. A player's invite carries
+the team's message, already filled in with his name and the team's, as user metadata. In **Authentication → Emails →
+Invite user**, print it above the button:
+
+```html
+{{ if .Data.message }}<p>{{ .Data.message }}</p>{{ end }}
+```
+
+(`{{ .Data.player_name }}` and `{{ .Data.team_name }}` are there too.) The app shows an invite unused for longer than
+`INVITE_TTL_MS` (24 h, Supabase's default) as «Caducada»: if the project's e-mail link validity is changed, change
+that constant to match.
+
 ## Data
 
 | Table | What it holds |
 |---|---|
-| `teams` | Club and scoreboard names, brand colours, crest (a small image as a data URL), coaching staff (name, job and photo, up to 6). |
-| `team_members` | Which users belong to which team (`owner` creates it, `coach` is added). |
+| `teams` | Club and scoreboard names, brand colours, crest (a small image as a data URL), coaching staff (name, job and photo, up to 6), the invitation message (`{nombre}` and `{equipo}` filled in per player; null is the app's default). |
+| `team_members` | Which users belong to which team (`owner` creates it, `coach` is added, `player` and `viewer` read only), and when and how (`email` or `link`) the last invite went out. |
+| `player_contacts` | Staff only: each roster player's e-mail and phone (`+` and the country code), kept before and after an invite. Players and guests never read them. |
 | `players` | The team roster. Players who leave are kept as inactive so past matches still make sense. |
 | `matches` | One row per match: listing columns (date, rival, venue, status, score) and the whole match state as JSON. |
 | `fixtures` | The season calendar: one row per round (reference Sunday, home or away, opponent, kickoff, venue) and the match played in it. Load a calendar file with `python3 tools/calendar_sql.py FILE TEAM_ID`. |

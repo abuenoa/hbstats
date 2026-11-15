@@ -146,3 +146,37 @@ async function seedSeason() {
   await selectTeam(created);
   return ids;
 }
+
+// The accounts card of the club inviting its squad, every invite state present. The matrix runs on the local backend,
+// which has no accounts: a stand-in serves them. Players by sample id: [account state, days since the invite, channel];
+// a player with no entry has an e-mail and no invite yet, and those in INVITES_NO_EMAIL not even an e-mail.
+const INVITES_ACCOUNTS = { p1: ['in'], p12: ['in'], p22: ['in'], p17: ['sent', 3, 'email'], p3: ['sent', 0, 'email'], p8: ['sent', 0, 'link'] };
+const INVITES_NO_EMAIL = ['p10', 'p13', 'p19'];
+const INVITES_PHONES = { p5: '+34600111222' };
+const INVITES_STAFF = [
+  { userId: 'u-owner', role: 'owner', email: 'antonio@correo.es', signedIn: true, isMe: true },
+  { userId: 'u-coach', role: 'coach', email: 'miguel@correo.es', signedIn: true, isMe: false },
+  { userId: 'u-guest', role: 'viewer', email: 'paco.delegado@correo.es', signedIn: false, isMe: false, invitedAt: new Date(Date.now() - DAY_MS / 2).toISOString(), invitedVia: 'email' },
+];
+const invitesEmailOf = (player) => `${normalName(player.name).toLowerCase().replace(/ /g, '.')}@correo.es`;
+async function seedInvites() {
+  const ids = await seedSeason();
+  const withEmail = SEASON_SQUAD_IDS.filter((sampleId) => !INVITES_NO_EMAIL.includes(sampleId)).map((sampleId) => [sampleId, home.roster.find((p) => p.id === ids.get(sampleId))]);
+  const players = withEmail.filter(([sampleId]) => INVITES_ACCOUNTS[sampleId]).map(([sampleId, player]) => {
+    const [state, days, via] = INVITES_ACCOUNTS[sampleId];
+    return { userId: `u-${sampleId}`, role: PLAYER_ROLE, playerId: player.id, email: invitesEmailOf(player), signedIn: state === 'in', isMe: false,
+      invitedAt: state === 'in' ? null : new Date(Date.now() - days * DAY_MS).toISOString(), invitedVia: via || null };
+  });
+  const contacts = withEmail.map(([sampleId, player]) => ({ playerId: player.id, email: invitesEmailOf(player), phone: INVITES_PHONES[sampleId] || null }));
+  backend = { ...backend, needsLogin: true,
+    listAccounts: async () => [...INVITES_STAFF.map((a) => ({ playerId: null, invitedAt: null, invitedVia: null, ...a })), ...players],
+    listPlayerContacts: async () => contacts, inviteMember: async () => ({ link: null, sent: true }) };
+  // The headless browser may call itself offline; the stand-in is the cloud.
+  Object.defineProperty(navigator, 'onLine', { value: true, configurable: true });
+  showHomeView('team-edit');
+  for (let i = 0; i < 5 && !accountsReady(); i++) await new Promise((resolve) => setTimeout(resolve));
+  renderHome();
+  // The card's top just under the sticky bar.
+  $('home').scrollTop = document.querySelector('.team-accounts').offsetTop - document.querySelector('.home .top-bar').offsetHeight;
+  return ids;
+}
