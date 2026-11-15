@@ -516,6 +516,8 @@ button.rex-chip { border: 0; cursor: pointer; position: relative; }
 .t-sancion { color: var(--dos); }
 .act-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; }
 .act-grid.two { grid-template-columns: repeat(2, 1fr); }
+.clock-steps { display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px; }
+.clock-steps .act { font-family: var(--font-display); font-size: 20px; font-variant-numeric: tabular-nums; }
 .chip { min-height: 40px; padding: 0 14px; border-radius: 20px; border: 1px solid var(--line); background: var(--surface); font-weight: 700; font-size: 13px; }
 .chip[aria-pressed="true"] { background: var(--fg); color: var(--bg); border-color: var(--fg); }
 .pop.wide { width: 560px; }
@@ -542,6 +544,9 @@ button.rex-chip { border: 0; cursor: pointer; position: relative; }
 .pick { display: flex; align-items: center; gap: 8px; min-height: 48px; min-width: 0; padding: 0 10px 0 6px; border-radius: 14px; border: 1px solid var(--line); background: var(--surface); color: var(--fg); font-weight: 600; font-size: 14px; text-align: left; }
 .pick span:last-child { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .pick[aria-pressed="true"] { border-color: var(--gol); box-shadow: 0 0 0 3px var(--gol); }
+.assist-main { width: 100%; justify-content: flex-start; gap: 12px; padding: 0 14px; margin-bottom: 8px; }
+.pick-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; margin-bottom: 8px; }
+.assist-pick { min-height: 56px; border-left: 6px solid var(--pos); }
 .picker .bench-picks .pick { min-height: 40px; font-size: 12px; }
 .picker .bench-picks .disc { width: 28px; height: 28px; font-size: 13px; }
 .act:disabled { opacity: .35; }
@@ -1462,7 +1467,7 @@ span.att-foot { visibility: hidden; }
     swapRadiusUnits: 70,
     palmGuardMs: 600,
     // Clock corrections, shown as a minus row and a plus row; taps add up (+10 +5 +1 = 16 s).
-    clockSteps: [-10, -5, -1, 1, 5, 10],
+    clockSteps: [1, 5, 10, 30],
     // Turnover types grouped by what went wrong, one colour per group (coach-editable later)
     turnoverGroups: [
       { label: 'Balón', cls: 'c-act-bad', types: ['Pase', 'Recepción', 'Bote'] },
@@ -1886,16 +1891,54 @@ span.att-foot { visibility: hidden; }
     const early = earlyEndOf(e, events);
     return Math.min(early ? early.abs : Infinity, e.abs + exclusionLength(e));
   }
+  // A window starts at its sanction, or earlier when a correction moved the clock back while it ran. A 2' that had already
+  // ended is never shifted, so moving the clock back (to add a play late) leaves it served, not running.
+  const exclusionStart = (e) => e.abs + Math.min(0, e.clockShift || 0);
   function runningExclusions(events) {
     const now = absSeconds();
-    return events.filter((e) => now < exclusionEnd(e))
+    return events.filter((e) => exclusionStart(e) <= now && now < exclusionEnd(e))
       .map((e) => ({ event: e, remaining: exclusionEnd(e) - now }));
   }
   const activeExclusions = () => runningExclusions(exclusionEvents());
   const activeRivalExclusions = () => runningExclusions(rivalExclusionEvents());
   // Serving a 2' or sent off: out of play (no shots or actions), though cards can still be given.
   const offCourtOf = (kind) => new Set([...sendOffsOf(kind).keys(), ...runningExclusions(exclusionsOf(kind)).map((x) => SANCTION_TARGETS[kind](x.event)).filter(Boolean)]);
-  const ourOffCourt = () => offCourtOf('SANCTION');
+  const ourOffCourt = () => new Set([...offCourtOf('SANCTION'), ...standInsOut(state.phase).keys()]);
+  // Playing a man down: every running exclusion (a 2', or the 2' after a send-off) leaves the team one player short in
+  // both phases. When the excluded player does not play a phase (an attack-defence specialist, a goalkeeper replaced in
+  // goal…) that phase's lineup still has everybody, so one of its players sits it out until the window ends: the stand-in.
+  // Id → the running exclusion { event, remaining } they sit out for.
+  function standInsOut(phase) {
+    const seated = new Map(), running = activeExclusions();
+    if (!running.length) return seated;
+    const team = state.lineups[phase], off = offCourtOf('SANCTION');
+    const free = Object.keys(team).filter((id) => !off.has(id));
+    const keeper = state.gkId && !off.has(state.gkId) ? 1 : 0;
+    const excess = free.length + keeper - (FIELD_PLAYERS_ON_COURT + 1 - running.length);
+    running.filter((x) => !team[x.event.playerId]).slice(0, Math.max(0, excess)).forEach((x) => {
+      const picked = x.event.standIn && x.event.standIn[phase];
+      const id = free.includes(picked) ? picked : pickStandIn(free, phase, x.event.playerId);
+      if (!id) return;
+      free.splice(free.indexOf(id), 1);
+      seated.set(id, x);
+    });
+    return seated;
+  }
+  // The coach's pick (`standIn` on the sanction, per phase) wins; else a player of that phase only, then the excluded
+  // player's position, then the one furthest from goal.
+  function pickStandIn(ids, phase, excludedId) {
+    const team = state.lineups[phase], excluded = playerById(excludedId);
+    const samePos = (id) => Boolean(excluded) && Boolean(playerById(id)) && playerById(id).pos === excluded.pos;
+    const rank = (id) => [onePhaseOnly(id) ? 0 : 1, samePos(id) ? 0 : 1, -team[id].y];
+    const byRank = (a, b) => rank(a).reduce((d, v, i) => d || v - rank(b)[i], 0) || (a < b ? -1 : 1);
+    return ids.slice().sort(byRank)[0] || null;
+  }
+  // Seconds left out of play for every one of our players shown on court: serving a 2' or sitting one out.
+  function courtExclusionTimes() {
+    const times = new Map(activeExclusions().map((x) => [x.event.playerId, x.remaining]));
+    standInsOut(state.phase).forEach((x, id) => times.set(id, x.remaining));
+    return times;
+  }
   // The running 2' of one player or dorsal, if any: nobody can get a second 2' while serving one.
   const runningExclusionOf = (kind, id) => runningExclusions(exclusionsOf(kind)).find((x) => SANCTION_TARGETS[kind](x.event) === id) || null;
   const rivalOffCourt = () => offCourtOf('RIVAL_SANCTION');
@@ -2143,7 +2186,8 @@ span.att-foot { visibility: hidden; }
   // Returns { unplaced }: a bench player with nobody of their position on court to swap with.
   function addEvent(kind, data, opts = {}) {
     const e = makeEvent(kind, data);
-    autoStartClock(kind);
+    const stops = stopsClock(e);
+    if (stops) pauseClock(); else autoStartClock(kind);
     const op = { added: [e], removed: [] };
     const benched = opts.bringOn ? isOnBench(opts.bringOn) : false;
     if (benched) { const swap = benchSwapFor(opts.bringOn); if (swap) op.lineup = swap; }
@@ -2155,10 +2199,11 @@ span.att-foot { visibility: hidden; }
     const unplaced = benched && !op.lineup;
     if (unplaced) hint(BENCH_NOTE);
     if (kind === 'ACTION' && PENALTY_TEAM[data.action]) startPenalty(PENALTY_TEAM[data.action], e.id, data.playerId);
-    return { unplaced };
+    return { unplaced, stopped: stops };
   }
   const BENCH_NOTE = 'Arrástralo a la pista si ha entrado';
-  const withBenchNote = (text, result) => (result && result.unplaced ? `${text} · ${BENCH_NOTE}` : text);
+  // The hint after logging: a bench player with nobody to swap, and a clock the referees stop.
+  const withAddNotes = (text, result) => [text, result && result.unplaced ? BENCH_NOTE : '', result && result.stopped ? 'reloj parado' : ''].filter(Boolean).join(' · ');
   // ---- Penalties: a 7 m is recorded only after it is provoked or committed; its shot starts on the mark ----
   const PENALTY_TEAM = { PROV7: 'us', PEN7C: 'them' };
   function startPenalty(team, eventId, byId) {
@@ -2268,8 +2313,11 @@ span.att-foot { visibility: hidden; }
     if (log.length && log.at(-1).set === set) return;
     log.push({ abs, set });
   }
+  // A stand-in sitting out a teammate's 2' is off the log until the window ends (the next commit logs them back).
   function noteCourt() {
-    if (keepsCourtLog()) logCourt(internCourtSet(onCourtIds()));
+    if (!keepsCourtLog()) return;
+    const seated = standInsOut(state.phase);
+    logCourt(internCourtSet(onCourtIds().filter((id) => !seated.has(id))));
   }
 
   // ===================== Minutes and +/− (derived from the court log and the event stamps, never stored) =====================
@@ -2765,7 +2813,7 @@ span.att-foot { visibility: hidden; }
   }
   // A correction of the clock, not time played: the running 2' keep what they had left.
   function correctClock(elapsedMs) {
-    const before = absSeconds(), running = [...exclusionEvents(), ...rivalExclusionEvents()].filter((e) => before < exclusionEnd(e));
+    const before = absSeconds(), running = [...exclusionEvents(), ...rivalExclusionEvents()].filter((e) => exclusionStart(e) <= before && before < exclusionEnd(e));
     state.clock.elapsedMs = elapsedMs;
     if (isRunning()) state.clock.runningSince = Date.now();
     const shift = absSeconds() - before;
@@ -2788,6 +2836,13 @@ span.att-foot { visibility: hidden; }
   // Logging a play with the clock stopped means the game is on: start it (not for sanctions or score fixes,
   // which usually come with the clock stopped, nor during a time-out or once the half is over).
   const CLOCK_STARTING_EVENTS = ['SHOT', 'RIVAL_SHOT', 'ACTION', 'TURNOVER'];
+  // The referees stop the clock for a 7 m (it restarts with the throw, which starts it again when logged) and for an
+  // exclusion or a send-off (the coach restarts it). Returns why the clock stops for this event, or null.
+  function stopsClock(e) {
+    if (e.kind === 'ACTION' && PENALTY_TEAM[e.action]) return '7 m';
+    if ((e.kind === 'SANCTION' || e.kind === 'RIVAL_SANCTION') && (e.card === '2M' || DISQUALIFYING_CARDS.includes(e.card))) return SANCTIONS[e.card].name;
+    return null;
+  }
   function autoStartClock(kind) {
     if (isRunning() || !CLOCK_STARTING_EVENTS.includes(kind) || state.timeout || state.finished) return;
     if (periodElapsedMs() >= CONFIG.halfSeconds * 1000) return;
@@ -3026,7 +3081,7 @@ span.att-foot { visibility: hidden; }
     </g>`;
   }
   function renderTokens() {
-    const ex = new Map(activeExclusions().map((x) => [x.event.playerId, x.remaining]));
+    const ex = courtExclusionTimes();
     const gk = playerById(state.gkId);
     const exOf = (id) => (ex.has(id) ? ex.get(id) : null);
     $('tokens-layer').innerHTML = tokenMarkup(gk, GK_SPOT, exOf(gk.id), ` gk${canReceive(gk.id) ? ' target' : ''}`)
@@ -3163,7 +3218,7 @@ span.att-foot { visibility: hidden; }
   function updateLiveBits() {
     const t = document.querySelector('[data-live-timeout]');
     if (t) t.textContent = `${remainingTimeout()} s`;
-    const ex = new Map(activeExclusions().map((x) => [x.event.playerId, x.remaining]));
+    const ex = courtExclusionTimes();
     const badges = document.querySelectorAll('[data-ex]');
     badges.forEach((el) => { const r = ex.get(el.dataset.ex); if (r != null) el.textContent = mmss(r).slice(1); });
     const visible = new Set([state.gkId, ...Object.keys(lineup())]);
@@ -3240,6 +3295,8 @@ span.att-foot { visibility: hidden; }
     const p = playerById(playerId);
     if (p.pos === 'POR') { openGkPop(anchor, playerId); return; }
     ui.popView = { type: 'player', playerId, anchor, sub: null };
+    const seat = standInsOut(state.phase).get(playerId);
+    if (seat) { openPop(standInPopHtml(p, seat), anchor); return; }
     if (ourOffCourt().has(playerId)) {
       const x = runningExclusionOf('SANCTION', playerId);
       openPop(`${popHead(p, isDisqualified(playerId) ? 'Descalificado' : "Cumpliendo 2'")}${endExclusionHtml(x)}${sanctionGroup(Boolean(x))}`, anchor);
@@ -3356,7 +3413,7 @@ span.att-foot { visibility: hidden; }
   }
   function commitDirectShot(view, result) {
     const done = commitShot(view, result);
-    hint(withBenchNote(`${RESULTS[result].label} ${ZONES[view.zone]} · ↶ deshacer`, done));
+    hint(withAddNotes(`${RESULTS[result].label} ${ZONES[view.zone]} · ↶ deshacer`, done));
   }
   function openShotPop(view, anchor) {
     Object.assign(view, { zone: view.penalty ? '7M' : zoneFrom(view.origin), contra: false, anchor });
@@ -3375,18 +3432,35 @@ span.att-foot { visibility: hidden; }
     const goal = state.events.at(-1), withinSeconds = CONFIG.rating.windows.assist;
     return !state.events.some((e) => e.kind === 'ACTION' && e.action === 'ASIST' && e !== goal && goal.abs - e.abs >= 0 && goal.abs - e.abs <= withinSeconds);
   }
-  // Teammates on court (the goalkeeper too) except the scorer; tapping outside or «Sin pase» skips it.
+  // The usual passer for a goal scored from each spot: a wing gets it from the back on his side, a back or the pivot
+  // from the centre, the centre from a back.
+  const ASSIST_FROM = { 'EXT-L': ['LAT-L'], 'EXT-R': ['LAT-R'], 'LAT-L': ['CEN'], 'LAT-R': ['CEN'], PIV: ['CEN'], CEN: ['LAT-L', 'LAT-R'] };
+  // Among the field mates, the nearest one playing the usual passer's spot; else the nearest one; null off the lineup.
+  function suggestedPasserId(scorerId, mates) {
+    const team = state.lineups.ATK, spot = team[scorerId];
+    const field = mates.filter((p) => team[p.id]);
+    if (!spot || !field.length) return null;
+    const dist = (p) => Math.hypot(team[p.id].x - spot.x, team[p.id].y - spot.y);
+    const nearest = (list) => (list.length ? list.reduce((a, b) => (dist(b) < dist(a) ? b : a)).id : null);
+    const usual = ASSIST_FROM[courtArea(spot)] || [];
+    return nearest(field.filter((p) => usual.includes(courtArea(team[p.id])))) || nearest(field);
+  }
+  // Teammates on court (the goalkeeper too) except the scorer, the usual passer first and big; tapping outside or
+  // «Sin pase» skips it.
   function openAssistPop(scorerId, anchor) {
     const out = ourOffCourt(), onCourt = new Set([...Object.keys(state.lineups.ATK), state.gkId]);
     const mates = state.players.filter((p) => onCourt.has(p.id) && p.id !== scorerId && !out.has(p.id)).sort(byPosition);
+    const suggested = playerById(suggestedPasserId(scorerId, mates));
+    const pick = (p) => `<button class="pick press assist-pick" type="button" data-assist="${p.id}" style="--pos:${posOf(p).color}">${discHtml(p)}<span>${esc(p.name)}</span></button>`;
     ui.popView = { type: 'assist', anchor };
-    openPop(`<header><div><b>¿Pase de gol?</b><small>Un toque, o sigue sin marcarlo</small></div></header>
-      <div class="picks">${mates.map((p) => `<button class="pick press" type="button" data-assist="${p.id}">${discHtml(p)}<span>${esc(p.name)}</span></button>`).join('')}</div>
+    openPop(`<header><div><b>¿Pase de gol?</b><small>${suggested ? 'El habitual por su posición, o toca otro' : 'Un toque, o sigue sin marcarlo'}</small></div></header>
+      ${suggested ? `<button class="act big c-act-good assist-main press" type="button" data-assist="${suggested.id}">${discHtml(suggested)}<span>Pase de <b>${esc(suggested.name)}</b></span></button>` : ''}
+      <div class="picks pick-grid">${mates.filter((p) => p !== suggested).map(pick).join('')}</div>
       <button class="act c-neutral" type="button" data-close>Sin pase</button>`, anchor, true);
   }
   function logAssist(playerId) {
     const result = addEvent('ACTION', { playerId, action: 'ASIST' }, { bringOn: playerId });
-    hint(withBenchNote(`${describe(state.events.at(-1))} · ↶ deshacer`, result));
+    hint(withAddNotes(`${describe(state.events.at(-1))} · ↶ deshacer`, result));
   }
   function openGkPop(anchor, focusId) {
     const gk = playerById(focusId || state.gkId);
@@ -3403,11 +3477,31 @@ span.att-foot { visibility: hidden; }
     const sentOff = sendOffsOf(x.event.kind).get(SANCTION_TARGETS[x.event.kind](x.event)) === x.event;
     return `<button class="act big c-gol" type="button" data-end-ex="${x.event.id}">${sentOff ? 'Ya pueden completar' : 'Vuelve a pista'} · quedaban ${mmss(x.remaining).slice(1)}</button>`;
   }
+  // A stand-in sits out a teammate's 2' in this phase; the coach can send another court player out instead.
+  function standInPopHtml(p, seat) {
+    const out = ourOffCourt();
+    const others = Object.keys(lineup()).filter((id) => !out.has(id)).map((id) => playerById(id)).filter(Boolean).sort(byPosition);
+    const pick = (o) => `<button class="pick press" type="button" data-stand-in="${seat.event.id}:${o.id}">${discHtml(o)}<span>${esc(o.name)}</span></button>`;
+    return `${popHead(p, `Fuera por el 2' de ${exclusionTargetLabel(seat.event)} · quedan ${mmss(seat.remaining).slice(1)}`)}
+      <h3>Que se quede fuera otro</h3><div class="picks pick-grid">${others.map(pick).join('') || '<p class="note">Nadie</p>'}</div>`;
+  }
+  function chooseStandIn(sanctionId, playerId) {
+    const sanction = state.events.find((e) => e.id === sanctionId), p = playerById(playerId);
+    if (!sanction || !p) return;
+    sanction.standIn = { ...sanction.standIn, [state.phase]: playerId };
+    commit();
+    hint(`Fuera por el 2': #${p.num} ${p.name}`);
+  }
   function endExclusion(sanctionId) {
     const sanction = state.events.find((e) => e.id === sanctionId);
     addEvent('EXCLUSION_END', { sanctionId });
     hint(`Fin del 2' · ${exclusionTargetLabel(sanction)} · ↶ deshacer`);
   }
+  // Each step in one column: add on top (green), take away right under it (red), so +1 and −1 never get mixed up.
+  const clockStepsHtml = () => `<div class="clock-steps" role="group" aria-label="Ajustar el reloj">${[1, -1].map((sign) => CONFIG.clockSteps.map((step) => {
+    const s = sign * step;
+    return `<button class="act ${s > 0 ? 'c-act-good' : 'c-act-bad'}" type="button" data-adjust="${s}" aria-label="${s > 0 ? 'Sumar' : 'Restar'} ${step} segundos">${s > 0 ? '+' : '−'}${step}s</button>`;
+  }).join('')).join('')}</div>`;
   function openClockPop(anchor) {
     ui.popView = { type: 'clock', anchor };
     const running = isRunning();
@@ -3416,7 +3510,7 @@ span.att-foot { visibility: hidden; }
       <div class="big-time" id="pop-clock">${clockText()}</div>
       <div class="seg" role="group" aria-label="Sentido del reloj">${mode(false, '↑ Ascendente')}${mode(true, '↓ Descendente')}</div>
       <button class="act big ${running ? 'c-error' : 'c-gol'}" type="button" data-clock="toggle">${running ? '⏸ Parar' : '▶ Seguir'}</button>
-      ${[CONFIG.clockSteps.filter((s) => s < 0), CONFIG.clockSteps.filter((s) => s > 0)].map((row) => `<div class="act-grid">${row.map((s) => `<button class="act c-neutral" type="button" data-adjust="${s}">${s > 0 ? '+' : '−'}${Math.abs(s)}s</button>`).join('')}</div>`).join('')}
+      ${clockStepsHtml()}
       <form class="clock-set" id="clock-set"><input class="in time-in" id="clock-input" type="text" inputmode="numeric" maxlength="6" value="${clockText()}" aria-label="Tiempo exacto (mm:ss)"><button class="act c-dark" type="submit">Fijar</button></form>
       <div class="act-grid two"><button class="act c-neutral" type="button" data-clock="period">${state.clock.period === 1 ? 'Ir a 2ª parte' : 'Volver a 1ª parte'}</button>
         ${state.clock.period === 2 ? `<button class="act c-dark" type="button" data-clock="finish">${state.finished ? 'Resumen final' : 'Terminar partido'}</button>` : '<button class="act c-dark" type="button" data-clock="halftime">Resumen del descanso</button>'}</div>`, anchor);
@@ -3441,8 +3535,8 @@ span.att-foot { visibility: hidden; }
     const p = playerById(playerId);
     if (card === '2M' && runningExclusionOf('SANCTION', p.id)) { hint(`#${p.num} ${p.name} ya está cumpliendo 2'`); return; }
     const wasOut = isDisqualified(p.id);
-    addEvent('SANCTION', { playerId: p.id, card });
-    hint(`${SANCTIONS[card].name} a #${p.num} ${p.name} · ↶ deshacer`);
+    const result = addEvent('SANCTION', { playerId: p.id, card });
+    hint(withAddNotes(`${SANCTIONS[card].name} a #${p.num} ${p.name} · ↶ deshacer`, result));
     if (!wasOut && isDisqualified(p.id)) sendOff(p, card);
   }
   const sendOffReason = (card) => (card === '2M' ? '3ª exclusión' : `${SANCTIONS[card].name} · 2' con uno menos`);
@@ -3450,9 +3544,9 @@ span.att-foot { visibility: hidden; }
     const r = rivalById(rivalId);
     if (r && card === '2M' && runningExclusionOf('RIVAL_SANCTION', r.id)) { hint(`${rivalLabel(r)} ya está cumpliendo 2'`); return; }
     const wasOut = Boolean(r) && rivalDisqualifications().has(r.id);
-    addEvent('RIVAL_SANCTION', { rivalId: r ? r.id : null, card });
+    const result = addEvent('RIVAL_SANCTION', { rivalId: r ? r.id : null, card });
     const who = rivalTeamLabel(rivalId);
-    hint(`${SANCTIONS[card].name} a ${who} · ↶ deshacer`);
+    hint(withAddNotes(`${SANCTIONS[card].name} a ${who} · ↶ deshacer`, result));
     if (!r || wasOut || !rivalDisqualifications().has(r.id)) return;
     pushAlert({ id: newId('d'), kind: 'desc', title: `Descalificado: ${who}`, body: `${sendOffReason(card)} · no vuelve` }, SOUND_ALARM);
     commit();
@@ -3562,7 +3656,7 @@ span.att-foot { visibility: hidden; }
     const result = key === 'TURNOVER'
       ? addEvent('TURNOVER', { playerId, subtype: sub }, { bringOn: playerId })
       : addEvent('ACTION', { playerId, action: key === 'DEFFAULT' ? sub : key }, { bringOn: playerId });
-    hint(withBenchNote(`${describe(state.events.at(-1))} · ↶ deshacer`, result));
+    hint(withAddNotes(`${describe(state.events.at(-1))} · ↶ deshacer`, result));
     return true;
   }
   $('acts').addEventListener('click', (ev) => {
@@ -3579,6 +3673,7 @@ span.att-foot { visibility: hidden; }
     const v = ui.popView;
     if (b.hasAttribute('data-close')) { closePop(); return; }
     if (b.dataset.endEx) { closePop(); endExclusion(b.dataset.endEx); return; }
+    if (b.dataset.standIn) { closePop(); chooseStandIn(...b.dataset.standIn.split(':')); return; }
     if (b.hasAttribute('data-back')) { v.sub = null; openPop(playerPopHtml(playerById(v.playerId), v), v.anchor); return; }
     if (b.dataset.sub) { v.sub = b.dataset.sub; openPop(playerPopHtml(playerById(v.playerId), v), v.anchor); return; }
     if (b.hasAttribute('data-arm')) { closePop(); armShooter(v.playerId); return; }
