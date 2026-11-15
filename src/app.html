@@ -4252,7 +4252,7 @@ span.att-foot { visibility: hidden; }
     const keep = PHONE_COLUMNS.matchPlayers, hide = (c) => phoneHide(keep, c);
     // A phone has no room for the goals by zone: one «Goles» column after Min stands in for them.
     const phoneGoals = (cell, tone = '') => `<${cell} data-phone-only${tone ? ` class="${tone}"` : ''}>${cell === 'th' ? PHONE_GOALS_HEAD : ''}`;
-    const rows = fieldPlayers().map((p) => {
+    const rows = phoneMatchOrder(fieldPlayers()).map((p) => {
       const [num, name, ...rest] = playerRow(p, state);
       const tones = playerRowTones(p), stats = playerStats(p.id, state.events);
       const [goals, shots] = [stats.goals, stats.shots].map((byZone) => sumOf(SHEET_ZONES, (z) => byZone[z]));
@@ -4440,7 +4440,7 @@ span.att-foot { visibility: hidden; }
       </div>`;
   }
   function sheetReportsHtml() {
-    const rows = [...fieldPlayers(), ...goalkeepers()].map((p) => {
+    const rows = phoneMatchOrder([...fieldPlayers(), ...goalkeepers()]).map((p) => {
       const isGk = p.pos === 'POR';
       const c = countGroups(isGk ? gkShots(p.id) : ourShots().filter((e) => e.playerId === p.id));
       const line = isGk ? `${c.PARADA} detenidos · ${c.GOL} encajados` : `${c.GOL} goles · ${c.GOL + c.PARADA + c.FALLO} lanzamientos`;
@@ -4519,8 +4519,14 @@ span.att-foot { visibility: hidden; }
       <div class="sheet-grid">${card('Pérdidas por tipo', typeBarsHtml(report.turnovers, 'Sin pérdidas.'))}${card('Fallos defensivos', typeBarsHtml(report.faults, 'Sin fallos.'))}</div>
       ${card('Cronología', tableHtml(['Min', 'Acción'], report.timeline.length ? report.timeline : [['–', 'Sin acciones']]))}`;
   }
+  // On a phone a match's players read best first (rankedByRating, «S/C» last); the tablet keeps the order it is given.
+  function phoneMatchOrder(players, s = state, ratings = null) {
+    if (!onPhone()) return players;
+    const ids = new Set(players.map((p) => p.id));
+    return rankedByRating(s, ratings || matchRatings(s), minutesOnCourt(s)).filter((p) => ids.has(p.id));
+  }
   function sheetPlayerHtml() {
-    const convocados = [...fieldPlayers(), ...goalkeepers()];
+    const convocados = phoneMatchOrder([...fieldPlayers(), ...goalkeepers()]);
     const picked = convocados.find((p) => p.id === ui.sheetPlayer);
     const chips = convocados.map((p) => `<button class="face-chip press" type="button" data-sheet-player="${p.id}" aria-pressed="${p === picked}">${discHtml(p)}<span class="who">${esc(p.name || `#${p.num}`)}</span></button>`).join('');
     return `<div class="chips" role="group" aria-label="Jugador">${chips}</div>
@@ -4561,7 +4567,7 @@ span.att-foot { visibility: hidden; }
   function sheetSummaryHtml() {
     const ours = ourShots(), theirs = rivalShots(), ratings = matchRatings(state);
     const onGoal = (list) => list.filter(onTarget).length;
-    const players = state.players.slice().sort(byPosition).map((p) => summaryPlayerHtml(p, ratings)).join('');
+    const players = phoneMatchOrder(state.players.slice().sort(byPosition), state, ratings).map((p) => summaryPlayerHtml(p, ratings)).join('');
     return `${state.finished ? summaryMvpHtml() : ''}<div class="stat-tiles summary-tiles">${summaryTilesHtml(matchFigures())}</div>
       <p class="note">${TARGET_COLOUR_NOTE}</p>
       <div class="summary-cols">

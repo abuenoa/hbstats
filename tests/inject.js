@@ -1555,6 +1555,32 @@
     if (!figures.find((f) => f[0] === 'Pérdidas')[2].startsWith(teamMeanText(decimalText(means.TURNOVER)))) throw new Error(JSON.stringify(figures));
     if (teamMeans({ ...s, events: [], court: [] }) !== null) throw new Error('mean without participants');
   });
+  T('phone: a match\'s players are listed by rating, «S/C» last; the tablet keeps its order', () => {
+    const real = window.matchMedia, keep = { tab: ui.sheetTab, player: ui.sheetPlayer }, snap = snapshot();
+    const order = () => [...$('sheet').querySelectorAll('.player-strip [data-sheet-open-player]')].map((b) => b.dataset.sheetOpenPlayer);
+    try {
+      state = sampleState();
+      const ratings = matchRatings(state), value = (id) => ratingValue(ratings, playerById(id));
+      if (!state.players.some((p) => value(p.id) == null) || !state.players.some((p) => value(p.id) != null)) throw new Error('premise: rated and unrated players');
+      Object.assign(ui, { sheetTab: 'summary' });
+      window.matchMedia = (q) => (q === PHONE_QUERY ? { matches: false, media: q } : real.call(window, q));
+      renderSheet();
+      if (order().join() !== state.players.slice().sort(byPosition).map((p) => p.id).join()) throw new Error('tablet order changed');
+      window.matchMedia = (q) => (q === PHONE_QUERY ? { matches: true, media: q } : real.call(window, q));
+      renderSheet();
+      const values = order().map(value), firstNone = values.indexOf(null);
+      if (values.length !== state.players.length) throw new Error('players lost');
+      if (firstNone >= 0 && values.slice(firstNone).some((v) => v != null)) throw new Error('S/C not last ' + values);
+      const rated = values.filter((v) => v != null);
+      if (rated.some((v, i) => i && v > rated[i - 1])) throw new Error('not by rating ' + values);
+      Object.assign(ui, { sheetTab: 'stats' }); renderSheet();
+      const tableIds = [...$('sheet').querySelectorAll('.stats-table [data-sheet-open-player]')].map((b) => b.dataset.sheetOpenPlayer);
+      if (tableIds.join() !== rankedByRating(state, ratings, minutesOnCourt(state)).filter((p) => p.pos !== 'POR').map((p) => p.id).join()) throw new Error('table ' + tableIds);
+      Object.assign(ui, { sheetTab: 'player', sheetPlayer: null }); renderSheet();
+      const chips = [...$('sheet').querySelectorAll('[data-sheet-player]')].map((b) => b.dataset.sheetPlayer);
+      if (chips.join() !== rankedByRating(state, ratings, minutesOnCourt(state)).map((p) => p.id).join()) throw new Error('chips ' + chips);
+    } finally { window.matchMedia = real; Object.assign(ui, { sheetTab: keep.tab, sheetPlayer: keep.player }); restore(snap); renderSheet(); }
+  });
   T('pdf: an unrated player reads «S/C» with the reason, a keeper has his rating under the map', () => {
     const quiet = state.players.find((p) => p.pos !== 'POR' && !matchRatings(state).get(p.id).rated);
     if (!quiet) throw new Error('premise: the sample has no unrated field player');
