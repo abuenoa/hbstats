@@ -1052,6 +1052,19 @@
     const blowout = playerRating(rateMatch(ahead, { clock }), fieldA);
     if (!nearTo(blowout.lines.clutch, (RW.context.blowoutFactor - 1) * early.moments[0].value * PPG)) throw new Error('blowout ×' + RW.context.blowoutFactor);
   });
+  T('rating: the last minutes of the first half are a «Momento decisivo» too, with the same margin', () => {
+    const at = (abs, events = []) => playerRating(rateMatch([...events, rShot('a', '6M', 'GOL', abs)]), fieldA);
+    const base = at(100).moments[0].value * PPG, c = RW.context;
+    if (at(c.firstHalfCloseFrom - 1).lines.clutch !== 0) throw new Error('before the window');
+    if (!nearTo(at(c.firstHalfCloseFrom).lines.clutch, (RW.weights.closeFactor - 1) * base) || !nearTo(at(CONFIG.halfSeconds - 1).lines.clutch, (RW.weights.closeFactor - 1) * base)) throw new Error('first-half close ×' + RW.weights.closeFactor);
+    if (at(CONFIG.halfSeconds).lines.clutch !== 0) throw new Error('the second half starts plain until closeFrom');
+    const wide = rMany(c.closeMargin + 1, (i) => rShot('b', '6M', 'GOL', 10 + i));
+    if (at(c.firstHalfCloseFrom + 10, wide).lines.clutch !== 0) throw new Error('beyond the margin');
+    const tight = rMany(c.closeMargin, (i) => rShot('b', '6M', 'GOL', 10 + i));
+    if (!(at(c.firstHalfCloseFrom + 10, tight).lines.clutch > 0)) throw new Error('within the margin');
+    const tuned = { ...ratingWeights({}), closeFactor: 2 };
+    if (!nearTo(playerRating(rateMatch([rShot('a', '6M', 'GOL', c.firstHalfCloseFrom)]), fieldA, { weights: tuned }).lines.clutch, base)) throw new Error('not the closeFactor knob');
+  });
   T('rating: the unit on court shares what each possession left, and adds up to it', () => {
     const six = ['a', 'b', 'c', 'd', 'e', 'f'], players = [...six.map((id) => ({ id, pos: 'LAT' })), keeperG];
     const goals = rMany(4, (i) => ({ id: 'rg' + i, abs: 10 + i, kind: 'RIVAL_SHOT', gkId: 'g', zone: '6M', result: 'GOL', on: 0 }));
