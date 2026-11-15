@@ -2861,6 +2861,50 @@
         if (!copies.offline || copies.matches.map((x) => x.id).join() !== 'sd1' || !copies.matches[0].state) throw new Error(copies.matches.map((x) => x.id).join());
       } finally { backend = real; team.id = savedId; ['sd1', 'sd2', 'sd3'].forEach((id) => removeKey(MATCH_KEY_PREFIX + id)); }
     });
+    await TA('reports: mailed once at the final whistle to the players with e-mail; re-sent on request; WhatsApp per phone', async () => {
+      const real = backend, saved = { loadPdfLibs, pdfNewDoc, open: window.open }, snap = snapshot(), keepId = currentMatchId;
+      const calls = [], opened = [];
+      try {
+        state = sampleState(); state.sample = false; currentMatchId = 'reports-match';
+        loadPdfLibs = async () => {};
+        pdfNewDoc = () => fakeDrawingDoc({ output: () => 'data:application/pdf;filename=x;base64,QUJD' });
+        window.open = (url) => { opened.push(url); return null; };
+        backend = {
+          listPlayerContacts: async () => [{ playerId: 'p8', email: 'p8@club.es', phone: '+34600000000' }, { playerId: 'p17', email: '', phone: '' }],
+          sendPlayerReports: async (teamId, reports) => { calls.push(reports); return { sent: reports.map((r) => r.playerId), skipped: [], failed: [] }; }
+        };
+        ui.autoMailReports = true; openFinal(); await ui.sendReportsReady;
+        if (calls.length !== 1 || calls[0].map((r) => r.playerId).join() !== 'p8') throw new Error('mailed ' + JSON.stringify(calls.map((c) => c.map((r) => r.playerId))));
+        const r = calls[0][0];
+        if (r.pdf !== 'QUJD' || !/\.pdf$/.test(r.filename) || !r.subject.includes('tu informe') || !r.text.includes('Nota:') || !r.text.startsWith(playerById('p8').name)) throw new Error(JSON.stringify(r));
+        if (!state.reportsMailed || state.reportsMailed.sent !== 1 || mailedIsStale()) throw new Error('not recorded');
+        if (!$('send-reports').textContent.includes('Reenviar por correo')) throw new Error($('send-reports').textContent);
+        openFinal(); await ui.sendReportsReady;
+        if (calls.length !== 1) throw new Error('mailed again on reopening');
+        addEvent('ACTION', { playerId: 'p8', action: 'BLOC' }); openFinal(); await ui.sendReportsReady;
+        if (!mailedIsStale() || !$('send-reports').textContent.includes('ha cambiado')) throw new Error('change after mailing not shown');
+        $('send-reports').querySelector('[data-reports-mail]').click(); await new Promise((res) => setTimeout(res, 0)); while (ui.reportsBusy) await new Promise((res) => setTimeout(res, 5));
+        if (calls.length !== 2 || mailedIsStale()) throw new Error('not re-sent');
+        if ($('send-reports').querySelector('[data-reports-wa="p17"]')) throw new Error('WhatsApp without a phone');
+        $('send-reports').querySelector('[data-reports-wa="p8"]').click(); await new Promise((res) => setTimeout(res, 0));
+        if (!opened[0] || !opened[0].startsWith('https://wa.me/34600000000?text=') || !decodeURIComponent(opened[0]).includes('Nota:')) throw new Error(opened[0]);
+        if (!$('send-reports').querySelector('[data-reports-wa="p8"]').textContent.includes('Enviado')) throw new Error('not marked');
+        backend.sendPlayerReports = async () => { throw new Error('el correo de Zona6 no está configurado todavía'); };
+        const before = state.reportsMailed.at;
+        await mailPlayerReports();
+        if (!$('send-reports').textContent.includes('no está configurado') || state.reportsMailed.at !== before) throw new Error('failure not shown');
+      } finally {
+        backend = real; ({ loadPdfLibs, pdfNewDoc } = saved); window.open = saved.open; currentMatchId = keepId;
+        ui.autoMailReports = false; ui.reportsStatus = ''; ui.reportsWhatsApped = []; ui.reportContacts = null; hideFinal(); restore(snap);
+      }
+    });
+    await TA('reports: no card for read-only accounts, without accounts, or for the sample', async () => {
+      const real = backend, keepId = currentMatchId;
+      try {
+        backend = null; currentMatchId = 'x'; if (sendReportsCardHtml()) throw new Error('without accounts');
+        backend = { sendPlayerReports: async () => ({}) }; currentMatchId = null; if (sendReportsCardHtml()) throw new Error('sample');
+      } finally { backend = real; currentMatchId = keepId; }
+    });
     await TA('season: reloads when stale on a team page, never while fresh, in a match or hidden', async () => {
       const real = backend, savedId = team.id, savedView = home.view, homeHidden = $('home').hidden;
       team.id = 'season-refresh-team';

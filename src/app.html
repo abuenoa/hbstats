@@ -743,6 +743,13 @@ button.rex-chip { border: 0; cursor: pointer; position: relative; }
 .mvp-face[aria-pressed="true"] { border-color: var(--gold); background: var(--glow-gold); }
 .mvp-tag { font: var(--type-caption); font-weight: 800; color: var(--fg); }
 .mvp-share { display: grid; gap: var(--space-2); }
+.send-reports { display: grid; gap: var(--space-2); }
+.send-reports-mail { display: flex; align-items: center; gap: var(--space-3); flex-wrap: wrap; justify-content: space-between; }
+.send-reports-list { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: var(--space-2); }
+.send-reports-list li { display: flex; align-items: center; gap: var(--space-2); min-width: 0; }
+.send-reports-list .who { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 600; }
+.send-reports-list .btn { min-height: var(--tap); }
+.send-reports-list .btn.wa { background: var(--act-good); color: #fff; border-color: transparent; }
 .mvp-preview { font: var(--type-caption); color: var(--muted); }
 .summary-mvp .mvp-preview-img { width: min(100%, 320px); }
 .mvp-preview-img { display: block; margin-inline: auto; width: min(100%, 200px); height: auto; aspect-ratio: 1080 / 1350; border-radius: var(--radius-md); }
@@ -3299,6 +3306,7 @@ span.att-foot { visibility: hidden; }
   }
   function finishMatch() {
     pauseClock();
+    ui.autoMailReports = true;
     state.finished = true;
     alarm(SOUND_ALARM);
     commit();
@@ -6878,6 +6886,7 @@ table { border-collapse: collapse; width: 100%; }
       ${summaryGapHtml('final')}
       ${ratingsListHtml(state, ratings, seconds)}
       ${mvpPickHtml()}
+      ${sendReportsCardHtml()}
       ${summaryDetailHtml()}
       <p class="note" id="final-status" aria-live="polite">${esc(ui.sharedLog && ui.sharedLog !== sharedLogOf(state) ? SHARE_TEXT.changed : SHARE_TEXT.intro)}</p>
       <div class="row-actions final-actions">
@@ -6892,6 +6901,7 @@ table { border-collapse: collapse; width: 100%; }
     ui.mvpCardReady = renderMvpPreview();
     ui.ratingsCardReady = renderRatingsCard();
     ui.reportFilesReady = renderReportFiles();
+    ui.sendReportsReady = loadSendReports();
   }
   const finalStatus = (text) => sheetStatus('final-status', text);
   function hideFinal() {
@@ -7038,7 +7048,100 @@ table { border-collapse: collapse; width: 100%; }
     if (b.dataset.finalPlays) { openPlays(b.dataset.finalPlays); return; }
     if (b.dataset.finalAssign) { openPlays(b.dataset.finalAssign, { assign: true }); return; }
     if (b.hasAttribute('data-final-share')) shareMatch();
+    if (b.hasAttribute('data-reports-mail')) mailPlayerReports();
+    if (b.dataset.reportsWa) whatsAppPlayerReport(b.dataset.reportsWa);
   });
+
+  // ===================== Personal reports: each player gets his own match by e-mail or WhatsApp =====================
+  // E-mail: the server sends each player his text and his PDF page, automatically once right after the final whistle and
+  // again on request (say, after «Completar jugadas»). WhatsApp: one tap per player opens his chat with the text ready.
+  // The team's reports go to the groups through «Compartir». Staff only, with accounts, never for the sample.
+  const REPORTS_PER_REQUEST = 4;
+  const REPORT_TEXT_FIGURES = 6;
+  const canSendReports = () => Boolean(currentMatchId) && !readOnly() && Boolean(backend && backend.sendPlayerReports);
+  const appLink = () => `${location.origin}${location.pathname}`;
+  const reportPlayers = () => [...fieldPlayers(), ...goalkeepers()];
+  // What a player reads about his match: the score, his rating and his figures that are not empty.
+  function playerReportText(p, s = state, ratings = matchRatings(s)) {
+    const empty = ['–', 0, '0', '0/0'];
+    const figures = playerReport(p, s, ratings).figures.filter(([, value]) => !empty.includes(value)).slice(0, REPORT_TEXT_FIGURES);
+    return [`${p.name}, tu partido: *${scoreLine(s, score(s.events))}*`, [matchPlaceText(s), dateText(s.date)].filter(Boolean).join(' · '),
+      `Nota: ${ratingText(ratingValue(ratings, p))}`, ...figures.map(([label, value]) => `${label}: ${value}`),
+      `Todo el detalle en Zona6: ${appLink()}`].filter(Boolean).join('\n');
+  }
+  const reportSubject = (s = state) => `${scoreLine(s, score(s.events))} · tu informe`;
+  const reportsMailed = () => state.reportsMailed || null;
+  const mailedIsStale = () => Boolean(reportsMailed()) && reportsMailed().log !== sharedLogOf(state);
+  function sendReportsCardHtml() {
+    if (!canSendReports()) return '';
+    return `<section class="sheet-card send-reports" id="send-reports" aria-live="polite"><h3>Informes a los jugadores</h3><p class="note">Cargando contactos…</p></section>`;
+  }
+  // The contacts are read from the server each time the final screen opens; nothing is kept on the device.
+  async function loadSendReports() {
+    if (!canSendReports()) return;
+    try { ui.reportContacts = await loadPlayerContacts(team.id); }
+    catch (err) { ui.reportContacts = null; ui.reportsStatus = `Sin contactos: ${cloudErrorText(err)}`; }
+    renderSendReports();
+    const withEmail = reportPlayers().filter((p) => ui.reportContacts && ui.reportContacts.get(p.id)?.email);
+    if (ui.autoMailReports && !reportsMailed() && withEmail.length) await mailPlayerReports();
+    ui.autoMailReports = false;
+  }
+  function renderSendReports() {
+    const box = $('send-reports');
+    if (!box) return;
+    const contacts = ui.reportContacts || new Map(), players = reportPlayers();
+    const withEmail = players.filter((p) => contacts.get(p.id)?.email);
+    const mailed = reportsMailed();
+    const mailNote = !ui.reportContacts ? '' : !withEmail.length ? 'Nadie tiene correo: añádelo en Editar equipo → Cuentas.'
+      : mailed ? `Enviados por correo el ${new Date(mailed.at).toLocaleString('es-ES', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })} a ${plural(mailed.sent, 'jugador', 'jugadores')}${mailedIsStale() ? ' · el partido ha cambiado después' : ''}.`
+      : `Se envía a ${plural(withEmail.length, 'jugador con correo', 'jugadores con correo')}.`;
+    const row = (p) => {
+      const phone = contacts.get(p.id)?.phone, done = (ui.reportsWhatsApped || []).includes(p.id);
+      const action = !phone ? '<span class="note">sin teléfono</span>'
+        : `<button class="btn press${done ? '' : ' wa'}" type="button" data-reports-wa="${p.id}">${done ? 'Enviado ✓' : 'WhatsApp'}</button>`;
+      return `<li>${discHtml(p)}<span class="who">${esc(p.name)}</span>${action}</li>`;
+    };
+    box.innerHTML = `<h3>Informes a los jugadores</h3>
+      <div class="send-reports-mail"><p class="note">${esc(mailNote)}</p>
+        <button class="btn primary press" type="button" data-reports-mail ${withEmail.length && !ui.reportsBusy ? '' : 'disabled'}>${ui.reportsBusy ? 'Enviando…' : mailed ? 'Reenviar por correo' : `Enviar por correo (${withEmail.length})`}</button></div>
+      ${ui.reportsStatus ? `<p class="note" role="status">${esc(ui.reportsStatus)}</p>` : ''}
+      <ul class="send-reports-list">${players.map(row).join('')}</ul>
+      <p class="note">Para los grupos de WhatsApp, «Compartir» lleva el informe del equipo.</p>`;
+  }
+  // Builds each player's page and sends them in small batches; what failed is named, what was sent is recorded.
+  async function mailPlayerReports() {
+    if (ui.reportsBusy || !ui.reportContacts) return;
+    const players = reportPlayers().filter((p) => ui.reportContacts.get(p.id)?.email);
+    if (!players.length) return;
+    ui.reportsBusy = true; ui.reportsStatus = ''; renderSendReports();
+    const result = { sent: [], skipped: [], failed: [] };
+    try {
+      await loadPdfLibs();
+      const ratings = matchRatings(state), subject = reportSubject();
+      const reports = players.map((p) => {
+        const { doc, filename } = playerPagesPdf(p.id);
+        return { playerId: p.id, subject, text: playerReportText(p, state, ratings), filename, pdf: doc.output('datauristring').split(',')[1] };
+      });
+      for (let i = 0; i < reports.length; i += REPORTS_PER_REQUEST) {
+        const r = await backend.sendPlayerReports(team.id, reports.slice(i, i + REPORTS_PER_REQUEST));
+        Object.keys(result).forEach((k) => result[k].push(...r[k]));
+      }
+    } catch (err) {
+      ui.reportsStatus = `No se pudieron enviar por correo: ${cloudErrorText(err)}`;
+    }
+    if (result.sent.length) { state.reportsMailed = { at: new Date().toISOString(), log: sharedLogOf(state), sent: result.sent.length }; save(); }
+    const nameOf = (id) => (playerById(id) || { name: id }).name;
+    if (result.failed.length) ui.reportsStatus = `Sin enviar: ${result.failed.map((f) => `${nameOf(f.playerId)} (${f.error})`).join(', ')}`;
+    ui.reportsBusy = false;
+    renderSendReports();
+  }
+  async function whatsAppPlayerReport(playerId) {
+    const p = playerById(playerId), phone = ui.reportContacts && ui.reportContacts.get(playerId)?.phone;
+    if (!p || !phone) return;
+    await openWhatsApp(phone, playerReportText(p));
+    ui.reportsWhatsApped = [...new Set([...(ui.reportsWhatsApped || []), playerId])];
+    renderSendReports();
+  }
 
   // ===================== «Completar jugadas»: add, edit and attribute plays after the whistle =====================
   // A full-screen editor over the summary it came from (final, half-time, or the live screen with the clock stopped). Each
@@ -7947,6 +8050,13 @@ table { border-collapse: collapse; width: 100%; }
       // returns the sign-in link to share.
       async inviteMember(teamId, member, email) {
         const { data, error } = await client.functions.invoke('invite-player', { body: { teamId, ...member, email } });
+        if (error) throw new Error((await error.context?.json?.().catch(() => null))?.error || error.message);
+        return data;
+      },
+      // Each player's own report by e-mail (staff only): [{ playerId, subject, text, filename, pdf (base64) }] →
+      // { sent, skipped (no e-mail), failed: [{ playerId, error }] }. The addresses stay on the server.
+      async sendPlayerReports(teamId, reports) {
+        const { data, error } = await client.functions.invoke('send-player-reports', { body: { teamId, reports } });
         if (error) throw new Error((await error.context?.json?.().catch(() => null))?.error || error.message);
         return data;
       },
