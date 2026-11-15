@@ -1653,6 +1653,16 @@
     if (pdfText('−3') !== '-3' || pdfText("2′") !== "2'" || pdfText('↶ deshecho ›') !== ' deshecho ') throw new Error(pdfText('−3') + pdfText("2′"));
     if (pdfText('Nº 1ª parte · áéíóúñ') !== 'Nº 1ª parte · áéíóúñ') throw new Error('accents');
   });
+  T('rating: our 2\' window is short-handed even with six on court in the lineup, as the rival\'s is superiority', () => {
+    const r = CONFIG.rating, s = sampleState(), set = 0;
+    s.courtSets = [[...Object.keys(s.lineups.DEF), 'p1'].sort()]; s.court = [{ abs: 0, set }];
+    s.events = [{ id: 'ox', abs: 600, kind: 'SANCTION', playerId: 'p5', card: '2M' }];
+    if (stateBaselines(s, set, 650) !== r.shortHanded || stateBaselines(s, set, 720).att !== r.possession || stateBaselines(s, set, 599).att !== r.possession) throw new Error('our 2\'');
+    s.events.push({ id: 'rx', abs: 1000, kind: 'RIVAL_SANCTION', rivalId: null, card: '2M' });
+    if (stateBaselines(s, set, 1050) !== r.superiority) throw new Error('rival 2\'');
+    s.events.push({ id: 'oy', abs: 1030, kind: 'SANCTION', playerId: 'p18', card: '2M' });
+    if (stateBaselines(s, set, 1050).att !== r.possession) throw new Error('both short');
+  });
   // ---- Accounts, team and saved matches (device backend; Supabase mapping through a fake client) ----
   const TA = async (name, fn) => { try { await fn(); __results.push('OK ' + name); } catch (e) { __results.push('FAIL ' + name + ': ' + (e && e.message || e) + ' ' + ((e && e.stack) || '').split('\n')[1]); } };
   const tick0 = () => new Promise((r) => setTimeout(r, 0));

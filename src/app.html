@@ -2457,12 +2457,13 @@ span.att-foot { visibility: hidden; }
   }
   const shotCourtSet = (s, e) => e.on ?? courtSetBefore(s, e.abs);
   const isAction = (e, action) => e.kind === 'ACTION' && e.action === action;
-  // Numerical state from the lineup itself (an exclusion that was not logged still shows as 5 field players) and the
-  // rival's 2' windows.
+  // Numerical state from the lineup itself (an exclusion that was not logged still shows as 5 field players), our 2'
+  // windows (a 2' added after the match leaves the lineup as it was) and the rival's 2' windows.
   function stateBaselines(s, set, t) {
     const r = CONFIG.rating, logged = (s.court || []).length > 0;
-    const short = logged && set != null && fieldOnCourt(s, set).length < FIELD_PLAYERS_ON_COURT;
-    const plus = s.events.some((e) => e.kind === 'RIVAL_SANCTION' && e.card === '2M' && t >= e.abs && t < e.abs + exclusionLength(e, r.exclusionSeconds));
+    const inTwo = (kind) => s.events.some((e) => e.kind === kind && e.card === '2M' && t >= e.abs && t < e.abs + exclusionLength(e, r.exclusionSeconds));
+    const short = (logged && set != null && fieldOnCourt(s, set).length < FIELD_PLAYERS_ON_COURT) || inTwo('SANCTION');
+    const plus = inTwo('RIVAL_SANCTION');
     if (short && !plus) return r.shortHanded;
     if (plus && !short) return r.superiority;
     return { att: r.possession, def: r.possession };
