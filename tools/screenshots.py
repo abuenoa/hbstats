@@ -57,12 +57,16 @@ SCENES = {
 MVP_CARD_SIZE = "1080,1350"
 MVP_FIELD_NAME = "Maximiliano Fernández Lo"
 MVP_KEEPER_NAME = "Wolfeschlegelsteinhausen"
+# The club's two Instagram accounts, as the coach set them in Editar equipo.
+SAMPLE_HANDLES = "applyTeam({ ...team, socialHandle: 'triana_balonmano', socialHandle2: 'vivero.triana_of' });"
 MVP_CARD_SNIPPET = (
-    f"{SAMPLE} commit(); (async () => {{ await document.fonts.ready;"
+    f"{SAMPLE} {SAMPLE_HANDLES} commit(); (async () => {{ await document.fonts.ready;"
+    " await loadCardFonts([cardPoster(MVP_CARD.title.size), cardSmall(MVP_CARD.subSize)]);"
     " const data = mvpCardData(state, '%s', matchRatings(state)); data.name = '%s';"
     " %s"
     " const canvas = document.createElement('canvas'); document.body.replaceChildren(canvas); document.body.style.margin = '0';"
-    " drawMvpCard(canvas, data, { photo: data.photo ? await loadImage(data.photo) : null, crest: await loadImage(data.crest) }); })();"
+    " drawMvpCard(canvas, data, { plate: await loadImage(ARENA.plate), photo: data.photo ? await loadImage(data.photo) : null,"
+    " crest: await loadImage(data.crest) }); })();"
 )
 MVP_SAMPLE_PHOTO = (
     "const face = document.createElement('canvas'); face.width = face.height = 160; const f = face.getContext('2d');"
@@ -90,9 +94,8 @@ RATINGS_CARD_SNIPPET = (
 # The convocatoria of the sample squad for a home round, with two coaches, both Instagram accounts and three photos.
 CALLUP_CARD_SIZE = "1080,1350"
 CALLUP_CARD_SNIPPET = (
-    f"{SAMPLE} (async () => {{ await document.fonts.ready;"
-    " applyTeam({ ...team, socialHandle: 'triana_balonmano', socialHandle2: 'vivero.triana_of',"
-    " staff: [{ id: 's1', name: 'Jorge Caro', role: 'head' }, { id: 's2', name: 'Antonio Bueno', role: 'assistant' }] });"
+    f"{SAMPLE} {SAMPLE_HANDLES} (async () => {{ await document.fonts.ready;"
+    " applyTeam({ ...team, staff: [{ id: 's1', name: 'Jorge Caro', role: 'head' }, { id: 's2', name: 'Antonio Bueno', role: 'assistant' }] });"
     " home.fixtures = [{ id: 'f1', season: '2026/2027', competition: 'Liga', round: 7, weekend: '2026-11-21', home: true,"
     " opponent: 'BM Gades', kickoff: '2026-11-21T18:30:00', venue: 'Pabellón Vista Alegre', matchId: null }];"
     " const data = callupCardData({ fixtureId: 'f1', date: '2026-11-21', time: '18:30', meet: '', ids: new Set() }, state.players);"

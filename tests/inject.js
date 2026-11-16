@@ -2444,6 +2444,13 @@
       drawMvpCard(canvas, data, images);
       return { texts, ctx, canvas };
     };
+    const solidCanvas = (colour, size = 4) => { const c = document.createElement('canvas'); c.width = c.height = size; const x = c.getContext('2d'); x.fillStyle = colour; x.fillRect(0, 0, size, size); return c; };
+    const textSpy = (draw) => {
+      const canvas = document.createElement('canvas'), ctx = canvas.getContext('2d'), texts = [], fillText = ctx.fillText.bind(ctx);
+      ctx.fillText = (text, x, y) => { texts.push({ text, x, y, font: ctx.font }); fillText(text, x, y); };
+      draw(canvas, ctx);
+      return { texts, ctx, canvas };
+    };
     const cardFace = () => { const c = document.createElement('canvas'); c.width = c.height = 64; c.getContext('2d').fillRect(0, 0, 64, 64); return c; };
     await TA('mvp image: field and keeper KPIs', async () => {
       const goals = state.events.filter((e) => e.kind === 'SHOT' && e.playerId === 'p17' && e.result === 'GOL').length;
@@ -2486,6 +2493,22 @@
       const size = `${header.getUint32(PNG_WIDTH_OFFSET)}×${header.getUint32(PNG_HEIGHT_OFFSET)}`;
       if (size !== '1080×1350') throw new Error(size);
     });
+    await TA('mvp image: the arena poster with «MVP», the name, dorsal, figures, score line and both handles', async () => {
+      const t = { ...team, socialHandle: 'triana_balonmano', socialHandle2: 'vivero.triana_of' }, picked = state.mvpId;
+      state.mvpId = 'p17';
+      let data;
+      try { data = mvpCardData(state, 'p17', cardRatings(), t, new Map([['p17', 25 * 60]])); } finally { state.mvpId = picked; }
+      if (data.handles.join() !== '@TRIANA_BALONMANO,@VIVERO.TRIANA_OF' || data.match !== finalTitle()) throw new Error(JSON.stringify([data.handles, data.match]));
+      const { texts, canvas } = textSpy((c) => drawMvpCard(c, data, { plate: solidCanvas('#c01010', 8), photo: cardFace(), crest: cardFace() }));
+      const said = texts.map((x) => x.text), player = state.players.find((p) => p.id === 'p17');
+      [MVP_TITLE, player.name.toUpperCase(), `DORSAL ${player.num} · ${posOf(player).label.toUpperCase()}`, data.rating, 'GOLES', '25', data.match.toUpperCase(), ...data.handles].forEach((w) => { if (!said.includes(w)) throw new Error(`«${w}» not drawn: ${said.join('|')}`); });
+      if (said.some((x) => x.startsWith(MVP_PROVISIONAL_TAG.toUpperCase()))) throw new Error('a coach pick marked provisional');
+      if (canvas.width !== MVP_CARD.w || canvas.height !== MVP_CARD.h) throw new Error(`${canvas.width}×${canvas.height}`);
+      const second = texts.find((x) => x.text === '@VIVERO.TRIANA_OF');
+      if (second.y !== MVP_CARD.handlesY || second.x !== MVP_CARD.w - MVP_CARD.pad) throw new Error('handles not bottom right');
+      const provisional = drawnTexts({ ...data, provisional: true, handles: [] }, { photo: null, crest: null }).texts.map((x) => x.text);
+      if (!provisional[0].startsWith(`${MVP_PROVISIONAL_TAG} · `.toUpperCase()) || provisional.some((x) => x.startsWith(SOCIAL_PREFIX))) throw new Error(provisional.join('|'));
+    });
     await TA('mvp image: no photo draws initials', async () => {
       const data = { ...mvpCardData(state, 'p17', cardRatings()), name: 'Ana Pérez', photo: null };
       if (!drawnTexts(data, { photo: null, crest: null }).texts.some((t) => t.text === 'AP')) throw new Error('no initials');
@@ -2500,13 +2523,13 @@
       const lines = drawn.texts.filter((t) => spaced.toUpperCase().includes(t.text) && t.text.length > 3).map((t) => t.text);
       if (lines.join(' ') !== spaced.toUpperCase()) throw new Error('name not whole: ' + lines);
       inBox(drawn.texts, drawn.ctx);
-      // A 24-character rival fits the «us vs rival» line by shrinking.
-      const rival = 'Club Deportivo Balonmano', vs = drawnTexts({ ...base, teams: `${base.teams.split(' vs ')[0]} vs ${rival}` }, noImages).texts.find((t) => t.text.includes(rival));
+      // A 24-character rival fits the score line by shrinking.
+      const rival = 'Club Deportivo Balonmano', vs = drawnTexts({ ...base, match: `${base.match} ${rival}` }, noImages).texts.find((t) => t.text.includes(rival.toUpperCase()));
       if (!vs || vs.text.includes('…')) throw new Error('rival cut: ' + (vs && vs.text));
       // A name with no space shrinks to the floor before any ellipsis; beyond the floor it is cut and still fits.
       const solid = drawnTexts({ ...base, name: 'X'.repeat(MAX_NAME_LENGTH) }, noImages);
       if (solid.texts.some((t) => t.text.includes('…'))) throw new Error('24 characters without a space were cut');
-      const huge = 'Maximiliano '.repeat(12).trim(), cut = drawnTexts({ ...base, name: huge, teams: huge, venue: huge }, noImages);
+      const huge = 'Maximiliano '.repeat(12).trim(), cut = drawnTexts({ ...base, name: huge, match: huge, venue: huge }, noImages);
       if (!cut.texts.some((t) => t.text.endsWith('…'))) throw new Error('nothing was cut');
       inBox(cut.texts, cut.ctx);
       if (fitText(cut.ctx, 'Jose', MVP_CARD.w) !== 'Jose') throw new Error('short text changed');
@@ -2520,11 +2543,9 @@
       if (fromCentre < M.faceR - M.ringWidth - 1 || fromCentre > M.faceR) throw new Error('band bottom-centre off the rim: ' + fromCentre);
       const points = [...CROWN.pearls.flatMap(([x, y]) => [[x - CROWN.pearlR, y - CROWN.pearlR], [x + CROWN.pearlR, y - CROWN.pearlR]]), [4, 22], [116, 22]].map(at);
       const ctx = document.createElement('canvas').getContext('2d');
-      [MVP_TITLE, MVP_PROVISIONAL_TITLE].forEach((title) => {
-        ctx.font = cardFont(M.weights.heavy, M.headerSize, 'display');
-        const half = ctx.measureText(title).width / 2;
-        points.forEach(([x, y]) => { if (x >= cx - half && x <= cx + half && y >= M.headerY - M.headerSize && y <= M.headerY) throw new Error(`crown point (${x | 0}, ${y | 0}) in the «${title}» box`); });
-      });
+      ctx.font = cardPoster(M.title.size);
+      const box = ctx.measureText(MVP_TITLE), half = box.width / 2;
+      points.forEach(([x, y]) => { if (x >= cx - half && x <= cx + half && y >= M.title.y - box.actualBoundingBoxAscent && y <= M.title.y + box.actualBoundingBoxDescent) throw new Error(`crown point (${x | 0}, ${y | 0}) in the «${MVP_TITLE}» box`); });
       points.forEach(([x, y]) => { if (x < 0 || y < 0 || x > M.w) throw new Error(`crown point off the card: ${x | 0}, ${y | 0}`); });
     });
     await TA('mvp image: a broken photo still gives an image', async () => {
@@ -2594,7 +2615,6 @@
       if (heights[1] - heights[0] !== 4 * RATINGS_CARD.row) throw new Error(heights.join());
     });
     // ---- The arena style of the three images ----
-    const solidCanvas = (colour, size = 4) => { const c = document.createElement('canvas'); c.width = c.height = size; const x = c.getContext('2d'); x.fillStyle = colour; x.fillRect(0, 0, size, size); return c; };
     const pixelOf = (ctx, x = 1, y = 1) => [...ctx.getImageData(x, y, 1, 1).data.slice(0, 3)];
     const lightOf = ([r, g, b]) => 0.3 * r + 0.59 * g + 0.11 * b;
     await TA('arena: the plate turns to the team colour, keeps its light, is veiled where words sit, and has a fallback', async () => {
@@ -2623,12 +2643,6 @@
       } finally { delete document.fonts.load; }
       if (!/Vina Sans/.test(spec) || !/Barlow Condensed/.test(spec)) throw new Error('the poster face and its fallback: ' + spec);
     });
-    const textSpy = (draw) => {
-      const canvas = document.createElement('canvas'), ctx = canvas.getContext('2d'), texts = [], fillText = ctx.fillText.bind(ctx);
-      ctx.fillText = (text, x, y) => { texts.push({ text, x, y, font: ctx.font }); fillText(text, x, y); };
-      draw(canvas, ctx);
-      return { texts, ctx, canvas };
-    };
     const callupPlayers = (n) => Array.from({ length: n }, (_, i) => ({ id: 'c' + i, num: i + 2, name: i === 3 ? 'Antonio Bokiki' : 'Jugador ' + i, pos: i === 5 ? 'POR' : 'LAT', photo: null }));
     await TA('convocatoria image: the match, day, times and hall, the players in two columns, the staff and both handles', async () => {
       const keep = home.fixtures, day = todayIso();
