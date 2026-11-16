@@ -7063,6 +7063,7 @@ table { border-collapse: collapse; width: 100%; }
     if (b.hasAttribute('data-final-share')) shareMatch();
     if (b.hasAttribute('data-reports-mail')) mailPlayerReports();
     if (b.hasAttribute('data-staff-mail')) mailStaffReport();
+    if (b.dataset.staffWa) whatsAppStaffReport(b.dataset.staffWa);
     if (b.dataset.reportsWa) whatsAppPlayerReport(b.dataset.reportsWa);
   });
 
@@ -7073,7 +7074,7 @@ table { border-collapse: collapse; width: 100%; }
   // the files through «Compartir». Staff only, with accounts, never for the sample.
   const REPORTS_PER_REQUEST = 4;
   const REPORT_TEXT_FIGURES = 6;
-  const canSendReports = () => Boolean(currentMatchId) && !readOnly() && Boolean(backend && backend.sendPlayerReports && backend.sendStaffReport);
+  const canSendReports = () => Boolean(currentMatchId) && !readOnly() && Boolean(backend && backend.sendPlayerReports && backend.sendStaffReport && backend.listStaffContacts);
   const appLink = () => `${location.origin}${location.pathname}`;
   const reportPlayers = () => [...fieldPlayers(), ...goalkeepers()];
   // What a player reads about his match: the score, his rating and his figures that are not empty.
@@ -7099,7 +7100,7 @@ table { border-collapse: collapse; width: 100%; }
       const files = await Promise.all((await reportFiles()).map(async (f) => ({ filename: f.filename, pdf: await blobBase64(f.blob) })));
       const { sent } = await backend.sendStaffReport(team.id, { subject: `${scoreLine(state, score(state.events))} · informe del partido`, text: `${shareText(state)}\n\nTodo el detalle en Zona6: ${appLink()}`, files });
       if (sent) { state.staffMailed = { at: new Date().toISOString(), log: sharedLogOf(state), sent }; save(); }
-      else ui.staffStatus = 'Ningún entrenador tiene el correo confirmado.';
+      else ui.staffStatus = 'Nadie del cuerpo técnico tiene correo: añádelo en su ficha o con su cuenta.';
     } catch (err) {
       ui.staffStatus = `No se pudo enviar a los entrenadores: ${cloudErrorText(err)}`;
     }
@@ -7113,8 +7114,8 @@ table { border-collapse: collapse; width: 100%; }
   // The contacts are read from the server each time the final screen opens; nothing is kept on the device.
   async function loadSendReports() {
     if (!canSendReports()) return;
-    try { ui.reportContacts = await loadPlayerContacts(team.id); }
-    catch (err) { ui.reportContacts = null; ui.reportsStatus = `Sin contactos: ${cloudErrorText(err)}`; }
+    try { [ui.reportContacts, ui.staffContacts] = await Promise.all([loadPlayerContacts(team.id), loadStaffContacts(team.id)]); }
+    catch (err) { ui.reportContacts = ui.staffContacts = null; ui.reportsStatus = `Sin contactos: ${cloudErrorText(err)}`; }
     renderSendReports();
     const withEmail = reportPlayers().filter((p) => ui.reportContacts && ui.reportContacts.get(p.id)?.email);
     const auto = ui.autoMailReports;
@@ -7138,12 +7139,20 @@ table { border-collapse: collapse; width: 100%; }
       return `<li>${discHtml(p)}<span class="who">${esc(p.name)}</span>${action}</li>`;
     };
     const staff = staffMailed();
-    const staffNote = staff ? `Informe completo enviado por correo el ${mailedWhen(staff.at)} a ${plural(staff.sent, 'entrenador', 'entrenadores')}${staffMailedIsStale() ? ' · el partido ha cambiado después' : ''}.`
-      : 'El informe del partido y el de todos los jugadores, por correo al dueño y a los entrenadores.';
-    box.innerHTML = `<h3>Entrenadores</h3>
+    const staffNote = staff ? `Informe completo enviado por correo el ${mailedWhen(staff.at)} a ${plural(staff.sent, 'persona', 'personas')}${staffMailedIsStale() ? ' · el partido ha cambiado después' : ''}.`
+      : 'El informe del partido y el de todos los jugadores, por correo a cada entrenador y al cuerpo técnico.';
+    const staffContacts = ui.staffContacts || new Map();
+    const staffRow = (m) => {
+      const phone = staffContacts.get(m.id)?.phone, done = (ui.staffWhatsApped || []).includes(m.id);
+      const action = !phone ? '<span class="note">sin teléfono</span>'
+        : `<button class="btn press${done ? '' : ' wa'}" type="button" data-staff-wa="${esc(m.id)}">${done ? 'Enviado ✓' : 'WhatsApp'}</button>`;
+      return `<li>${staffDiscHtml(m)}<span class="who">${esc(m.name)}</span>${action}</li>`;
+    };
+    box.innerHTML = `<h3>Entrenadores y cuerpo técnico</h3>
       <div class="send-reports-mail"><p class="note">${esc(staffNote)}</p>
-        <button class="btn primary press" type="button" data-staff-mail ${ui.staffBusy ? 'disabled' : ''}>${ui.staffBusy ? 'Enviando…' : staff ? 'Reenviar a los entrenadores' : 'Enviar a los entrenadores'}</button></div>
+        <button class="btn primary press" type="button" data-staff-mail ${ui.staffBusy ? 'disabled' : ''}>${ui.staffBusy ? 'Enviando…' : staff ? 'Reenviar al cuerpo técnico' : 'Enviar al cuerpo técnico'}</button></div>
       ${ui.staffStatus ? `<p class="note" role="status">${esc(ui.staffStatus)}</p>` : ''}
+      ${teamStaff().length ? `<ul class="send-reports-list">${teamStaff().map(staffRow).join('')}</ul>` : '<p class="note">Añade el cuerpo técnico en Equipo para enviarles el informe por WhatsApp.</p>'}
       <h3>Informes a los jugadores</h3>
       <div class="send-reports-mail"><p class="note">${esc(mailNote)}</p>
         <button class="btn primary press" type="button" data-reports-mail ${withEmail.length && !ui.reportsBusy ? '' : 'disabled'}>${ui.reportsBusy ? 'Enviando…' : mailed ? 'Reenviar por correo' : `Enviar por correo (${withEmail.length})`}</button></div>
@@ -7176,6 +7185,15 @@ table { border-collapse: collapse; width: 100%; }
     const nameOf = (id) => (playerById(id) || { name: id }).name;
     if (result.failed.length) ui.reportsStatus = `Sin enviar: ${result.failed.map((f) => `${nameOf(f.playerId)} (${f.error})`).join(', ')}`;
     ui.reportsBusy = false;
+    renderSendReports();
+  }
+  // A staff member's WhatsApp: the match summary and the link (the PDFs reach WhatsApp through «Compartir»).
+  const staffReportText = (m, s = state) => `${m.name}, informe del partido:\n${shareText(s)}\n\nTodo el detalle en Zona6: ${appLink()}`;
+  async function whatsAppStaffReport(staffId) {
+    const m = staffMember(staffId), phone = ui.staffContacts && ui.staffContacts.get(staffId)?.phone;
+    if (!m || !phone) return;
+    await openWhatsApp(phone, staffReportText(m));
+    ui.staffWhatsApped = [...new Set([...(ui.staffWhatsApped || []), staffId])];
     renderSendReports();
   }
   async function whatsAppPlayerReport(playerId) {
@@ -7957,6 +7975,14 @@ table { border-collapse: collapse; width: 100%; }
       async savePlayerContact(teamId, playerId, { email, phone }) {
         check(await client.from('player_contacts').upsert({ player_id: playerId, team_id: teamId, email: email || null, phone: phone || null }, { onConflict: 'player_id' }));
       },
+      // The coaching staff's e-mails and phones (staff only), by staff profile id: [{ staffId, email, phone }].
+      async listStaffContacts(teamId) {
+        return check(await client.from('staff_contacts').select('staff_id,email,phone').eq('team_id', teamId)).map((r) => ({ staffId: r.staff_id, email: r.email, phone: r.phone }));
+      },
+      async saveStaffContact(teamId, staffId, { email, phone }) {
+        check(await client.from('staff_contacts').upsert({ team_id: teamId, staff_id: staffId, email: email || null, phone: phone || null }, { onConflict: 'team_id,staff_id' }));
+      },
+      async deleteStaffContact(teamId, staffId) { check(await client.from('staff_contacts').delete().eq('team_id', teamId).eq('staff_id', staffId)); },
       // Takes the account off the team; an invite never used is cancelled and its link stops working.
       async removeAccount(teamId, userId) { check(await client.rpc('remove_team_account', { p_team: teamId, p_user: userId })); },
       async createTeam(t) {
@@ -8459,6 +8485,7 @@ table { border-collapse: collapse; width: 100%; }
       <div class="field">Rol<div class="tabs staff-roles" role="group" aria-label="Rol">${roles}</div></div>
       ${role === 'staff' ? `<label class="field">Cargo<input class="in" type="text" maxlength="${MAX_NAME_LENGTH}" value="${esc(m.job || '')}" list="staff-jobs" placeholder="Delegado, Fisioterapeuta…" data-staff-job="${id}"></label>
         <datalist id="staff-jobs">${STAFF_JOBS.map((j) => `<option value="${esc(j)}">`).join('')}</datalist>` : ''}
+      ${staffContactHtml(m)}
       <div class="row-actions">${armedButton(`staff-${m.id}`, 'Quitar del cuerpo técnico', `data-staff-del="${id}"`)}</div></section>`;
     return `${statusHtml()}<div class="staff-profile"><section class="sheet-card staff-hero">${staffDiscHtml(m)}<h2>${esc(m.name)}</h2><p>${esc(staffLabel(m))}</p></section>${edit}</div>`;
   }
@@ -8467,6 +8494,39 @@ table { border-collapse: collapse; width: 100%; }
     home.staffId = id;
     showHomeView('staff');
     $('home').scrollTop = 0;
+    loadStaffContactsForPage();
+  }
+  // ---- The staff's own e-mail and WhatsApp, to get the final reports; staff only (staff_contacts), never on the device ----
+  const canKeepStaffContacts = () => !readOnly() && Boolean(backend && backend.listStaffContacts);
+  async function loadStaffContacts(teamId) {
+    return new Map((await backend.listStaffContacts(teamId)).map((c) => [c.staffId, { email: c.email || '', phone: c.phone || '' }]));
+  }
+  async function loadStaffContactsForPage() {
+    if (!canKeepStaffContacts()) return;
+    const teamId = team.id;
+    try { home.staffContacts = await loadStaffContacts(teamId); }
+    catch (err) { home.staffContacts = null; homeStatus(`Sin contactos: ${cloudErrorText(err)}.`); }
+    if (team.id === teamId && home.view === 'staff') renderHome();
+  }
+  function staffContactHtml(m) {
+    if (!canKeepStaffContacts()) return '';
+    if (!home.staffContacts) return '<p class="note">Cargando correo y teléfono…</p>';
+    const c = home.staffContacts.get(m.id) || { email: '', phone: '' }, id = esc(m.id);
+    return `<div class="staff-contact"><p class="note">Para recibir los informes al final de cada partido. Solo lo ven los entrenadores.</p>
+      <label class="field">Correo<input class="in" id="staff-contact-email" type="email" inputmode="email" autocomplete="off" placeholder="nombre@correo.es" value="${esc(c.email)}"></label>
+      <label class="field">Teléfono (WhatsApp)<input class="in" id="staff-contact-phone" type="tel" inputmode="tel" autocomplete="off" placeholder="600 11 22 33" value="${esc(c.phone)}"></label>
+      <div class="row-actions"><button class="btn primary press" type="button" data-staff-contact-save="${id}">Guardar contacto</button></div></div>`;
+  }
+  async function saveStaffContactFromPage(staffId) {
+    const email = $('staff-contact-email').value.trim(), phone = normalPhone($('staff-contact-phone').value);
+    if (email && !EMAIL_PATTERN.test(email)) { homeStatus('Revisa el correo.'); return; }
+    if (phone === null) { homeStatus('Revisa el teléfono: con el prefijo si no es de España (+351…).'); return; }
+    try {
+      await backend.saveStaffContact(team.id, staffId, { email, phone });
+      home.staffContacts = new Map(home.staffContacts || []).set(staffId, { email, phone });
+      renderHome();
+      homeStatus('Contacto guardado.');
+    } catch (err) { homeStatus(`No se pudo guardar: ${cloudErrorText(err)}.`); }
   }
   // Every change saves the whole list; resolves to whether it was saved.
   async function saveStaff(staff) {
@@ -8493,7 +8553,12 @@ table { border-collapse: collapse; width: 100%; }
     if (await saveStaff([...teamStaff(), member])) showStaff(member.id);
   }
   async function removeStaff(id) {
-    if (await saveStaff(teamStaff().filter((m) => m.id !== id))) showTeamPage();
+    if (!(await saveStaff(teamStaff().filter((m) => m.id !== id)))) return;
+    if (canKeepStaffContacts()) {
+      try { await backend.deleteStaffContact(team.id, id); }
+      catch (err) { console.warn(`Staff contact ${id} not deleted: ${cloudErrorText(err)}`); }
+    }
+    showTeamPage();
   }
   // The accounts with full access (owner and coaches) that have no profile yet; the owner first. Known once «Editar
   // equipo» has loaded the accounts.
@@ -11457,6 +11522,7 @@ table { border-collapse: collapse; width: 100%; }
     if (b.dataset.staffPhoto) { home.staffPhotoFor = b.dataset.staffPhoto; $('photo-file').click(); return; }
     if (b.dataset.staffPhotoClear) { editStaff(b.dataset.staffPhotoClear, { photo: null }); return; }
     if (b.dataset.staffOpen) { showStaff(b.dataset.staffOpen); return; }
+    if (b.dataset.staffContactSave) { saveStaffContactFromPage(b.dataset.staffContactSave); return; }
     if (b.dataset.staffRole) { const [id, role] = b.dataset.staffRole.split(':'); setStaffRole(id, role); return; }
     if (b.dataset.teamPos) { const [id, pos] = b.dataset.teamPos.split(':'); saveTeamPlayer(rosterPlayer(id), { pos }); return; }
     if (b.hasAttribute('data-team-export')) { exportRoster(team.name, home.roster, 'home-status'); return; }
