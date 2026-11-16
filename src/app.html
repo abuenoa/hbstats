@@ -7093,7 +7093,9 @@ table { border-collapse: collapse; width: 100%; }
   // The messages read the same on WhatsApp and in the e-mails: a headline with the score, the match's place and day,
   // a short body, the PDF links on their own lines (nothing glued to them) and the app. WhatsApp's *bold* marks are
   // dropped in the e-mails.
-  const REPORT_ICONS = { match: '🤾', place: '📍', rating: '⭐', mvp: '🏆', goals: '🎯', pdf: '📄', squad: '👥', app: '📲' };
+  // Symbols of the Basic Multilingual Plane only: WhatsApp's link turns emoji beyond it (🤾, 📄…) into «�» on its web
+  // and desktop apps.
+  const REPORT_ICONS = { match: '▶', place: '➤', rating: '⭐', mvp: '♛', goals: '✔', pdf: '⬇', squad: '⬇', app: '➜' };
   const reportHeadline = (s) => [`${REPORT_ICONS.match} *${scoreLine(s, score(s.events))}*`, [matchPlaceText(s), dateText(s.date)].filter(Boolean).join(' · ')]
     .map((line, i) => (i && line ? `${REPORT_ICONS.place} ${line}` : line)).filter(Boolean);
   const reportLinkLines = (label, url, icon = REPORT_ICONS.pdf) => (url ? ['', `${icon} *${label}*`, url] : []);

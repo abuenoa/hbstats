@@ -2897,7 +2897,7 @@
         if (staffCalls.length !== 1 || staffCalls[0].files.map((f) => `${f.filename}:${f.pdf}`).join() !== 'informe-a-b.pdf:QUJD,jugadores-a-b.pdf:REU=' || !staffCalls[0].subject.includes('informe del partido') || !staffCalls[0].text.includes('Zona6')) throw new Error('staff ' + JSON.stringify(staffCalls));
         if (!state.staffMailed || state.staffMailed.sent !== 2 || !$('send-reports').textContent.includes('Reenviar al cuerpo técnico')) throw new Error('staff mailing not recorded');
         const r = calls[0][0];
-        if (r.pdf !== 'QUJD' || !/\.pdf$/.test(r.filename) || !r.subject.includes('tu informe') || !r.text.includes('Nota:') || !r.text.includes(`¡Hola, ${playerById('p8').name}!`) || !r.text.startsWith('🤾 *')) throw new Error(JSON.stringify(r));
+        if (r.pdf !== 'QUJD' || !/\.pdf$/.test(r.filename) || !r.subject.includes('tu informe') || !r.text.includes('Nota:') || !r.text.includes(`¡Hola, ${playerById('p8').name}!`) || !r.text.startsWith(`${REPORT_ICONS.match} *`)) throw new Error(JSON.stringify(r));
         if (!state.reportsMailed || state.reportsMailed.sent !== 1 || mailedIsStale()) throw new Error('not recorded');
         if (!$('send-reports').textContent.includes('Reenviar por correo')) throw new Error($('send-reports').textContent);
         openFinal(); await ui.sendReportsReady;
@@ -3091,12 +3091,14 @@
         state.reportLinks = { version: REPORT_LINKS_VERSION, log: sharedLogOf(state), at: new Date().toISOString(), expiresAt: new Date(Date.now() + REPORT_LINK_SECONDS * 1000).toISOString(),
           match: url, players: url + 'x', byPlayer: { p8: url } };
         const lines = playerReportText(playerById('p8')).split('\n');
-        if (!lines[0].startsWith('🤾 *') || !lines.includes(`¡Hola, ${playerById('p8').name}! Así fue tu partido:`) || !lines.some((l) => l.startsWith('⭐ Nota: *'))) throw new Error(lines.join(' | '));
+        if (!lines[0].startsWith(`${REPORT_ICONS.match} *`) || !lines.includes(`¡Hola, ${playerById('p8').name}! Así fue tu partido:`) || !lines.some((l) => l.startsWith(`${REPORT_ICONS.rating} Nota: *`))) throw new Error(lines.join(' | '));
         const at = lines.indexOf(url);
-        if (at < 1 || lines[at - 1] !== '📄 *Tu informe en PDF*' || lines.at(-1) !== appLink()) throw new Error(lines.join(' | '));
+        if (at < 1 || lines[at - 1] !== `${REPORT_ICONS.pdf} *Tu informe en PDF*` || lines.at(-1) !== appLink()) throw new Error(lines.join(' | '));
         const staff = staffReportText({ name: 'Jorge' }).split('\n');
-        if (!staff.includes('¡Hola, Jorge! Aquí tienes el informe del partido:') || staff[staff.indexOf(url) - 1] !== '📄 *Informe del partido (PDF)*' || staff[staff.indexOf(url + 'x') - 1] !== '👥 *Informe de jugadores (PDF)*') throw new Error(staff.join(' | '));
+        if (!staff.includes('¡Hola, Jorge! Aquí tienes el informe del partido:') || staff[staff.indexOf(url) - 1] !== `${REPORT_ICONS.pdf} *Informe del partido (PDF)*` || staff[staff.indexOf(url + 'x') - 1] !== `${REPORT_ICONS.squad} *Informe de jugadores (PDF)*`) throw new Error(staff.join(' | '));
         if (staff.some((l, i) => l === '' && staff[i - 1] === '')) throw new Error('two blank lines');
+        const astral = [...playerReportText(playerById('p8')), ...staffReportText({ name: 'Jorge' })].filter((ch) => ch.codePointAt(0) > 0xffff);
+        if (astral.length) throw new Error('symbols WhatsApp web breaks: ' + astral.join(' '));
       } finally { restore(snap); }
     });
     await TA('new version: loads at once on the team pages, waits (with one hint) while a match is open', async () => {
