@@ -3174,6 +3174,67 @@
         if (button().textContent !== 'Reenviar' || button().disabled) throw new Error('not re-sendable');
       });
     });
+    await TA('compartir: the MVP image first, and under it the summary with the links to both PDFs', async () => {
+      await withReportLinks({}, async () => {
+        const shared = [], unstub = sheetStubs(() => true, async (data) => { shared.push(data); });
+        try {
+          openFinal(); await ui.sendReportsReady; await allReady();
+          const links = currentReportLinks();
+          if (!links) throw new Error('no links');
+          $('final').querySelector('[data-final-share]').click();
+          if (shared.length !== 1) throw new Error('shared ' + shared.length + ' ' + $('final-status').textContent);
+          const names = shared[0].files.map((f) => f.name);
+          if (!/^mvp-.+\.png$/.test(names[0]) || !/^puntuaciones-.+\.png$/.test(names[1]) || names.slice(2).join() !== (ui.reportFiles || []).map((f) => f.name).join()) throw new Error(names.join());
+          const text = shared[0].text;
+          if (!text.startsWith(`*${finalTitle()}*`) || !text.includes(`*Informe del partido (PDF)*\n${links.match}`) || !text.includes(`*Informe de jugadores (PDF)*\n${links.players}`)) throw new Error(text);
+          if (text.indexOf(links.match) > text.indexOf(links.players) || text.includes(links.byPlayer.p8)) throw new Error('order or a player link: ' + text);
+          if (shareText(state) !== text) throw new Error('the share text is not the summary');
+        } finally { unstub(); }
+      });
+    });
+    await TA('compartir: waits while the PDF links are prepared, then shares them inside the tap; failed links do not block it', async () => {
+      let release;
+      const held = new Promise((res) => { release = res; });
+      await withReportLinks({ uploadReport: () => held }, async () => {
+        const shared = [], unstub = sheetStubs(() => true, async (data) => { shared.push(data); });
+        const tap = () => $('final').querySelector('[data-final-share]').click();
+        try {
+          openFinal(); await allReady();
+          while (!ui.reportLinksJob) await new Promise((res) => setTimeout(res, 5));
+          tap();
+          if (shared.length || !$('final-status').textContent.includes('enlaces se están preparando')) throw new Error('shared before the links: ' + $('final-status').textContent);
+          release(); await ui.sendReportsReady;
+          tap();
+          if (shared.length !== 1 || !shared[0].text.includes('(PDF)*\nhttps://links.test/')) throw new Error('not shared with the links: ' + (shared[0] && shared[0].text));
+        } finally { unstub(); }
+      });
+      await withReportLinks({ uploadReport: async () => { throw new Error('Bucket not found'); } }, async () => {
+        const shared = [], unstub = sheetStubs(() => true, async (data) => { shared.push(data); });
+        try {
+          openFinal(); await ui.sendReportsReady; await allReady();
+          $('final').querySelector('[data-final-share]').click();
+          if (shared.length !== 1 || shared[0].text.includes('(PDF)') || !shared[0].files[0].name.startsWith('mvp-')) throw new Error('failed links blocked the share: ' + $('final-status').textContent);
+        } finally { unstub(); }
+      });
+    });
+    await TA('compartir: links outdated by a change are rebuilt on the tap, and the next tap shares the new ones', async () => {
+      await withReportLinks({}, async (log) => {
+        const shared = [], unstub = sheetStubs(() => true, async (data) => { shared.push(data); });
+        try {
+          openFinal(); await ui.sendReportsReady; await allReady();
+          const before = log.uploads.length;
+          addEvent('ACTION', { playerId: 'p8', action: 'BLOC' });
+          $('final').querySelector('[data-final-share]').click();
+          if (shared.length || !ui.reportLinksJob) throw new Error('shared stale links or did not rebuild them');
+          await ui.reportLinksJob;
+          $('final').querySelector('[data-final-share]').click();
+          if (shared.length !== 1 || log.uploads.length <= before || !shared[0].text.includes(currentReportLinks().match)) throw new Error('not shared with the new links');
+        } finally { unstub(); }
+      });
+    });
+    await TA('staff: «Community manager» is a job to pick', async () => {
+      if (!STAFF_JOBS.includes('Community manager')) throw new Error(STAFF_JOBS.join());
+    });
     await TA('report links: a failed upload is named on the card and nothing waits for it; texts go without links', async () => {
       await withReportLinks({ uploadReport: async () => { throw new Error('Bucket not found'); } }, async (log) => {
         ui.autoMailReports = true; openFinal(); await ui.sendReportsReady;

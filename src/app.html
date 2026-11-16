@@ -6955,8 +6955,8 @@ table { border-collapse: collapse; width: 100%; }
   }
   const SHARE_STATUS = { shared: 'Compartido.', cancelled: 'Compartir cancelado.' };
   const SHARE_TEXT = {
-    intro: 'Compartir abre el menú del sistema con la imagen del MVP, la de puntuaciones y los dos PDF: elige WhatsApp, Gmail, Drive…',
-    preparing: 'Las imágenes y los PDF se están preparando, vuelve a tocar en un momento.', denied: 'El menú de compartir no se abrió: vuelve a tocar el botón.',
+    intro: 'Compartir abre el menú del sistema con la imagen del MVP, la de puntuaciones y los dos PDF, y el resumen con los enlaces a los informes: elige WhatsApp, Instagram, Gmail, Drive…',
+    preparing: 'Las imágenes, los PDF y sus enlaces se están preparando, vuelve a tocar en un momento.', denied: 'El menú de compartir no se abrió: vuelve a tocar el botón.',
     ratingsFailed: 'No se pudo preparar la imagen de puntuaciones.',
     changed: 'Cambiado después de compartir · vuelve a compartir.'
   };
@@ -6973,7 +6973,8 @@ table { border-collapse: collapse; width: 100%; }
       if (ticket === ui.mvpCardTicket) { ui.ratingsCardBlob = false; finalStatus(SHARE_TEXT.ratingsFailed); }
     }
   }
-  // The message that goes with the files: «Triana 22–22 BM Gades», place and date, the MVP and our top scorers.
+  // The message that goes with the files, for the coaches and the club's community manager to publish: «Triana 22–22 BM
+  // Gades», place and date, the MVP, our top scorers and the links to the match PDF and the all-players PDF when they are ready.
   const SHARE_SCORERS = 5;
   // The match's top scorers, most goals first: [{ name, goals }].
   function topScorers(s = state) {
@@ -6988,8 +6989,11 @@ table { border-collapse: collapse; width: 100%; }
       [matchPlaceText(s), dateText(s.date)].filter(Boolean).join(' · '),
       best ? `MVP: ${best.name} (${ratingText(ratingValue(ratings, best))})` : '',
       scorers.length ? `Goles: ${scorers.map((p) => `${p.name} ${p.goals}`).join(', ')}` : ''
-    ].filter(Boolean).join('\n');
+    ].filter(Boolean).concat(...shareLinkLines(currentReportLinks(s))).join('\n');
   }
+  const shareLinkLines = (links) => (links ? [reportLinkLines('Informe del partido (PDF)', links.match), reportLinkLines('Informe de jugadores (PDF)', links.players, REPORT_ICONS.squad)] : []);
+  // The PDF links are on their way: the match is the team's on the server and they are neither ready nor failed.
+  const reportLinksPending = () => canSendReports() && !currentReportLinks() && !ui.reportLinksError;
   async function reportFiles() {
     await loadPdfLibs();
     const files = [];
@@ -7011,11 +7015,12 @@ table { border-collapse: collapse; width: 100%; }
     }
   }
   const shareFilename = (prefix, ext) => `${prefix}-${slug(state.us)}-${slug(state.them)}.${ext}`;
-  // What one share carries: the MVP and ratings cards and the report PDFs, or null while any of them is still being built
-  // (awaiting it would spend the tap). Each build leaves `false` when it failed, and that file is left out.
+  // What one share carries: the MVP card first, then the ratings card and the report PDFs, or null while any of them or
+  // the PDF links of its text is still being built (awaiting it would spend the tap). Each build leaves `false` when it
+  // failed, and that file is left out; failed links leave the text without them.
   function shareBundle() {
     const mvpPending = ui.mvpCardBlob === null && Boolean(matchMvp(state, matchRatings(state)).id);
-    if (mvpPending || ui.ratingsCardBlob === null || ui.reportFiles === null) return null;
+    if (mvpPending || ui.ratingsCardBlob === null || ui.reportFiles === null || reportLinksPending()) return null;
     const png = (blob, prefix) => (blob ? [new File([blob], shareFilename(prefix, 'png'), { type: blob.type })] : []);
     return [...png(ui.mvpCardBlob, 'mvp'), ...png(ui.ratingsCardBlob, 'puntuaciones'), ...(ui.reportFiles || [])];
   }
@@ -7023,7 +7028,12 @@ table { border-collapse: collapse; width: 100%; }
   // Called straight from the tap, as the sheet needs its user activation; a device that cannot share files downloads them.
   function shareMatch() {
     const files = shareBundle();
-    if (!files) { finalStatus(SHARE_TEXT.preparing); return; }
+    if (!files) {
+      // Links outdated by a change since the screen opened are rebuilt now; the next tap shares them.
+      if (reportLinksPending() && !ui.reportLinksJob) prepareReportLinks();
+      finalStatus(SHARE_TEXT.preparing);
+      return;
+    }
     const log = sharedLogOf(state);
     return shareOrDownload(files, finalTitle(), shareText(), (text) => { if (text === SHARE_STATUS.shared) ui.sharedLog = log; finalStatus(text); });
   }
@@ -8614,7 +8624,7 @@ table { border-collapse: collapse; width: 100%; }
   // One head coach and one assistant; everyone else is the staff, with a job of their own (Delegado, Fisioterapeuta…).
   const STAFF_ROLES = { head: 'Entrenador principal', assistant: 'Segundo entrenador', staff: 'Cuerpo técnico' };
   const STAFF_ORDER = Object.keys(STAFF_ROLES), UNIQUE_STAFF_ROLES = ['head', 'assistant'];
-  const STAFF_JOBS = ['Delegado', 'Oficial', 'Preparador físico', 'Entrenador de porteros', 'Fisioterapeuta', 'Auxiliar'];
+  const STAFF_JOBS = ['Delegado', 'Oficial', 'Preparador físico', 'Entrenador de porteros', 'Fisioterapeuta', 'Auxiliar', 'Community manager'];
   const staffRoleOf = (m) => (m.role in STAFF_ROLES ? m.role : 'staff');
   const staffLabel = (m) => (staffRoleOf(m) === 'staff' && m.job ? m.job : STAFF_ROLES[staffRoleOf(m)]);
   // The head coach first, then the assistant, then the staff in the order they were added.
