@@ -719,6 +719,9 @@ button.rex-chip { border: 0; cursor: pointer; position: relative; }
 .mvp-tag { font: var(--type-caption); font-weight: 800; color: var(--fg); }
 .mvp-share { display: grid; gap: var(--space-2); }
 .send-reports { display: grid; gap: var(--space-2); }
+.wa-queue { display: flex; align-items: center; gap: var(--space-2); flex-wrap: wrap; padding: var(--space-3); border-radius: var(--radius); background: var(--soft); }
+.wa-queue .note { flex: 1 1 220px; }
+.wa-queue .wa-next { flex: 1 1 260px; min-height: 56px; font-size: 18px; }
 .send-reports-mail { display: flex; align-items: center; gap: var(--space-3); flex-wrap: wrap; justify-content: space-between; }
 .send-reports-list { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: var(--space-2); }
 .send-reports-list li { display: flex; align-items: center; gap: var(--space-2); min-width: 0; }
@@ -7086,6 +7089,10 @@ table { border-collapse: collapse; width: 100%; }
     if (b.hasAttribute('data-reports-mail')) mailPlayerReports();
     if (b.hasAttribute('data-staff-mail')) mailStaffReport();
     if (b.dataset.staffWa) whatsAppStaffReport(b.dataset.staffWa);
+    if (b.hasAttribute('data-wa-queue-start')) startWhatsAppQueue();
+    if (b.hasAttribute('data-wa-queue-next')) whatsAppQueueStep(true);
+    if (b.hasAttribute('data-wa-queue-skip')) whatsAppQueueStep(false);
+    if (b.hasAttribute('data-wa-queue-end')) { ui.waQueue = null; renderSendReports(); }
     if (b.dataset.reportsWa) whatsAppPlayerReport(b.dataset.reportsWa);
   });
 
@@ -7239,6 +7246,7 @@ table { border-collapse: collapse; width: 100%; }
     };
     const linksNote = ui.reportLinksJob ? REPORT_LINKS_TEXT.busy : ui.reportLinksError;
     box.innerHTML = `${linksNote ? `<p class="note" role="status">${esc(linksNote)}</p>` : ''}
+      ${whatsAppQueueHtml()}
       <h3>Entrenadores y cuerpo técnico</h3>
       <div class="send-reports-mail"><p class="note">${esc(staffNote)}</p>
         <button class="btn primary press" type="button" data-staff-mail ${ui.staffBusy ? 'disabled' : ''}>${ui.staffBusy ? 'Enviando…' : staff ? 'Reenviar al cuerpo técnico' : 'Enviar al cuerpo técnico'}</button></div>
@@ -7250,6 +7258,38 @@ table { border-collapse: collapse; width: 100%; }
       ${ui.reportsStatus ? `<p class="note" role="status">${esc(ui.reportsStatus)}</p>` : ''}
       <ul class="send-reports-list">${players.map(row).join('')}</ul>
       <p class="note">A los grupos del equipo: «Compartir» lleva el informe completo y eliges el chat.</p>`;
+  }
+  // ---- «WhatsApp a todos»: WhatsApp sends nothing on its own, so the queue takes everyone with a phone (the staff
+  // first) and each tap opens the next chat with its message ready; back in the app, the button already names the next.
+  const whatsAppRecipients = () => [
+    ...teamStaff().filter((m) => ui.staffContacts?.get(m.id)?.phone).map((m) => ({ kind: 'staff', id: m.id, name: m.name })),
+    ...reportPlayers().filter((p) => ui.reportContacts?.get(p.id)?.phone).map((p) => ({ kind: 'player', id: p.id, name: p.name }))
+  ];
+  function whatsAppQueueHtml() {
+    if (ui.waQueue && ui.waQueue.matchId !== currentMatchId) ui.waQueue = null;
+    const all = whatsAppRecipients();
+    if (!all.length) return '';
+    const busy = Boolean(ui.reportLinksJob);
+    if (!ui.waQueue) return `<div class="wa-queue"><p class="note">Todos los WhatsApp seguidos: un toque por persona, cada chat se abre con su mensaje.</p>
+      <button class="btn go press" type="button" data-wa-queue-start ${busy ? 'disabled' : ''}>${busy ? 'Preparando…' : `WhatsApp a todos (${all.length})`}</button></div>`;
+    const q = ui.waQueue, next = q.list[q.at];
+    if (!next) return `<div class="wa-queue done"><p class="note">Hecho: ${plural(q.list.length, 'mensaje preparado', 'mensajes preparados')}.</p>
+      <button class="btn press" type="button" data-wa-queue-end>Cerrar</button></div>`;
+    return `<div class="wa-queue"><p class="note">WhatsApp a todos · ${q.at + 1} de ${q.list.length}</p>
+      <button class="btn go press wa-next" type="button" data-wa-queue-next ${busy ? 'disabled' : ''}>Enviar a ${esc(next.name)}</button>
+      <button class="btn press" type="button" data-wa-queue-skip>Saltar</button><button class="btn press" type="button" data-wa-queue-end>Terminar</button></div>`;
+  }
+  function startWhatsAppQueue() {
+    ui.waQueue = { matchId: currentMatchId, list: whatsAppRecipients(), at: 0 };
+    renderSendReports();
+  }
+  // Opens the current chat inside the tap (WhatsApp is opened before anything is awaited) and moves on.
+  function whatsAppQueueStep(send) {
+    const q = ui.waQueue, next = q && q.list[q.at];
+    if (!next) return;
+    q.at += 1;
+    if (send) (next.kind === 'staff' ? whatsAppStaffReport : whatsAppPlayerReport)(next.id);
+    renderSendReports();
   }
   // The name on a row, marked once his WhatsApp went out.
   const whoHtml = (name, sent) => `<span class="who">${esc(name)}${sent ? '<span class="note sent">enviado</span>' : ''}</span>`;
