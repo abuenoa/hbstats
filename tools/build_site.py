@@ -9,7 +9,7 @@ docs/ gets:
   sw.js                 the service worker, stamped with a content hash and the Supabase library URL
   icons/                copied from assets/icons/ (run tools/make_icons.py first)
   sounds/               copied from assets/sounds/ (the splash sound)
-  cards/                copied from assets/cards/ (textures of the shared images)
+  cards/                copied from assets/cards/ (the arena plate of the shared images)
   demo/index.html       the public demo: the same app on the sample match in progress, no sign-in, nothing saved
 
 src/app.html stays the single source of the app (it is also publishable alone, which is why it has no
@@ -36,7 +36,7 @@ SUPABASE_JS = re.compile(r"const SUPABASE_JS_URL = '(https://cdn\.jsdelivr\.net/
 SUPABASE_URL = re.compile(r"^https://[a-z0-9-]+\.supabase\.co$")
 ICON_FILES = ("favicon-32.png", "icon-192.png", "icon-512.png", "icon-maskable-512.png", "apple-touch-icon.png")
 # Media copied as they are, by folder under assets/ (and under the site).
-MEDIA_FILES = {"sounds": ("splash.mp3",), "cards": ("callup-texture.webp", "brush.webp", "ball.webp")}
+MEDIA_FILES = {"sounds": ("splash.mp3",), "cards": ("arena.webp",)}
 BACKGROUND = "#f4f3f0"
 THEME = "#151515"
 
