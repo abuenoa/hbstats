@@ -683,7 +683,7 @@
       if (state.home !== false || matchPlaceText() !== 'Vivero · Fuera' || document.querySelector('[data-match-home][aria-pressed="true"]').textContent !== 'Fuera') throw new Error('away');
       document.querySelector('[data-match-home="true"]').click();
       state.venue = '';
-      if (state.home !== true || matchPlaceText() !== 'Casa' || !shareText(state).split('\n')[1].startsWith('Casa')) throw new Error('home');
+      if (state.home !== true || matchPlaceText() !== 'Casa' || !shareText(state).split('\n')[1].startsWith(`${REPORT_ICONS.place} Casa`)) throw new Error('home');
       const icons = HOME_AWAY.map((isHome) => document.querySelector(`[data-match-home="${isHome}"] .venue-icon`)?.innerHTML);
       const drawn = (paths) => { const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg'); svg.innerHTML = paths; return svg.innerHTML; };
       if (icons[0] !== drawn(HOME_AWAY_ICONS.true) || icons[1] !== drawn(HOME_AWAY_ICONS.false)) throw new Error('house and plane icons');
@@ -2759,11 +2759,11 @@
         if (!/^mvp-.+\.png$/.test(names[0]) || !/^puntuaciones-.+\.png$/.test(names[1]) || names.slice(2).join() !== pdfs.join()) throw new Error(names.join());
         if (shared[0].title !== finalTitle()) throw new Error(shared[0].title);
         const lines = shared[0].text.split('\n');
-        if (lines[0] !== `*${finalTitle()}*`) throw new Error('score line: ' + lines[0]);
+        if (lines[0] !== `${REPORT_ICONS.match} *${finalTitle()}*`) throw new Error('score line: ' + lines[0]);
         const mvp = matchMvp(state, matchRatings(state));
-        if (mvp.id && !lines.some((l) => l.startsWith(`MVP: ${playerById(mvp.id).name} (`))) throw new Error('mvp: ' + lines);
-        const scorers = lines.find((l) => l.startsWith('Goles: '));
-        if (scorers && scorers.slice('Goles: '.length).split(', ').length > SHARE_SCORERS) throw new Error('too many scorers: ' + scorers);
+        if (mvp.id && !lines.some((l) => l.startsWith(`${REPORT_ICONS.mvp} MVP: *${playerById(mvp.id).name}* (`))) throw new Error('mvp: ' + lines);
+        const scorersHead = `${REPORT_ICONS.squad} Goleadores: `, scorers = lines.find((l) => l.startsWith(scorersHead));
+        if (scorers && scorers.slice(scorersHead.length).split(', ').length > SHARE_SCORERS) throw new Error('too many scorers: ' + scorers);
       } finally { unstub(); done(); }
     });
     await TA('final: a failed card is left out of the share instead of blocking it', async () => {
@@ -2776,10 +2776,14 @@
         if (shared.length !== 1 || shared[0].files.some((f) => f.name.startsWith('puntuaciones-')) || !shared[0].files[0].name.startsWith('mvp-')) throw new Error(JSON.stringify(shared.map((d) => d.files.map((f) => f.name))));
       } finally { unstub(); done(); }
     });
-    await TA('share text: away match puts the rival first and skips a match with no goals', async () => {
-      const s = { ...JSON.parse(snapshot()), us: 'Triana', them: 'Gades', home: false, venue: '', date: '2026-10-24', events: [], mvpId: null };
-      const text = shareText(s);
-      if (!text.startsWith('*Gades 0–0 Triana*\nFuera · ') || text.includes('Goles:')) throw new Error(text);
+    await TA('share text: the coaches\' summary without greeting; away puts the rival first; no scorers with no goals', async () => {
+      const snap = snapshot();
+      try {
+        state = { ...JSON.parse(snap), us: 'Triana', them: 'Gades', home: false, venue: '', date: '2026-10-24', events: [], mvpId: null };
+        const text = shareText(state);
+        if (!text.startsWith(`${REPORT_ICONS.match} *Gades 0–0 Triana*\n${REPORT_ICONS.place} Fuera · `) || text.includes('Goleadores:') || text.includes('¡Hola')) throw new Error(text);
+        if (!text.includes('Claves del partido') || !text.includes(`${REPORT_ICONS.goals} Tiro: `)) throw new Error('no match keys: ' + text);
+      } finally { restore(snap); }
     });
     await TA('final: share() runs inside the tap, and waits while the files are being built', async () => {
       const done = withFinal(playedFew()), shared = [];
@@ -3186,7 +3190,7 @@
           const names = shared[0].files.map((f) => f.name);
           if (!/^mvp-.+\.png$/.test(names[0]) || !/^puntuaciones-.+\.png$/.test(names[1]) || names.slice(2).join() !== (ui.reportFiles || []).map((f) => f.name).join()) throw new Error(names.join());
           const text = shared[0].text;
-          if (!text.startsWith(`*${finalTitle()}*`) || !text.includes(`*Informe del partido (PDF)*\n${links.match}`) || !text.includes(`*Informe de jugadores (PDF)*\n${links.players}`)) throw new Error(text);
+          if (!text.startsWith(`${REPORT_ICONS.match} *${finalTitle()}*`) || !text.includes('Claves del partido') || !text.includes(`*Informe del partido (PDF)*\n${links.match}`) || !text.includes(`*Informe de jugadores (PDF)*\n${links.players}`)) throw new Error(text);
           if (text.indexOf(links.match) > text.indexOf(links.players) || text.includes(links.byPlayer.p8)) throw new Error('order or a player link: ' + text);
           if (shareText(state) !== text) throw new Error('the share text is not the summary');
         } finally { unstub(); }
