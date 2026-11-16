@@ -1106,14 +1106,24 @@
     const legacy = matchRatings(rateMatch([{ id: 'old', abs: 5, kind: 'ACTION', playerId: 'a', action: 'NOATK' }]));
     if (!legacy.get('a').rated || legacy.get('b').rated || legacy.get('g').rated) throw new Error('a legacy NOATK with a player counts for that player only');
   });
+  T("rating: a 2' charges the excluded player the exclusion share of what was lost with one less", () => {
+    const events = [{ id: 'x', abs: 10, kind: 'SANCTION', playerId: 'a', card: '2M' }, rShot('b', '9M', 'FUERA', 20), rShot('b', '9M', 'GOL', 40),
+      { id: 'r1', abs: 30, kind: 'RIVAL_SHOT', gkId: 'g', zone: '9M', result: 'GOL' }, { id: 'r2', abs: 50, kind: 'RIVAL_SHOT', gkId: 'g', zone: '6M', result: 'GOL' }];
+    const cost = (share) => playerRating(rateMatch(events), fieldA, { weights: { ...ratingWeights(), exclusionShare: share } }).lines.disciplina;
+    const full = cost(1), tuned = cost(RW.weights.exclusionShare);
+    if (!(full < 0) || !nearTo(tuned, full * RW.weights.exclusionShare)) throw new Error([full, tuned].join());
+    if (!(RW.weights.exclusionShare > 0 && RW.weights.exclusionShare < 1)) throw new Error('share ' + RW.weights.exclusionShare);
+  });
   T('rating: the keeper earns goals saved above expected, at the keeper weight', () => {
     const kw = RW.weights.keeperWeight;
     const events = [...rGkShots('6M', 3, 2), { id: 'off', abs: 9, kind: 'RIVAL_SHOT', gkId: 'g', zone: '6M', result: 'FUERA' }, { id: 'other', abs: 9, kind: 'RIVAL_SHOT', gkId: 'x', zone: '9M', result: 'PARADA' }];
     const six = playerRating(rateMatch(events), keeperG).lines.porteria;
-    if (!nearTo(six, kw * PPG * (3 * RW.pOn['6M'] - 2 * (1 - RW.pOn['6M'])))) throw new Error('6 m ' + six);
+    const kg = RW.keeperGoalRate;
+    if (!nearTo(six, kw * PPG * (3 * kg['6M'] - 2 * (1 - kg['6M'])))) throw new Error('6 m ' + six);
+    if (['6M', '9M', '11M', 'CONTRA', '7M'].some((z) => !(kg[z] > RW.pOn[z]))) throw new Error('a keeper is expected to let in more than a shooter is to score');
     const pen = playerRating(rateMatch([{ id: 'p7', abs: 1, kind: 'RIVAL_SHOT', gkId: 'g', zone: '7M', result: 'PARADA' }]), keeperG).lines.porteria;
     const contra = playerRating(rateMatch([{ id: 'c', abs: 1, kind: 'RIVAL_SHOT', gkId: 'g', zone: '9M', contra: true, result: 'PARADA' }]), keeperG).lines.porteria;
-    if (!nearTo(pen, kw * PPG * RW.pOn['7M']) || !nearTo(contra, kw * PPG * RW.pOn.CONTRA)) throw new Error([pen, contra].join());
+    if (!nearTo(pen, kw * PPG * kg['7M']) || !nearTo(contra, kw * PPG * kg.CONTRA)) throw new Error([pen, contra].join());
     if (playerRating(rateMatch([{ id: 'nz', abs: 1, kind: 'RIVAL_SHOT', gkId: 'g', result: 'PARADA' }]), keeperG).rated) throw new Error('a shot with no zone is not rated');
   });
   T('rating: a red card and 0/3 is clearly negative (the case that started v5)', () => {

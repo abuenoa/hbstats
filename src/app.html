@@ -1736,13 +1736,16 @@ span.att-foot { visibility: hidden; }
       pointsPerGoal: 3, decimals: 1, minPossessions: 5, shrinkPossessions: 15, mvpFullShare: 2 / 3,
       pOn: { '6M': 0.60, '9M': 0.50, '11M': 0.40, CONTRA: 0.75, '7M': 0.75 },
       onTargetRate: { '6M': 0.80, '9M': 0.70, '11M': 0.60, CONTRA: 0.95, '7M': 0.95 },
+      // What a keeper is expected to let in of the shots on target, set a little under pOn (coach, 2026-11-16: 19 saves of 47,
+      // 40%, is a good afternoon, not an average one). Only the keeper's line reads it; the shooters keep pOn.
+      keeperGoalRate: { '6M': 0.65, '9M': 0.55, '11M': 0.45, CONTRA: 0.80, '7M': 0.78 },
       possession: 0.43, shortHanded: { att: 0.32, def: 0.58 }, superiority: { att: 0.58, def: 0.32 },
       shooterCreationShare: 0.5, exclusionSeconds: 120, lastSecondsWindow: 30, sameMomentSeconds: 2, playerLossPerMatch: 0.5,
       windows: { provoked7: 90, fastBreakStart: 10, assist: 15, counterAfterTurnover: 15 },
       context: { firstHalfCloseFrom: 1500, closeFrom: 3000, closeMargin: 2, lateFrom: 3300, lateMargin: 1, blowoutMargin: 6, blowoutFactor: 0.75 },
       defence: { goodDefence: 0.30, offensiveFoulExtra: 0.05, zoneGoal: 0.03, zoneSolid: 0.10, zoneFewerShare: 0.5, zoneMinGoals: 2 },
       weights: {
-        keeperWeight: 0.65, assist: 0.15, starter: 0.14, oneOnOne: 0.20, ruleFaultDiscount: 0.10, blocRetained: 0.12,
+        keeperWeight: 0.65, exclusionShare: 0.6, assist: 0.15, starter: 0.14, oneOnOne: 0.20, ruleFaultDiscount: 0.10, blocRetained: 0.12,
         minorFault: -0.07, teamFaultField: -0.05, teamFaultKeeper: -0.02, result: 0.25, yellow: -0.10,
         conductDirect: -0.50, conductLastSeconds: -0.30, blue: -0.25, closeFactor: 1.5, lateFactor: 2.0
       },
@@ -2764,6 +2767,7 @@ span.att-foot { visibility: hidden; }
   const RATING_KNOB_DECIMALS = 2;
   const RATING_KNOBS = [
     { key: 'keeperWeight', label: 'Peso de las paradas y goles encajados', group: 'Portería', unit: 'share', min: 0, max: 1, step: RATING_KNOB_STEP },
+    { key: 'exclusionShare', label: "Parte del 2' que paga el excluido", group: 'Sanciones', unit: 'share', min: 0, max: 1, step: RATING_KNOB_STEP },
     { key: 'assist', label: 'Asistencia', group: 'Creación', unit: 'pts', min: 0, max: 1.5, step: RATING_KNOB_STEP },
     { key: 'starter', label: 'Iniciar un contraataque', group: 'Creación', unit: 'pts', min: 0, max: 1.5, step: RATING_KNOB_STEP },
     { key: 'oneOnOne', label: '1x1: 7 m provocado, superado o cometido', group: '1x1 y 7 m', unit: 'pts', min: 0, max: 1.5, step: RATING_KNOB_STEP },
@@ -2956,7 +2960,7 @@ span.att-foot { visibility: hidden; }
     rivalShots(events).forEach((e) => {
       const z = e.contra ? ZONE_CONTRA : e.zone, set = shotCourtSet(s, e), base = stateBaselines(s, set, e.abs).def;
       if (!(z in r.pOn)) return;
-      if (e.gkId && onTarget(e)) own(e.gkId, 'porteria', r.pOn[z] - (e.result === 'GOL' ? 1 : 0), e, `${e.result === 'GOL' ? 'Gol encajado' : 'Parada'} ${ZONES[z]}`);
+      if (e.gkId && onTarget(e)) own(e.gkId, 'porteria', r.keeperGoalRate[z] - (e.result === 'GOL' ? 1 : 0), e, `${e.result === 'GOL' ? 'Gol encajado' : 'Parada'} ${ZONES[z]}`);
       if (ownedCounter.has(e)) return;
       // The field answers for the shot reaching the keeper; a 7 m is judged before the shot (its accuracy is luck).
       let value = z === '7M' ? base - preShotGoal('7M') : base - (onTarget(e) ? r.pOn[z] : 0);
@@ -3018,7 +3022,8 @@ span.att-foot { visibility: hidden; }
     const end = (s.clock && matchEndAbs(s)) || Math.max(0, ...events.map((e) => e.abs));
     const shortCost = (e) => {
       const until = Math.min(e.abs + exclusionLength(e, r.exclusionSeconds), end), inWindow = (p) => p.abs >= e.abs && p.abs < until;
-      return attackPool.filter(inWindow).length * (r.possession - r.shortHanded.att) + defencePool.filter(inWindow).length * (r.shortHanded.def - r.possession);
+      // The share of the possessions played a man down the player is charged with (the team shares the rest of it).
+      return weights.exclusionShare * (attackPool.filter(inWindow).length * (r.possession - r.shortHanded.att) + defencePool.filter(inWindow).length * (r.shortHanded.def - r.possession));
     };
     events.filter((e) => e.kind === 'SANCTION').forEach((e) => {
       if (e.card === 'A') own(e.playerId, 'disciplina', weights.yellow, e, 'Amarilla');
@@ -6067,8 +6072,8 @@ span.att-foot { visibility: hidden; }
         <b>Balón:</b> pérdida ${sign(-b)} (de reglamento ${sign(-(b - weights.ruleFaultDiscount))}; más si acaba en contraataque rival). <b>Def. individual:</b> robo ${sign(b)}, falta en ataque provocada ${sign(b + d.offensiveFoulExtra)}, buena defensa (salida, golpe, dureza) ${sign(d.goodDefence)}, blocaje ${sign(weights.blocRetained)}, 7 m cometido y 1x1 superado ${sign(-weights.oneOnOne)}.
         <b>Tu zona:</b> cada gol rival de juego (sin 7 m ni contraataques) va al defensor de su carril más cerca del lanzamiento ${sign(-d.zoneGoal)}; si tu zona encaja como mucho el ${Math.round(d.zoneFewerShare * PERCENT)}% de los goles que te tocaban (desde ${d.zoneMinGoals} goles) ${sign(d.zoneSolid)}.
         <b>Def. en pista:</b> lo que el rival consigue tirar a puerta mientras defiendes (lo que pasa después es cosa del portero), repartido entre los que estáis en pista. <b>Atq. en pista:</b> igual con nuestras posesiones.
-        <b>Portería:</b> goles evitados frente a lo esperable, al ${Math.round(kw * PERCENT)}% (parar en 6 m ${sign(r.pOn['6M'] * kw)}, encajar ${sign(-(1 - r.pOn['6M']) * kw)}; parar un 7 m ${sign(r.pOn['7M'] * kw)}).
-        <b>Disciplina:</b> el 2' cuesta lo que se perdió con uno menos; roja: eso, la conducta y el resto del partido sin el jugador. <b>Momento decisivo:</b> desde el ${r.context.firstHalfCloseFrom / SECONDS_PER_MINUTE}' de la primera parte y desde el ${r.context.closeFrom / SECONDS_PER_MINUTE}' con ±${r.context.closeMargin} goles cada acción vale ×${exact(weights.closeFactor)}; desde el ${r.context.lateFrom / SECONDS_PER_MINUTE}' con ±${r.context.lateMargin} ×${exact(weights.lateFactor)}; para bien y para mal.
+        <b>Portería:</b> goles evitados frente a lo esperable para un portero, al ${Math.round(kw * PERCENT)}% (parar en 6 m ${sign(r.keeperGoalRate['6M'] * kw)}, encajar ${sign(-(1 - r.keeperGoalRate['6M']) * kw)}; parar un 7 m ${sign(r.keeperGoalRate['7M'] * kw)}).
+        <b>Disciplina:</b> el 2' cuesta el ${Math.round(weights.exclusionShare * PERCENT)}% de lo que se perdió con uno menos; roja: eso, la conducta y el resto del partido sin el jugador. <b>Momento decisivo:</b> desde el ${r.context.firstHalfCloseFrom / SECONDS_PER_MINUTE}' de la primera parte y desde el ${r.context.closeFrom / SECONDS_PER_MINUTE}' con ±${r.context.closeMargin} goles cada acción vale ×${exact(weights.closeFactor)}; desde el ${r.context.lateFrom / SECONDS_PER_MINUTE}' con ±${r.context.lateMargin} ×${exact(weights.lateFactor)}; para bien y para mal.
         <b>Resultado:</b> ±${pts(weights.result)} según la parte del partido jugada.
         <span class="bands"><b>Valoración:</b> ${CONFIG.rating.bands.map(([from, label]) => `<span><i style="background:${bandColour(from === -Infinity ? -100 : from)}"></i>${label}${from > -Infinity ? ` ≥ ${signedText(from)}` : ''}</span>`).join('')}</span></div>`;
     }
