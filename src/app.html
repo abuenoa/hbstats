@@ -467,6 +467,33 @@ button.rex-chip { border: 0; cursor: pointer; position: relative; }
 .ev time { font-family: var(--font-display); font-weight: 700; font-size: 16px; color: var(--muted); font-variant-numeric: tabular-nums; }
 .ev.fresh { animation: flash 1.4s ease-out; }
 .strip-actions { display: flex; gap: 8px; flex: none; }
+/* ---------- «Completar jugadas»: completion mode, a gold strip on top and the time bar in place of the last plays ---------- */
+/* The score and clock (the strip shows the score), time-outs, notes, alerts, the statistics, the theme and the way out of the
+   match are not part of it: «Terminar» is the way back. */
+.app.completion-mode { grid-template-rows: auto auto minmax(0, 1fr) auto; }
+.app.completion-mode .bar .center { visibility: hidden; }
+.app.completion-mode #btn-tm-us, .app.completion-mode #btn-tm-them, .app.completion-mode #btn-stop, .app.completion-mode #btn-finish, .app.completion-mode #btn-sheet,
+.app.completion-mode #btn-theme, .app.completion-mode #btn-home, .app.completion-mode .note-box, .app.completion-mode .alerts { display: none; }
+.completing { display: flex; align-items: center; gap: 12px; min-width: 0; border-radius: var(--radius); padding: 4px 4px 4px 16px; background: var(--gold); color: var(--on-gold); }
+.completing-title { margin: 0; min-width: 0; font-size: 15px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.completing-title b { font-family: var(--font-display); font-weight: 800; text-transform: uppercase; letter-spacing: .02em; }
+.completing-score { flex: none; font: 800 24px/1 var(--font-display); font-variant-numeric: tabular-nums; white-space: nowrap; }
+.completing-gap { flex: none; font-size: 13px; font-weight: 700; white-space: nowrap; }
+.completing .spacer { flex: 1 1 auto; }
+.completing .btn { flex: none; }
+.time-bar { flex: 1; min-width: 0; display: flex; align-items: center; gap: 6px; }
+.completing[hidden], .time-bar[hidden], .events[hidden] { display: none; }
+.time-play { flex: 1 1 auto; min-width: 64px; font-size: 14px; line-height: 1.2; overflow: hidden; display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; }
+.time-choice { flex: none; flex-direction: column; gap: 0; padding: 2px 8px; font-size: 13px; line-height: 1.15; white-space: nowrap; }
+.time-choice small { font-size: 11px; font-weight: 700; color: var(--muted); }
+.time-choice[aria-pressed="true"] { background: var(--gold); color: var(--on-gold); border-color: transparent; }
+.time-choice[aria-pressed="true"] small { color: inherit; }
+.time-exact { display: flex; align-items: center; gap: 6px; margin: 0; }
+.time-exact .seg { flex: none; margin: 0; }
+.time-exact .seg button { min-height: var(--target); padding: 0 10px; }
+.time-exact .time-in { width: 110px; min-height: var(--target); font-size: 22px; }
+.pop .time-choices { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
+.pop .time-choices .time-exact { grid-column: 1 / -1; flex-wrap: wrap; }
 /* Leaving the match: first in the strip and red, so it reads apart from the match actions. */
 .btn.back { flex: none; display: inline-flex; align-items: center; gap: var(--space-1); background: var(--red); color: #ffffff; border-color: transparent; }
 @keyframes flash { from { box-shadow: 0 0 0 3px var(--gold); } to { box-shadow: 0 0 0 0 transparent; } }
@@ -598,10 +625,9 @@ button.rex-chip { border: 0; cursor: pointer; position: relative; }
 .more summary { min-height: 44px; display: flex; align-items: center; font-weight: 700; cursor: pointer; }
 .halftime-points { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
 @media (max-width: 700px) { .kpi-tiles { grid-template-columns: repeat(2, minmax(0, 1fr)); } .halftime-points, .final-hero { grid-template-columns: minmax(0, 1fr); } }
-/* ---------- «Completar jugadas»: the play editor (dark, like the match report; the live colours carry the dark dorsal ink) ---------- */
+/* ---------- «Completar jugadas»: the review list (dark, like the match report; the live colours carry the dark dorsal ink) ---------- */
 .plays { position: fixed; inset: 0; z-index: 19; box-sizing: border-box; padding: var(--space-4); background: var(--bg); color: var(--fg); overflow: auto; }
 .plays-card { box-sizing: border-box; height: 100%; display: grid; grid-template-rows: auto auto auto minmax(0, 1fr) auto; border-radius: var(--radius-xl); background: var(--glass-strong); border: 1px solid var(--glass-edge); box-shadow: var(--pop-shadow); overflow: hidden; }
-.plays-card.composing { grid-template-rows: auto minmax(0, 1fr) auto; }
 .plays-top { display: flex; align-items: center; gap: var(--space-3); padding: var(--space-3) var(--space-5); border-bottom: 1px solid var(--line); min-width: 0; }
 .plays-title { min-width: 0; }
 .plays-title h2 { margin: 0; font: 800 26px/1 var(--font-display); text-transform: uppercase; letter-spacing: .01em; white-space: nowrap; }
@@ -635,82 +661,28 @@ button.rex-chip { border: 0; cursor: pointer; position: relative; }
 .play-empty { padding: var(--space-4); }
 .play-block { display: flex; align-items: center; gap: var(--space-2); min-height: var(--target); padding-left: var(--space-4); background: var(--soft); color: var(--muted); font: var(--type-caption); font-weight: 700; letter-spacing: .04em; }
 .play-block b { margin-left: auto; padding-right: var(--space-2); color: var(--fg); font: 700 16px/1 var(--font-display); font-variant-numeric: tabular-nums; }
-.play-block button { width: var(--target); height: var(--target); border: 0; border-left: 1px solid var(--line); background: var(--btn); color: var(--fg); font-size: 18px; font-weight: 700; }
 .play-row { display: flex; align-items: center; gap: 10px; box-sizing: border-box; width: 100%; min-height: var(--target); padding: 0 var(--space-4); border: 0; border-bottom: 1px solid var(--line); background: transparent; color: var(--fg); text-align: left; font-size: 14px; }
-.play-row time, .play-here time { flex: none; width: 46px; font: 700 17px/1 var(--font-display); color: var(--muted); font-variant-numeric: tabular-nums; }
+.play-row time { flex: none; min-width: 46px; font: 700 17px/1 var(--font-display); color: var(--muted); font-variant-numeric: tabular-nums; white-space: nowrap; }
+.play-row time.loose { font-size: 13px; color: var(--color-warning-text); }
 .play-row .dot { width: 10px; height: 10px; flex: none; border-radius: 50%; }
-.play-row .txt, .play-here .txt { flex: 1; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.play-row .sc, .play-here .sc { flex: none; font: 700 16px/1 var(--font-display); font-variant-numeric: tabular-nums; color: var(--muted); }
+.play-row .txt { flex: 1; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.play-row .sc { flex: none; font: 700 16px/1 var(--font-display); font-variant-numeric: tabular-nums; color: var(--muted); }
 .play-tag { flex: none; padding: 1px var(--space-2); border-radius: var(--radius-full); border: 1px solid var(--line); font-size: 11px; font-weight: 700; color: var(--muted); white-space: nowrap; }
 .play-tag.late { color: var(--act-def); border-color: color-mix(in srgb, var(--act-def) 50%, transparent); }
 .play-tag.bad { color: var(--color-warning-text); border-color: color-mix(in srgb, var(--dos) 55%, transparent); }
 .play-row.fix { background: color-mix(in srgb, var(--gold) 10%, transparent); }
 .play-row.fix .txt { color: var(--color-warning-text); font-weight: 600; }
 .play-assign { flex: none; padding: 4px var(--space-3); border-radius: var(--radius-sm); background: var(--gold); color: var(--on-gold); font-size: 13px; font-weight: 700; }
-.play-here { display: flex; align-items: center; gap: var(--space-2); min-height: var(--target); padding: 0 var(--space-4); border-block: 2px dashed var(--gol); background: color-mix(in srgb, var(--gol) 10%, transparent); color: var(--color-success-text); font-size: 13px; font-weight: 700; }
-.play-here time { color: inherit; }
 .plays-status { margin: 0; min-height: 1.4em; padding: 0 var(--space-5) var(--space-2); font: var(--type-caption); color: var(--muted); }
-/* Composing: the half of the play on the left, the four steps on the right */
-.plays-split { display: grid; grid-template-columns: minmax(0, 1fr) 520px; gap: var(--space-4); padding: var(--space-3) var(--space-5) 0; min-height: 0; }
-.composer { display: flex; flex-direction: column; min-height: 0; min-width: 0; background: var(--surface); border-radius: var(--radius-lg); box-shadow: var(--ring), 0 0 0 2px color-mix(in srgb, var(--gol) 40%, transparent); overflow: hidden; }
-.composer-body { flex: 1; min-height: 0; overflow-y: auto; overscroll-behavior: contain; padding: var(--space-3) var(--space-4); display: grid; gap: var(--space-3); align-content: start; }
-.cmp-assign { margin: 0; font: 800 15px/1 var(--font-display); letter-spacing: .06em; text-transform: uppercase; color: var(--color-warning-text); }
-.cmp-step > header { display: flex; align-items: center; flex-wrap: wrap; gap: var(--space-2); margin-bottom: var(--space-2); }
-.cmp-step > header .k { width: 22px; height: 22px; flex: none; border-radius: 50%; display: grid; place-items: center; background: var(--soft); color: var(--muted); font: 800 14px/1 var(--font-display); }
-.cmp-step > header h3 { margin: 0; font: 800 17px/1 var(--font-display); text-transform: uppercase; letter-spacing: .03em; }
-.cmp-step > header output { color: var(--color-success-text); font: 700 17px/1 var(--font-display); font-variant-numeric: tabular-nums; }
-.cmp-step > header .seg { margin: 0 0 0 auto; }
-.cmp-step > header .seg button { min-height: var(--target); padding: 0 var(--space-3); }
-.cmp-mins { display: grid; grid-template-columns: repeat(10, minmax(0, 1fr)); gap: 4px; }
-.cmp-mins button, .cmp-secs button { min-height: var(--target); padding: 0; border-radius: 10px; border: 1px solid var(--line); background: var(--btn); color: var(--fg); font: 700 17px/1 var(--font-display); font-variant-numeric: tabular-nums; }
-.cmp-mins button.has { box-shadow: inset 0 -3px 0 var(--faint); }
-.cmp-mins button[aria-pressed="true"], .cmp-secs button[aria-pressed="true"] { background: var(--gol); border-color: transparent; color: var(--dorsal-ink); box-shadow: none; }
-.cmp-secs { display: flex; align-items: center; gap: 4px; margin-top: var(--space-2); }
-.cmp-secs .note { margin-right: var(--space-2); }
-.cmp-secs button { min-width: 52px; }
-.cmp-tiles { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 6px; }
-.composer .act { min-height: var(--target); font-size: 13px; padding: 0 4px; color: var(--dorsal-ink); }
-.cmp-tiles .act[aria-pressed="true"], .cmp-sub-acts .act[aria-pressed="true"] { outline: 3px solid var(--fg); outline-offset: 2px; }
-.cmp-subs { display: grid; gap: 6px; margin-top: var(--space-2); }
-.cmp-sub-row { display: grid; grid-template-columns: 88px minmax(0, 1fr); gap: var(--space-2); align-items: center; }
-.cmp-sub-row > span { font-size: 11px; font-weight: 800; letter-spacing: .08em; text-transform: uppercase; color: var(--muted); }
-.cmp-sub-acts { display: grid; grid-template-columns: repeat(auto-fill, minmax(84px, 1fr)); gap: 6px; }
-.composer .act.card-btn { min-height: 56px; color: var(--fg); }
-.cmp-picks { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 6px; }
-.cmp-picks.keepers { grid-template-columns: repeat(2, minmax(0, 1fr)); }
-.composer .pick { min-height: var(--target); padding: 0 6px 0 4px; gap: 6px; font-size: 13px; }
-.composer .pick .disc { width: 30px; height: 30px; font-size: 15px; flex: none; }
-.composer .pick em { margin-left: auto; font-style: normal; font-size: 11px; font-weight: 800; color: var(--color-warning-text); }
-.composer .pick span:last-child { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.cmp-picks.bench .pick { font-size: 12px; color: var(--muted); }
-.cmp-picks.bench .disc { width: 24px; height: 24px; font-size: 12px; }
-.cmp-label { margin: var(--space-2) 0 var(--space-1); color: var(--muted); font-size: 11px; font-weight: 700; letter-spacing: .05em; text-transform: uppercase; }
-.composer .rival-picks .rpick { min-height: var(--target); }
-.cmp-zones { display: flex; flex-wrap: wrap; gap: 6px; }
-.cmp-zones .cmp-pass { margin-left: auto; }
-.composer .note.warn, .pop .note.warn { color: var(--color-warning-text); }
-.composer footer { display: grid; gap: var(--space-2); padding: var(--space-2) var(--space-4) var(--space-3); border-top: 1px solid var(--line); }
-.cmp-effect { margin: 0; font: var(--type-caption); color: var(--muted); }
-.cmp-effect b, .cmp-switch b { color: var(--fg); }
-.cmp-switch { display: flex; align-items: center; gap: var(--space-2); min-height: var(--target); padding: 0; border: 0; background: transparent; color: var(--muted); font: var(--type-caption); text-align: left; }
-.cmp-switch i { position: relative; width: 40px; height: 24px; flex: none; border-radius: 12px; background: var(--faint); transition: background var(--dur-state) var(--ease-out); }
-.cmp-switch i::after { content: ""; position: absolute; top: 3px; left: 3px; width: 18px; height: 18px; border-radius: 50%; background: var(--surface); transition: transform var(--dur-state) var(--ease-out); }
-.cmp-switch[aria-checked="true"] i { background: var(--gol); }
-.cmp-switch[aria-checked="true"] i::after { transform: translateX(16px); }
-.cmp-acts { display: flex; gap: var(--space-2); }
-.cmp-acts .btn { min-height: 52px; white-space: nowrap; }
-.cmp-acts .btn.go { flex: 1; }
-/* The popup of a play: its fields, each opening the composer on that value */
+.pop .note.warn { color: var(--color-warning-text); }
+/* The popup of a play */
 .pop .pop-title { font-size: 17px; }
-.pop .field { display: flex; align-items: center; gap: 10px; min-height: var(--target); padding: 0 var(--space-3); border-radius: var(--radius-md); border: 1px solid var(--line); background: var(--btn); color: var(--fg); text-align: left; }
-.pop .field small { width: 76px; flex: none; color: var(--muted); font-size: 12px; font-weight: 700; text-transform: uppercase; letter-spacing: .04em; }
-.pop .field::after { content: "›"; margin-left: auto; color: var(--faint); font-size: 20px; }
 .pop .check { display: flex; align-items: center; gap: 10px; min-height: var(--target); padding: var(--space-2) var(--space-3); border: 0; border-radius: var(--radius-md); background: var(--soft); color: var(--fg); font-size: 14px; text-align: left; }
 .pop .check i { width: 22px; height: 22px; flex: none; box-sizing: border-box; border-radius: 6px; border: 2px solid var(--muted); display: grid; place-items: center; color: transparent; font-style: normal; font-weight: 900; }
 .pop .check[aria-checked="true"] i { background: var(--gol); border-color: var(--gol); color: var(--on-color); }
 @media (max-width: 820px) {
   .plays { padding: var(--space-2); }
-  .plays-card, .plays-card.composing { height: auto; min-height: 100%; display: block; overflow: visible; }
+  .plays-card { height: auto; min-height: 100%; display: block; overflow: visible; }
   .plays-top { flex-wrap: wrap; padding: var(--space-3); gap: var(--space-2); }
   .plays-title { order: 1; flex: 1 1 100%; }
   .plays-top .spacer { display: none; }
@@ -725,16 +697,6 @@ button.rex-chip { border: 0; cursor: pointer; position: relative; }
   .play-half.phone-hidden { display: none; }
   .play-tag.window { display: none; }
   .play-list { max-height: 60vh; }
-  .plays-split { grid-template-columns: minmax(0, 1fr); padding: var(--space-2) var(--space-3) var(--space-3); gap: var(--space-3); }
-  .plays-split .play-list { max-height: 200px; }
-  .composer-body { overflow: visible; padding: var(--space-3); }
-  .cmp-mins { grid-template-columns: repeat(6, minmax(0, 1fr)); }
-  .cmp-tiles { grid-template-columns: repeat(3, minmax(0, 1fr)); }
-  .cmp-picks { grid-template-columns: repeat(2, minmax(0, 1fr)); }
-  .cmp-step > header .seg { margin-left: 0; }
-  .cmp-acts { flex-wrap: wrap; }
-  .cmp-acts .btn { flex: 1; }
-  .cmp-acts .btn.go { flex: 1 1 100%; order: -1; }
   .plays-status { padding: var(--space-2) var(--space-3); }
 }
 .mvp-pick { display: grid; gap: var(--space-2); }
@@ -914,6 +876,16 @@ td.zero { color: var(--color-text-tertiary); }
   .bar { grid-template-columns: 1fr 1fr; }
   .bar .center { grid-column: 1 / -1; order: -1; justify-content: center; }
   .strip { flex-wrap: wrap; }
+  .completing, .time-bar { flex-wrap: wrap; }
+  /* The page scrolls: the strip with the time bar stays in view, and the scoreboard row gives its room. */
+  .app.completion-mode .bar .center { display: none; }
+  .app.completion-mode .strip { position: sticky; bottom: 8px; z-index: 6; align-items: center; }
+  .completing { padding: 8px 8px 8px 12px; }
+  .time-play { flex-basis: 100%; }
+  .time-choice { flex: 1 1 40%; }
+  .time-exact { flex: 1 1 100%; flex-wrap: wrap; }
+  .time-exact .seg { flex: 1 1 100%; }
+  .time-exact .time-in { flex: 1; }
   .alerts { position: static; width: auto; padding: 8px 0 0; }
 }
 @media (max-height: 680px) and (min-width: 1001px) {
@@ -1546,6 +1518,7 @@ span.att-foot { visibility: hidden; }
 </style>
 
 <div class="app">
+  <div class="completing" id="completing" role="region" aria-label="Completar jugadas" hidden></div>
   <header class="bar glass" aria-label="Marcador">
     <div class="side us">
       <img class="crest" id="bar-crest" alt="" src="">
@@ -1646,6 +1619,7 @@ span.att-foot { visibility: hidden; }
   <footer class="strip glass">
     <button class="btn back press" id="btn-home" type="button" aria-label="Atrás, a Partidos"><svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M15 5l-7 7 7 7"/></svg><span>Atrás</span></button>
     <div class="events" id="events" aria-label="Últimas acciones (toca una para borrarla)"></div>
+    <div class="time-bar" id="time-bar" role="group" aria-label="¿Cuándo fue la jugada?" hidden></div>
     <div class="strip-actions">
       <button class="btn press" id="btn-undo" type="button" aria-label="Deshacer">↶</button>
       <button class="btn press" id="btn-redo" type="button" aria-label="Rehacer">↷</button>
@@ -2004,8 +1978,8 @@ span.att-foot { visibility: hidden; }
     photos: new Map(),
     // A provoked (us) or committed (them) 7 m waiting for its shot: { team, eventId, byId }.
     penalty: null,
-    // «Completar jugadas»: the open editor (see openPlays), and the second and zone of its last play, kept for the next one.
-    plays: null, playsLast: null,
+    // «Completar jugadas»: completion mode on the live screen (see startCompleting), and its review list (see openPlays).
+    completing: null, plays: null,
     // The log as it was when the final report was last shared, to say when it changed since.
     sharedLog: null,
     // Right panel: 'acts' (actions to arm) or 'kpis' (live stats). Armed action: { key, sub } until a player is tapped.
@@ -2169,9 +2143,11 @@ span.att-foot { visibility: hidden; }
   // A window starts at its sanction, or earlier when a correction moved the clock back while it ran. A 2' that had already
   // ended is never shifted, so moving the clock back (to add a play late) leaves it served, not running.
   const exclusionStart = (e) => e.abs + Math.min(0, e.clockShift || 0);
+  // A 2' added after the fact is history: it never runs, shows a chip, rings or moves with the clock.
+  const runsLive = (e) => !e.late;
   function runningExclusions(events) {
     const now = absSeconds();
-    return events.filter((e) => exclusionStart(e) <= now && now < exclusionEnd(e))
+    return events.filter((e) => runsLive(e) && exclusionStart(e) <= now && now < exclusionEnd(e))
       .map((e) => ({ event: e, remaining: exclusionEnd(e) - now }));
   }
   const activeExclusions = () => runningExclusions(exclusionEvents());
@@ -2347,7 +2323,6 @@ span.att-foot { visibility: hidden; }
 
   const rivalById = (id, s = state) => (s.rivals || []).find((r) => r.id === id) || null;
   const rivalLabel = (r) => (r.name ? `#${r.num} ${r.name}` : `#${r.num}`);
-  const sortedRivals = () => state.rivals.slice().sort((a, b) => a.num - b.num);
   // "Rival #7 Pérez", or just the team when the event has no dorsal.
   const exclusionTargetLabel = (e, s = state) => (e.kind === 'SANCTION' ? `#${playerById(e.playerId, s).num} ${playerById(e.playerId, s).name}` : rivalTeamLabel(e.rivalId, s));
   const rivalTeamLabel = (rivalId, s = state) => { const r = rivalById(rivalId, s); return r ? `${s.them} ${rivalLabel(r)}` : s.them; };
@@ -2468,7 +2443,9 @@ span.att-foot { visibility: hidden; }
   // `opts.bringOn`: the player who acts; from the bench they come on in the same undoable step.
   // `opts.penalty`: the pending penalty this event (its shot) used up; undo brings it back.
   // Returns { unplaced }: a bench player with nobody of their position on court to swap with.
+  // In completion mode a play is logged late instead (see addCompletedPlay); ending a running 2' keeps its live second.
   function addEvent(kind, data, opts = {}) {
+    if (ui.completing && kind !== 'EXCLUSION_END') return addCompletedPlay(kind, data);
     const e = makeEvent(kind, data);
     const stops = stopsClock(e);
     if (stops) pauseClock(); else autoStartClock(kind);
@@ -2559,9 +2536,17 @@ span.att-foot { visibility: hidden; }
   }
   function commit(opts) { noteCourt(); save(); renderAll(opts); }
 
-  // ---- Plays added or corrected after the whistle («Completar jugadas») ----
+  // ---- Plays added after the fact («Completar jugadas») ----
   // None of these reads or writes the clock, the lineups, the phase or a pending penalty: the match stays where it is and
   // only the log changes, one undoable operation each. The court log is never edited, so minutes do not change.
+  // A play added late has a `timing`: 'none' (sin tiempo: it sorts last, at the end of the clock), 'bucket' (a quarter
+  // of the match, `bucket` names it: at its middle second) or 'exact' (its second). Only an exact play has a match time:
+  // the others count in every figure but carry no court stamp and no leverage. Plays without `timing` were logged live.
+  const PLAY_TIMING = { NONE: 'none', BUCKET: 'bucket', EXACT: 'exact' };
+  const hasMatchTime = (e) => !e.timing || e.timing === PLAY_TIMING.EXACT;
+  // The second a play without time sorts at: the end of the clock, after every play logged live.
+  const untimedAbs = () => Math.floor(matchEndAbs());
+  const untimedTime = () => ({ abs: untimedAbs(), timing: PLAY_TIMING.NONE });
   // Who played a play added at its second: the lineup of that second without whoever was serving a 2' or sent off, with
   // the player who acts (or the chosen keeper) in for a teammate of his position. Undefined without a lineup to read.
   function pastCourtStamp(e) {
@@ -2579,8 +2564,17 @@ span.att-foot { visibility: hidden; }
     return internCourtSet(ids.sort());
   }
   const stampedForPast = (e) => { const on = pastCourtStamp(e); if (on == null) delete e.on; else e.on = on; return e; };
+  // A copy of play `e` at time `at` ({ abs, timing, bucket? }): stamped with who was on court only when the time is exact.
+  function timedPlay(e, at) {
+    const t = { ...e, abs: at.abs, timing: at.timing };
+    delete t.bucket;
+    delete t.on;
+    if (at.bucket) t.bucket = at.bucket;
+    if (at.timing === PLAY_TIMING.EXACT && isOnCourtStamped(t)) stampedForPast(t);
+    return t;
+  }
   const ALARM_KEY_PREFIX = { SANCTION: 'ex', RIVAL_SANCTION: 'rex' };
-  // A 2' whose window is already over when it is added gets its alarm key, so no alarm rings for it.
+  // A 2' whose window is over once its clock stretch is undone gets its alarm key, so no alarm rings for it.
   function markServedExclusions(events) {
     const now = matchEndAbs();
     let marked = false;
@@ -2591,30 +2585,27 @@ span.att-foot { visibility: hidden; }
     if (marked) save();
   }
   const removal = (e) => ({ event: e, index: state.events.indexOf(e) });
-  // A play that was not logged, at second `abs`. `consumeFixId`: the score fix it explains (the score does not move);
-  // `assist`: the passer of our goal, added with it. Returns the new event.
-  function addPastEvent(kind, data, abs, { consumeFixId = null, assist = null } = {}) {
-    const e = Object.assign({ id: newId('e'), abs, kind }, data, { late: true });
-    if (isOnCourtStamped(e)) stampedForPast(e);
+  // A play that was not logged, late and at time `at` (sin tiempo unless given). `consumeFixId`: the score fix it explains
+  // (the score does not move). Returns the new event.
+  function addPastEvent(kind, data, { consumeFixId = null, at = untimedTime() } = {}) {
+    const e = timedPlay(Object.assign({ id: newId('e'), kind }, data, { late: true }), at);
     const op = { added: [e], removed: [] };
-    if (assist) op.added.push({ id: newId('e'), abs, kind: 'ACTION', playerId: assist, action: 'ASIST', late: true });
     const fix = consumeFixId && state.events.find((x) => x.id === consumeFixId && x.kind === 'SCORE_FIX');
     if (fix) op.removed.push(removal(fix));
     record(op);
-    markServedExclusions(op.added);
     return e;
   }
-  // A logged play corrected: the same id (an early end of its 2' still points at it), marked `edited`, one undoable step.
-  function replacePastEvent(id, kind, data, abs) {
-    const old = state.events.find((x) => x.id === id);
-    if (!old) return null;
-    const base = old.kind === kind ? { ...old } : { id, kind, ...(old.late ? { late: true } : {}) };
-    const e = Object.assign(base, data, { abs, edited: true });
-    const moved = old.abs !== abs || old.kind !== kind || old.playerId !== e.playerId || old.gkId !== e.gkId;
-    if (isOnCourtStamped(e) && moved) stampedForPast(e);
-    record({ added: [e], removed: [removal(old)] });
-    markServedExclusions([e]);
-    return e;
+  // The pass of goal logged with a late goal (`goalId`): it keeps the goal's time.
+  const pairedAssists = (e) => state.events.filter((x) => x.goalId === e.id && isAction(x, 'ASIST'));
+  // A late play moved to time `at`, its pass of goal along, as one undoable step (none when the time is the same).
+  // Returns the play.
+  function setPlayTime(id, at) {
+    const e = state.events.find((x) => x.id === id && x.late);
+    if (!e || (e.abs === at.abs && e.timing === at.timing && e.bucket === at.bucket)) return e || null;
+    const moving = [e, ...pairedAssists(e)];
+    const moved = moving.map((x) => timedPlay(x, at));
+    record({ added: moved, removed: moving.map(removal) });
+    return moved[0];
   }
   // The pass of goal paired with our goal (the one the rating credits): the nearest before it, else the nearest after.
   function assistOf(goal, events = state.events) {
@@ -2677,8 +2668,9 @@ span.att-foot { visibility: hidden; }
     log.push({ abs, set });
   }
   // A stand-in sitting out a teammate's 2' is off the log until the window ends (the next commit logs them back).
+  // Completion mode logs nothing: its lineups, keeper and phase are only a view (see startCompleting).
   function noteCourt() {
-    if (!keepsCourtLog()) return;
+    if (!keepsCourtLog() || ui.completing) return;
     const seated = standInsOut(state.phase);
     logCourt(internCourtSet(onCourtIds().filter((id) => !seated.has(id))));
   }
@@ -2687,10 +2679,11 @@ span.att-foot { visibility: hidden; }
   // Seconds since kick-off at the end of the clock, running time not counted (a half never lasts more than `halfSeconds`).
   const matchEndAbs = (s = state) => (s.clock.period - 1) * CONFIG.halfSeconds + Math.min(s.clock.elapsedMs / 1000, CONFIG.halfSeconds);
   // Where each of our players is out of play: every 2' window, and for good from a send-off. Overlapping windows (a red card
-  // during a 2', a goalkeeper who stays in the court set) are merged so no second is subtracted twice.
+  // during a 2', a goalkeeper who stays in the court set) are merged so no second is subtracted twice. A card added
+  // without its exact second has no window.
   function awayWindows(s) {
     const away = new Map(), sentOff = sendOffsOf('SANCTION', s.events);
-    exclusionsOf('SANCTION', s.events).filter((e) => e.playerId).forEach((e) => {
+    exclusionsOf('SANCTION', s.events).filter((e) => e.playerId && hasMatchTime(e)).forEach((e) => {
       const end = sentOff.get(e.playerId) === e ? Infinity : exclusionEnd(e, s.events);
       away.set(e.playerId, [...(away.get(e.playerId) || []), [e.abs, end]]);
     });
@@ -2820,40 +2813,41 @@ span.att-foot { visibility: hidden; }
     (s.court || []).forEach((c) => { if (c.abs < t) set = c.set; });
     return set;
   }
-  const shotCourtSet = (s, e) => e.on ?? courtSetBefore(s, e.abs);
+  // Who was on court for a play: its stamp, else the lineup just before it; nobody for a play without a match time.
+  const playCourtSetBefore = (s, e) => (hasMatchTime(e) ? courtSetBefore(s, e.abs) : null);
+  const shotCourtSet = (s, e) => (hasMatchTime(e) ? e.on ?? courtSetBefore(s, e.abs) : null);
   // The lineup on court at second `t` (an entry from that second counts): the set index, or null without a log or in a break.
   function courtSetAt(s, t) {
     let set = null;
     (s.court || []).forEach((c) => { if (c.abs <= t) set = c.set; });
     return set;
   }
-  // The goalkeeper in goal at second `t`: the one in that lineup, else the one in goal now.
-  const keeperAt = (s, t) => courtSetOf(courtSetAt(s, t), s).find((id) => isKeeperOf(s, id)) || s.gkId;
-  // The 2' (or the send-off's 2') of one player or rival dorsal whose window covers second `t`, if any.
-  const exclusionAt = (kind, id, t, events = state.events) => exclusionsOf(kind, events)
-    .find((e) => SANCTION_TARGETS[kind](e) === id && exclusionStart(e) <= t && t < exclusionEnd(e, events)) || null;
-  // Out of play at second `t`: serving a 2', or sent off at or before it.
+  // Out of play at second `t`: serving a 2', or sent off at or before it (a card added without its exact second has no
+  // second to count from).
   function offCourtAt(kind, t, events = state.events) {
     const who = SANCTION_TARGETS[kind];
-    const sentOff = [...sendOffsOf(kind, events)].filter(([, e]) => e.abs <= t).map(([id]) => id);
-    const serving = exclusionsOf(kind, events).filter((e) => exclusionStart(e) <= t && t < exclusionEnd(e, events)).map(who).filter(Boolean);
+    const sentOff = [...sendOffsOf(kind, events)].filter(([, e]) => hasMatchTime(e) && e.abs <= t).map(([id]) => id);
+    const serving = exclusionsOf(kind, events).filter((e) => hasMatchTime(e) && exclusionStart(e) <= t && t < exclusionEnd(e, events)).map(who).filter(Boolean);
     return new Set([...sentOff, ...serving]);
   }
   const isAction = (e, action) => e.kind === 'ACTION' && e.action === action;
   // Numerical state from the lineup itself (an exclusion that was not logged still shows as 5 field players), our 2'
-  // windows (a 2' added after the match leaves the lineup as it was) and the rival's 2' windows.
+  // windows (a 2' added after the match leaves the lineup as it was; one added without its exact second has no window)
+  // and the rival's 2' windows.
   function stateBaselines(s, set, t) {
     const r = CONFIG.rating, logged = (s.court || []).length > 0;
-    const inTwo = (kind) => s.events.some((e) => e.kind === kind && e.card === '2M' && t >= e.abs && t < e.abs + exclusionLength(e, r.exclusionSeconds));
+    const inTwo = (kind) => s.events.some((e) => e.kind === kind && e.card === '2M' && hasMatchTime(e) && t >= e.abs && t < e.abs + exclusionLength(e, r.exclusionSeconds));
     const short = (logged && set != null && fieldOnCourt(s, set).length < FIELD_PLAYERS_ON_COURT) || inTwo('SANCTION');
     const plus = inTwo('RIVAL_SANCTION');
     if (short && !plus) return r.shortHanded;
     if (plus && !short) return r.superiority;
     return { att: r.possession, def: r.possession };
   }
-  // The context of a moment: late and close (at the end of either half) weighs more, a second-half blowout less.
+  // The context of a moment: late and close (at the end of either half) weighs more, a second-half blowout less. A play
+  // added without its exact second has no moment: always factor 1.
   function leverageOf(s, e, weights, order) {
     const before = score(s.events.filter((x) => x.abs < e.abs || (x.abs === e.abs && order.get(x) < order.get(e))));
+    if (!hasMatchTime(e)) return { factor: 1, score: before };
     const margin = Math.abs(before.us - before.them), c = CONFIG.rating.context;
     const firstHalfClose = e.abs >= c.firstHalfCloseFrom && e.abs < CONFIG.halfSeconds;
     if (e.abs >= c.lateFrom && margin <= c.lateMargin) return { factor: weights.lateFactor, score: before };
@@ -2928,7 +2922,7 @@ span.att-foot { visibility: hidden; }
       attackPool.push({ set, value: creation, abs: e.abs });
     });
     events.filter((e) => e.kind === 'TURNOVER').forEach((e) => {
-      const set = courtSetBefore(s, e.abs), base = stateBaselines(s, set, e.abs).att;
+      const set = playCourtSetBefore(s, e), base = stateBaselines(s, set, e.abs).att;
       if (e.subtype === PASSIVE_TURNOVER) {
         const on = fieldOnCourt(s, set);
         if (on.length) on.forEach((id) => own(id, 'balon', -base / on.length, e, 'Pasivo (compartido)'));
@@ -2970,7 +2964,7 @@ span.att-foot { visibility: hidden; }
       defencePool.push({ set, value, abs: e.abs });
     });
     events.filter((e) => isAction(e, 'RECUP')).forEach((e) => {
-      const foul = recoveryType(e) === RECOVERY_TYPES.OFFENSIVE_FOUL, base = stateBaselines(s, courtSetBefore(s, e.abs), e.abs).def;
+      const foul = recoveryType(e) === RECOVERY_TYPES.OFFENSIVE_FOUL, base = stateBaselines(s, playCourtSetBefore(s, e), e.abs).def;
       own(e.playerId, 'defInd', base + (foul ? r.defence.offensiveFoulExtra : 0), e, foul ? 'Falta en ataque provocada' : 'Recuperación');
     });
     // A good defence is owned whatever ends the possession; when a rival shot ends it, it comes out of the unit's share.
@@ -2978,7 +2972,7 @@ span.att-foot { visibility: hidden; }
     events.filter((e) => e.kind === 'SCORE_FIX' && e.team === 'them' && e.delta > 0)
       .forEach((e) => defencePool.push({ set: courtSetBefore(s, e.abs), value: r.possession - r.pOn['6M'], abs: e.abs }));
     events.filter((e) => e.kind === 'ACTION' && TEAM_FAULTS.includes(e.action)).forEach((e) => {
-      const on = e.playerId == null ? courtSetOf(e.on ?? courtSetBefore(s, e.abs), s) : [e.playerId];
+      const on = e.playerId == null ? courtSetOf(e.on ?? playCourtSetBefore(s, e), s) : [e.playerId];
       on.forEach((id) => own(id, 'defInd', isKeeperOf(s, id) ? weights.teamFaultKeeper : weights.teamFaultField, e, ACTIONS[e.action].label));
     });
     // Zone defence: a little off the defender of each field goal's zone, a little on one whose zone clearly held.
@@ -3251,7 +3245,7 @@ span.att-foot { visibility: hidden; }
   }
   // A correction of the clock, not time played: the running 2' keep what they had left.
   function correctClock(elapsedMs) {
-    const before = absSeconds(), running = [...exclusionEvents(), ...rivalExclusionEvents()].filter((e) => exclusionStart(e) <= before && before < exclusionEnd(e));
+    const before = absSeconds(), running = [...exclusionEvents(), ...rivalExclusionEvents()].filter((e) => runsLive(e) && exclusionStart(e) <= before && before < exclusionEnd(e));
     state.clock.elapsedMs = elapsedMs;
     if (isRunning()) state.clock.runningSince = Date.now();
     const shift = absSeconds() - before;
@@ -3343,14 +3337,14 @@ span.att-foot { visibility: hidden; }
       changed = true;
     };
     exclusionEvents().forEach((e) => {
-      if (earlyEndOf(e) || abs < e.abs + exclusionLength(e)) return;
+      if (!runsLive(e) || earlyEndOf(e) || abs < e.abs + exclusionLength(e)) return;
       const p = playerById(e.playerId);
       const title = disqualifications().get(p.id) === e ? `Puede entrar otro por #${p.num} ${p.name}` : `#${p.num} ${p.name} puede volver`;
       fire(`ex-${e.id}`, { id: `ex-${e.id}`, kind: 'exclusion', title, body: "Fin de los 2'" }, SOUND_ALARM);
     });
     const rivalOut = rivalDisqualifications();
     rivalExclusionEvents().forEach((e) => {
-      if (earlyEndOf(e) || abs < e.abs + exclusionLength(e)) return;
+      if (!runsLive(e) || earlyEndOf(e) || abs < e.abs + exclusionLength(e)) return;
       const r = rivalById(e.rivalId);
       const title = !r ? `${state.them} vuelve a estar completo` : rivalOut.get(r.id) === e ? `${state.them}: puede entrar otro por ${rivalLabel(r)}` : `${state.them}: ${rivalLabel(r)} puede volver`;
       fire(`rex-${e.id}`, { id: `rex-${e.id}`, kind: 'exclusion', title, body: "Fin de su 2'" }, SOUND_ALARM);
@@ -3378,7 +3372,7 @@ span.att-foot { visibility: hidden; }
   function renderAll(opts) {
     syncSourceToPhase();
     renderBar(); renderClock(); renderBench(); renderTokens(); renderShots();
-    renderGk(); renderLive(); renderActs(); renderAlerts(); renderArmed(); renderPhase(); renderEvents(opts && opts.freshId);
+    renderGk(); renderLive(); renderActs(); renderAlerts(); renderArmed(); renderPhase(); renderEvents(opts && opts.freshId); renderCompleting();
     $('sample-tag').hidden = !state.sample;
     $('btn-undo').disabled = !state.history.length;
     $('btn-redo').disabled = !state.future.length;
@@ -3674,7 +3668,7 @@ span.att-foot { visibility: hidden; }
     const list = state.events.slice().reverse();
     $('events').innerHTML = list.length ? list.map((e) => `
       <button class="ev press${e.id === freshId ? ' fresh' : ''}" type="button" data-ev="${e.id}">
-        <i style="background:${eventColor(e)}"></i><time>${absToClock(e.abs)}</time><span>${esc(describe(e))}</span>
+        <i style="background:${eventColor(e)}"></i><time>${playTimeLabel(e)}</time><span>${esc(describe(e))}</span>
       </button>`).join('') : '<span class="empty">Toca un jugador o arrastra hasta la portería.</span>';
     $('events').scrollLeft = 0;
   }
@@ -3868,9 +3862,11 @@ span.att-foot { visibility: hidden; }
     openPop(shotPopHtml(view), anchor, Boolean(view.pick) || view.rivalPick);
   }
   // ---- Quick follow-ups: after our goal, who gave the pass is one tap away ----
-  // Not for a 7 m, and not when a pass of goal was already logged just before the shot.
+  // Not for a 7 m, and not when a pass of goal was already logged just before the shot (a goal added afterwards has no
+  // «just before»: it is always asked).
   function asksForAssist(view, result) {
     if (view.type !== 'ourShot' || result !== 'GOL' || view.penalty) return false;
+    if (ui.completing) return true;
     const goal = state.events.at(-1), withinSeconds = CONFIG.rating.windows.assist;
     return !state.events.some((e) => e.kind === 'ACTION' && e.action === 'ASIST' && e !== goal && goal.abs - e.abs >= 0 && goal.abs - e.abs <= withinSeconds);
   }
@@ -3901,6 +3897,7 @@ span.att-foot { visibility: hidden; }
       <button class="act c-neutral" type="button" data-close>Sin pase</button>`, anchor, true);
   }
   function logAssist(playerId) {
+    if (ui.completing) { addCompletedAssist(playerId); return; }
     const result = addEvent('ACTION', { playerId, action: 'ASIST' }, { bringOn: playerId });
     hint(withAddNotes(`${describe(state.events.at(-1))} · ↶ deshacer`, result));
   }
@@ -3971,7 +3968,7 @@ span.att-foot { visibility: hidden; }
     const e = state.events.find((x) => x.id === id);
     if (!e) return;
     ui.popView = { type: 'event' };
-    openPop(`<h3>${absToClock(e.abs)}</h3><b style="font-size:17px">${esc(describe(e))}</b>
+    openPop(`<h3>${playTimeLabel(e)}</h3><b style="font-size:17px">${esc(describe(e))}</b>
       <div class="act-grid two"><button class="act c-error" type="button" data-delete="${id}">Borrar</button><button class="act c-neutral" type="button" data-close>Cancelar</button></div>`, anchor);
   }
   function addSanction(playerId, card) {
@@ -3980,7 +3977,7 @@ span.att-foot { visibility: hidden; }
     const wasOut = isDisqualified(p.id);
     const result = addEvent('SANCTION', { playerId: p.id, card });
     hint(withAddNotes(`${SANCTIONS[card].name} a #${p.num} ${p.name} · ↶ deshacer`, result));
-    if (!wasOut && isDisqualified(p.id)) sendOff(p, card);
+    if (!ui.completing && !wasOut && isDisqualified(p.id)) sendOff(p, card);
   }
   const sendOffReason = (card) => (card === '2M' ? '3ª exclusión' : `${SANCTIONS[card].name} · 2' con uno menos`);
   function addRivalSanction(rivalId, card) {
@@ -3990,7 +3987,7 @@ span.att-foot { visibility: hidden; }
     const result = addEvent('RIVAL_SANCTION', { rivalId: r ? r.id : null, card });
     const who = rivalTeamLabel(rivalId);
     hint(withAddNotes(`${SANCTIONS[card].name} a ${who} · ↶ deshacer`, result));
-    if (!r || wasOut || !rivalDisqualifications().has(r.id)) return;
+    if (ui.completing || !r || wasOut || !rivalDisqualifications().has(r.id)) return;
     pushAlert({ id: newId('d'), kind: 'desc', title: `Descalificado: ${who}`, body: `${sendOffReason(card)} · no vuelve` }, SOUND_ALARM);
     commit();
   }
@@ -4167,7 +4164,7 @@ span.att-foot { visibility: hidden; }
     if (b.dataset.clock === 'period') { closePop(); startPeriod(state.clock.period === 1 ? 2 : 1); return; }
     if (b.dataset.clock === 'finish') { closePop(); if (state.finished) openFinal(); else finishMatch(); return; }
     if (b.dataset.clock === 'halftime') { closePop(); openHalftime(); return; }
-    if (b.dataset.clock === 'plays') { closePop(); openPlays('live'); return; }
+    if (b.dataset.clock === 'plays') { startCompleting('live'); return; }
     if (b.dataset.adjust) { adjustClock(Number(b.dataset.adjust)); return; }
     if (b.dataset.clockMode) { state.clockDown = b.dataset.clockMode === 'down'; commit(); openClockPop(v.anchor); return; }
     if (b.dataset.fix) {
@@ -4179,10 +4176,11 @@ span.att-foot { visibility: hidden; }
     if (b.dataset.delete) { closePop(); deleteEvent(b.dataset.delete); }
   });
   $('pop').addEventListener('input', (ev) => {
-    if (ev.target.id === 'clock-input') ev.target.value = maskClockText(ev.target.value);
+    if (ev.target.id === 'clock-input' || ev.target.hasAttribute('data-time-input')) ev.target.value = maskClockText(ev.target.value);
   });
   $('pop').addEventListener('focusin', (ev) => { if (ev.target.id === 'clock-input') ev.target.select(); });
   $('pop').addEventListener('submit', (ev) => {
+    if (ev.target.hasAttribute('data-time-form')) { ev.preventDefault(); submitPlayPopTime(ev.target); return; }
     if (ev.target.id !== 'clock-set') return;
     ev.preventDefault();
     if (setClockText($('clock-input').value)) closePop();
@@ -4196,8 +4194,8 @@ span.att-foot { visibility: hidden; }
     if (ev.key !== 'Escape' || ev.isComposing) return;
     if (!$('pop').hidden) { closePop(); return; }
     const field = document.activeElement;
-    if (field?.matches(TEXT_ENTRY_SELECTOR) && field.closest('#home, #sheet, #final, #plays')) { field.blur(); return; }
-    const leading = visibleLeading('plays') || visibleLeading('final') || visibleLeading('sheet') || visibleLeading('home');
+    if (field?.matches(TEXT_ENTRY_SELECTOR) && field.closest('#home, #sheet, #final, #plays, #time-bar')) { field.blur(); return; }
+    const leading = visibleLeading('plays') || visibleLeading('final') || visibleLeading('sheet') || visibleLeading('home') || visibleLeading('completing');
     if (leading) leading.click();
     else { disarm(); disarmAction(); }
   });
@@ -7050,8 +7048,8 @@ table { border-collapse: collapse; width: 100%; }
     if (b.hasAttribute('data-final-close')) { hideFinal(); return; }
     if (b.hasAttribute('data-final-sheet')) { hideFinal(); ui.sheetReturn = { summary: state.finished ? 'final' : 'halftime' }; ui.sheetMode = 'sheet'; ui.sheetTab = 'summary'; renderSheet(); $('sheet').hidden = false; armBackGuard(); return; }
     if (b.hasAttribute('data-second-half')) { startSecondHalf(); return; }
-    if (b.dataset.finalPlays) { openPlays(b.dataset.finalPlays); return; }
-    if (b.dataset.finalAssign) { openPlays(b.dataset.finalAssign, { assign: true }); return; }
+    if (b.dataset.finalPlays) { startCompleting(b.dataset.finalPlays); return; }
+    if (b.dataset.finalAssign) { startCompleting(b.dataset.finalAssign); return; }
     if (b.hasAttribute('data-final-share')) shareMatch();
     if (b.hasAttribute('data-reports-mail')) mailPlayerReports();
     if (b.hasAttribute('data-staff-mail')) mailStaffReport();
@@ -7178,38 +7176,46 @@ table { border-collapse: collapse; width: 100%; }
     renderSendReports();
   }
 
-  // ===================== «Completar jugadas»: add, edit and attribute plays after the whistle =====================
-  // A full-screen editor over the summary it came from (final, half-time, or the live screen with the clock stopped). Each
-  // change is one operation of the match history (↶ ↷), the clock is never touched, and every figure is derived again.
-  // Players and guests read only, and the sample match is never saved: neither sees it.
+  // ===================== «Completar jugadas»: the plays that were not logged, added on the live screen =====================
+  // Completion mode turns the live screen into a log of what was missed: every flow logs as in play, but each play is
+  // late (see addPastEvent): the clock never runs, nobody comes on from the bench, no alarm rings, and the lineups, the
+  // keeper and the phase are only a view, put back on «Terminar». A play starts «sin tiempo»; the time bar in the strip
+  // gives it a quarter of the match or its exact second. «Revisar lista» opens the timeline of the match to change a
+  // time or delete a play. Players and guests read only, and the sample match is never saved: neither sees it.
   const canCompletePlays = () => Boolean(currentMatchId) && !readOnly();
-  // Where the editor returns to: the leading control's label (NAV_LABELS key) and the moment named under the title.
-  const PLAYS_FROM = { final: { back: 'final', period: 'final' }, halftime: { back: 'halftime', period: 'descanso' }, live: { back: 'liveMatch', period: 'reloj parado' } };
   const SECONDS_PER_BLOCK = CONFIG.scoreIntervalSeconds;
-  const MINUTES_PER_HALF = CONFIG.halfSeconds / SECONDS_PER_MINUTE;
-  const SECOND_STEPS = [0, 15, 30, 45];
   const HALVES = [1, 2];
   const halfOf = (abs) => (abs >= CONFIG.halfSeconds ? 2 : 1);
   const halfStart = (half) => (half - 1) * CONFIG.halfSeconds;
   const halfLabel = (half) => `${half}ª`;
   const halfClock = (abs) => `${halfLabel(halfOf(abs))} · ${absToClock(abs)}`;
-  const minuteLabel = (abs) => `${Math.floor(abs / SECONDS_PER_MINUTE)}'`;
   const scoreText = (s) => `${s.us} – ${s.them}`;
-  // The kinds the composer can build (and so edit); notes, score fixes and early ends of a 2' can only be deleted.
-  const EDITABLE_KINDS = ['SHOT', 'RIVAL_SHOT', 'ACTION', 'TURNOVER', 'SANCTION', 'RIVAL_SANCTION'];
   const CARD_KINDS = ['SANCTION', 'RIVAL_SANCTION'];
   const SHOT_KINDS = ['SHOT', 'RIVAL_SHOT'];
   const isGoalPlay = (e) => SHOT_KINDS.includes(e.kind) && isGoal(e);
   const teamOfPlay = (kind) => (kind.startsWith('RIVAL_') ? 'them' : 'us');
-  // Our blocked shots stay a turnover («Bloqueado»), as live: the result is not offered.
-  const BLOCKED_RESULT = 'BLOCADO';
-  const resultsOfGroup = (g) => Object.keys(RESULTS).filter((r) => groupOf(r) === g && r !== BLOCKED_RESULT);
-  const SHOT_GROUPS = Object.keys(GROUP_COLOR);
-  const SHOT_TILE_LABELS = { SHOT: { GOL: 'Gol', PARADA: 'Tiro parado', FALLO: 'Fuera / Palo' }, RIVAL_SHOT: { GOL: 'Gol encajado', PARADA: 'Parada', FALLO: 'Fuera / Palo' } };
-  // The zone chips: a counter-attack is a chip of its own, as in the live shot popup.
-  const composerZones = () => SHEET_ZONES.filter((z) => z !== ZONE_CONTRA);
-  const DEFAULT_COMPOSER_ZONE = SHEET_ZONES[0];
-  const DEFAULT_CARD = '2M';
+  // The quarters a play without its exact second can be put in: each half before and after its middle (the 15').
+  const BUCKET_SECONDS = CONFIG.halfSeconds / 2;
+  const BUCKET_MINUTE = `${BUCKET_SECONDS / SECONDS_PER_MINUTE}'`;
+  const TIME_BUCKETS = HALVES.flatMap((half) => [false, true].map((after) => ({
+    key: `${half}-${after ? 'late' : 'early'}`, half, start: halfStart(half) + (after ? BUCKET_SECONDS : 0),
+    part: `${after ? 'después' : 'antes'} del ${BUCKET_MINUTE}`, short: `${halfLabel(half)} · ${after ? `${BUCKET_MINUTE}+` : `<${BUCKET_MINUTE}`}`
+  })));
+  const bucketLabel = (b) => `${halfLabel(b.half)} · ${b.part}`;
+  // A quarter's time: its middle second, never past the clock.
+  function bucketTime(key) {
+    const b = TIME_BUCKETS.find((x) => x.key === key);
+    return { abs: Math.min(b.start + BUCKET_SECONDS / 2, untimedAbs()), timing: PLAY_TIMING.BUCKET, bucket: key };
+  }
+  // A quarter can be given once its half has been played into it.
+  const bucketPlayed = (b) => b.start < untimedAbs();
+  // How a play's time reads in lists: its clock, its quarter («1ª · 15'+»), or «sin tiempo».
+  function playTimeLabel(e) {
+    if (e.timing === PLAY_TIMING.NONE) return 'sin tiempo';
+    if (e.timing === PLAY_TIMING.BUCKET) return TIME_BUCKETS.find((b) => b.key === e.bucket).short;
+    return absToClock(e.abs);
+  }
+  const playMomentLabel = (e) => (hasMatchTime(e) ? halfClock(e.abs) : playTimeLabel(e));
   const PLAYS_FILTERS = [
     { key: 'all', label: 'Todo', test: () => true },
     { key: 'goals', label: 'Goles', test: isGoalPlay },
@@ -7227,99 +7233,166 @@ table { border-collapse: collapse; width: 100%; }
     const t = key.slice(TEAM_GOALS_FILTER.length);
     return { key, label: `Goles ${t === 'us' ? state.us : state.them}`, test: (e) => (isGoalPlay(e) && teamOfPlay(e.kind) === t) || (e.kind === 'SCORE_FIX' && e.team === t) };
   }
-
-  // ---- The «Qué» tiles, built from the live definitions so a new result, action or type shows here too ----
-  // Each tile: { key, kind, label, cls, result?, action?, subs? }. `subs` are the groups of types picked under a ▸ tile,
-  // each { label, team?, options: [[value, label, cls]] } (the live panel's own groups for turnovers and faults).
-  function playTiles(team) {
-    const shotTile = (kind) => (g) => {
-      const results = resultsOfGroup(g);
-      return { key: `${kind}:${g}`, kind, label: SHOT_TILE_LABELS[kind][g], cls: GROUP_CLASS[g], result: results[0],
-        subs: results.length > 1 ? [{ label: 'Resultado', options: results.map((r) => [r, RESULTS[r].label, GROUP_CLASS[g]]) }] : null };
-    };
-    const cards = [{ label: 'Tarjeta', cards: true, options: Object.keys(SANCTIONS).map((k) => [k, SANCTIONS[k].name, '']) }];
-    if (team === 'them') return [...SHOT_GROUPS.map(shotTile('RIVAL_SHOT')), { key: 'RIVAL_SANCTION', kind: 'RIVAL_SANCTION', label: 'Sanción rival', cls: 'c-dos', subs: cards }];
-    const typed = (key) => ({ key, kind: key === 'TURNOVER' ? 'TURNOVER' : 'ACTION', label: PANEL_TYPED[key].label, cls: 'c-act-bad',
-      subs: PANEL_TYPED[key].groups().map((g) => ({ label: g.label, team: Boolean(g.team), options: g.subs })) });
-    const plain = Object.keys(ACTIONS).filter((k) => !DEFENSIVE_FAULTS.includes(k) && !RETIRED_FAULTS.includes(k));
-    const action = (k) => ({ key: `ACTION:${k}`, kind: 'ACTION', label: ACTIONS[k].label, cls: `c-${ACTIONS[k].group}`, action: k,
-      split: Boolean(PANEL_SPLIT[k]), subs: PANEL_SPLIT[k] ? [{ label: 'Tipo', options: PANEL_SPLIT[k].map((v) => [v, v, `c-${ACTIONS[k].group}`]) }] : null });
-    const attack = plain.filter((k) => PANEL_ACTIONS.ATK.includes(k));
-    return [...SHOT_GROUPS.map(shotTile('SHOT')), ...attack.map(action), typed('TURNOVER'), ...plain.filter((k) => !attack.includes(k)).map(action),
-      typed('DEFFAULT'), { key: 'SANCTION', kind: 'SANCTION', label: 'Sanción', cls: 'c-dos', subs: cards }];
-  }
-  // The type a ▸ tile starts on: a 2' for cards (as live), the first result of a shot; turnovers and faults wait for a tap.
-  const defaultSub = (tile) => (!tile.subs ? null : tile.subs[0].cards ? DEFAULT_CARD : SHOT_KINDS.includes(tile.kind) ? tile.result : tile.split ? tile.subs[0].options[0][0] : null);
-  const tileOf = (c) => playTiles(c.team).find((t) => t.key === c.tile) || null;
-  const subGroupOf = (tile, sub) => (tile && tile.subs ? tile.subs.find((g) => g.options.some(([v]) => v === sub)) || null : null);
-  // Logged without a player: a fault of the whole defence.
-  const isTeamPlay = (c) => Boolean((subGroupOf(tileOf(c), c.sub) || {}).team);
-  // The tile and type an existing play is shown with.
-  function tileForEvent(e) {
-    switch (e.kind) {
-      case 'SHOT': case 'RIVAL_SHOT': { const g = groupOf(e.result); return { tile: `${e.kind}:${g}`, sub: resultsOfGroup(g).length > 1 ? e.result : null }; }
-      case 'ACTION': return DEFENSIVE_FAULTS.includes(e.action) ? { tile: 'DEFFAULT', sub: e.action } : { tile: `ACTION:${e.action}`, sub: PANEL_SPLIT[e.action] ? e.subtype || PANEL_SPLIT[e.action][0] : null };
-      case 'TURNOVER': return { tile: 'TURNOVER', sub: e.subtype };
-      default: return { tile: e.kind, sub: e.card };
-    }
-  }
-  // The play the composer describes, as { kind, data }; null until a tile is picked.
-  function composerPlay(c) {
-    const tile = tileOf(c);
-    if (!tile) return null;
-    const sub = c.sub || tile.result || null;
-    switch (tile.kind) {
-      case 'SHOT': return { kind: 'SHOT', data: { playerId: c.playerId, from: c.zone, zone: c.contra ? ZONE_CONTRA : c.zone, result: sub } };
-      case 'RIVAL_SHOT': return { kind: 'RIVAL_SHOT', data: { gkId: c.gkId || null, rivalId: c.rivalId || null, zone: c.zone, result: sub, contra: c.contra } };
-      case 'TURNOVER': return { kind: 'TURNOVER', data: { playerId: c.playerId, subtype: sub } };
-      case 'SANCTION': return { kind: 'SANCTION', data: { playerId: c.playerId, card: sub } };
-      case 'RIVAL_SANCTION': return { kind: 'RIVAL_SANCTION', data: { rivalId: c.rivalId || null, card: sub } };
-      default: return { kind: 'ACTION', data: { playerId: isTeamPlay(c) ? null : c.playerId, action: tile.action || sub, ...(tile.action ? typedFields(tile.action, sub) : {}) } };
-    }
-  }
-  // The log as it would be with the composer's play in it (the play it edits taken out), under a placeholder id.
-  const COMPOSER_EVENT_ID = 'composer';
-  function eventsWithPlay(c, play) {
-    const events = state.events.filter((e) => e.id !== c.editId);
-    insertInMatchOrder(events, { id: c.editId || COMPOSER_EVENT_ID, abs: c.abs, kind: play.kind, ...play.data });
-    return events;
-  }
-  // Why the play cannot be added yet (Spanish, shown in the footer), or '' when it can.
-  function composerProblem(c) {
-    const tile = tileOf(c), play = composerPlay(c);
-    if (!tile) return 'Elige qué pasó.';
-    if (tile.subs && !c.sub) return 'Elige el tipo.';
-    const ours = tile.kind !== 'RIVAL_SHOT' && tile.kind !== 'RIVAL_SANCTION';
-    if (ours && !isTeamPlay(c) && !c.playerId) return 'Elige quién.';
-    if (SHOT_KINDS.includes(tile.kind) && !c.zone) return 'Elige la zona.';
-    const others = state.events.filter((e) => e.id !== c.editId);
-    if (play.kind === 'SANCTION' && play.data.card === DEFAULT_CARD && exclusionAt('SANCTION', c.playerId, c.abs, others)) return `Ya cumplía 2' en el ${minuteLabel(c.abs)}.`;
-    if (play.kind === 'RIVAL_SANCTION' && play.data.card === DEFAULT_CARD && c.rivalId && exclusionAt('RIVAL_SANCTION', c.rivalId, c.abs, others)) return `Ese dorsal ya cumplía 2' en el ${minuteLabel(c.abs)}.`;
-    if (ours && !CARD_KINDS.includes(tile.kind) && c.playerId && offCourtAt('SANCTION', c.abs, others).has(c.playerId)) return `No podía jugar en el ${minuteLabel(c.abs)}: cumplía 2' o estaba descalificado.`;
-    return '';
-  }
-
-  // ---- Attributing the score fixes ----
-  // The open fix a goal added at `t` explains: the first one at or after it, else the nearest.
-  function fixToConsume(team, t) {
-    const open = scoreFixGaps()[team].open;
-    return open.find((e) => e.abs >= t) || open.slice().sort((a, b) => Math.abs(a.abs - t) - Math.abs(b.abs - t))[0] || null;
-  }
-  const openFixes = () => { const g = scoreFixGaps(); return [...g.us.open, ...g.them.open].sort((a, b) => a.abs - b.abs); };
   // «3 goles nuestros · 1 gol rival» for the unassigned goals; the same for the surplus ones.
   const gapTally = (n, team) => (n ? `${plural(n, 'gol', 'goles')} ${team === 'us' ? (n === 1 ? 'nuestro' : 'nuestros') : 'rival'}` : '');
   const gapText = (gaps, key) => SCORE_TEAMS.map((t) => gapTally(gaps[t][key].length, t)).filter(Boolean).join(' · ');
 
-  // ---- Opening and closing ----
-  function openPlays(from, { assign = false } = {}) {
+  // ---- Entering and leaving ----
+  // `from`: where «Terminar» returns ('final', 'halftime' or 'live'). The clock stops; the lineups, the keeper and the
+  // phase are kept to be put back, so whatever the coach moves to find a player stays a view.
+  function startCompleting(from) {
     if (!canCompletePlays()) return;
     closePop();
     hideFinal();
-    ui.plays = { from, filter: 'all', half: halfOf(Math.max(0, matchEndAbs() - 1)), composer: null, status: '', statusTimer: null };
+    hidePlays();
+    pauseClock();
+    disarm();
+    disarmAction();
+    cancelPenalty();
+    ui.completing = { from, view: { phase: state.phase, gkId: state.gkId, lineups: JSON.parse(JSON.stringify(state.lineups)) }, timed: null };
+    armBackGuard();
+    commit();
+  }
+  // Out of completion mode with the view put back; false when it was not on.
+  function quitCompleting() {
+    const c = ui.completing;
+    if (!c) return false;
+    ui.completing = null;
+    Object.assign(state, c.view);
+    return true;
+  }
+  // «Terminar»: back to where it came from, with every figure rebuilt; the changes go up at once so others see them.
+  function endCompleting() {
+    const from = ui.completing && ui.completing.from;
+    closePop();
+    hidePlays();
+    disarm();
+    disarmAction();
+    cancelPenalty();
+    if (!quitCompleting()) return;
+    commit();
+    syncMatches();
+    if (from === 'final') openFinal();
+    else if (from === 'halftime') openHalftime();
+  }
+
+  // ---- Logging: addEvent hands every play here while completing ----
+  // A goal of a team with unassigned goals («Corregir marcador») explains the earliest one: the score does not move. The
+  // phase follows the play as live, as a view only. The time bar then asks for its time.
+  function addCompletedPlay(kind, data) {
+    const fix = SHOT_KINDS.includes(kind) && data.result === 'GOL' ? scoreFixGaps()[teamOfPlay(kind)].open[0] : null;
+    const next = state.autoPhase ? phaseAfter({ kind, ...data }) : null;
+    if (next) state.phase = next;
+    const e = addPastEvent(kind, data, { consumeFixId: fix ? fix.id : null });
+    askPlayTime(e.id);
+    if (kind === 'ACTION' && PENALTY_TEAM[data.action]) startPenalty(PENALTY_TEAM[data.action], e.id, data.playerId);
+    return { unplaced: false, stopped: null };
+  }
+  // The pass of goal answered after a late goal: logged at the goal's time and moved with it; the bar stays on the goal.
+  function addCompletedAssist(playerId) {
+    const goal = ui.completing.timed && state.events.find((e) => e.id === ui.completing.timed.id && e.kind === 'SHOT' && isGoal(e));
+    if (!goal) { addEvent('ACTION', { playerId, action: 'ASIST' }); return; }
+    const e = addPastEvent('ACTION', { playerId, action: 'ASIST', goalId: goal.id }, { at: { abs: goal.abs, timing: goal.timing, bucket: goal.bucket } });
+    hint(`${describe(e)} · ↶ deshacer`);
+  }
+  function askPlayTime(id) {
+    ui.completing.timed = { id, exact: false, half: state.clock.period };
+    renderTimeBar();
+  }
+
+  // ---- Time: the four quarters, the exact second or none, for the time bar and a row of the list ----
+  // `view`: { exact, half } of the exact form; `none` offers «Sin tiempo» too.
+  function timeChoicesHtml(e, view, { none = false } = {}) {
+    if (view.exact) return exactTimeFormHtml(e, view);
+    const bucket = (b) => `<button class="btn time-choice press" type="button" data-time-bucket="${b.key}" aria-pressed="${e.timing === PLAY_TIMING.BUCKET && e.bucket === b.key}" aria-label="${bucketLabel(b)}"${bucketPlayed(b) ? '' : ' disabled'}><small>${halfLabel(b.half)} parte</small>${b.part}</button>`;
+    const exact = e.timing === PLAY_TIMING.EXACT;
+    return `${TIME_BUCKETS.map(bucket).join('')}
+      <button class="btn time-choice press" type="button" data-time-exact aria-pressed="${exact}">${exact ? `<small>Minuto exacto</small>${halfClock(e.abs)}` : 'Minuto exacto…'}</button>
+      ${none ? `<button class="btn time-choice press" type="button" data-time-none aria-pressed="${e.timing === PLAY_TIMING.NONE}">Sin tiempo</button>` : ''}`;
+  }
+  function exactTimeFormHtml(e, view) {
+    const halves = HALVES.map((h) => `<button type="button" data-time-half="${h}" aria-pressed="${view.half === h}"${halfStarted(h) ? '' : ' disabled'}>${halfLabel(h)} parte</button>`).join('');
+    const value = e.timing === PLAY_TIMING.EXACT && halfOf(e.abs) === view.half ? absToClock(e.abs) : '';
+    return `<form class="time-exact" data-time-form><div class="seg" role="group" aria-label="Parte">${halves}</div>
+      <input class="in time-in" type="text" inputmode="numeric" maxlength="6" data-time-input value="${value}" placeholder="mm:ss" aria-label="Minuto exacto de la parte (mm:ss)">
+      <button class="btn go press" type="submit">Fijar</button><button class="btn press" type="button" data-time-back aria-label="Volver a las partes">‹</button></form>`;
+  }
+  // A tap on a time choice of play `id`: true when it was one (the caller renders again).
+  function timeChoiceClick(b, id, view) {
+    const d = b.dataset;
+    if (d.timeBucket) setPlayTime(id, bucketTime(d.timeBucket));
+    else if (b.hasAttribute('data-time-none')) setPlayTime(id, untimedTime());
+    else if (b.hasAttribute('data-time-exact')) view.exact = true;
+    else if (b.hasAttribute('data-time-back')) view.exact = false;
+    else if (d.timeHalf) view.half = Number(d.timeHalf);
+    else return false;
+    return true;
+  }
+  // The exact form sent: '' when the play moved, else why not (Spanish, for the screen it is on).
+  function submitExactTime(form, id, view) {
+    const shown = parseClockText(form.querySelector('[data-time-input]').value);
+    const abs = shown == null ? null : halfStart(view.half) + Math.min(shown, CONFIG.halfSeconds - 1);
+    if (abs == null || abs > untimedAbs()) return `Minuto no válido: usa mm:ss de la ${halfLabel(view.half)} parte, ya jugado`;
+    setPlayTime(id, { abs, timing: PLAY_TIMING.EXACT });
+    view.exact = false;
+    return '';
+  }
+
+  // ---- The strip and the time bar ----
+  function renderCompleting() {
+    const c = ui.completing, strip = $('completing');
+    document.querySelector('.app').classList.toggle('completion-mode', Boolean(c));
+    strip.hidden = !c;
+    renderTimeBar();
+    if (!c) { strip.innerHTML = ''; return; }
+    const open = gapText(scoreFixGaps(), 'open');
+    strip.innerHTML = `<p class="completing-title"><b>Completando jugadas</b> · el reloj no corre</p>
+      <b class="completing-score" aria-label="Marcador">${scoreText(score())}</b>
+      ${open ? `<span class="completing-gap">Sin asignar: ${esc(open)}</span>` : ''}
+      <span class="spacer"></span>
+      <button class="btn press" type="button" data-completing-review>Revisar lista</button>
+      <button class="btn primary press" type="button" data-completing-done data-nav-leading>Terminar</button>`;
+  }
+  // In the strip, in place of the last plays, until the next play or ✕: the play just logged and when it was.
+  function renderTimeBar() {
+    const c = ui.completing, e = c && c.timed && state.events.find((x) => x.id === c.timed.id), bar = $('time-bar');
+    bar.hidden = !e;
+    $('events').hidden = Boolean(e);
+    bar.innerHTML = e ? `<b class="time-play">${esc(describe(e))} · ¿cuándo?</b>${timeChoicesHtml(e, c.timed)}
+      <button class="btn icon press" type="button" data-time-close aria-label="Dejar sin tiempo">✕</button>` : '';
+  }
+  $('completing').addEventListener('click', (ev) => {
+    const b = ev.target.closest('button');
+    if (!b || !ui.completing) return;
+    if (b.hasAttribute('data-completing-review')) openPlays();
+    else if (b.hasAttribute('data-completing-done')) endCompleting();
+  });
+  $('time-bar').addEventListener('click', (ev) => {
+    const b = ev.target.closest('button');
+    const c = ui.completing;
+    if (!b || b.disabled || !c || !c.timed) return;
+    if (b.hasAttribute('data-time-close')) c.timed = null;
+    else if (!timeChoiceClick(b, c.timed.id, c.timed)) return;
+    renderTimeBar();
+  });
+  $('time-bar').addEventListener('input', (ev) => { if (ev.target.hasAttribute('data-time-input')) ev.target.value = maskClockText(ev.target.value); });
+  $('time-bar').addEventListener('submit', (ev) => {
+    ev.preventDefault();
+    const c = ui.completing;
+    if (!c || !c.timed) return;
+    const problem = submitExactTime(ev.target, c.timed.id, c.timed);
+    if (problem) hint(problem);
+    renderTimeBar();
+  });
+
+  // ---- The review list: the whole match in order, over the live screen ----
+  function openPlays() {
+    if (!ui.completing) return;
+    closePop();
+    ui.plays = { filter: 'all', half: halfOf(Math.max(0, matchEndAbs() - 1)), status: '', statusTimer: null };
     $('plays').hidden = false;
     armBackGuard();
-    if (assign && openFixes().length) startAssign(openFixes().map((e) => e.id));
-    else renderPlays();
+    renderPlays();
   }
   function hidePlays() {
     if (ui.plays) clearTimeout(ui.plays.statusTimer);
@@ -7327,14 +7400,11 @@ table { border-collapse: collapse; width: 100%; }
     $('plays').hidden = true;
     $('plays').innerHTML = '';
   }
-  // Back to where it came from, with every figure rebuilt; the changes go up at once so others see them.
+  // Back to the court, the strip showing the score as it is now.
   function closePlays() {
-    const from = ui.plays && ui.plays.from;
     closePop();
     hidePlays();
-    syncMatches();
-    if (from === 'final') openFinal();
-    else if (from === 'halftime') openHalftime();
+    renderAll();
   }
   function playsStatus(text) {
     const v = ui.plays;
@@ -7342,8 +7412,6 @@ table { border-collapse: collapse; width: 100%; }
     clearTimeout(v.statusTimer);
     v.statusTimer = setTimeout(() => { if (ui.plays !== v) return; v.status = ''; const el = $('plays-status'); if (el) el.textContent = ''; }, CONFIG.hintMs);
   }
-
-  // ---- The timeline ----
   // Score after each play, in match order.
   function runningScores() {
     const after = new Map();
@@ -7357,62 +7425,54 @@ table { border-collapse: collapse; width: 100%; }
   }
   const blockOf = (abs) => Math.min(Math.floor(abs / SECONDS_PER_BLOCK), (2 * CONFIG.halfSeconds) / SECONDS_PER_BLOCK - 1);
   const halfStarted = (half) => half === 1 || state.clock.period === 2;
-  function playTagsHtml(e, gaps, usedFix) {
+  function playTagsHtml(e, gaps) {
     const tags = [];
-    if (CARD_KINDS.includes(e.kind) && exclusionsOf(e.kind).includes(e)) tags.push(`<span class="play-tag window">${absToClock(exclusionStart(e))} → ${absToClock(exclusionEnd(e))}</span>`);
+    if (CARD_KINDS.includes(e.kind) && exclusionsOf(e.kind).includes(e) && hasMatchTime(e)) tags.push(`<span class="play-tag window">${absToClock(exclusionStart(e))} → ${absToClock(exclusionEnd(e))}</span>`);
     if (e.clockShift) tags.push('<span class="play-tag bad">2\' alterado</span>');
     if (e.late) tags.push('<span class="play-tag late">añadida</span>');
     else if (e.edited) tags.push('<span class="play-tag late">editada</span>');
-    if (e.kind === 'SCORE_FIX' && gaps[e.team].open.includes(e) && e !== usedFix) tags.push('<span class="play-assign">Asignar</span>');
+    if (e.kind === 'SCORE_FIX' && gaps[e.team].open.includes(e)) tags.push('<span class="play-assign">Asignar</span>');
     return tags.join('');
   }
-  // `usedFix`: the open fix the composer's goal uses up, named so.
-  function playRowHtml(e, scores, gaps, usedFix = null) {
+  function playRowHtml(e, scores, gaps) {
     const fix = e.kind === 'SCORE_FIX';
-    const gapNote = !fix ? '' : e === usedFix ? ' · se usa para este gol' : gaps[e.team].open.includes(e) ? ' · sin asignar' : gaps[e.team].surplus.includes(e) ? ' · de más' : '';
+    const gapNote = !fix ? '' : gaps[e.team].open.includes(e) ? ' · sin asignar' : gaps[e.team].surplus.includes(e) ? ' · de más' : '';
     const counts = fix || isGoalPlay(e);
-    return `<button class="play-row press${fix ? ' fix' : ''}" type="button" data-play="${e.id}"><time>${absToClock(e.abs)}</time><i class="dot" style="background:${fix ? 'var(--gold)' : eventColor(e)}"></i>
-      <span class="txt">${esc(describe(e) + gapNote)}</span>${playTagsHtml(e, gaps, usedFix)}${counts ? `<span class="sc">${scores.get(e.id).us}–${scores.get(e.id).them}</span>` : ''}</button>`;
+    return `<button class="play-row press${fix ? ' fix' : ''}" type="button" data-play="${e.id}"><time${hasMatchTime(e) ? '' : ' class="loose"'}>${playTimeLabel(e)}</time><i class="dot" style="background:${fix ? 'var(--gold)' : eventColor(e)}"></i>
+      <span class="txt">${esc(describe(e) + gapNote)}</span>${playTagsHtml(e, gaps)}${counts ? `<span class="sc">${scores.get(e.id).us}–${scores.get(e.id).them}</span>` : ''}</button>`;
   }
-  // The «aquí» marker of the composer: where its play goes, what it is and the score it leaves.
-  function playHereHtml(c) {
-    const play = composerPlay(c), complete = play && !composerProblem(c);
-    const text = complete ? describe({ id: COMPOSER_EVENT_ID, abs: c.abs, kind: play.kind, ...play.data }) : 'La jugada entra aquí';
-    return `<div class="play-here" id="play-here"><time>${absToClock(c.abs)}</time><span class="txt">▸ ${esc(text)}</span>${complete ? `<span class="sc">${scoreText(composerScore(c))}</span>` : ''}</div>`;
-  }
-  // One half: its 5' blocks with the score at their end and a «＋» that opens the composer there.
-  function playHalfHtml(half, { filter, composer = null } = {}) {
-    const scores = runningScores(), gaps = scoreFixGaps(), test = playsFilter(filter).test, usedFix = composer ? composerFix(composer) : null;
-    const inHalf = state.events.filter((e) => halfOf(e.abs) === half && (!composer || e.id !== composer.editId));
-    const shown = inHalf.filter(test);
+  // One half: its 5' blocks with the score at their end, then its quarters' plays without an exact second; the plays
+  // without time close the half being played.
+  function playHalfHtml(half, filter) {
+    const scores = runningScores(), gaps = scoreFixGaps(), test = playsFilter(filter).test;
+    const inHalf = state.events.filter((e) => (e.timing === PLAY_TIMING.NONE ? half === state.clock.period : halfOf(e.abs) === half));
+    const shown = inHalf.filter(test), timed = shown.filter(hasMatchTime);
     const end = matchEndAbs(), first = blockOf(halfStart(half)), blocks = CONFIG.halfSeconds / SECONDS_PER_BLOCK;
     const atEnd = score(state.events.filter((e) => halfOf(e.abs) <= half));
-    let here = Boolean(composer && halfOf(composer.abs) === half);
-    const list = !halfStarted(half) ? '<p class="note play-empty">Aún no se ha jugado.</p>' : Array.from({ length: blocks }, (_, i) => first + i).map((b) => {
-      const from = b * SECONDS_PER_BLOCK, rows = shown.filter((e) => blockOf(e.abs) === b);
+    const block = (label, rows, right = '') => (filter !== 'all' && !rows.length ? ''
+      : `<div class="play-block"><span>${label}</span><b>${right}</b></div>${rows.map((e) => playRowHtml(e, scores, gaps)).join('')}`);
+    const minutes = Array.from({ length: blocks }, (_, i) => first + i).map((b) => {
+      const from = b * SECONDS_PER_BLOCK, rows = timed.filter((e) => blockOf(e.abs) === b);
       if (from > end && !rows.length) return '';
-      if (filter !== 'all' && !rows.length && !(here && blockOf(composer.abs) === b)) return '';
-      const blockScore = score(state.events.filter((e) => blockOf(e.abs) <= b));
-      const add = composer ? '' : `<button class="press" type="button" data-plays-add-at="${from}" aria-label="Añadir jugada entre el ${from / SECONDS_PER_MINUTE}' y el ${(from + SECONDS_PER_BLOCK) / SECONDS_PER_MINUTE}'">＋</button>`;
-      const items = rows.map((e) => {
-        let marker = '';
-        if (here && e.abs > composer.abs) { marker = playHereHtml(composer); here = false; }
-        return marker + playRowHtml(e, scores, gaps, usedFix);
-      }).join('');
-      const tail = here && blockOf(composer.abs) === b ? (here = false, playHereHtml(composer)) : '';
-      return `<div class="play-block"><span>${from / SECONDS_PER_MINUTE}' – ${(from + SECONDS_PER_BLOCK) / SECONDS_PER_MINUTE}'</span><b>${scoreText(blockScore)}</b>${add}</div>${items}${tail}`;
+      return block(`${from / SECONDS_PER_MINUTE}' – ${(from + SECONDS_PER_BLOCK) / SECONDS_PER_MINUTE}'`, rows, scoreText(score(state.events.filter((e) => blockOf(e.abs) <= b))));
     }).join('');
-    return `<section class="play-half${!composer && ui.plays.half !== half ? ' phone-hidden' : ''}" aria-label="${halfLabel(half)} parte">
-      <header><h3>${halfLabel(half)} parte</h3><small>${composer ? 'la jugada entra aquí' : plural(inHalf.length, 'jugada', 'jugadas')}</small><b>${halfStarted(half) ? scoreText(atEnd) : ''}</b></header>
+    const quarters = TIME_BUCKETS.filter((b) => b.half === half).map((b) => {
+      const rows = shown.filter((e) => e.timing === PLAY_TIMING.BUCKET && e.bucket === b.key);
+      return rows.length ? block(bucketLabel(b), rows) : '';
+    }).join('');
+    const untimed = shown.filter((e) => e.timing === PLAY_TIMING.NONE);
+    const list = !halfStarted(half) ? '<p class="note play-empty">Aún no se ha jugado.</p>' : minutes + quarters + (untimed.length ? block('Sin tiempo', untimed) : '');
+    return `<section class="play-half${ui.plays.half !== half ? ' phone-hidden' : ''}" aria-label="${halfLabel(half)} parte">
+      <header><h3>${halfLabel(half)} parte</h3><small>${plural(inHalf.length, 'jugada', 'jugadas')}</small><b>${halfStarted(half) ? scoreText(atEnd) : ''}</b></header>
       <div class="play-list" data-keep-scroll="half-${half}">${list}</div></section>`;
   }
   // The gold banners of what the score fixes left: goals to assign, and goals one too many. `summary`: the final or
-  // half-time summary, where «Asignar» opens the editor (`summary` names it) and a surplus is only reported.
+  // half-time summary, where «Asignar» enters completion mode (`summary` names it) and a surplus is only reported.
   function playsGapHtml(gaps, summary = null) {
     const open = SCORE_TEAMS.reduce((n, t) => n + gaps[t].open.length, 0), surplus = SCORE_TEAMS.find((t) => gaps[t].surplus.length);
-    const assign = summary ? `data-final-assign="${summary}"` : 'data-plays-assign';
+    const assign = summary ? `data-final-assign="${summary}"` : 'data-plays-add';
     const banners = [];
-    if (open) banners.push(`<span class="n">${open}</span><div><b>Goles sin asignar</b><p>${esc(gapText(gaps, 'open'))} · vienen de «Corregir marcador»: asígnalos para que cuenten en la valoración.</p></div>
+    if (open) banners.push(`<span class="n">${open}</span><div><b>Goles sin asignar</b><p>${esc(gapText(gaps, 'open'))} · vienen de «Corregir marcador»: apunta cada gol en la pista para que cuente en la valoración.</p></div>
       <span class="spacer"></span><button class="btn gold press" type="button" ${assign}>Asignar (${open}) ›</button>`);
     if (surplus) banners.push(`<div><b>${esc(gapText(gaps, 'surplus'))} de más</b><p>Un «−1» de «Corregir marcador» quita un gol apuntado: busca cuál sobra y bórralo con su ajuste.</p></div>
       ${summary ? '' : `<span class="spacer"></span><button class="btn press" type="button" data-plays-filter="${TEAM_GOALS_FILTER}${surplus}">Ver goles</button>`}`);
@@ -7424,228 +7484,28 @@ table { border-collapse: collapse; width: 100%; }
     const halfSwitch = `<div class="seg plays-half-seg" role="group" aria-label="Parte">${HALVES.map((h) => `<button type="button" data-plays-half="${h}" aria-pressed="${v.half === h}">${halfLabel(h)}</button>`).join('')}</div>`;
     return `<div class="plays-filters" role="toolbar" aria-label="Filtrar jugadas">${halfSwitch}${filters.map(chip).join('')}</div>`;
   }
-
-  // ---- The composer: when, what, who, where; all four steps in view ----
-  function newComposer(over = {}) {
-    const last = ui.playsLast || {};
-    return { mode: 'add', editId: null, fixIds: [], fixAt: 0, abs: last.abs ?? halfStart(halfOf(Math.max(0, matchEndAbs() - 1))), team: 'us', tile: null, sub: null,
-      playerId: null, gkId: null, gkAuto: true, rivalId: null, zone: last.zone || DEFAULT_COMPOSER_ZONE, contra: false, passId: null, passPicking: false, useFix: true, reveal: null, ...over };
-  }
-  function openComposer(over) {
-    const v = ui.plays;
-    v.composer = newComposer(over);
-    // A play edited keeps its second; a new one starts where the composer can go.
-    if (v.composer.mode !== 'edit') v.composer.abs = playableAbs(v.composer.abs);
-    syncComposerKeeper(v.composer);
-    renderPlays();
-  }
-  function editComposer(id) {
-    const e = state.events.find((x) => x.id === id);
-    if (!e || !EDITABLE_KINDS.includes(e.kind)) return;
-    const zone = e.kind === 'SHOT' ? e.from || e.zone : e.zone;
-    openComposer({ mode: 'edit', editId: id, abs: e.abs, team: teamOfPlay(e.kind), ...tileForEvent(e), playerId: e.playerId || null, gkId: e.gkId || null, gkAuto: false,
-      rivalId: e.rivalId || null, zone: zone === ZONE_CONTRA ? DEFAULT_COMPOSER_ZONE : zone || DEFAULT_COMPOSER_ZONE, contra: e.kind === 'SHOT' ? e.zone === ZONE_CONTRA : Boolean(e.contra) });
-  }
-  // Assigns the open fixes `ids` one after another: time from the fix, the team's goal tile locked.
-  function startAssign(ids) {
-    ui.plays.composer = newComposer({ mode: 'assign', fixIds: ids, fixAt: 0 });
-    loadAssignFix(ui.plays.composer);
-    renderPlays();
-  }
-  const assignFix = (c) => state.events.find((e) => e.id === c.fixIds[c.fixAt] && e.kind === 'SCORE_FIX') || null;
-  function loadAssignFix(c) {
-    while (c.fixAt < c.fixIds.length && !assignFix(c)) c.fixAt++;
-    const fix = assignFix(c);
-    if (!fix) { ui.plays.composer = null; return; }
-    const kind = fix.team === 'us' ? 'SHOT' : 'RIVAL_SHOT';
-    Object.assign(c, { abs: fix.abs, team: fix.team, tile: `${kind}:GOL`, sub: null, playerId: null, rivalId: null, passId: null, passPicking: false, contra: false, gkAuto: true });
-    syncComposerKeeper(c);
-  }
-  // A rival shot starts with the keeper in goal at that second (when the court log knows him), until the coach picks one.
-  function syncComposerKeeper(c) {
-    if (!c.gkAuto) return;
-    c.gkId = courtSetAt(state, c.abs) != null ? keeperAt(state, c.abs) : null;
-  }
-  const composerKind = (c) => (tileOf(c) || {}).kind || null;
-  const offersPass = (c) => c.mode !== 'edit' && composerKind(c) === 'SHOT' && (c.sub || (tileOf(c) || {}).result) === 'GOL';
-  // The open fix the composer's goal uses up: in assign mode its own; adding a goal, the nearest open one of that team.
-  function composerFix(c) {
-    if (c.mode === 'assign') return assignFix(c);
-    const play = composerPlay(c);
-    if (c.mode !== 'add' || !play || play.data.result !== 'GOL' || !c.useFix) return null;
-    return fixToConsume(teamOfPlay(play.kind), c.abs);
-  }
-  function composerScore(c) {
-    const play = composerPlay(c), fix = composerFix(c);
-    return score((play ? eventsWithPlay(c, play) : state.events).filter((e) => e !== fix));
-  }
-  // A late card that sends the player off, and his plays logged after it: «Descalificado desde el 41' · tiene 2 jugadas posteriores».
-  function sendOffWarning(c, play) {
-    if (play.kind !== 'SANCTION' || !play.data.playerId) return '';
-    const events = eventsWithPlay(c, play), id = play.data.playerId;
-    const out = sendOffsOf('SANCTION', events).get(id);
-    if (!out || out.id !== (c.editId || COMPOSER_EVENT_ID)) return '';
-    const later = state.events.filter((e) => e.playerId === id && e.abs > c.abs && !CARD_KINDS.includes(e.kind) && e.id !== c.editId).length;
-    return `Descalificado desde el ${minuteLabel(c.abs)}${later ? ` · tiene ${plural(later, 'jugada posterior', 'jugadas posteriores')}` : ''}`;
-  }
-  // `key` names the step, so a tap can bring the next one into view (see renderPlays).
-  const COMPOSER_STEPS = { when: 1, what: 2, who: 3, zone: 4 };
-  function stepHtml(key, title, extra, body) {
-    return `<section class="cmp-step" data-step="${key}"><header><span class="k">${COMPOSER_STEPS[key]}</span><h3>${title}</h3>${extra}</header>${body}</section>`;
-  }
-  const segHtml = (label, items) => `<div class="seg" role="group" aria-label="${label}">${items.map(([attr, value, text, pressed, disabled]) => `<button type="button" ${attr}="${value}" aria-pressed="${pressed}"${disabled ? ' disabled' : ''}>${text}</button>`).join('')}</div>`;
-  function whenStepHtml(c) {
-    const end = matchEndAbs(), half = halfOf(c.abs), inHalf = c.abs - halfStart(half), minute = Math.floor(inHalf / SECONDS_PER_MINUTE), second = inHalf % SECONDS_PER_MINUTE;
-    const busy = new Set(state.events.filter((e) => halfOf(e.abs) === half).map((e) => Math.floor((e.abs - halfStart(half)) / SECONDS_PER_MINUTE)));
-    const halves = segHtml('Parte', HALVES.map((h) => ['data-cmp-half', h, `${halfLabel(h)} parte`, h === half, !halfStarted(h) || halfStart(h) > end]));
-    const mins = Array.from({ length: MINUTES_PER_HALF }, (_, m) => `<button class="press${busy.has(m) ? ' has' : ''}" type="button" data-cmp-min="${m}" aria-pressed="${m === minute}"${halfStart(half) + m * SECONDS_PER_MINUTE > end ? ' disabled' : ''}>${m}</button>`).join('');
-    const secs = SECOND_STEPS.map((sec) => `<button class="press" type="button" data-cmp-sec="${sec}" aria-pressed="${sec === second}"${halfStart(half) + minute * SECONDS_PER_MINUTE + sec > end ? ' disabled' : ''}>:${pad2(sec)}</button>`).join('');
-    return stepHtml('when', 'Cuándo', `<output>${halfClock(c.abs)}</output>${halves}`,
-      `<div class="cmp-mins" role="group" aria-label="Minuto del reloj">${mins}</div><div class="cmp-secs" role="group" aria-label="Segundos"><span class="note">Segundos</span>${secs}</div>`);
-  }
-  function whatStepHtml(c) {
-    const locked = c.mode === 'assign';
-    const teams = segHtml('Equipo', SCORE_TEAMS.map((t) => ['data-cmp-team', t, t === 'us' ? 'Nosotros' : 'Rival', t === c.team, locked && t !== c.team]));
-    const tiles = playTiles(c.team).filter((t) => !locked || t.key === c.tile);
-    const tile = tileOf(c);
-    const tileBtn = (t) => `<button class="act press ${t.cls}" type="button" data-cmp-tile="${t.key}" aria-pressed="${t.key === c.tile}">${esc(t.label)}${t.subs && !SHOT_KINDS.includes(t.kind) ? ' ▸' : ''}</button>`;
-    const option = (g) => ([value, label, cls]) => (g.cards
-      ? `<button class="act card-btn press" type="button" data-cmp-sub="${value}" aria-pressed="${c.sub === value}">${cardIcon(SANCTIONS[value])}<span>${esc(label)}</span></button>`
-      : `<button class="act press ${cls}" type="button" data-cmp-sub="${esc(value)}" aria-pressed="${c.sub === value}">${esc(label)}</button>`);
-    const subs = tile && tile.subs ? `<div class="cmp-subs">${tile.subs.map((g) => `<div class="cmp-sub-row"><span>${esc(g.label)}</span><div class="cmp-sub-acts">${g.options.map(option(g)).join('')}</div></div>`).join('')}</div>` : '';
-    return stepHtml('what', 'Qué', teams, `<div class="cmp-tiles">${tiles.map(tileBtn).join('')}</div>${subs}`);
-  }
-  function ourPicksHtml(c, kind) {
-    const at = courtSetAt(state, c.abs), onCourt = new Set(courtSetOf(at)), others = state.events.filter((e) => e.id !== c.editId), off = offCourtAt('SANCTION', c.abs, others);
-    const sentOff = sendOffsOf('SANCTION', others);
-    const offTag = (p) => (sentOff.has(p.id) && sentOff.get(p.id).abs <= c.abs ? SANCTIONS.D.short : SANCTIONS[DEFAULT_CARD].short);
-    const pick = (p) => `<button class="pick press" type="button" data-cmp-player="${p.id}" aria-pressed="${p.id === c.playerId}"${!CARD_KINDS.includes(kind) && off.has(p.id) ? ' disabled' : ''}>${discHtml(p)}<span>${esc(p.name)}</span>${off.has(p.id) ? `<em>${offTag(p)}</em>` : ''}</button>`;
-    const players = state.players.slice().sort(byPosition);
-    if (at == null) return `<div class="cmp-picks">${players.map(pick).join('')}</div>`;
-    const bench = players.filter((p) => !onCourt.has(p.id));
-    const note = c.playerId && bench.some((p) => p.id === c.playerId) ? `<p class="note warn">No estaba en pista en el ${minuteLabel(c.abs)} según los cambios. La jugada cuenta; sus minutos no cambian.</p>` : '';
-    return `<div class="cmp-picks">${players.filter((p) => onCourt.has(p.id)).map(pick).join('')}</div>
-      ${bench.length ? `<p class="cmp-label">Banquillo en el ${minuteLabel(c.abs)} · la jugada cuenta igual</p><div class="cmp-picks bench">${bench.map(pick).join('')}</div>` : ''}${note}`;
-  }
-  function rivalPicksHtml(c, kind) {
-    if (!state.rivals.length) return '<p class="note">Sin plantilla rival: sin dorsal.</p>';
-    const off = offCourtAt('RIVAL_SANCTION', c.abs, state.events.filter((e) => e.id !== c.editId));
-    const chip = (r) => `<button class="rpick press" type="button" data-cmp-rival="${r.id}" aria-pressed="${r.id === c.rivalId}"${kind === 'RIVAL_SHOT' && off.has(r.id) ? ' disabled' : ''} aria-label="${rivalLabel(r)}">${discHtml(r, rivalPos(r))}${r.name ? `<span>${esc(r.name)}</span>` : ''}</button>`;
-    return `<p class="cmp-label">Dorsal rival (opcional)</p><div class="rival-picks${rivalPickWide() ? ' named' : ''}">${sortedRivals().map(chip).join('')}</div>`;
-  }
-  function whoStepHtml(c) {
-    const kind = composerKind(c);
-    if (!kind) return stepHtml('who', 'Quién', '', '<p class="note">Primero elige qué pasó.</p>');
-    if (isTeamPlay(c)) return stepHtml('who', 'Quién', '', '<p class="note">Falta de toda la defensa: sin jugador.</p>');
-    if (kind === 'RIVAL_SANCTION') return stepHtml('who', 'Quién', '', rivalPicksHtml(c, kind));
-    if (kind === 'RIVAL_SHOT') {
-      const known = courtSetAt(state, c.abs) != null;
-      const keeper = (g) => `<button class="pick press" type="button" data-cmp-gk="${g.id}" aria-pressed="${g.id === c.gkId}">${discHtml(g)}<span>${esc(g.name)}</span></button>`;
-      return stepHtml('who', 'Quién', `<span class="note">${known ? `Portero en el ${minuteLabel(c.abs)} según los cambios` : 'Portero'}</span>`,
-        `<div class="cmp-picks keepers">${goalkeepers().map(keeper).join('')}</div>${rivalPicksHtml(c, kind)}`);
-    }
-    const at = courtSetAt(state, c.abs);
-    return stepHtml('who', 'Quién', at == null ? '' : `<span class="note">En pista en el ${minuteLabel(c.abs)}</span>`, ourPicksHtml(c, kind));
-  }
-  function zoneStepHtml(c) {
-    if (!SHOT_KINDS.includes(composerKind(c))) return '';
-    const chip = (z) => `<button class="chip press" type="button" data-cmp-zone="${z}" aria-pressed="${c.zone === z}">${ZONES[z]}</button>`;
-    const penalty = c.zone === KPI_PENALTY_ZONE;
-    const contra = `<button class="chip press" type="button" data-cmp-contra aria-pressed="${c.contra && !penalty}"${penalty ? ' disabled' : ''}>Contraataque</button>`;
-    const passer = c.passId ? playerById(c.passId) : null;
-    const pass = offersPass(c) ? `<button class="chip press cmp-pass" type="button" data-cmp-pass aria-pressed="${Boolean(passer) || c.passPicking}">${passer ? `Pase: ${esc(passer.name)} ✕` : '＋ Pase'}</button>` : '';
-    const onCourt = new Set(courtSetOf(courtSetAt(state, c.abs)));
-    const mates = state.players.filter((p) => p.id !== c.playerId && (!onCourt.size || onCourt.has(p.id))).sort(byPosition);
-    const picker = offersPass(c) && c.passPicking ? `<p class="cmp-label">Pase de gol</p><div class="cmp-picks">${mates.map((p) => `<button class="pick press" type="button" data-cmp-passer="${p.id}">${discHtml(p)}<span>${esc(p.name)}</span></button>`).join('')}</div>` : '';
-    return stepHtml('zone', 'Zona', '', `<div class="cmp-zones">${composerZones().map(chip).join('')}${contra}${pass}</div>${picker}`);
-  }
-  function composerFooterHtml(c) {
-    const play = composerPlay(c), problem = composerProblem(c);
-    const before = score(), after = composerScore(c);
-    const lines = [];
-    if (c.mode === 'assign') lines.push(`<p class="cmp-effect">El marcador no cambia${c.team === 'them' ? ' · cuenta como gol encajado para el portero' : ''}.</p>`);
-    else if (c.mode === 'add' && play && play.data.result === 'GOL' && fixToConsume(teamOfPlay(play.kind), c.abs)) {
-      lines.push(`<button class="cmp-switch press" type="button" role="switch" data-cmp-usefix aria-checked="${c.useFix}"><i aria-hidden="true"></i><span>${c.useFix ? `Usa 1 gol sin asignar · <b>el marcador sigue ${scoreText(after)}</b>` : `No usa los goles sin asignar · <b>el marcador pasa a ${scoreText(after)}</b>`}</span></button>`);
-    } else if (play && (after.us !== before.us || after.them !== before.them)) lines.push(`<p class="cmp-effect">El marcador pasa a <b>${scoreText(after)}</b>.</p>`);
-    const warn = play ? sendOffWarning(c, play) : '';
-    if (warn) lines.push(`<p class="note warn">${esc(warn)}</p>`);
-    if (problem) lines.push(`<p class="note">${esc(problem)}</p>`);
-    const go = (attr, text) => `<button class="btn go press" type="button" ${attr}${problem ? ' disabled' : ''}>${text}</button>`;
-    const fixOf = assignFix(c);
-    const acts = c.mode === 'edit'
-      ? `<button class="btn press" type="button" data-cmp-cancel>Cancelar</button>${go('data-cmp-save', 'Guardar cambios')}`
-      : c.mode === 'assign'
-        ? `<button class="btn press" type="button" data-cmp-skip>Saltar</button>${go('data-cmp-add', fixOf && fixOf.team === 'us' ? 'Asignar gol' : 'Asignar gol encajado')}`
-        : `<button class="btn press" type="button" data-cmp-cancel>Cancelar</button><button class="btn press" type="button" data-cmp-again${problem ? ' disabled' : ''}>Añadir y otra</button>${go('data-cmp-add', 'Añadir')}`;
-    return `<footer>${lines.filter(Boolean).join('')}<div class="cmp-acts">${acts}</div></footer>`;
-  }
-  function composerHtml(c) {
-    const title = c.mode === 'assign' ? `<p class="cmp-assign">Asignar · ${c.fixAt + 1} de ${c.fixIds.length}</p>` : c.mode === 'edit' ? '<p class="cmp-assign">Editar jugada</p>' : '';
-    return `<aside class="composer" aria-label="${c.mode === 'edit' ? 'Editar jugada' : 'Añadir jugada'}"><div class="composer-body" data-keep-scroll="composer">${title}
-      ${whenStepHtml(c)}${whatStepHtml(c)}${whoStepHtml(c)}${zoneStepHtml(c)}</div>${composerFooterHtml(c)}</aside>`;
-  }
-
   function renderPlays() {
     const v = ui.plays;
     if (!v) return;
     const kept = new Map([...$('plays').querySelectorAll('[data-keep-scroll]')].map((el) => [el.dataset.keepScroll, el.scrollTop]));
     const pageScroll = $('plays').scrollTop;
-    const c = v.composer, s = score(), logged = loggedScore(), gaps = scoreFixGaps();
-    const open = gapText(gaps, 'open');
-    const sub = c && open ? `${open} sin asignar` : logged.us !== s.us || logged.them !== s.them ? `apuntado ${scoreText(logged)}` : '';
-    const from = PLAYS_FROM[v.from];
-    $('plays').innerHTML = `<div class="plays-card${c ? ' composing' : ''}">
-      <header class="plays-top">${backButtonHtml(NAV_LABELS[from.back], 'data-plays-close')}
-        <div class="plays-title"><h2>Completar jugadas</h2><small>${esc(state.us)} – ${esc(state.them)} · ${from.period}</small></div>
+    const s = score(), logged = loggedScore(), gaps = scoreFixGaps();
+    const sub = logged.us !== s.us || logged.them !== s.them ? `apuntado ${scoreText(logged)}` : '';
+    $('plays').innerHTML = `<div class="plays-card">
+      <header class="plays-top">${backButtonHtml(NAV_LABELS.court, 'data-plays-close')}
+        <div class="plays-title"><h2>Completar jugadas</h2><small>${esc(state.us)} – ${esc(state.them)} · revisar lista</small></div>
         <span class="spacer"></span>
         <div class="plays-score"><b aria-label="Marcador">${scoreText(s)}</b>${sub ? `<small>${esc(sub)}</small>` : ''}</div>
         <div class="plays-tools"><button class="btn icon press" type="button" data-plays-undo aria-label="Deshacer"${state.history.length ? '' : ' disabled'}>↶</button>
           <button class="btn icon press" type="button" data-plays-redo aria-label="Rehacer"${state.future.length ? '' : ' disabled'}>↷</button>
-          ${c ? '' : '<button class="btn go press" type="button" data-plays-add>＋ Añadir jugada</button>'}</div>
+          <button class="btn go press" type="button" data-plays-add>＋ Añadir jugada</button></div>
       </header>
-      ${c ? '' : playsGapHtml(gaps) + playsFiltersHtml()}
-      ${c ? `<div class="plays-split">${playHalfHtml(halfOf(c.abs), { filter: 'all', composer: c })}${composerHtml(c)}</div>`
-    : `<div class="plays-halves">${HALVES.map((h) => playHalfHtml(h, { filter: v.filter })).join('')}</div>`}
+      ${playsGapHtml(gaps)}${playsFiltersHtml()}
+      <div class="plays-halves">${HALVES.map((h) => playHalfHtml(h, v.filter)).join('')}</div>
       <p class="plays-status" id="plays-status" role="status">${esc(v.status)}</p>
     </div>`;
     $('plays').querySelectorAll('[data-keep-scroll]').forEach((el) => { if (kept.has(el.dataset.keepScroll)) el.scrollTop = kept.get(el.dataset.keepScroll); });
     $('plays').scrollTop = pageScroll;
-    const here = $('play-here');
-    if (here) { const list = here.closest('.play-list'); list.scrollTop = here.offsetTop - (list.clientHeight - here.offsetHeight) / 2; }
-    const next = c && c.reveal && $('plays').querySelector(`[data-step="${c.reveal}"]`);
-    if (c) c.reveal = null;
-    if (next) next.scrollIntoView({ block: 'nearest' });
-  }
-
-  // ---- Changes ----
-  // A second the composer can take: in a half already started, never past the clock.
-  function playableAbs(abs) {
-    const half = halfStarted(halfOf(abs)) ? halfOf(abs) : 1;
-    return clamp(abs, halfStart(half), Math.min(halfStart(half) + CONFIG.halfSeconds - 1, matchEndAbs()));
-  }
-  function composerSetTime(c, abs) {
-    c.abs = playableAbs(abs);
-    syncComposerKeeper(c);
-  }
-  function commitComposer(again) {
-    const v = ui.plays, c = v.composer, play = composerPlay(c);
-    if (!play || composerProblem(c)) return;
-    const p = play.data.playerId ? playerById(play.data.playerId) : null, wasOut = Boolean(p) && isDisqualified(p.id);
-    if (c.mode === 'edit') {
-      const e = replacePastEvent(c.editId, play.kind, play.data, c.abs);
-      playsStatus(e ? `Cambiado: ${describe(e)} · ↶ deshacer` : 'Esa jugada ya no está en el partido.');
-    } else {
-      const fix = composerFix(c);
-      const e = addPastEvent(play.kind, play.data, c.abs, { consumeFixId: fix ? fix.id : null, assist: offersPass(c) ? c.passId : null });
-      playsStatus(`${c.mode === 'assign' ? 'Asignado' : 'Añadido'}: ${describe(e)} · ↶ deshacer`);
-    }
-    // At half-time (or with the clock stopped) a late send-off leaves the lineups now; after the final whistle they stay.
-    if (p && play.kind === 'SANCTION' && !wasOut && isDisqualified(p.id) && !state.finished) sendOff(p, play.data.card);
-    ui.playsLast = { abs: c.abs, zone: c.zone };
-    if (c.mode === 'assign') { c.fixAt++; loadAssignFix(c); }
-    else if (again) Object.assign(c, { tile: null, sub: null, playerId: null, rivalId: null, passId: null, passPicking: false, contra: false, useFix: true });
-    else v.composer = null;
-    renderPlays();
   }
   function playsUndoRedo(redoing) {
     if (!(redoing ? state.future : state.history).length) return;
@@ -7654,79 +7514,35 @@ table { border-collapse: collapse; width: 100%; }
     if (op) playsStatus(`${redoing ? '↷' : '↶'} ${opLabel(op)}`);
     renderPlays();
   }
-  function composerClick(b, c) {
-    const d = b.dataset;
-    if (d.cmpHalf) composerSetTime(c, halfStart(Number(d.cmpHalf)) + (c.abs % CONFIG.halfSeconds));
-    else if (d.cmpMin) composerSetTime(c, halfStart(halfOf(c.abs)) + Number(d.cmpMin) * SECONDS_PER_MINUTE + (c.abs % SECONDS_PER_MINUTE));
-    else if (d.cmpSec) composerSetTime(c, c.abs - (c.abs % SECONDS_PER_MINUTE) + Number(d.cmpSec));
-    else if (d.cmpTeam) { if (c.team !== d.cmpTeam) Object.assign(c, { team: d.cmpTeam, tile: null, sub: null, playerId: null, rivalId: null, passId: null, passPicking: false }); }
-    else if (d.cmpTile) {
-      const tile = playTiles(c.team).find((t) => t.key === d.cmpTile);
-      if (c.tile !== tile.key) Object.assign(c, { sub: defaultSub(tile), reveal: 'who' });
-      c.tile = tile.key;
-      if (!offersPass(c)) { c.passId = null; c.passPicking = false; }
-    } else if (d.cmpSub != null) c.sub = d.cmpSub;
-    else if (d.cmpPlayer) { c.playerId = d.cmpPlayer; c.reveal = 'zone'; if (c.passId === c.playerId) c.passId = null; }
-    else if (d.cmpGk) { c.gkId = d.cmpGk; c.gkAuto = false; }
-    else if (d.cmpRival) c.rivalId = c.rivalId === d.cmpRival ? null : d.cmpRival;
-    else if (d.cmpZone) { c.zone = d.cmpZone; if (c.zone === KPI_PENALTY_ZONE) c.contra = false; }
-    else if (b.hasAttribute('data-cmp-contra')) c.contra = !c.contra;
-    else if (b.hasAttribute('data-cmp-pass')) { if (c.passId) c.passId = null; else c.passPicking = !c.passPicking; }
-    else if (d.cmpPasser) { c.passId = d.cmpPasser; c.passPicking = false; }
-    else if (b.hasAttribute('data-cmp-usefix')) c.useFix = !c.useFix;
-    else if (b.hasAttribute('data-cmp-cancel')) ui.plays.composer = null;
-    else if (b.hasAttribute('data-cmp-skip')) { c.fixAt++; loadAssignFix(c); }
-    else if (b.hasAttribute('data-cmp-add') || b.hasAttribute('data-cmp-save')) { commitComposer(false); return; }
-    else if (b.hasAttribute('data-cmp-again')) { commitComposer(true); return; }
-    else return;
-    renderPlays();
-  }
   $('plays').addEventListener('click', (ev) => {
     const b = ev.target.closest('button');
     const v = ui.plays;
     if (!b || !v || b.disabled) return;
     const d = b.dataset;
-    if (b.hasAttribute('data-plays-close')) { closePlays(); return; }
+    if (b.hasAttribute('data-plays-close') || b.hasAttribute('data-plays-add')) { closePlays(); return; }
     if (b.hasAttribute('data-plays-undo')) { playsUndoRedo(false); return; }
     if (b.hasAttribute('data-plays-redo')) { playsUndoRedo(true); return; }
-    if (b.hasAttribute('data-plays-add')) { openComposer(); return; }
-    if (d.playsAddAt) { openComposer({ abs: Number(d.playsAddAt) }); return; }
-    if (b.hasAttribute('data-plays-assign')) { startAssign(openFixes().map((e) => e.id)); return; }
     if (d.playsFilter) { v.filter = v.filter === d.playsFilter ? 'all' : d.playsFilter; renderPlays(); return; }
     if (d.playsHalf) { v.half = Number(d.playsHalf); renderPlays(); return; }
-    if (d.play) { const r = b.getBoundingClientRect(); openPlayPop(d.play, { x: r.left + r.width / 2, y: r.top + r.height / 2 }); return; }
-    if (v.composer) composerClick(b, v.composer);
+    if (d.play) { const r = b.getBoundingClientRect(); openPlayPop(d.play, { x: r.left + r.width / 2, y: r.top + r.height / 2 }); }
   });
 
-  // ---- A play's popup: its fields (each opens the composer on it), add after it, restore its 2', delete ----
+  // ---- A play's popup: change the time of a play added late, restore its 2', delete ----
   function openPlayPop(id, anchor) {
     if (!state.events.some((e) => e.id === id)) return;
-    ui.popView = { type: 'plays', id, anchor, view: 'row', withAssist: true, withFix: true };
+    ui.popView = { type: 'plays', id, anchor, view: 'row', withAssist: true, withFix: true, exact: false, half: state.clock.period };
     openPop(playPopHtml(ui.popView), anchor);
-  }
-  const fieldHtml = (label, value) => `<button class="field press" type="button" data-pp-edit><small>${label}</small><span>${esc(value)}</span></button>`;
-  function playFieldsHtml(e) {
-    const p = e.playerId ? playerById(e.playerId) : null, who = p ? `#${p.num} ${p.name}` : 'Equipo';
-    const zone = (z, contra) => `${ZONES[z]}${contra ? ' · contraataque' : ''}`;
-    const rival = (id) => { const r = rivalById(id); return r ? rivalLabel(r) : 'Sin dorsal'; };
-    const fields = [['Minuto', halfClock(e.abs)]];
-    if (e.kind === 'SHOT') fields.push(['Jugador', who], ['Resultado', RESULTS[e.result].label], ['Zona', zone(e.from || e.zone, e.zone === ZONE_CONTRA)]);
-    if (e.kind === 'RIVAL_SHOT') { const gk = playerById(e.gkId); fields.push(['Portero', gk ? `#${gk.num} ${gk.name}` : '–'], ['Dorsal', rival(e.rivalId)], ['Resultado', RESULTS[e.result].label], ['Zona', zone(e.zone, e.contra)]); }
-    if (e.kind === 'ACTION') fields.push(['Jugador', who], ['Tipo', ACTIONS[e.action].label]);
-    if (e.kind === 'TURNOVER') fields.push(['Jugador', who], ['Tipo', e.subtype]);
-    if (e.kind === 'SANCTION') fields.push(['Jugador', who], ['Tarjeta', SANCTIONS[e.card].label]);
-    if (e.kind === 'RIVAL_SANCTION') fields.push(['Dorsal', rival(e.rivalId)], ['Tarjeta', SANCTIONS[e.card].label]);
-    return fields.map(([label, value]) => fieldHtml(label, value)).join('');
   }
   // What else goes with a deletion: the pass of goal, and a surplus −1 fix of the same team (the score then stays).
   function deletionExtras(e) {
     if (!isGoalPlay(e)) return { assist: null, fix: null };
-    return { assist: e.kind === 'SHOT' ? assistOf(e) : null, fix: scoreFixGaps()[teamOfPlay(e.kind)].surplus[0] || null };
+    return { assist: e.kind === 'SHOT' ? pairedAssists(e)[0] || assistOf(e) : null, fix: scoreFixGaps()[teamOfPlay(e.kind)].surplus[0] || null };
   }
   function playPopHtml(v) {
     const e = state.events.find((x) => x.id === v.id);
-    const head = `<h3>${halfClock(e.abs)}</h3><b class="pop-title">${esc(describe(e))}</b>`;
+    const head = `<h3>${playMomentLabel(e)}</h3><b class="pop-title">${esc(describe(e))}</b>`;
     const check = (key, on, text) => `<button class="check press" type="button" role="checkbox" aria-checked="${on}" data-pp-toggle="${key}"><i aria-hidden="true">✓</i><span>${text}</span></button>`;
+    if (v.view === 'time') return `${head}<div class="time-choices">${timeChoicesHtml(e, v, { none: true })}</div><button class="act c-neutral" type="button" data-pp-back>Cancelar</button>`;
     if (v.view === 'delete') {
       const { assist, fix } = deletionExtras(e), passer = assist && playerById(assist.playerId);
       const removed = [e, ...(v.withFix && fix ? [fix] : [])];
@@ -7736,7 +7552,7 @@ table { border-collapse: collapse; width: 100%; }
       if (SHOT_KINDS.includes(e.kind) && kpiShotZone(e) === KPI_PENALTY_ZONE) notes.push(`«${ACTIONS[e.kind === 'SHOT' ? 'PROV7' : 'PEN7C'].label}» se queda: bórralo aparte si tampoco fue.`);
       const before = score(), moves = after.us !== before.us || after.them !== before.them;
       return `${head}
-        ${assist && passer ? check('withAssist', v.withAssist, `Borrar también el pase de gol de <b>#${passer.num} ${esc(passer.name)}</b> (${absToClock(assist.abs)})`) : ''}
+        ${assist && passer ? check('withAssist', v.withAssist, `Borrar también el pase de gol de <b>#${passer.num} ${esc(passer.name)}</b> (${playTimeLabel(assist)})`) : ''}
         ${fix ? check('withFix', v.withFix, `Quitar también el ajuste −1 de las ${absToClock(fix.abs)}: el marcador no cambia`) : ''}
         ${notes.map((n) => `<p class="note">${esc(n)}</p>`).join('')}
         ${SHOT_KINDS.includes(e.kind) || e.kind === 'SCORE_FIX' ? `<p class="note${moves ? ' warn' : ''}">${moves ? `El marcador pasa a ${scoreText(after)}.` : 'El marcador no cambia.'}</p>` : ''}
@@ -7745,26 +7561,36 @@ table { border-collapse: collapse; width: 100%; }
     }
     if (e.kind === 'SCORE_FIX') {
       const open = scoreFixGaps()[e.team].open.includes(e);
-      return `${head}<p class="note">${open ? 'Un gol sin jugador: asígnalo para que cuente en la valoración.' : 'Ajuste del marcador.'}</p>
-        <div class="act-grid two">${open ? '<button class="act c-gol" type="button" data-pp-assign>Asignar</button>' : ''}<button class="act c-error" type="button" data-pp-delete>Borrar ajuste</button></div>
+      return `${head}<p class="note">${open ? 'Un gol sin jugador: apúntalo en la pista para que cuente en la valoración.' : 'Ajuste del marcador.'}</p>
+        <div class="act-grid two">${open ? '<button class="act c-gol" type="button" data-plays-add>Asignar</button>' : ''}<button class="act c-error" type="button" data-pp-delete>Borrar ajuste</button></div>
         <button class="act c-neutral" type="button" data-close>Cerrar</button>`;
     }
-    const editable = EDITABLE_KINDS.includes(e.kind);
-    return `${head}${editable ? playFieldsHtml(e) : ''}
-      <button class="act c-neutral" type="button" data-pp-after>＋ Añadir otra después</button>
+    return `${head}
+      ${e.late ? `<button class="act c-neutral" type="button" data-pp-time>Cambiar tiempo · ${playTimeLabel(e)}</button>` : ''}
       ${e.clockShift ? `<button class="act c-neutral" type="button" data-pp-reset>Restablecer 2' (${absToClock(e.abs)} → ${absToClock(e.abs + CONFIG.exclusionSeconds)})</button>` : ''}
       <div class="act-grid two"><button class="act c-error" type="button" data-pp-delete>Borrar</button><button class="act c-neutral" type="button" data-close>Cerrar</button></div>`;
+  }
+  const reopenPlayPop = (v) => openPop(playPopHtml(v), v.anchor, v.view === 'time');
+  // The play moved: the popup closes and the list says where it went.
+  function playMoved(id) {
+    const moved = state.events.find((x) => x.id === id);
+    closePop();
+    playsStatus(`${describe(moved)}: ${playMomentLabel(moved)} · ↶ deshacer`);
+    renderPlays();
   }
   function playPopClick(b, v) {
     const e = state.events.find((x) => x.id === v.id);
     if (!e) { closePop(); return; }
-    if (b.hasAttribute('data-pp-edit')) { closePop(); editComposer(v.id); return; }
-    if (b.hasAttribute('data-pp-after')) { closePop(); openComposer({ abs: e.abs }); return; }
-    if (b.hasAttribute('data-pp-assign')) { closePop(); startAssign([v.id]); return; }
+    if (b.hasAttribute('data-plays-add')) { closePlays(); return; }
+    if (v.view === 'time' && timeChoiceClick(b, v.id, v)) {
+      if (state.events.find((x) => x.id === v.id) !== e) playMoved(v.id); else reopenPlayPop(v);
+      return;
+    }
+    if (b.hasAttribute('data-pp-time')) { v.view = 'time'; v.exact = false; reopenPlayPop(v); return; }
     if (b.hasAttribute('data-pp-reset')) { closePop(); resetClockShift(v.id); playsStatus(`2' restablecido: ${describe(e)} · ↶ deshacer`); renderPlays(); return; }
-    if (b.hasAttribute('data-pp-delete')) { v.view = 'delete'; openPop(playPopHtml(v), v.anchor); return; }
-    if (b.hasAttribute('data-pp-back')) { v.view = 'row'; openPop(playPopHtml(v), v.anchor); return; }
-    if (b.dataset.ppToggle) { v[b.dataset.ppToggle] = !v[b.dataset.ppToggle]; openPop(playPopHtml(v), v.anchor); return; }
+    if (b.hasAttribute('data-pp-delete')) { v.view = 'delete'; reopenPlayPop(v); return; }
+    if (b.hasAttribute('data-pp-back')) { v.view = 'row'; reopenPlayPop(v); return; }
+    if (b.dataset.ppToggle) { v[b.dataset.ppToggle] = !v[b.dataset.ppToggle]; reopenPlayPop(v); return; }
     if (b.hasAttribute('data-pp-confirm')) {
       const { assist, fix } = deletionExtras(e);
       closePop();
@@ -7772,6 +7598,13 @@ table { border-collapse: collapse; width: 100%; }
       playsStatus(`Borrado: ${describe(e)} · ↶ deshacer`);
       renderPlays();
     }
+  }
+  // The exact form of a row's «Cambiar tiempo».
+  function submitPlayPopTime(form) {
+    const v = ui.popView;
+    if (!v || v.type !== 'plays') return;
+    const problem = submitExactTime(form, v.id, v);
+    if (problem) playsStatus(problem); else playMoved(v.id);
   }
 
   // ---- Sheet wiring ----
@@ -8451,7 +8284,7 @@ table { border-collapse: collapse; width: 100%; }
     renderHome();
     return false;
   }
-  const NAV_LABELS = { teams: 'Mis equipos', team: 'Equipo', matches: 'Partidos', liveMatch: 'Volver al partido', halftime: 'Descanso', final: 'Final', cancel: 'Cancelar' };
+  const NAV_LABELS = { teams: 'Mis equipos', team: 'Equipo', matches: 'Partidos', liveMatch: 'Volver al partido', court: 'Pista', halftime: 'Descanso', final: 'Final', cancel: 'Cancelar' };
   const backButtonHtml = (label, attrs) => `<button class="btn back-nav press" type="button" data-nav-leading ${attrs}>‹ ${esc(label)}</button>`;
   const cancelButtonHtml = (attrs, armId) => (armId ? armedButton(armId, NAV_LABELS.cancel, `data-nav-leading ${attrs}`)
     : `<button class="btn press" type="button" data-nav-leading ${attrs}>${NAV_LABELS.cancel}</button>`);
@@ -11128,7 +10961,7 @@ table { border-collapse: collapse; width: 100%; }
   window.addEventListener('popstate', () => {
     ui.backGuard = false;
     if (!$('pop').hidden) { closePop(); armBackGuard(); return; }
-    const leading = visibleLeading('plays') || visibleLeading('final') || visibleLeading('sheet') || visibleLeading('home');
+    const leading = visibleLeading('plays') || visibleLeading('final') || visibleLeading('sheet') || visibleLeading('home') || visibleLeading('completing');
     if (leading) {
       leading.click();
       // An armed «Cancelar» only arms on the first back, and a click may not leave the screen.
@@ -11141,6 +10974,7 @@ table { border-collapse: collapse; width: 100%; }
   });
   function leaveMatch(after = showMatches) {
     if (isRunning()) pauseClock();
+    quitCompleting();
     save();
     syncMatches();
     currentMatchId = null;
