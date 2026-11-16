@@ -2811,6 +2811,26 @@
       if (document.querySelector('[data-staff-from-accounts]') || (await addCoachProfiles()) !== false) throw new Error('profiles made twice');
       home.accounts = null; await saveStaff([]);
     });
+    await TA('third kit: optional in the team form, a third shirt in the convocatoria, never the app colours', async () => {
+      const saved = { ...team };
+      try {
+        showHomeView('team-edit');
+        const form = document.querySelector('[data-form="team"]');
+        if (!$('team-brand3').disabled || $('team-kit3').getAttribute('aria-pressed') !== 'false') throw new Error('a team without a third kit shows one');
+        if (teamFromForm(form, team).brand3 !== null) throw new Error('third kit without the box ticked');
+        $('team-kit3').click();
+        if ($('team-brand3').disabled) throw new Error('colour still off');
+        $('team-brand3').value = '#2255aa';
+        const fields = teamFromForm(form, team);
+        if (fields.brand3 !== '#2255aa' || fields.brand !== team.brand || fields.brand2 !== team.brand2) throw new Error(JSON.stringify(fields));
+        if (shirtChoices({ ...team, brand3: null }).length !== 2) throw new Error('two kits');
+        const three = shirtChoices({ ...team, brand3: '#2255aa' });
+        if (three.map(([label]) => label).join() !== 'Primera,Segunda,Tercera' || three[2][1] !== '#2255aa') throw new Error(JSON.stringify(three));
+        if (shirtOf({ shirt: '#2255aa' }, { ...team, brand3: '#2255aa' }) !== '#2255aa' || shirtOf({ shirt: '#2255aa' }, { ...team, brand3: null }) !== team.brand) throw new Error('shirt of a removed third kit');
+        applyTeam({ ...team, brand3: '#2255aa' });
+        if (getComputedStyle(document.documentElement).getPropertyValue('--brand').trim().toLowerCase() === '#2255aa') throw new Error('the third kit dressed the app');
+      } finally { applyTeam(saved); showHomeView('team'); }
+    });
     await TA('team form refuses empty names', async () => { showHomeView('team-edit'); $('team-name').value = '  '; await submitTeam(document.querySelector('[data-form="team"]'), false); if (team.name !== 'Ejemplo Sur' || !$('home-status').textContent.includes('vacíos')) throw new Error($('home-status').textContent); });
     await TA('team roster: add, position, duplicate dorsal refused, retire', async () => { showHomeView('team-edit'); await addTeamPlayer(); await addTeamPlayer(); await addTeamPlayer(); const [a, b, c] = home.roster; await saveTeamPlayer(a, { pos: 'POR', name: 'Ana' }); if (rosterPlayer(a.id).pos !== 'POR') throw new Error('pos'); await saveTeamPlayer(rosterPlayer(b.id), { num: a.num }); if (rosterPlayer(b.id).num === a.num || !$('home-status').textContent.includes('ya está')) throw new Error('dup'); document.querySelector(`[data-team-del="${c.id}"]`).click(); if (!rosterPlayer(c.id)) throw new Error('retired on first tap'); document.querySelector(`[data-team-del="${c.id}"]`).click(); await tick0(); await tick0(); if (rosterPlayer(c.id)) throw new Error('not retired'); const listed = await backend.listPlayers(team.id); if (listed.length !== 2) throw new Error('backend ' + listed.length); });
     await TA('roster file adds new dorsals and updates existing ones', async () => { const a = home.roster.find((p) => p.pos === 'POR'); const file = new File([JSON.stringify({ format: ROSTER_FORMAT, players: [{ num: a.num, name: 'Ana Ruiz', pos: 'POR' }, { num: 9, name: 'Lola', pos: 'CEN' }, { num: 11, name: 'Marta', pos: 'EXT' }, { num: 12, name: 'Sara', pos: 'POR' }] })], 'p.json', { type: 'application/json' }); await importTeamRoster(file); if (home.roster.length !== 5 || rosterPlayer(a.id).name !== 'Ana Ruiz') throw new Error(home.roster.map((p) => p.num + p.name).join()); });
