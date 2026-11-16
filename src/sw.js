@@ -32,7 +32,7 @@ const PRECACHED_THIRD_PARTY = [
   'https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js',
   'https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.5.31/jspdf.plugin.autotable.min.js',
   'https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js',
-  'https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@600;700;800&family=Pirata+One&display=swap',
+  'https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@600;700;800&family=Vina+Sans&display=swap',
   '__SUPABASE_JS__'
 ];
 const THIRD_PARTY_HOSTS = ['cdnjs.cloudflare.com', 'cdn.jsdelivr.net', 'fonts.googleapis.com', 'fonts.gstatic.com'];

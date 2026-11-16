@@ -2621,7 +2621,7 @@
         await loadCardFonts([spec]);
         if (Date.now() - started < CARD_FONT_WAIT_MS - 50) throw new Error('did not wait for the face');
       } finally { delete document.fonts.load; }
-      if (!/Pirata One/.test(spec) || !/Barlow Condensed/.test(spec)) throw new Error('the poster face and its fallback: ' + spec);
+      if (!/Vina Sans/.test(spec) || !/Barlow Condensed/.test(spec)) throw new Error('the poster face and its fallback: ' + spec);
     });
     const textSpy = (draw) => {
       const canvas = document.createElement('canvas'), ctx = canvas.getContext('2d'), texts = [], fillText = ctx.fillText.bind(ctx);
@@ -2636,7 +2636,7 @@
       try {
         home.fixtures = [{ id: 'f1', season: '2026/2027', competition: 'Liga', round: 4, weekend: day, home: true, opponent: 'BM Gades', kickoff: `${day}T18:30:00`, venue: 'Pabellón Vista Alegre', matchId: null }];
         const data = callupCardData({ fixtureId: 'f1', date: day, time: '18:30', meet: '', ids: new Set() }, callupPlayers(16), t);
-        if (data.match !== 'Triana - BM Gades' || data.venue !== 'Pabellón Vista Alegre' || data.time !== '18:30' || data.meet !== '17:45' || data.day !== callupDay(day) || data.tag !== 'Liga · Jornada 4 · Casa') throw new Error(JSON.stringify({ ...data, crest: '' }));
+        if (data.match !== 'Triana vs BM Gades' || data.venue !== 'Pabellón Vista Alegre' || data.time !== '18:30' || data.meet !== '17:45' || data.day !== callupDay(day) || data.tag !== 'Liga · Jornada 4 · Casa') throw new Error(JSON.stringify({ ...data, crest: '' }));
         if (data.handles.join() !== '@TRIANA_BALONMANO,@VIVERO.TRIANA_OF' || data.players[0].name !== 'Jugador 5' || !data.players[0].keeper || data.players[1].keeper || data.staff[0].name !== 'Paco Ruiz') throw new Error(JSON.stringify(data.handles) + data.players[0].name);
         if (callupCardData({ fixtureId: null, date: day, time: '', rival: 'CB Este', ids: new Set() }, [], { ...t, socialHandle: null }).handles.join() !== '@VIVERO.TRIANA_OF') throw new Error('a second handle alone takes the main place');
         const loose = callupCardData({ fixtureId: null, date: day, time: '', rival: '', ids: new Set() }, [], { ...t, socialHandle: null, socialHandle2: null });
@@ -2644,7 +2644,7 @@
         const { texts, canvas } = textSpy((c) => drawCallupCard(c, data));
         const said = texts.map((x) => x.text);
         if (canvas.width !== CALLUP_CARD.w || canvas.height !== CALLUP_CARD.h) throw new Error(`${canvas.width}×${canvas.height}`);
-        ['CONVOCATORIA', 'TRIANA - BM GADES', `${callupDay(day)} · 18:30`.toUpperCase(), 'CITACIÓN 17:45 · PABELLÓN VISTA ALEGRE', '5. ANTONIO BOKIKI', 'PACO RUIZ', 'Entrenador principal', '@TRIANA_BALONMANO', '@VIVERO.TRIANA_OF'].forEach((w) => { if (!said.includes(w)) throw new Error(`«${w}» not drawn: ${said.join('|')}`); });
+        ['CONVOCATORIA', 'TRIANA VS BM GADES', `${callupDay(day)} · 18:30`.toUpperCase(), 'CITACIÓN 17:45 · PABELLÓN VISTA ALEGRE', '5. ANTONIO BOKIKI', 'PACO RUIZ', 'Entrenador principal', '@TRIANA_BALONMANO', '@VIVERO.TRIANA_OF'].forEach((w) => { if (!said.includes(w)) throw new Error(`«${w}» not drawn: ${said.join('|')}`); });
         // Two columns of eight, keepers first, every row inside the list box; the main handle sits over the second one, bottom right.
         const rows = texts.filter((x) => /^\d+\. /.test(x.text));
         if (rows.length !== 16 || !rows[0].text.startsWith('7. JUGADOR 5') || new Set(rows.map((x) => Math.round(x.x))).size !== 2 || rows.some((x) => x.y > CALLUP_CARD.list.bottom || x.y < CALLUP_CARD.list.top)) throw new Error(rows.map((x) => `${x.text}@${x.x | 0},${x.y | 0}`).join(' '));
@@ -6462,7 +6462,7 @@
         const called = document.querySelector(`[data-callup-pick="${home.roster[0].id}"]`);
         if (called.getAttribute('aria-pressed') !== 'true' || flatText(called.querySelector('.att-badge')) !== 'Convocado' || flatText(document.querySelector('.callup .att-stat.att-C')) !== '2 convocados de 16' || flatText(document.querySelector('.callup .att-stat.att-NC')) !== '1 no convocado') throw new Error('pick ' + flatText(called));
         const data = callupCardData(callupDraft(), calledPlayers(callupDraft()));
-        if (data.players.map((p) => `${p.name}:${p.keeper}`).join() !== 'Portero Uno:true,Lateral Siete:false' || 'left' in data || data.shirt !== team.brand || data.rival !== 'BALONMANO GADES - ASISA' || data.match !== `BALONMANO GADES - ASISA - ${team.name}` || data.tag !== 'Liga · Jornada 2 · Fuera' || data.venue !== 'Pabellón Centro' || data.time !== '18:30' || data.meet !== '17:45' || data.handles.length) throw new Error(JSON.stringify({ ...data, crest: '' }));
+        if (data.players.map((p) => `${p.name}:${p.keeper}`).join() !== 'Portero Uno:true,Lateral Siete:false' || 'left' in data || data.shirt !== team.brand || data.rival !== 'BALONMANO GADES - ASISA' || data.match !== `BALONMANO GADES - ASISA vs ${team.name}` || data.tag !== 'Liga · Jornada 2 · Fuera' || data.venue !== 'Pabellón Centro' || data.time !== '18:30' || data.meet !== '17:45' || data.handles.length) throw new Error(JSON.stringify({ ...data, crest: '' }));
         $('callup-meet').value = '17:30'; $('callup-meet').dispatchEvent(new Event('change', { bubbles: true }));
         if (meetTime(callupDraft()) !== '17:30' || $('callup-meet').value !== '17:30') throw new Error('meeting time');
         const chips = [...document.querySelectorAll('[data-callup-shirt]')];

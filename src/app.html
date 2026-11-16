@@ -1,7 +1,7 @@
 <title>Zona6</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@600;700;800&family=Pirata+One&display=swap">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@600;700;800&family=Vina+Sans&display=swap">
 <style>
 /* Zona6 — Copyright (C) 2026 Antonio Bueno Antón. All rights reserved. */
 /* Layout: one landscape screen — glass scoreboard / [bench | court + floating alerts | goalkeeper, lines, live stats] / glass action strip.
@@ -82,7 +82,7 @@
   --font-display: "Barlow Condensed", "Arial Narrow", "Roboto Condensed", sans-serif;
   --font-body: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
   /* The chiselled display face of the shared images only (the club's poster template); the page never shows it. */
-  --font-poster: "Pirata One", "Barlow Condensed", "Arial Narrow", sans-serif;
+  --font-poster: "Vina Sans", "Barlow Condensed", "Arial Narrow", sans-serif;
   --radius: 18px;
   --tap: 56px;
   --spring: cubic-bezier(.2, .9, .25, 1);
@@ -6451,8 +6451,6 @@ table { border-collapse: collapse; width: 100%; }
     tint: 0.6,
     // Without the plate (offline before it was cached), the team colour fades into the base over this share of the card.
     fallbackFade: 0.6,
-    // The poster face has one weight: a stroke in its own ink, this share of the size, makes it as heavy as the template.
-    embolden: 0.02,
     shadow: { colour: 'rgba(0, 0, 0, .65)', blur: 16, dy: 4 },
     handles: { size: 42, minSize: 26, secondSize: 28, gap: 8, maxWidth: 420 }
   };
@@ -6477,18 +6475,15 @@ table { border-collapse: collapse; width: 100%; }
     ctx.fillStyle = shade; ctx.fillRect(0, 0, w, h);
   }
   // Words in white over the arena, with a soft shadow; shrunk from `size` to `minSize` to fit `width`, then cut with an
-  // ellipsis. The poster face is drawn heavier, as in the template. Returns the drawn width.
+  // ellipsis. Returns the drawn width.
   function posterText(ctx, value, x, y, { align = 'left', ink = CARD_PALETTE.ink, size, width, minSize = size, specOf = cardPoster }) {
     const S = ARENA.shadow;
     ctx.save();
     ctx.textAlign = align;
-    const drawnSize = fitFont(ctx, value, width, size, minSize, specOf), shown = fitText(ctx, value, width);
+    fitFont(ctx, value, width, size, minSize, specOf);
+    const shown = fitText(ctx, value, width);
     ctx.shadowColor = S.colour; ctx.shadowBlur = S.blur; ctx.shadowOffsetY = S.dy;
     ctx.fillStyle = ink; ctx.fillText(shown, x, y);
-    if (specOf === cardPoster) {
-      ctx.shadowColor = 'transparent';
-      ctx.lineJoin = 'round'; ctx.lineWidth = drawnSize * ARENA.embolden; ctx.strokeStyle = ink; ctx.strokeText(shown, x, y);
-    }
     const drawn = ctx.measureText(shown).width;
     ctx.restore();
     return drawn;
@@ -6652,7 +6647,7 @@ table { border-collapse: collapse; width: 100%; }
     w: 1080, h: 1350, pad: 56,
     veil: [[0, 0.55], [0.3, 0.3], [0.42, 0.45], [0.82, 0.5], [1, 0.9]],
     tag: { y: 76, size: 30 },
-    title: { y: 300, size: 236, minSize: 120 },
+    title: { y: 300, size: 236, minSize: 90 },
     match: { y: 344, h: 88, crestR: 44, gap: 20, size: 64, minSize: 36 },
     info: { y: 488, size: 52, minSize: 30, subY: 534, subSize: 30, subMinSize: 20 },
     list: { top: 570, bottom: 1110, colGap: 40, maxRow: 72, face: 0.76, nameScale: 0.62, minNameScale: 0.6, ring: 3 },
@@ -6666,8 +6661,6 @@ table { border-collapse: collapse; width: 100%; }
   const CALLUP_BRING_TITLE = 'Se ruega puntualidad';
   const CALLUP_BRING = ['Equipación completa', 'Zapatillas de pista', 'Bolsa de balones'];
   const CALLUP_TBC = 'hora por confirmar';
-  // The poster face draws «V» much like «U»: the teams are joined as a fixture is written, «Triana - BM Gades».
-  const CALLUP_MATCH_JOIN = ' - ';
   // The kit: the shirt in the team's first, second or (when it has one) third colour; the shorts are always black.
   const SHORTS_COLOUR = '#151515';
   const shirtChoices = (t = team) => [['Primera', t.brand], ['Segunda', t.brand2], ...(t.brand3 ? [['Tercera', t.brand3]] : [])];
@@ -6689,7 +6682,7 @@ table { border-collapse: collapse; width: 100%; }
     return {
       team: t.name, club: t.club, crest: crestSrc(t), brand: t.brand, brand2: t.brand2, brandInk: t.brandInk, handles: cardHandles(t),
       tag: fixture ? [fixture.competition, `Jornada ${fixture.round}`, homeAwayText(fixture.home)].filter(Boolean).join(' · ') : 'Partido',
-      rival, match: (away ? [rival, t.name] : [t.name, rival]).filter(Boolean).join(CALLUP_MATCH_JOIN),
+      rival, match: (away ? [rival, t.name] : [t.name, rival]).filter(Boolean).join(' vs '),
       day: callupDay(draft.date), venue: (fixture && fixture.venue) || '', meet: meetTime(draft), time: draft.time, shirt: shirtOf(draft, t),
       players: players.slice().sort(benchOrder).map(face),
       staff: teamStaff(t).slice(0, CALLUP_CARD.staff.max).map((m) => ({ name: m.name, job: staffLabel(m), photo: staffPhoto(m) }))
