@@ -7049,16 +7049,18 @@ table { border-collapse: collapse; width: 100%; }
     if (b.dataset.finalAssign) { openPlays(b.dataset.finalAssign, { assign: true }); return; }
     if (b.hasAttribute('data-final-share')) shareMatch();
     if (b.hasAttribute('data-reports-mail')) mailPlayerReports();
+    if (b.hasAttribute('data-staff-mail')) mailStaffReport();
     if (b.dataset.reportsWa) whatsAppPlayerReport(b.dataset.reportsWa);
   });
 
-  // ===================== Personal reports: each player gets his own match by e-mail or WhatsApp =====================
-  // E-mail: the server sends each player his text and his PDF page, automatically once right after the final whistle and
-  // again on request (say, after «Completar jugadas»). WhatsApp: one tap per player opens his chat with the text ready.
-  // The team's reports go to the groups through «Compartir». Staff only, with accounts, never for the sample.
+  // ===================== Reports after the final whistle: the whole report to the staff, his own to each player =====================
+  // E-mail, sent by the server automatically once right after the final whistle and again on request (say, after
+  // «Completar jugadas»): the match PDF and every player's page to the owner and the coaches, and each player his text and
+  // his page. WhatsApp: one tap per player opens his chat with the text ready; the staff chats and the team's groups get
+  // the files through «Compartir». Staff only, with accounts, never for the sample.
   const REPORTS_PER_REQUEST = 4;
   const REPORT_TEXT_FIGURES = 6;
-  const canSendReports = () => Boolean(currentMatchId) && !readOnly() && Boolean(backend && backend.sendPlayerReports);
+  const canSendReports = () => Boolean(currentMatchId) && !readOnly() && Boolean(backend && backend.sendPlayerReports && backend.sendStaffReport);
   const appLink = () => `${location.origin}${location.pathname}`;
   const reportPlayers = () => [...fieldPlayers(), ...goalkeepers()];
   // What a player reads about his match: the score, his rating and his figures that are not empty.
@@ -7072,9 +7074,28 @@ table { border-collapse: collapse; width: 100%; }
   const reportSubject = (s = state) => `${scoreLine(s, score(s.events))} · tu informe`;
   const reportsMailed = () => state.reportsMailed || null;
   const mailedIsStale = () => Boolean(reportsMailed()) && reportsMailed().log !== sharedLogOf(state);
+  const staffMailed = () => state.staffMailed || null;
+  const staffMailedIsStale = () => Boolean(staffMailed()) && staffMailed().log !== sharedLogOf(state);
+  const mailedWhen = (iso) => new Date(iso).toLocaleString('es-ES', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' });
+  const blobBase64 = async (blob) => { let bin = ''; new Uint8Array(await blob.arrayBuffer()).forEach((b) => { bin += String.fromCharCode(b); }); return btoa(bin); };
+  // The match report and every player's page, with the share text, to the owner and the coaches.
+  async function mailStaffReport() {
+    if (ui.staffBusy) return;
+    ui.staffBusy = true; ui.staffStatus = ''; renderSendReports();
+    try {
+      const files = await Promise.all((await reportFiles()).map(async (f) => ({ filename: f.filename, pdf: await blobBase64(f.blob) })));
+      const { sent } = await backend.sendStaffReport(team.id, { subject: `${scoreLine(state, score(state.events))} · informe del partido`, text: `${shareText(state)}\n\nTodo el detalle en Zona6: ${appLink()}`, files });
+      if (sent) { state.staffMailed = { at: new Date().toISOString(), log: sharedLogOf(state), sent }; save(); }
+      else ui.staffStatus = 'Ningún entrenador tiene el correo confirmado.';
+    } catch (err) {
+      ui.staffStatus = `No se pudo enviar a los entrenadores: ${cloudErrorText(err)}`;
+    }
+    ui.staffBusy = false;
+    renderSendReports();
+  }
   function sendReportsCardHtml() {
     if (!canSendReports()) return '';
-    return `<section class="sheet-card send-reports" id="send-reports" aria-live="polite"><h3>Informes a los jugadores</h3><p class="note">Cargando contactos…</p></section>`;
+    return `<section class="sheet-card send-reports" id="send-reports" aria-live="polite"><h3>Enviar informes</h3><p class="note">Cargando contactos…</p></section>`;
   }
   // The contacts are read from the server each time the final screen opens; nothing is kept on the device.
   async function loadSendReports() {
@@ -7083,8 +7104,10 @@ table { border-collapse: collapse; width: 100%; }
     catch (err) { ui.reportContacts = null; ui.reportsStatus = `Sin contactos: ${cloudErrorText(err)}`; }
     renderSendReports();
     const withEmail = reportPlayers().filter((p) => ui.reportContacts && ui.reportContacts.get(p.id)?.email);
-    if (ui.autoMailReports && !reportsMailed() && withEmail.length) await mailPlayerReports();
+    const auto = ui.autoMailReports;
     ui.autoMailReports = false;
+    if (auto && !staffMailed()) await mailStaffReport();
+    if (auto && !reportsMailed() && withEmail.length) await mailPlayerReports();
   }
   function renderSendReports() {
     const box = $('send-reports');
@@ -7093,7 +7116,7 @@ table { border-collapse: collapse; width: 100%; }
     const withEmail = players.filter((p) => contacts.get(p.id)?.email);
     const mailed = reportsMailed();
     const mailNote = !ui.reportContacts ? '' : !withEmail.length ? 'Nadie tiene correo: añádelo en Editar equipo → Cuentas.'
-      : mailed ? `Enviados por correo el ${new Date(mailed.at).toLocaleString('es-ES', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })} a ${plural(mailed.sent, 'jugador', 'jugadores')}${mailedIsStale() ? ' · el partido ha cambiado después' : ''}.`
+      : mailed ? `Enviados por correo el ${mailedWhen(mailed.at)} a ${plural(mailed.sent, 'jugador', 'jugadores')}${mailedIsStale() ? ' · el partido ha cambiado después' : ''}.`
       : `Se envía a ${plural(withEmail.length, 'jugador con correo', 'jugadores con correo')}.`;
     const row = (p) => {
       const phone = contacts.get(p.id)?.phone, done = (ui.reportsWhatsApped || []).includes(p.id);
@@ -7101,12 +7124,19 @@ table { border-collapse: collapse; width: 100%; }
         : `<button class="btn press${done ? '' : ' wa'}" type="button" data-reports-wa="${p.id}">${done ? 'Enviado ✓' : 'WhatsApp'}</button>`;
       return `<li>${discHtml(p)}<span class="who">${esc(p.name)}</span>${action}</li>`;
     };
-    box.innerHTML = `<h3>Informes a los jugadores</h3>
+    const staff = staffMailed();
+    const staffNote = staff ? `Informe completo enviado por correo el ${mailedWhen(staff.at)} a ${plural(staff.sent, 'entrenador', 'entrenadores')}${staffMailedIsStale() ? ' · el partido ha cambiado después' : ''}.`
+      : 'El informe del partido y el de todos los jugadores, por correo al dueño y a los entrenadores.';
+    box.innerHTML = `<h3>Entrenadores</h3>
+      <div class="send-reports-mail"><p class="note">${esc(staffNote)}</p>
+        <button class="btn primary press" type="button" data-staff-mail ${ui.staffBusy ? 'disabled' : ''}>${ui.staffBusy ? 'Enviando…' : staff ? 'Reenviar a los entrenadores' : 'Enviar a los entrenadores'}</button></div>
+      ${ui.staffStatus ? `<p class="note" role="status">${esc(ui.staffStatus)}</p>` : ''}
+      <h3>Informes a los jugadores</h3>
       <div class="send-reports-mail"><p class="note">${esc(mailNote)}</p>
         <button class="btn primary press" type="button" data-reports-mail ${withEmail.length && !ui.reportsBusy ? '' : 'disabled'}>${ui.reportsBusy ? 'Enviando…' : mailed ? 'Reenviar por correo' : `Enviar por correo (${withEmail.length})`}</button></div>
       ${ui.reportsStatus ? `<p class="note" role="status">${esc(ui.reportsStatus)}</p>` : ''}
       <ul class="send-reports-list">${players.map(row).join('')}</ul>
-      <p class="note">Para los grupos de WhatsApp, «Compartir» lleva el informe del equipo.</p>`;
+      <p class="note">Por WhatsApp, a los entrenadores o a los grupos: «Compartir» lleva el informe completo y eliges el chat.</p>`;
   }
   // Builds each player's page and sends them in small batches; what failed is named, what was sent is recorded.
   async function mailPlayerReports() {
@@ -8057,6 +8087,13 @@ table { border-collapse: collapse; width: 100%; }
       // { sent, skipped (no e-mail), failed: [{ playerId, error }] }. The addresses stay on the server.
       async sendPlayerReports(teamId, reports) {
         const { data, error } = await client.functions.invoke('send-player-reports', { body: { teamId, reports } });
+        if (error) throw new Error((await error.context?.json?.().catch(() => null))?.error || error.message);
+        return data;
+      },
+      // The whole report to the owner and coaches by e-mail (staff only): { subject, text, files: [{ filename, pdf (base64) }] }
+      // → { sent } (how many staff accounts it went to). The addresses stay on the server.
+      async sendStaffReport(teamId, report) {
+        const { data, error } = await client.functions.invoke('send-staff-report', { body: { teamId, ...report } });
         if (error) throw new Error((await error.context?.json?.().catch(() => null))?.error || error.message);
         return data;
       },

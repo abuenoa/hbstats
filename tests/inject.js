@@ -2861,28 +2861,34 @@
         if (!copies.offline || copies.matches.map((x) => x.id).join() !== 'sd1' || !copies.matches[0].state) throw new Error(copies.matches.map((x) => x.id).join());
       } finally { backend = real; team.id = savedId; ['sd1', 'sd2', 'sd3'].forEach((id) => removeKey(MATCH_KEY_PREFIX + id)); }
     });
-    await TA('reports: mailed once at the final whistle to the players with e-mail; re-sent on request; WhatsApp per phone', async () => {
-      const real = backend, saved = { loadPdfLibs, pdfNewDoc, open: window.open }, snap = snapshot(), keepId = currentMatchId;
-      const calls = [], opened = [];
+    await TA('reports: mailed once at the final whistle to the staff and the players with e-mail; re-sent on request; WhatsApp per phone', async () => {
+      const real = backend, saved = { loadPdfLibs, pdfNewDoc, reportFiles, open: window.open }, snap = snapshot(), keepId = currentMatchId;
+      const calls = [], opened = [], staffCalls = [];
       try {
         state = sampleState(); state.sample = false; currentMatchId = 'reports-match';
         loadPdfLibs = async () => {};
         pdfNewDoc = () => fakeDrawingDoc({ output: () => 'data:application/pdf;filename=x;base64,QUJD' });
+        reportFiles = async () => [{ filename: 'informe-a-b.pdf', blob: new Blob(['ABC']) }, { filename: 'jugadores-a-b.pdf', blob: new Blob(['DE']) }];
         window.open = (url) => { opened.push(url); return null; };
         backend = {
           listPlayerContacts: async () => [{ playerId: 'p8', email: 'p8@club.es', phone: '+34600000000' }, { playerId: 'p17', email: '', phone: '' }],
-          sendPlayerReports: async (teamId, reports) => { calls.push(reports); return { sent: reports.map((r) => r.playerId), skipped: [], failed: [] }; }
+          sendPlayerReports: async (teamId, reports) => { calls.push(reports); return { sent: reports.map((r) => r.playerId), skipped: [], failed: [] }; },
+          sendStaffReport: async (teamId, report) => { staffCalls.push(report); return { sent: 2 }; }
         };
         ui.autoMailReports = true; openFinal(); await ui.sendReportsReady;
         if (calls.length !== 1 || calls[0].map((r) => r.playerId).join() !== 'p8') throw new Error('mailed ' + JSON.stringify(calls.map((c) => c.map((r) => r.playerId))));
+        if (staffCalls.length !== 1 || staffCalls[0].files.map((f) => `${f.filename}:${f.pdf}`).join() !== 'informe-a-b.pdf:QUJD,jugadores-a-b.pdf:REU=' || !staffCalls[0].subject.includes('informe del partido') || !staffCalls[0].text.includes('Zona6')) throw new Error('staff ' + JSON.stringify(staffCalls));
+        if (!state.staffMailed || state.staffMailed.sent !== 2 || !$('send-reports').textContent.includes('Reenviar a los entrenadores')) throw new Error('staff mailing not recorded');
         const r = calls[0][0];
         if (r.pdf !== 'QUJD' || !/\.pdf$/.test(r.filename) || !r.subject.includes('tu informe') || !r.text.includes('Nota:') || !r.text.startsWith(playerById('p8').name)) throw new Error(JSON.stringify(r));
         if (!state.reportsMailed || state.reportsMailed.sent !== 1 || mailedIsStale()) throw new Error('not recorded');
         if (!$('send-reports').textContent.includes('Reenviar por correo')) throw new Error($('send-reports').textContent);
         openFinal(); await ui.sendReportsReady;
-        if (calls.length !== 1) throw new Error('mailed again on reopening');
+        if (calls.length !== 1 || staffCalls.length !== 1) throw new Error('mailed again on reopening');
         addEvent('ACTION', { playerId: 'p8', action: 'BLOC' }); openFinal(); await ui.sendReportsReady;
-        if (!mailedIsStale() || !$('send-reports').textContent.includes('ha cambiado')) throw new Error('change after mailing not shown');
+        if (!mailedIsStale() || !staffMailedIsStale() || !$('send-reports').textContent.includes('ha cambiado')) throw new Error('change after mailing not shown');
+        $('send-reports').querySelector('[data-staff-mail]').click(); await new Promise((res) => setTimeout(res, 0)); while (ui.staffBusy) await new Promise((res) => setTimeout(res, 5));
+        if (staffCalls.length !== 2 || staffMailedIsStale()) throw new Error('staff not re-sent');
         $('send-reports').querySelector('[data-reports-mail]').click(); await new Promise((res) => setTimeout(res, 0)); while (ui.reportsBusy) await new Promise((res) => setTimeout(res, 5));
         if (calls.length !== 2 || mailedIsStale()) throw new Error('not re-sent');
         if ($('send-reports').querySelector('[data-reports-wa="p17"]')) throw new Error('WhatsApp without a phone');
@@ -2893,16 +2899,19 @@
         const before = state.reportsMailed.at;
         await mailPlayerReports();
         if (!$('send-reports').textContent.includes('no está configurado') || state.reportsMailed.at !== before) throw new Error('failure not shown');
+        backend.sendStaffReport = async () => ({ sent: 0 });
+        await mailStaffReport();
+        if (!$('send-reports').textContent.includes('Ningún entrenador')) throw new Error('no staff e-mail not shown');
       } finally {
-        backend = real; ({ loadPdfLibs, pdfNewDoc } = saved); window.open = saved.open; currentMatchId = keepId;
-        ui.autoMailReports = false; ui.reportsStatus = ''; ui.reportsWhatsApped = []; ui.reportContacts = null; hideFinal(); restore(snap);
+        backend = real; ({ loadPdfLibs, pdfNewDoc, reportFiles } = saved); window.open = saved.open; currentMatchId = keepId;
+        ui.autoMailReports = false; ui.reportsStatus = ''; ui.staffStatus = ''; ui.reportsWhatsApped = []; ui.reportContacts = null; hideFinal(); restore(snap);
       }
     });
     await TA('reports: no card for read-only accounts, without accounts, or for the sample', async () => {
       const real = backend, keepId = currentMatchId;
       try {
         backend = null; currentMatchId = 'x'; if (sendReportsCardHtml()) throw new Error('without accounts');
-        backend = { sendPlayerReports: async () => ({}) }; currentMatchId = null; if (sendReportsCardHtml()) throw new Error('sample');
+        backend = { sendPlayerReports: async () => ({}), sendStaffReport: async () => ({}) }; currentMatchId = null; if (sendReportsCardHtml()) throw new Error('sample');
       } finally { backend = real; currentMatchId = keepId; }
     });
     await TA('season: reloads when stale on a team page, never while fresh, in a match or hidden', async () => {

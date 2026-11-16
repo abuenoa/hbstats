@@ -58,9 +58,10 @@ that constant to match.
 
 ## Players' match reports by e-mail
 
-At the final whistle the app sends each player with an e-mail (staff-only `player_contacts`) his own text and PDF
-page through the Edge Function `send-player-reports`. The function mails through an SMTP account kept in its secrets
-(**Edge Functions → Secrets**): `SMTP_HOST` (for Gmail `smtp.gmail.com`), `SMTP_PORT` (`465`), `SMTP_USER`,
+At the final whistle the app sends the whole report (the match PDF and every player's page) to the owner and the
+coaches whose e-mail is confirmed, through the Edge Function `send-staff-report`, and each player with an e-mail
+(staff-only `player_contacts`) his own text and PDF page through `send-player-reports`. Both mail through an SMTP account kept in its secrets
+(**Edge Functions → Secrets**, shared through `functions/_shared/mail.ts`): `SMTP_HOST` (for Gmail `smtp.gmail.com`), `SMTP_PORT` (`465`), `SMTP_USER`,
 `SMTP_PASS` (a Gmail app password, never the account password) and optionally `SMTP_FROM`. Without them the app says
 the e-mail is not set up and nothing is sent; WhatsApp and «Compartir» work regardless.
 
