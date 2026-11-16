@@ -7092,8 +7092,8 @@ table { border-collapse: collapse; width: 100%; }
   const REPORT_LINK_SECONDS = 90 * 24 * 60 * 60;
   // Links closer than this to expiring are made again rather than sent: whoever gets one must have time to open it.
   const REPORT_LINK_MIN_LEFT_MS = 7 * 24 * 60 * 60 * 1000;
-  // Version 2: short links (report-pdf?k=…). Links of an older version are made again, never sent.
-  const REPORT_LINKS_VERSION = 2;
+  // Version 2: short links (report-pdf?k=…); 3: plus the MVP image. Links of an older version are made again, never sent.
+  const REPORT_LINKS_VERSION = 3;
   const REPORT_KEY_LENGTH = 24;
   const KEY_ALPHABET = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789';
   // Random letters and digits from the browser's crypto, without modulo bias (bytes past the last whole alphabet are skipped).
@@ -7143,7 +7143,8 @@ table { border-collapse: collapse; width: 100%; }
     const empty = ['–', 0, '0', '0/0'];
     const figures = playerReport(p, s, ratings).figures.filter(([, value]) => !empty.includes(value)).slice(0, REPORT_TEXT_FIGURES);
     return [...reportHeadline(s), '', `¡Hola, ${p.name}! Así fue tu partido:`, `${REPORT_ICONS.rating} Nota: *${ratingText(ratingValue(ratings, p))}*`,
-      ...figures.map(([label, value]) => `• ${label}: ${value}`), '', ...matchKeyLines(s, ratings), ...reportLinkLines('Tu informe en PDF', links?.byPlayer[p.id]),
+      ...figures.map(([label, value]) => `• ${label}: ${value}`), '', ...matchKeyLines(s, ratings), ...reportLinkLines('Imagen del MVP', links?.mvp, REPORT_ICONS.mvp),
+      ...reportLinkLines('Tu informe en PDF', links?.byPlayer[p.id]),
       ...reportLinkLines('Informe del partido (PDF)', links?.match),
       ...reportAppLines('Todas tus estadísticas en Zona6:')].join('\n');
   }
@@ -7178,9 +7179,11 @@ table { border-collapse: collapse; width: 100%; }
       await ui.reportFilesReady;
       const shared = ui.reportFiles || pdfFiles(await reportFiles());
       const pages = reportPlayers().map((p) => ({ id: p.id, ...playerPagesPdf(p.id) }));
-      const [match, players, ...own] = await Promise.all([...shared.map((f) => linkTo(f.name, f)), ...pages.map((pg) => linkTo(pg.filename, pg.doc.output('blob')))]);
+      await ui.mvpCardReady;
+      const mvpImage = ui.mvpCardBlob ? linkTo(shareFilename('mvp', 'png'), ui.mvpCardBlob) : null;
+      const [mvp, match, players, ...own] = await Promise.all([mvpImage, ...shared.map((f) => linkTo(f.name, f)), ...pages.map((pg) => linkTo(pg.filename, pg.doc.output('blob')))]);
       const at = Date.now();
-      const links = { version: REPORT_LINKS_VERSION, log, at: new Date(at).toISOString(), expiresAt: new Date(at + REPORT_LINK_SECONDS * 1000).toISOString(), match, players,
+      const links = { version: REPORT_LINKS_VERSION, log, at: new Date(at).toISOString(), expiresAt: new Date(at + REPORT_LINK_SECONDS * 1000).toISOString(), mvp, match, players,
         byPlayer: Object.fromEntries(pages.map((pg, i) => [pg.id, own[i]])) };
       if (state !== s || currentMatchId !== matchId) return null;
       state.reportLinks = links;
@@ -7199,7 +7202,10 @@ table { border-collapse: collapse; width: 100%; }
     ui.staffBusy = true; ui.staffStatus = ''; renderSendReports();
     try {
       await prepareReportLinks();
-      const files = await Promise.all((await reportFiles()).map(async (f) => ({ filename: f.filename, pdf: await blobBase64(f.blob) })));
+      // The MVP image goes first, attached as it is shared; then the match report and every player's page.
+      await ui.mvpCardReady;
+      const mvpImage = ui.mvpCardBlob ? [{ filename: shareFilename('mvp', 'png'), blob: ui.mvpCardBlob }] : [];
+      const files = await Promise.all([...mvpImage, ...(await reportFiles())].map(async (f) => ({ filename: f.filename, data: await blobBase64(f.blob) })));
       const { sent } = await backend.sendStaffReport(team.id, { subject: `${scoreLine(state, score(state.events))} · informe del partido`, text: staffReportBody(), files });
       if (sent) { state.staffMailed = { at: new Date().toISOString(), log: sharedLogOf(state), sent }; save(); }
       else ui.staffStatus = 'Nadie del cuerpo técnico tiene correo: añádelo en su ficha o con su cuenta.';
@@ -7337,6 +7343,7 @@ table { border-collapse: collapse; width: 100%; }
     const ratings = matchRatings(s), links = currentReportLinks(s), scorers = topScorers(s);
     return [...reportHeadline(s), '', greeting, '', ...matchKeyLines(s, ratings),
       scorers.length ? `${REPORT_ICONS.squad} Goleadores: ${scorers.map((p) => `${p.name} ${p.goals}`).join(', ')}` : '',
+      ...reportLinkLines('Imagen del MVP', links?.mvp, REPORT_ICONS.mvp),
       ...reportLinkLines('Informe del partido (PDF)', links?.match), ...reportLinkLines('Informe de jugadores (PDF)', links?.players, REPORT_ICONS.squad),
       ...reportAppLines('Todo el detalle en Zona6:')].filter((line, i, all) => line !== '' || (i > 0 && all[i - 1] !== '')).join('\n');
   }
@@ -8123,7 +8130,7 @@ table { border-collapse: collapse; width: 100%; }
       },
       // A report PDF in the team's private bucket (staff only), at <team>/<match>/<filename>; a second upload replaces it.
       async uploadReport(teamId, matchId, filename, blob) {
-        check(await client.storage.from(REPORTS_BUCKET).upload(reportPath(teamId, matchId, filename), blob, { contentType: PDF_TYPE, upsert: true }));
+        check(await client.storage.from(REPORTS_BUCKET).upload(reportPath(teamId, matchId, filename), blob, { contentType: blob.type || PDF_TYPE, upsert: true }));
       },
       // A short link to download that PDF, open to anyone who has it for REPORT_LINK_SECONDS: a random key, letters and
       // digits only (a long signed URL did not survive WhatsApp), that the report-pdf function turns into a download.
