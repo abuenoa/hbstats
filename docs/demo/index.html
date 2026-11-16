@@ -6992,16 +6992,8 @@ table { border-collapse: collapse; width: 100%; }
     return s.players.map((p) => ({ name: p.name, goals: goals(p) })).filter((p) => p.goals > 0)
       .sort((a, b) => b.goals - a.goals || a.name.localeCompare(b.name)).slice(0, SHARE_SCORERS);
   }
-  function shareText(s = state) {
-    const ratings = matchRatings(s), mvp = matchMvp(s, ratings), best = mvp.id ? playerById(mvp.id, s) : null, scorers = topScorers(s);
-    return [
-      `*${scoreLine(s, score(s.events))}*`,
-      [matchPlaceText(s), dateText(s.date)].filter(Boolean).join(' · '),
-      best ? `MVP: ${best.name} (${ratingText(ratingValue(ratings, best))})` : '',
-      scorers.length ? `Goles: ${scorers.map((p) => `${p.name} ${p.goals}`).join(', ')}` : ''
-    ].filter(Boolean).concat(...shareLinkLines(currentReportLinks(s))).join('\n');
-  }
-  const shareLinkLines = (links) => (links ? [reportLinkLines('Informe del partido (PDF)', links.match), reportLinkLines('Informe de jugadores (PDF)', links.players, REPORT_ICONS.squad)] : []);
+  // What goes under the shared images: the coaches' summary (headline, match keys, scorers, PDF links, app), with no greeting.
+  const shareText = (s = state) => staffReportBody(s, '');
   // The PDF links are on their way: the match is the team's on the server and they are neither ready nor failed.
   const reportLinksPending = () => canSendReports() && !currentReportLinks() && !ui.reportLinksError;
   async function reportFiles() {
