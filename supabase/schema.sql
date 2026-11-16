@@ -535,3 +535,8 @@ alter table public.teams add constraint teams_social_handle_check
 alter table public.teams drop constraint if exists teams_social_handle_2_check;
 alter table public.teams add constraint teams_social_handle_2_check
   check (social_handle_2 is null or social_handle_2 ~ '^[a-z0-9._]{1,30}$');
+
+-- ==== Migration: MVP image link (2026-11) ====
+-- The short links also open the MVP image (PNG) of the match, besides the report PDFs.
+alter table public.report_links drop constraint if exists report_links_filename_check;
+alter table public.report_links add constraint report_links_filename_check check (filename ~ '^[A-Za-z0-9.-]{1,120}\.(pdf|png)$');
