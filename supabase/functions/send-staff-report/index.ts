@@ -1,7 +1,8 @@
 // Zona6 — Copyright (C) 2026 Antonio Bueno Antón. All rights reserved.
-// Sends the whole match report (the match PDF and every player's page) to the team's owner and coaches by e-mail.
-// Only the team's staff may call it. The app builds the files; the addresses are read here from the accounts
-// (auth.users) of the owner and coaches who have confirmed their e-mail, and never leave the server.
+// Sends the whole match report (the match PDF and every player's page) by e-mail, one e-mail each, to the team's owner
+// and coaches and to the coaching staff. Only the team's staff may call it. The app builds the files; the addresses are
+// read here — the confirmed e-mails of the owner's and coaches' accounts (auth.users) and the staff profiles' e-mails
+// (staff_contacts) — and never leave the server. An address in both gets one e-mail.
 // The mail goes through the SMTP account in the function's secrets (see ../_shared/mail.ts).
 import { createClient } from "jsr:@supabase/supabase-js@2";
 import { BASE64_PATTERN, CORS, PDF_FILENAME_PATTERN, pdfAttachment, plainText, reply, reportHtml, smtpTransport, SMTP_NOT_CONFIGURED, STAFF_ROLES, staffOnly } from "../_shared/mail.ts";
@@ -37,23 +38,30 @@ Deno.serve(async (req) => {
   const smtp = smtpTransport();
   if (!smtp) return reply(503, SMTP_NOT_CONFIGURED);
 
-  const [{ data: team, error: teamError }, { data: members, error: membersError }] = await Promise.all([
+  const [{ data: team, error: teamError }, { data: members, error: membersError }, { data: contacts, error: contactsError }] = await Promise.all([
     admin.from("teams").select("name").eq("id", teamId).single(),
     admin.from("team_members").select("user_id").eq("team_id", teamId).in("role", STAFF_ROLES),
+    admin.from("staff_contacts").select("email").eq("team_id", teamId).not("email", "is", null),
   ]);
   if (teamError) return reply(500, { error: teamError.message });
   if (membersError) return reply(500, { error: membersError.message });
+  if (contactsError) return reply(500, { error: contactsError.message });
   const accounts = await Promise.all((members ?? []).map((m) => admin.auth.admin.getUserById(m.user_id)));
-  const to = accounts.map((a) => a.data.user).filter((u) => u && u.email && u.email_confirmed_at).map((u) => u!.email!);
-  if (!to.length) return reply(200, { sent: 0 });
+  const accountEmails = accounts.map((a) => a.data.user).filter((u) => u && u.email && u.email_confirmed_at).map((u) => u!.email!);
+  const byAddress = new Map([...accountEmails, ...(contacts ?? []).map((c) => c.email as string)].map((e) => [e.trim().toLowerCase(), e.trim()]));
+  const to = [...byAddress.values()];
 
-  try {
-    await smtp.transport.sendMail({
-      from: `Zona6 · ${team.name} <${smtp.from}>`, to: smtp.from, bcc: to, subject, text: plainText(text),
-      html: reportHtml(team.name, text, STAFF_FOOTNOTE), attachments: (files as Attachment[]).map((f) => pdfAttachment(f.filename, f.pdf)),
-    });
-  } catch (err) {
-    return reply(502, { error: `no se pudo enviar el correo: ${err instanceof Error ? err.message : String(err)}` });
+  const attachments = (files as Attachment[]).map((f) => pdfAttachment(f.filename, f.pdf)), html = reportHtml(team.name, text, STAFF_FOOTNOTE);
+  let sent = 0;
+  const failed: string[] = [];
+  for (const address of to) {
+    try {
+      await smtp.transport.sendMail({ from: `Zona6 · ${team.name} <${smtp.from}>`, to: address, subject, text: plainText(text), html, attachments });
+      sent += 1;
+    } catch (err) {
+      failed.push(err instanceof Error ? err.message : String(err));
+    }
   }
-  return reply(200, { sent: to.length });
+  if (!sent && failed.length) return reply(502, { error: `no se pudo enviar el correo: ${failed[0]}` });
+  return reply(200, { sent, failed: failed.length });
 });

@@ -2885,12 +2885,14 @@
         backend = {
           listPlayerContacts: async () => [{ playerId: 'p8', email: 'p8@club.es', phone: '+34600000000' }, { playerId: 'p17', email: '', phone: '' }],
           sendPlayerReports: async (teamId, reports) => { calls.push(reports); return { sent: reports.map((r) => r.playerId), skipped: [], failed: [] }; },
-          sendStaffReport: async (teamId, report) => { staffCalls.push(report); return { sent: 2 }; }
+          sendStaffReport: async (teamId, report) => { staffCalls.push(report); return { sent: 2 }; },
+          listStaffContacts: async () => [{ staffId: 'st-head', email: 'head@club.es', phone: '+34611222333' }]
         };
+        team.staff = [{ id: 'st-head', name: 'Jorge', role: 'head' }, { id: 'st-del', name: 'Ana', role: 'staff', job: 'Delegada' }];
         ui.autoMailReports = true; openFinal(); await ui.sendReportsReady;
         if (calls.length !== 1 || calls[0].map((r) => r.playerId).join() !== 'p8') throw new Error('mailed ' + JSON.stringify(calls.map((c) => c.map((r) => r.playerId))));
         if (staffCalls.length !== 1 || staffCalls[0].files.map((f) => `${f.filename}:${f.pdf}`).join() !== 'informe-a-b.pdf:QUJD,jugadores-a-b.pdf:REU=' || !staffCalls[0].subject.includes('informe del partido') || !staffCalls[0].text.includes('Zona6')) throw new Error('staff ' + JSON.stringify(staffCalls));
-        if (!state.staffMailed || state.staffMailed.sent !== 2 || !$('send-reports').textContent.includes('Reenviar a los entrenadores')) throw new Error('staff mailing not recorded');
+        if (!state.staffMailed || state.staffMailed.sent !== 2 || !$('send-reports').textContent.includes('Reenviar al cuerpo técnico')) throw new Error('staff mailing not recorded');
         const r = calls[0][0];
         if (r.pdf !== 'QUJD' || !/\.pdf$/.test(r.filename) || !r.subject.includes('tu informe') || !r.text.includes('Nota:') || !r.text.startsWith(playerById('p8').name)) throw new Error(JSON.stringify(r));
         if (!state.reportsMailed || state.reportsMailed.sent !== 1 || mailedIsStale()) throw new Error('not recorded');
@@ -2907,14 +2909,20 @@
         $('send-reports').querySelector('[data-reports-wa="p8"]').click(); await new Promise((res) => setTimeout(res, 0));
         if (!opened[0] || !opened[0].startsWith('https://wa.me/34600000000?text=') || !decodeURIComponent(opened[0]).includes('Nota:')) throw new Error(opened[0]);
         if (!$('send-reports').querySelector('[data-reports-wa="p8"]').textContent.includes('Enviado')) throw new Error('not marked');
+        if ($('send-reports').querySelector('[data-staff-wa="st-del"]')) throw new Error('staff WhatsApp without a phone');
+        $('send-reports').querySelector('[data-staff-wa="st-head"]').click(); await new Promise((res) => setTimeout(res, 0));
+        const staffUrl = decodeURIComponent(opened.at(-1));
+        if (!opened.at(-1).startsWith('https://wa.me/34611222333?text=') || !staffUrl.startsWith('https://wa.me/34611222333?text=Jorge, informe del partido') || !staffUrl.includes('Zona6')) throw new Error(staffUrl);
+        if (!$('send-reports').querySelector('[data-staff-wa="st-head"]').textContent.includes('Enviado')) throw new Error('staff not marked');
         backend.sendPlayerReports = async () => { throw new Error('el correo de Zona6 no está configurado todavía'); };
         const before = state.reportsMailed.at;
         await mailPlayerReports();
         if (!$('send-reports').textContent.includes('no está configurado') || state.reportsMailed.at !== before) throw new Error('failure not shown');
         backend.sendStaffReport = async () => ({ sent: 0 });
         await mailStaffReport();
-        if (!$('send-reports').textContent.includes('Ningún entrenador')) throw new Error('no staff e-mail not shown');
+        if (!$('send-reports').textContent.includes('Nadie del cuerpo técnico tiene correo')) throw new Error('no staff e-mail not shown');
       } finally {
+        delete team.staff;
         backend = real; ({ loadPdfLibs, pdfNewDoc, reportFiles } = saved); window.open = saved.open; currentMatchId = keepId;
         ui.autoMailReports = false; ui.reportsStatus = ''; ui.staffStatus = ''; ui.reportsWhatsApped = []; ui.reportContacts = null; hideFinal(); restore(snap);
       }
@@ -2923,8 +2931,28 @@
       const real = backend, keepId = currentMatchId;
       try {
         backend = null; currentMatchId = 'x'; if (sendReportsCardHtml()) throw new Error('without accounts');
-        backend = { sendPlayerReports: async () => ({}), sendStaffReport: async () => ({}) }; currentMatchId = null; if (sendReportsCardHtml()) throw new Error('sample');
+        backend = { sendPlayerReports: async () => ({}), sendStaffReport: async () => ({}), listStaffContacts: async () => [] }; currentMatchId = null; if (sendReportsCardHtml()) throw new Error('sample');
       } finally { backend = real; currentMatchId = keepId; }
+    });
+    await TA('staff contacts: e-mail and phone on the profile, checked, saved staff-only, gone with the member', async () => {
+      const real = backend, savedStaff = team.staff, saves = [], deletes = [];
+      try {
+        backend = { ...real, listStaffContacts: async () => [{ staffId: 'st-a', email: 'a@club.es', phone: '' }],
+          saveStaffContact: async (teamId, staffId, c) => { saves.push([staffId, c]); },
+          deleteStaffContact: async (teamId, staffId) => { deletes.push(staffId); },
+          updateTeam: async (id, change) => ({ ...team, ...change }) };
+        team.staff = [{ id: 'st-a', name: 'Jorge', role: 'head' }];
+        showStaff('st-a'); await new Promise((r) => setTimeout(r, 0));
+        if ($('staff-contact-email').value !== 'a@club.es') throw new Error('contact not loaded');
+        $('staff-contact-phone').value = '12'; document.querySelector('[data-staff-contact-save="st-a"]').click(); await new Promise((r) => setTimeout(r, 0));
+        if (saves.length || !$('home').textContent.includes('Revisa el teléfono')) throw new Error('bad phone saved');
+        $('staff-contact-email').value = 'mal'; $('staff-contact-phone').value = '600 11 22 33'; document.querySelector('[data-staff-contact-save="st-a"]').click(); await new Promise((r) => setTimeout(r, 0));
+        if (saves.length) throw new Error('bad e-mail saved');
+        $('staff-contact-email').value = 'jorge@club.es'; document.querySelector('[data-staff-contact-save="st-a"]').click(); await new Promise((r) => setTimeout(r, 0));
+        if (JSON.stringify(saves) !== JSON.stringify([['st-a', { email: 'jorge@club.es', phone: '+34600112233' }]])) throw new Error(JSON.stringify(saves));
+        await removeStaff('st-a');
+        if (deletes.join() !== 'st-a') throw new Error('contact kept after removing the member');
+      } finally { backend = real; team.staff = savedStaff; home.staffContacts = null; showHomeView('team'); }
     });
     await TA('season: reloads when stale on a team page, never while fresh, in a match or hidden', async () => {
       const real = backend, savedId = team.id, savedView = home.view, homeHidden = $('home').hidden;

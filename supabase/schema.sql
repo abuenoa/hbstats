@@ -456,3 +456,20 @@ grant execute on function public.team_accounts(uuid) to authenticated;
 -- A third kit colour to pick for a match (the convocatoria's shirt); null = the team has two. The app is still dressed
 -- in brand and brand2 only.
 alter table public.teams add column if not exists brand3 text check (brand3 is null or brand3 ~ '^#[0-9a-fA-F]{6}$');
+
+-- ==== Migration: staff contacts (2026-11) ====
+-- Each coaching-staff profile's e-mail and phone (teams.staff ids), staff only, to send them the final reports: one
+-- e-mail each from send-staff-report, and their WhatsApp from the final screen. Not in teams.staff, which every member
+-- reads.
+create table if not exists public.staff_contacts (
+  team_id uuid not null references public.teams (id) on delete cascade,
+  staff_id text not null check (char_length(staff_id) between 1 and 64),
+  email text check (email is null or (char_length(email) <= 254 and email ~ '^[^[:space:]@,;]+@[^[:space:]@,;]+\.[^[:space:]@,;]+$')),
+  phone text check (phone is null or phone ~ '^\+[1-9][0-9]{7,14}$'),
+  primary key (team_id, staff_id)
+);
+alter table public.staff_contacts enable row level security;
+revoke all on table public.staff_contacts from anon;
+drop policy if exists staff_contacts_staff on public.staff_contacts;
+create policy staff_contacts_staff on public.staff_contacts for all to authenticated
+  using (private.is_team_staff(team_id)) with check (private.is_team_staff(team_id));
