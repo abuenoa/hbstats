@@ -1745,7 +1745,7 @@ span.att-foot { visibility: hidden; }
       context: { firstHalfCloseFrom: 1500, closeFrom: 3000, closeMargin: 2, lateFrom: 3300, lateMargin: 1, blowoutMargin: 6, blowoutFactor: 0.75 },
       defence: { goodDefence: 0.30, offensiveFoulExtra: 0.05, zoneGoal: 0.03, zoneSolid: 0.10, zoneFewerShare: 0.5, zoneMinGoals: 2 },
       weights: {
-        keeperWeight: 0.65, exclusionShare: 0.6, assist: 0.15, starter: 0.14, oneOnOne: 0.20, ruleFaultDiscount: 0.10, blocRetained: 0.12,
+        keeperWeight: 0.65, exclusionShare: 0.7, exclusionRepeat: 0.15, assist: 0.15, starter: 0.14, oneOnOne: 0.20, ruleFaultDiscount: 0.10, blocRetained: 0.12,
         minorFault: -0.07, teamFaultField: -0.05, teamFaultKeeper: -0.02, result: 0.25, yellow: -0.10,
         conductDirect: -0.50, conductLastSeconds: -0.30, blue: -0.25, closeFactor: 1.5, lateFactor: 2.0
       },
@@ -2768,6 +2768,7 @@ span.att-foot { visibility: hidden; }
   const RATING_KNOBS = [
     { key: 'keeperWeight', label: 'Peso de las paradas y goles encajados', group: 'Portería', unit: 'share', min: 0, max: 1, step: RATING_KNOB_STEP },
     { key: 'exclusionShare', label: "Parte del 2' que paga el excluido", group: 'Sanciones', unit: 'share', min: 0, max: 1, step: RATING_KNOB_STEP },
+    { key: 'exclusionRepeat', label: "Más por cada 2' anterior del mismo jugador", group: 'Sanciones', unit: 'share', min: 0, max: 0.5, step: RATING_KNOB_STEP },
     { key: 'assist', label: 'Asistencia', group: 'Creación', unit: 'pts', min: 0, max: 1.5, step: RATING_KNOB_STEP },
     { key: 'starter', label: 'Iniciar un contraataque', group: 'Creación', unit: 'pts', min: 0, max: 1.5, step: RATING_KNOB_STEP },
     { key: 'oneOnOne', label: '1x1: 7 m provocado, superado o cometido', group: '1x1 y 7 m', unit: 'pts', min: 0, max: 1.5, step: RATING_KNOB_STEP },
@@ -3022,12 +3023,19 @@ span.att-foot { visibility: hidden; }
     const end = (s.clock && matchEndAbs(s)) || Math.max(0, ...events.map((e) => e.abs));
     const shortCost = (e) => {
       const until = Math.min(e.abs + exclusionLength(e, r.exclusionSeconds), end), inWindow = (p) => p.abs >= e.abs && p.abs < until;
-      // The share of the possessions played a man down the player is charged with (the team shares the rest of it).
-      return weights.exclusionShare * (attackPool.filter(inWindow).length * (r.possession - r.shortHanded.att) + defencePool.filter(inWindow).length * (r.shortHanded.def - r.possession));
+      return attackPool.filter(inWindow).length * (r.possession - r.shortHanded.att) + defencePool.filter(inWindow).length * (r.shortHanded.def - r.possession);
+    };
+    // A 2' is part of the game: the player pays a share of what was lost with one less (the team shares the rest), and
+    // more for each 2' he had before, up to all of it. A 2' in a decisive moment weighs more through «Momento decisivo».
+    const exclusionsBefore = new Map();
+    const exclusionShareOf = (playerId) => {
+      const before = exclusionsBefore.get(playerId) || 0;
+      exclusionsBefore.set(playerId, before + 1);
+      return Math.min(1, weights.exclusionShare + before * weights.exclusionRepeat);
     };
     events.filter((e) => e.kind === 'SANCTION').forEach((e) => {
       if (e.card === 'A') own(e.playerId, 'disciplina', weights.yellow, e, 'Amarilla');
-      else if (e.card === '2M') own(e.playerId, 'disciplina', -shortCost(e), e, "Exclusión 2'");
+      else if (e.card === '2M') own(e.playerId, 'disciplina', -shortCost(e) * exclusionShareOf(e.playerId), e, "Exclusión 2'");
       else if (e.card === 'D' || e.card === 'AZ') {
         const lastSeconds = e.abs >= end - r.lastSecondsWindow && events.some((x) => isAction(x, 'PEN7C') && x.playerId === e.playerId && Math.abs(x.abs - e.abs) <= r.sameMomentSeconds);
         const thirdTwo = events.filter((x) => x.kind === 'SANCTION' && x.card === '2M' && x.playerId === e.playerId).length >= 2;
@@ -6073,7 +6081,7 @@ span.att-foot { visibility: hidden; }
         <b>Tu zona:</b> cada gol rival de juego (sin 7 m ni contraataques) va al defensor de su carril más cerca del lanzamiento ${sign(-d.zoneGoal)}; si tu zona encaja como mucho el ${Math.round(d.zoneFewerShare * PERCENT)}% de los goles que te tocaban (desde ${d.zoneMinGoals} goles) ${sign(d.zoneSolid)}.
         <b>Def. en pista:</b> lo que el rival consigue tirar a puerta mientras defiendes (lo que pasa después es cosa del portero), repartido entre los que estáis en pista. <b>Atq. en pista:</b> igual con nuestras posesiones.
         <b>Portería:</b> goles evitados frente a lo esperable para un portero, al ${Math.round(kw * PERCENT)}% (parar en 6 m ${sign(r.keeperGoalRate['6M'] * kw)}, encajar ${sign(-(1 - r.keeperGoalRate['6M']) * kw)}; parar un 7 m ${sign(r.keeperGoalRate['7M'] * kw)}).
-        <b>Disciplina:</b> el 2' cuesta el ${Math.round(weights.exclusionShare * PERCENT)}% de lo que se perdió con uno menos; roja: eso, la conducta y el resto del partido sin el jugador. <b>Momento decisivo:</b> desde el ${r.context.firstHalfCloseFrom / SECONDS_PER_MINUTE}' de la primera parte y desde el ${r.context.closeFrom / SECONDS_PER_MINUTE}' con ±${r.context.closeMargin} goles cada acción vale ×${exact(weights.closeFactor)}; desde el ${r.context.lateFrom / SECONDS_PER_MINUTE}' con ±${r.context.lateMargin} ×${exact(weights.lateFactor)}; para bien y para mal.
+        <b>Disciplina:</b> el 2' cuesta el ${Math.round(weights.exclusionShare * PERCENT)}% de lo que se perdió con uno menos, y ${Math.round(weights.exclusionRepeat * PERCENT)} puntos más de ese porcentaje por cada 2' anterior (hasta el 100%); roja: eso, la conducta y el resto del partido sin el jugador. <b>Momento decisivo:</b> desde el ${r.context.firstHalfCloseFrom / SECONDS_PER_MINUTE}' de la primera parte y desde el ${r.context.closeFrom / SECONDS_PER_MINUTE}' con ±${r.context.closeMargin} goles cada acción vale ×${exact(weights.closeFactor)}; desde el ${r.context.lateFrom / SECONDS_PER_MINUTE}' con ±${r.context.lateMargin} ×${exact(weights.lateFactor)}; para bien y para mal.
         <b>Resultado:</b> ±${pts(weights.result)} según la parte del partido jugada.
         <span class="bands"><b>Valoración:</b> ${CONFIG.rating.bands.map(([from, label]) => `<span><i style="background:${bandColour(from === -Infinity ? -100 : from)}"></i>${label}${from > -Infinity ? ` ≥ ${signedText(from)}` : ''}</span>`).join('')}</span></div>`;
     }
