@@ -76,6 +76,11 @@ made again when the match changes. The bucket and its policies (the team's owner
 team's folder; nobody else) come with the «report links» migration in `schema.sql`. Without them the app says the links
 could not be made and sends the texts without them.
 
+The PDFs go to the private `match-reports` bucket and the messages carry short links,
+`/functions/v1/report-pdf?k=<key>` (`report_links`, keys of letters and digits; a long signed URL broke in WhatsApp). The
+`report-pdf` function is deployed **without JWT verification** (`--no-verify-jwt`): it is meant to be opened by anyone with
+the link, and it signs a one-minute download of that one PDF on each visit.
+
 ## Data
 
 | Table | What it holds |
