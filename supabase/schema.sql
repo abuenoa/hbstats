@@ -473,3 +473,22 @@ revoke all on table public.staff_contacts from anon;
 drop policy if exists staff_contacts_staff on public.staff_contacts;
 create policy staff_contacts_staff on public.staff_contacts for all to authenticated
   using (private.is_team_staff(team_id)) with check (private.is_team_staff(team_id));
+
+-- ==== Migration: report links (2026-11) ====
+-- The final reports as PDFs in a private bucket, at <team id>/<match id>/<file>.pdf, so the e-mails and the WhatsApp
+-- messages carry download links (a wa.me link cannot attach files). The staff upload them; whoever gets a link opens it
+-- through the signed URL the app makes, never through these policies.
+insert into storage.buckets (id, name, public) values ('match-reports', 'match-reports', false) on conflict do nothing;
+drop policy if exists match_reports_select on storage.objects;
+create policy match_reports_select on storage.objects for select to authenticated
+  using (bucket_id = 'match-reports' and private.is_team_staff(((storage.foldername(name))[1])::uuid));
+drop policy if exists match_reports_insert on storage.objects;
+create policy match_reports_insert on storage.objects for insert to authenticated
+  with check (bucket_id = 'match-reports' and private.is_team_staff(((storage.foldername(name))[1])::uuid));
+drop policy if exists match_reports_update on storage.objects;
+create policy match_reports_update on storage.objects for update to authenticated
+  using (bucket_id = 'match-reports' and private.is_team_staff(((storage.foldername(name))[1])::uuid))
+  with check (bucket_id = 'match-reports' and private.is_team_staff(((storage.foldername(name))[1])::uuid));
+drop policy if exists match_reports_delete on storage.objects;
+create policy match_reports_delete on storage.objects for delete to authenticated
+  using (bucket_id = 'match-reports' and private.is_team_staff(((storage.foldername(name))[1])::uuid));
