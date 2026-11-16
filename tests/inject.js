@@ -3127,6 +3127,39 @@
         if (reloads !== 1) throw new Error('not loaded on the team page: ' + reloads);
       } finally { reloadPage = saved; ui.updateReady = false; ui.updateHinted = false; $('home').hidden = homeHidden; home.view = view; }
     });
+    await TA('WhatsApp a todos: the staff then the players with a phone, one tap each opens the next chat; skip and end', async () => {
+      const real = backend, saved = { open: window.open, reportFiles, loadPdfLibs, pdfNewDoc }, snap = snapshot(), keepId = currentMatchId, opened = [];
+      try {
+        state = sampleState(); state.sample = false; currentMatchId = 'queue-match';
+        loadPdfLibs = async () => {}; pdfNewDoc = () => fakeDrawingDoc({ output: () => new Blob(['x']) });
+        reportFiles = async () => [{ filename: 'informe-a-b.pdf', blob: new Blob(['A']) }, { filename: 'jugadores-a-b.pdf', blob: new Blob(['B']) }];
+        window.open = (url) => { opened.push(decodeURIComponent(url)); return null; };
+        team.staff = [{ id: 'st-head', name: 'Jorge', role: 'head' }];
+        backend = { listPlayerContacts: async () => [{ playerId: 'p8', email: '', phone: '+34600000001' }, { playerId: 'p17', email: '', phone: '+34600000002' }],
+          listStaffContacts: async () => [{ staffId: 'st-head', email: '', phone: '+34600000003' }],
+          sendPlayerReports: async () => ({ sent: [], skipped: [], failed: [] }), sendStaffReport: async () => ({ sent: 0 }),
+          uploadReport: async () => {}, reportLink: async (t, m, f) => `https://links.test/${f}` };
+        openFinal(); await ui.sendReportsReady; await ui.reportLinksJob;
+        const box = $('send-reports');
+        const start = box.querySelector('[data-wa-queue-start]');
+        if (!start || !start.textContent.includes('(3)')) throw new Error('no queue button ' + (start && start.textContent));
+        start.click();
+        if (!$('send-reports').querySelector('[data-wa-queue-next]').textContent.includes('Jorge')) throw new Error('staff not first');
+        $('send-reports').querySelector('[data-wa-queue-next]').click();
+        if (!opened[0] || !opened[0].startsWith('https://wa.me/34600000003?text=')) throw new Error('staff chat ' + opened[0]);
+        if (!$('send-reports').textContent.includes('2 de 3')) throw new Error('did not advance');
+        $('send-reports').querySelector('[data-wa-queue-skip]').click();
+        if (opened.length !== 1) throw new Error('skip opened a chat');
+        $('send-reports').querySelector('[data-wa-queue-next]').click();
+        if (opened.length !== 2 || !opened[1].startsWith('https://wa.me/34600000002?text=')) throw new Error('last chat ' + opened[1]);
+        if (!$('send-reports').textContent.includes('Hecho')) throw new Error('not done');
+        $('send-reports').querySelector('[data-wa-queue-end]').click();
+        if (ui.waQueue || !$('send-reports').querySelector('[data-wa-queue-start]')) throw new Error('not closed');
+      } finally {
+        delete team.staff; backend = real; ({ reportFiles, loadPdfLibs, pdfNewDoc } = saved); window.open = saved.open; currentMatchId = keepId;
+        ui.waQueue = null; ui.reportsWhatsApped = []; ui.staffWhatsApped = []; ui.reportContacts = ui.staffContacts = null; hideFinal(); restore(snap);
+      }
+    });
     await TA('season: reloads when stale on a team page, never while fresh, in a match or hidden', async () => {
       const real = backend, savedId = team.id, savedView = home.view, homeHidden = $('home').hidden;
       team.id = 'season-refresh-team';
