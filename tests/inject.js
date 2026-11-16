@@ -1114,6 +1114,15 @@
     if (!(full < 0) || !nearTo(tuned, full * RW.weights.exclusionShare)) throw new Error([full, tuned].join());
     if (!(RW.weights.exclusionShare > 0 && RW.weights.exclusionShare < 1)) throw new Error('share ' + RW.weights.exclusionShare);
   });
+  T("rating: each later 2' of the same player costs a larger share, up to all of it", () => {
+    const two = (id, abs) => ({ id, abs, kind: 'SANCTION', playerId: 'a', card: '2M' });
+    const shots = (from) => [rShot('b', '9M', 'FUERA', from + 10), { id: 'r' + from, abs: from + 20, kind: 'RIVAL_SHOT', gkId: 'g', zone: '9M', result: 'GOL' }];
+    const events = [two('x0', 10), ...shots(10), two('x1', 300), ...shots(300)];
+    const costs = (weights) => playerRating(rateMatch(events), fieldA, { weights }).moments.filter((m) => m.label === "Exclusión 2'").map((m) => m.value);
+    const w = RW.weights, flat = costs({ ...ratingWeights(), exclusionRepeat: 0 }), each = costs(ratingWeights());
+    if (flat.length !== 2 || !nearTo(each[0], flat[0]) || !nearTo(each[1], flat[1] * (w.exclusionShare + w.exclusionRepeat) / w.exclusionShare)) throw new Error(each.join() + ' vs ' + flat.join());
+    if (Math.min(1, w.exclusionShare + 9 * w.exclusionRepeat) !== 1) throw new Error('no cap at the whole cost');
+  });
   T('rating: the keeper earns goals saved above expected, at the keeper weight', () => {
     const kw = RW.weights.keeperWeight;
     const events = [...rGkShots('6M', 3, 2), { id: 'off', abs: 9, kind: 'RIVAL_SHOT', gkId: 'g', zone: '6M', result: 'FUERA' }, { id: 'other', abs: 9, kind: 'RIVAL_SHOT', gkId: 'x', zone: '9M', result: 'PARADA' }];
