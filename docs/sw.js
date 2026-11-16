@@ -9,7 +9,7 @@
  * tools/build_site.py stamps BUILD (a hash of the page, so every release replaces the old shell cache) and
  * SUPABASE_JS (the library URL the page loads).
  */
-const BUILD = 'e29b39e62e74';
+const BUILD = '2fe86a8698c6';
 const SHELL_PREFIX = 'hbstats-app-shell-';
 const SHELL_CACHE = `${SHELL_PREFIX}${BUILD}`;
 const RUNTIME_CACHE = 'hbstats-app-cdn-v1';
