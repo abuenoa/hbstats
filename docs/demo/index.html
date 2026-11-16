@@ -7122,9 +7122,28 @@ table { border-collapse: collapse; width: 100%; }
   // The messages read the same on WhatsApp and in the e-mails: a headline with the score, the match's place and day,
   // a short body, the PDF links on their own lines (nothing glued to them) and the app. WhatsApp's *bold* marks are
   // dropped in the e-mails.
-  // Symbols of the Basic Multilingual Plane only: WhatsApp's link turns emoji beyond it (🤾, 📄…) into «�» on its web
-  // and desktop apps.
-  const REPORT_ICONS = { match: '▶', place: '➤', rating: '⭐', mvp: '♛', goals: '✔', pdf: '⬇', squad: '⬇', app: '➜' };
+  // WhatsApp's own emoji: the app reads them well; only WhatsApp on a computer may show some as «�».
+  const REPORT_ICONS = { match: '🤾', place: '📍', rating: '⭐', mvp: '🏆', goals: '🎯', keeper: '🧤', exclusions: '⛔', turnovers: '🔄',
+    penalties: '🥅', keys: '📊', alert: '⚠️', pdf: '📄', squad: '👥', app: '📲' };
+  // Our 2' that count as many against us: from this many, and at least this many more than the rival's.
+  const MANY_EXCLUSIONS = { min: 4, overRival: 2 };
+  // The match in a few lines, for the staff and the players: the MVP, the shooting of both teams, the goalkeepers, the
+  // 2', the turnovers and the 7 m, with a warning when our 2' cost us the match's balance.
+  function matchKeyLines(s = state, ratings = matchRatings(s)) {
+    const { us, them } = liveStats(), mvp = matchMvp(s, ratings), best = mvp.id ? playerById(mvp.id, s) : null;
+    const pens = (shots) => { const all = shots.filter((e) => e.zone === '7M'); return `${all.filter((e) => e.result === 'GOL').length}/${all.length}`; };
+    const ours = exclusionEvents().length, theirs = rivalExclusionEvents().length;
+    const both = (a, b) => `${s.us} ${a} · ${s.them} ${b}`;
+    return [`${REPORT_ICONS.keys} *Claves del partido*`,
+      best ? `${REPORT_ICONS.mvp} MVP: *${best.name}* (${ratingText(ratingValue(ratings, best))})` : '',
+      `${REPORT_ICONS.goals} Tiro: ${both(`${pctText(us.shooting)} (${us.goals}/${us.shots})`, `${pctText(them.shooting)} (${them.goals}/${them.shots})`)}`,
+      `${REPORT_ICONS.keeper} Portería: ${both(`${pctText(them.savedPct)} (${them.saved}/${them.onTarget})`, `${pctText(us.savedPct)} (${us.saved}/${us.onTarget})`)}`,
+      `${REPORT_ICONS.exclusions} Exclusiones 2': ${both(ours, theirs)}`,
+      `${REPORT_ICONS.turnovers} Pérdidas: ${both(us.turnovers, them.turnovers)}`,
+      `${REPORT_ICONS.penalties} 7 m: ${both(pens(ourShots()), pens(rivalShots()))}`,
+      ours >= MANY_EXCLUSIONS.min && ours - theirs >= MANY_EXCLUSIONS.overRival
+        ? `${REPORT_ICONS.alert} ${ours} exclusiones nuestras (${theirs} del rival): mucho tiempo con uno menos.` : ''].filter(Boolean);
+  }
   const reportHeadline = (s) => [`${REPORT_ICONS.match} *${scoreLine(s, score(s.events))}*`, [matchPlaceText(s), dateText(s.date)].filter(Boolean).join(' · ')]
     .map((line, i) => (i && line ? `${REPORT_ICONS.place} ${line}` : line)).filter(Boolean);
   const reportLinkLines = (label, url, icon = REPORT_ICONS.pdf) => (url ? ['', `${icon} *${label}*`, url] : []);
@@ -7134,7 +7153,7 @@ table { border-collapse: collapse; width: 100%; }
     const empty = ['–', 0, '0', '0/0'];
     const figures = playerReport(p, s, ratings).figures.filter(([, value]) => !empty.includes(value)).slice(0, REPORT_TEXT_FIGURES);
     return [...reportHeadline(s), '', `¡Hola, ${p.name}! Así fue tu partido:`, `${REPORT_ICONS.rating} Nota: *${ratingText(ratingValue(ratings, p))}*`,
-      ...figures.map(([label, value]) => `• ${label}: ${value}`), ...reportLinkLines('Tu informe en PDF', link),
+      ...figures.map(([label, value]) => `• ${label}: ${value}`), '', ...matchKeyLines(s, ratings), ...reportLinkLines('Tu informe en PDF', link),
       ...reportAppLines('Todas tus estadísticas en Zona6:')].join('\n');
   }
   const reportSubject = (s = state) => `${scoreLine(s, score(s.events))} · tu informe`;
@@ -7324,9 +7343,9 @@ table { border-collapse: collapse; width: 100%; }
   }
   // What the staff read, by e-mail and WhatsApp: the match, its MVP and scorers, the links to both PDFs and the app.
   function staffReportBody(s = state, greeting = 'Aquí tienes el informe del partido:') {
-    const ratings = matchRatings(s), mvp = matchMvp(s, ratings), best = mvp.id ? playerById(mvp.id, s) : null, links = currentReportLinks(s), scorers = topScorers(s);
-    return [...reportHeadline(s), '', greeting, best ? `${REPORT_ICONS.mvp} MVP: *${best.name}* (${ratingText(ratingValue(ratings, best))})` : '',
-      scorers.length ? `${REPORT_ICONS.goals} Goles: ${scorers.map((p) => `${p.name} ${p.goals}`).join(', ')}` : '',
+    const ratings = matchRatings(s), links = currentReportLinks(s), scorers = topScorers(s);
+    return [...reportHeadline(s), '', greeting, '', ...matchKeyLines(s, ratings),
+      scorers.length ? `${REPORT_ICONS.squad} Goleadores: ${scorers.map((p) => `${p.name} ${p.goals}`).join(', ')}` : '',
       ...reportLinkLines('Informe del partido (PDF)', links?.match), ...reportLinkLines('Informe de jugadores (PDF)', links?.players, REPORT_ICONS.squad),
       ...reportAppLines('Todo el detalle en Zona6:')].filter((line, i, all) => line !== '' || (i > 0 && all[i - 1] !== '')).join('\n');
   }
