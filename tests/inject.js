@@ -2852,6 +2852,49 @@
         if (getComputedStyle(document.documentElement).getPropertyValue('--brand').trim().toLowerCase() === '#2255aa') throw new Error('the third kit dressed the app');
       } finally { applyTeam(saved); showHomeView('team'); }
     });
+    await TA('instagram: two optional handles in the team form, kept lowercase without the @', async () => {
+      if (socialHandleOf('@Vivero.Triana_OF', 'Instagram') !== 'vivero.triana_of' || socialHandleOf('triana_balonmano', 'x') !== 'triana_balonmano') throw new Error('normalised');
+      if (socialHandleOf('', 'x') !== null || socialHandleOf('   ', 'x') !== null || socialHandleOf('@', 'x') !== null || socialHandleOf(null, 'x') !== null) throw new Error('empty is none');
+      if (socialHandleOf('a'.repeat(SOCIAL_HANDLE_MAX), 'x') !== 'a'.repeat(SOCIAL_HANDLE_MAX)) throw new Error('30 characters');
+      ['a'.repeat(SOCIAL_HANDLE_MAX + 1), 'club triana', '@@club', 'club-triana', 'clüb', 'https://instagram.com/club'].forEach((bad) => throws(() => socialHandleOf(bad, 'Instagram secundario'), /Instagram secundario: solo letras/));
+      const saved = { ...team };
+      try {
+        showHomeView('team-edit');
+        const form = document.querySelector('[data-form="team"]');
+        if ($('team-social').value || $('team-social2').value) throw new Error('a team without accounts shows one');
+        $('team-social').value = ' @Triana_Balonmano '; $('team-social2').value = '@vivero.triana_of';
+        await submitTeam(form, false);
+        if (team.socialHandle !== 'triana_balonmano' || team.socialHandle2 !== 'vivero.triana_of') throw new Error(JSON.stringify([team.socialHandle, team.socialHandle2]));
+        if ((await backend.listTeams()).find((t) => t.id === team.id).socialHandle !== 'triana_balonmano') throw new Error('not kept by the backend');
+        if ($('team-social').value !== '@triana_balonmano' || $('team-social2').value !== '@vivero.triana_of') throw new Error('form shows ' + $('team-social').value);
+        $('team-social2').value = 'vivero triana';
+        await submitTeam(document.querySelector('[data-form="team"]'), false);
+        if (team.socialHandle2 !== 'vivero.triana_of' || !$('home-status').textContent.includes('Instagram secundario')) throw new Error('a bad handle was saved: ' + $('home-status').textContent);
+        $('team-social').value = ''; $('team-social2').value = '';
+        await submitTeam(document.querySelector('[data-form="team"]'), false);
+        if (team.socialHandle !== null || team.socialHandle2 !== null) throw new Error('cleared handles kept');
+      } finally { applyTeam(saved); showHomeView('team'); }
+    });
+    await TA('instagram: Supabase maps both handles and leaves them out of edits that do not touch them', async () => {
+      const calls = []; let next = { data: null, error: null };
+      const query = () => new Proxy({}, { get: (t, k) => (k === 'then' ? (ok) => ok(next) : (...a) => { calls.push([k, ...a]); return query(); }) });
+      const savedLib = window.supabase; window.supabase = { createClient: () => ({ from: (tbl) => { calls.push(['from', tbl]); return query(); }, rpc: (fn, args) => { calls.push(['rpc', fn, args]); return query(); } }) };
+      try {
+        const cloud = await supabaseBackend({ url: 'https://x.supabase.co', anonKey: 'k' });
+        const row = { id: 't1', club: 'C', name: 'N', brand: '#000000', brand2: '#ffffff', brand_ink: '#ffffff', crest: null };
+        next = { data: { ...row, social_handle: 'triana_balonmano', social_handle_2: null }, error: null };
+        const saved = await cloud.updateTeam('t1', { socialHandle: 'triana_balonmano', socialHandle2: null });
+        const sent = calls.find((c) => c[0] === 'update')[1];
+        if (sent.social_handle !== 'triana_balonmano' || sent.social_handle_2 !== null || saved.socialHandle !== 'triana_balonmano' || saved.socialHandle2 !== null) throw new Error(JSON.stringify([sent, saved]));
+        calls.length = 0; await cloud.updateTeam('t1', { staff: [] });
+        const staffOnly = calls.find((c) => c[0] === 'update')[1];
+        if ('social_handle' in staffOnly || 'social_handle_2' in staffOnly) throw new Error('a staff edit must not touch the handles');
+        // create_team knows nothing of the handles: they follow in an update.
+        calls.length = 0; next = { data: row, error: null };
+        await cloud.createTeam({ ...DEFAULT_TEAM, socialHandle: 'triana_balonmano' });
+        if (!calls.some((c) => c[0] === 'rpc' && c[1] === 'create_team') || calls.find((c) => c[0] === 'update')?.[1].social_handle !== 'triana_balonmano') throw new Error(JSON.stringify(calls));
+      } finally { window.supabase = savedLib; }
+    });
     await TA('team form refuses empty names', async () => { showHomeView('team-edit'); $('team-name').value = '  '; await submitTeam(document.querySelector('[data-form="team"]'), false); if (team.name !== 'Ejemplo Sur' || !$('home-status').textContent.includes('vacíos')) throw new Error($('home-status').textContent); });
     await TA('team roster: add, position, duplicate dorsal refused, retire', async () => { showHomeView('team-edit'); await addTeamPlayer(); await addTeamPlayer(); await addTeamPlayer(); const [a, b, c] = home.roster; await saveTeamPlayer(a, { pos: 'POR', name: 'Ana' }); if (rosterPlayer(a.id).pos !== 'POR') throw new Error('pos'); await saveTeamPlayer(rosterPlayer(b.id), { num: a.num }); if (rosterPlayer(b.id).num === a.num || !$('home-status').textContent.includes('ya está')) throw new Error('dup'); document.querySelector(`[data-team-del="${c.id}"]`).click(); if (!rosterPlayer(c.id)) throw new Error('retired on first tap'); document.querySelector(`[data-team-del="${c.id}"]`).click(); await tick0(); await tick0(); if (rosterPlayer(c.id)) throw new Error('not retired'); const listed = await backend.listPlayers(team.id); if (listed.length !== 2) throw new Error('backend ' + listed.length); });
     await TA('roster file adds new dorsals and updates existing ones', async () => { const a = home.roster.find((p) => p.pos === 'POR'); const file = new File([JSON.stringify({ format: ROSTER_FORMAT, players: [{ num: a.num, name: 'Ana Ruiz', pos: 'POR' }, { num: 9, name: 'Lola', pos: 'CEN' }, { num: 11, name: 'Marta', pos: 'EXT' }, { num: 12, name: 'Sara', pos: 'POR' }] })], 'p.json', { type: 'application/json' }); await importTeamRoster(file); if (home.roster.length !== 5 || rosterPlayer(a.id).name !== 'Ana Ruiz') throw new Error(home.roster.map((p) => p.num + p.name).join()); });

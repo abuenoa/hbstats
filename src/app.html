@@ -1764,7 +1764,8 @@ span.att-foot { visibility: hidden; }
   const APP_URL = '../';
   // The team the app wears (name, colours, crest): the signed-in coach's team once the home screen loads it.
   // brand and brand2 dress the app and the first two kits; brand3 (null = none) is only a third kit to pick.
-  const DEFAULT_TEAM = { id: null, club: 'Mi club', name: 'Mi equipo', brand: '#d4202a', brand2: '#f5c400', brand3: null, brandInk: '#ffffff', crest: null };
+  // socialHandle and socialHandle2 (null = none) are the club's Instagram accounts, printed on the shared images.
+  const DEFAULT_TEAM = { id: null, club: 'Mi club', name: 'Mi equipo', brand: '#d4202a', brand2: '#f5c400', brand3: null, brandInk: '#ffffff', crest: null, socialHandle: null, socialHandle2: null };
   const DEFAULT_THIRD_KIT = '#ffffff';
   let team = DEFAULT_TEAM;
   // A player's or a guest's account reads everything of the team and changes nothing; the database refuses their writes too.
@@ -7871,6 +7872,8 @@ table { border-collapse: collapse; width: 100%; }
   const CREST_SIZE_PX = 160;
   const IMAGE_DATA_URL = /^data:image\/(png|jpeg|webp);base64,[A-Za-z0-9+/=]+$/;
   const HEX_COLOUR = /^#[0-9a-fA-F]{6}$/;
+  // An Instagram username as Instagram spells it; the form also takes it with a leading «@» and in capitals.
+  const SOCIAL_HANDLE = /^[a-z0-9._]{1,30}$/, SOCIAL_HANDLE_MAX = 30, SOCIAL_HANDLE_PREFIX = '@';
   const INK_DARK = '#151515';
   const INK_LIGHT = '#ffffff';
   const LIGHT_BRAND_LUMINANCE = 0.55;
@@ -8077,10 +8080,12 @@ table { border-collapse: collapse; width: 100%; }
     const check = (result) => { if (result.error) throw new Error(result.error.message); return result.data; };
     // A team the user creates or edits is theirs to run, so its role is the owner's unless listTeams says otherwise.
     // `playerId`: the roster player a player's account is, in that team.
-    const toTeam = (r, role = STAFF_ROLE, playerId = null) => ({ id: r.id, club: r.club, name: r.name, brand: r.brand, brand2: r.brand2, brand3: r.brand3 || null, brandInk: r.brand_ink, crest: r.crest, ratingWeights: r.rating_weights, staff: r.staff || [], inviteMessage: r.invite_message || null, role, playerId });
+    const toTeam = (r, role = STAFF_ROLE, playerId = null) => ({ id: r.id, club: r.club, name: r.name, brand: r.brand, brand2: r.brand2, brand3: r.brand3 || null, brandInk: r.brand_ink, crest: r.crest, ratingWeights: r.rating_weights, staff: r.staff || [], inviteMessage: r.invite_message || null,
+      socialHandle: r.social_handle || null, socialHandle2: r.social_handle_2 || null, role, playerId });
     const teamRow = (t) => ({ club: t.club, name: t.name, brand: t.brand, brand2: t.brand2, brand3: t.brand3 || null, brand_ink: t.brandInk, crest: t.crest,
       ...(t.ratingWeights === undefined ? {} : { rating_weights: t.ratingWeights }), ...(t.staff === undefined ? {} : { staff: t.staff }),
-      ...(t.inviteMessage === undefined ? {} : { invite_message: t.inviteMessage }) });
+      ...(t.inviteMessage === undefined ? {} : { invite_message: t.inviteMessage }),
+      ...(t.socialHandle === undefined ? {} : { social_handle: t.socialHandle }), ...(t.socialHandle2 === undefined ? {} : { social_handle_2: t.socialHandle2 }) });
     const PLAYER_COLUMNS = 'id,num,name,pos,full_name,photo';
     // `name` is the short name shown on court; `fullName` is the one on the official card.
     const toPlayer = (r) => ({ id: r.id, num: r.num, name: r.name, pos: r.pos, fullName: r.full_name, photo: r.photo });
@@ -8165,8 +8170,9 @@ table { border-collapse: collapse; width: 100%; }
       async removeAccount(teamId, userId) { check(await client.rpc('remove_team_account', { p_team: teamId, p_user: userId })); },
       async createTeam(t) {
         const created = toTeam(check(await client.rpc('create_team', { p_club: t.club, p_name: t.name, p_brand: t.brand, p_brand2: t.brand2, p_brand_ink: t.brandInk, p_crest: t.crest })));
-        // create_team takes the two app colours; a third kit is set right after.
-        return t.brand3 ? this.updateTeam(created.id, { ...created, brand3: t.brand3 }) : created;
+        // create_team takes the two app colours; a third kit and the Instagram accounts are set right after.
+        const later = { brand3: t.brand3, socialHandle: t.socialHandle, socialHandle2: t.socialHandle2 };
+        return Object.values(later).some(Boolean) ? this.updateTeam(created.id, { ...created, ...later }) : created;
       },
       async updateTeam(id, t) { return toTeam(check(await client.from('teams').update(teamRow(t)).eq('id', id).select().single())); },
       async listPlayers(teamId) { return check(await client.from('players').select(PLAYER_COLUMNS).eq('team_id', teamId).eq('active', true).order('num')).map(toPlayer); },
@@ -8541,6 +8547,8 @@ table { border-collapse: collapse; width: 100%; }
   function teamFormHtml(t, creating) {
     const crest = home.crestDraft === undefined ? t.crest : home.crestDraft;
     const colour = (label, key) => `<label>${label}<input class="in colour" type="color" name="${key}" id="team-${key}" value="${t[key]}"></label>`;
+    const handle = (label, key, name) => `<label>${label}<input class="in" type="text" name="${name}" id="team-${name}" maxlength="${SOCIAL_HANDLE_MAX + SOCIAL_HANDLE_PREFIX.length}"
+      value="${t[key] ? esc(SOCIAL_HANDLE_PREFIX + t[key]) : ''}" placeholder="@cuenta_del_club" autocomplete="off" autocapitalize="none" spellcheck="false"></label>`;
     return `<form class="team-form" data-form="${creating ? 'team-new' : 'team'}"${creating ? ` id="${TEAM_NEW_FORM_ID}"` : ''}>
       <div class="crest-pick"><img class="crest-preview" id="crest-preview" src="${esc(crestSrc({ ...t, crest }))}" alt="Escudo">
         <div class="row-actions"><button class="btn press" type="button" data-crest-pick>Subir escudo</button>${crest ? '<button class="btn press" type="button" data-crest-clear>Quitar</button>' : ''}</div>
@@ -8552,8 +8560,10 @@ table { border-collapse: collapse; width: 100%; }
         ${colour('Color secundario', 'brand2')}
         <div class="third-kit"><button class="btn press" type="button" id="team-kit3" aria-pressed="${Boolean(t.brand3)}">3ª equipación</button>
           <input class="in colour" type="color" name="brand3" id="team-brand3" aria-label="Color de la 3ª equipación" value="${t.brand3 || DEFAULT_THIRD_KIT}"${t.brand3 ? '' : ' disabled'}></div>
+        ${handle('Instagram', 'socialHandle', 'social')}
+        ${handle('Instagram secundario', 'socialHandle2', 'social2')}
       </div>
-      <p class="note">La app usa el color principal y el secundario; la 3ª equipación solo se elige en la convocatoria.</p>
+      <p class="note">La app usa el color principal y el secundario; la 3ª equipación solo se elige en la convocatoria. Las cuentas de Instagram salen en las imágenes que se comparten.</p>
       ${creating ? '' : '<div class="row-actions"><button class="btn primary press" type="submit">Guardar cambios</button></div>'}
       ${statusHtml()}
     </form>`;
@@ -11366,7 +11376,15 @@ table { border-collapse: collapse; width: 100%; }
     if (!club || !name) throw new Error('el club y el nombre no pueden quedar vacíos');
     if (!HEX_COLOUR.test(brand) || !HEX_COLOUR.test(brand2)) throw new Error('elige los dos colores');
     if (brand3 !== null && !HEX_COLOUR.test(brand3)) throw new Error('elige el color de la 3ª equipación');
-    return { club, name, brand, brand2, brand3, brandInk: inkFor(brand), crest: home.crestDraft === undefined ? current.crest : home.crestDraft };
+    const socialHandle = socialHandleOf(data.get('social'), 'Instagram'), socialHandle2 = socialHandleOf(data.get('social2'), 'Instagram secundario');
+    return { club, name, brand, brand2, brand3, brandInk: inkFor(brand), crest: home.crestDraft === undefined ? current.crest : home.crestDraft, socialHandle, socialHandle2 };
+  }
+  // An Instagram account typed in the team form, as stored: lowercase and without the «@»; null when left empty.
+  function socialHandleOf(raw, label) {
+    const typed = String(raw || '').trim(), handle = (typed.startsWith(SOCIAL_HANDLE_PREFIX) ? typed.slice(SOCIAL_HANDLE_PREFIX.length) : typed).toLowerCase();
+    if (!handle) return null;
+    if (!SOCIAL_HANDLE.test(handle)) throw new Error(`${label}: solo letras, números, «.» y «_», hasta ${SOCIAL_HANDLE_MAX}`);
+    return handle;
   }
   // The team as the backend returned it after an edit: in the list, in the device copy and worn by the app.
   function keepUpdatedTeam(updated) {
