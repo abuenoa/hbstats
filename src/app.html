@@ -6313,7 +6313,7 @@ table { border-collapse: collapse; width: 100%; }
   // Theme-independent colours: the card is shared outside the app, so it never follows the theme. The values are the light
   // theme's tokens (crown, rating bands, positions); the team's own colours come from the match data.
   const CARD_PALETTE = {
-    base: '#101014', ink: '#ffffff', inkSoft: 'rgba(255, 255, 255, .72)', tile: 'rgba(255, 255, 255, .12)', badgeEdge: '#101014',
+    base: '#101014', ink: '#ffffff', inkSoft: 'rgba(255, 255, 255, .72)', badgeEdge: '#101014',
     crownShadow: 'rgba(0, 0, 0, .35)',
     crown: { '--crown-light': '#fff3a6', '--gold': '#f5c400', '--crown-deep': '#b8860b', '--crown-band-deep': '#8a6400', '--crown-edge': '#7a5500',
       '--crown-shine': '#fffbe0', '--red': '#d4202a', '--parada': '#2563eb', '--gol': '#1f9d55' },
@@ -6324,7 +6324,7 @@ table { border-collapse: collapse; width: 100%; }
   };
   const MVP_TITLE = 'MVP', MVP_PROVISIONAL_TAG = 'Provisional';
   const CARD_ELLIPSIS = '…';
-  const CARD_FONT_TOKENS = { display: '--font-display', body: '--font-body', poster: '--font-poster' };
+  const CARD_FONT_TOKENS = { display: '--font-display', poster: '--font-poster' };
   // The canvas does not inherit CSS: the font shorthand uses the same stacks as the page.
   const cardFont = (weight, size, family) => `${weight} ${size}px ${getComputedStyle(document.documentElement).getPropertyValue(CARD_FONT_TOKENS[family]).trim()}`;
   // What the MVP card shows about one player; `ratings` is matchRatings(s). The 4th tile is the minutes on court, left out
@@ -6428,7 +6428,6 @@ table { border-collapse: collapse; width: 100%; }
     ctx.restore();
   }
   const cardDisplay = (size) => cardFont(CARD_WEIGHTS.heavy, size, 'display');
-  const cardBody = (weight) => (size) => cardFont(weight, size, 'body');
   // The text writer of one card: `write(value, x, y, align, ink, specOf, size, width, minSize)` draws `value` in the font
   // `specOf(size)`, shrunk from `size` to `minSize` and then cut with an ellipsis to fit `width` (default `maxWidth`).
   const cardWriter = (ctx, maxWidth) => (value, x, y, align, ink, specOf, size, width = maxWidth, minSize = size) => {
@@ -6436,8 +6435,6 @@ table { border-collapse: collapse; width: 100%; }
     fitFont(ctx, value, width, size, minSize, specOf);
     ctx.fillText(fitText(ctx, value, width), x, y);
   };
-  // The team colour for the card's accents: its second colour, or white when that one is too dim on the card's base.
-  const cardAccent = (data, minContrast) => (contrastRatio(data.brand2, CARD_PALETTE.base) >= minContrast ? data.brand2 : CARD_PALETTE.ink);
   // The card's base, with the team colour fading into it over the first `fadeHeight` px.
   function paintCardBackground(ctx, w, h, brand, fadeHeight) {
     const background = ctx.createLinearGradient(0, 0, 0, fadeHeight);
@@ -6581,24 +6578,22 @@ table { border-collapse: collapse; width: 100%; }
     return canvasPng(canvas, 'The MVP card');
   }
 
-  // The ratings card for the team's group: the match on a team-colour header, then one row per convocado (dorsal, face,
-  // name and a line of numbers, the rating in its band colour). It is as tall as its rows: head + rows × row px.
+  // The ratings card for the team's group, as the club's poster: over the arena, the day and the hall, a huge
+  // «PUNTUACIONES», our crest with the score line, then every convocado in two columns («NN. NAME» after the face, a line
+  // of numbers under it and the rating on a chip of its band colour, the MVP crowned) and the club's accounts. 1080×1350
+  // whatever the squad: rows grow shorter when more than two columns of `maxRow` px are needed.
   const RATINGS_CARD = {
-    w: 1080, head: 300, row: 120, pad: 48, fadeEnd: 1,
-    crest: { x: 48, y: 48, size: 120 },
-    titleY: 112, titleSize: 72, matchY: 184, matchSize: 44, matchMinSize: 32, metaY: 240, metaSize: 28,
-    numW: 64, numSize: 44, faceR: 40, gap: 20,
-    nameSize: 44, nameFloor: 36, nameBaseline: 58, lineSize: 30, lineMinSize: 26, lineBaseline: 100,
-    badge: { w: 168, h: 84, radius: 24, edge: 0, size: 60, baseline: 62 },
-    faceRing: 3, crown: { w: 56, rimDeg: -135, angleDeg: -34 },
-    minAccentContrast: 3
+    w: 1080, h: 1350, pad: 56,
+    veil: [[0, 0.6], [0.25, 0.35], [0.32, 0.55], [0.9, 0.6], [1, 0.9]],
+    tag: { y: 58, size: 30 },
+    title: { y: 236, size: 200, minSize: 90 },
+    match: { y: 266, h: 92, crestR: 42, gap: 20, size: 60, minSize: 34 },
+    list: { top: 396, bottom: 1236, colGap: 40, maxRow: 100, face: 0.62, ring: 3, gap: 12, nameScale: 0.42, minNameScale: 0.55, nameDy: 0.02, lineScale: 0.22, lineDy: 0.3 },
+    chip: { w: 96, h: 0.56, radius: 0.24, size: 0.72, minSize: 0.5, baseline: 0.77 },
+    crown: { w: 0.62, rimDeg: -135, angleDeg: -34 },
+    handlesY: 1318
   };
   const RATINGS_TITLE = 'Puntuaciones';
-  // Where a row's name and line start and how wide they may be, between the face and the rating badge.
-  const ratingsTextColumn = () => {
-    const R = RATINGS_CARD, x = R.pad + R.numW + R.gap + 2 * R.faceR + R.gap;
-    return { x, w: R.w - R.pad - R.badge.w - R.gap - x };
-  };
   // What the ratings card shows: one row per player, sorted like the final list (rating, then S/C last); `ratings` is matchRatings(s).
   function ratingsCardData(s, ratings, t = team, seconds = minutesOnCourt(s)) {
     const sc = score(s.events), mvp = matchMvp(s, ratings, seconds);
@@ -6609,39 +6604,47 @@ table { border-collapse: collapse; width: 100%; }
     });
     return {
       ...cardTeams(s, sc), date: dateText(s.date), venue: matchPlaceText(s), rows,
-      crest: crestSrc(t), brand: t.brand, brand2: t.brand2, brandInk: t.brandInk
+      crest: crestSrc(t), brand: t.brand, handles: cardHandles(t)
     };
   }
-  // Draws the ratings card on `canvas`; `images` are the loaded { crest, faces } (null when missing or broken; faces by row).
-  function drawRatingsCard(canvas, data, images = { crest: null, faces: [] }) {
-    const R = RATINGS_CARD, P = CARD_PALETTE, { semi, regular } = CARD_WEIGHTS, ctx = canvas.getContext('2d'), cx = R.w / 2;
-    const text = cardWriter(ctx, R.w - 2 * R.pad), column = ratingsTextColumn(), height = R.head + data.rows.length * R.row;
-    canvas.width = R.w; canvas.height = height;
-    paintCardBackground(ctx, R.w, height, data.brand, R.head * R.fadeEnd);
-    const accent = cardAccent(data, R.minAccentContrast), { crest } = R, headW = R.w - 2 * (crest.x + crest.size + R.gap);
-    if (images.crest) inCircle(ctx, crest.x + crest.size / 2, crest.y + crest.size / 2, crest.size / 2, () => ctx.drawImage(images.crest, crest.x, crest.y, crest.size, crest.size));
-    text(RATINGS_TITLE.toUpperCase(), cx, R.titleY, 'center', data.brandInk, cardDisplay, R.titleSize, headW);
-    text(data.match, cx, R.matchY, 'center', accent, cardDisplay, R.matchSize, headW, R.matchMinSize);
-    text([data.date, data.venue].filter(Boolean).join(' · '), cx, R.metaY, 'center', P.inkSoft, cardBody(regular), R.metaSize, headW);
+  // The rows of the ratings card: how many per column and how tall each one is.
+  function ratingsRows(count) {
+    const L = RATINGS_CARD.list, perColumn = Math.max(1, Math.ceil(count / 2));
+    return { perColumn, rowH: Math.min(L.maxRow, (L.bottom - L.top) / perColumn) };
+  }
+  // Draws the ratings card on `canvas`; `images` are the loaded { plate, crest, faces } (null when missing or broken; faces by row).
+  function drawRatingsCard(canvas, data, images = { plate: null, crest: null, faces: [] }) {
+    const R = RATINGS_CARD, P = CARD_PALETTE, L = R.list, ctx = canvas.getContext('2d'), cx = R.w / 2, inner = R.w - 2 * R.pad;
+    canvas.width = R.w; canvas.height = R.h;
+    paintArena(ctx, R.w, R.h, images.plate, data.brand, R.veil);
+    posterText(ctx, [data.date, data.venue].filter(Boolean).join(' · ').toUpperCase(), cx, R.tag.y, { align: 'center', ink: P.inkSoft, size: R.tag.size, width: inner, specOf: cardSmall });
+    posterText(ctx, RATINGS_TITLE.toUpperCase(), cx, R.title.y, { align: 'center', size: R.title.size, width: inner, minSize: R.title.minSize });
+    // Our crest and the score line, centred as one group.
+    const M = R.match, crest = images.crest ? 2 * M.crestR + M.gap : 0, label = data.match.toUpperCase();
+    const size = fitFont(ctx, label, inner - crest, M.size, M.minSize, cardPoster), matchW = Math.min(inner - crest, ctx.measureText(label).width);
+    const left = (R.w - crest - matchW) / 2, mid = M.y + M.h / 2;
+    if (images.crest) ringedFace(ctx, { name: data.match, pos: 'CEN' }, images.crest, left + M.crestR, mid, M.crestR, P.ink, L.ring);
+    posterText(ctx, label, left + crest, mid + size * 0.36, { size, width: inner - crest, minSize: M.minSize });
+    // Two columns of players, best first down the left one.
+    const { perColumn, rowH } = ratingsRows(data.rows.length), colW = (inner - L.colGap) / 2, r = rowH * L.face / 2;
+    const chipH = rowH * R.chip.h, badge = { w: R.chip.w, h: chipH, radius: chipH * R.chip.radius, edge: 0, size: chipH * R.chip.size, minSize: chipH * R.chip.minSize, baseline: chipH * R.chip.baseline };
+    const nameSize = rowH * L.nameScale, faces = images.faces || [];
     data.rows.forEach((row, i) => {
-      const top = R.head + i * R.row, mid = top + R.row / 2, faceX = R.pad + R.numW + R.gap + R.faceR;
-      if (i % 2) { ctx.fillStyle = P.tile; ctx.fillRect(0, top, R.w, R.row); }
-      text(String(row.num), R.pad + R.numW / 2, top + R.nameBaseline, 'center', P.inkSoft, cardDisplay, R.numSize, R.numW);
-      drawFace(ctx, text, row, images.faces[i], faceX, mid, R.faceR);
-      ctx.beginPath(); ctx.arc(faceX, mid, R.faceR, 0, 2 * Math.PI);
-      ctx.strokeStyle = P.inkSoft; ctx.lineWidth = R.faceRing; ctx.stroke();
-      if (row.mvp) drawCrown(ctx, crownMatrix(...rimPoint(faceX, mid, R.faceR, R.crown.rimDeg), R.crown.w, R.crown.angleDeg));
-      text(row.name, column.x, top + R.nameBaseline, 'left', P.ink, cardDisplay, R.nameSize, column.w, R.nameFloor);
-      text(row.line, column.x, top + R.lineBaseline, 'left', P.inkSoft, cardBody(semi), R.lineSize, column.w, R.lineMinSize);
-      drawRatingBadge(ctx, text, R.badge, R.w - R.pad - R.badge.w / 2, mid, row.rating, row.band);
+      const x = R.pad + Math.floor(i / perColumn) * (colW + L.colGap), cy = L.top + (i % perColumn) * rowH + rowH / 2;
+      const textX = x + 2 * r + L.gap, textW = colW - 2 * r - R.chip.w - 2 * L.gap;
+      ringedFace(ctx, row, faces[i], x + r, cy, r, P.ink, L.ring);
+      if (row.mvp) drawCrown(ctx, crownMatrix(...rimPoint(x + r, cy, r, R.crown.rimDeg), 2 * r * R.crown.w, R.crown.angleDeg));
+      posterText(ctx, `${row.num}. ${row.name.toUpperCase()}`, textX, cy + rowH * L.nameDy, { size: nameSize, width: textW, minSize: nameSize * L.minNameScale });
+      posterText(ctx, row.line, textX, cy + rowH * L.lineDy, { ink: P.inkSoft, size: rowH * L.lineScale, width: textW, specOf: cardSmall });
+      drawRatingBadge(ctx, cardWriter(ctx, R.chip.w), badge, x + colW - R.chip.w / 2, cy, row.rating, row.band);
     });
+    drawHandles(ctx, data.handles, R.w - R.pad, R.handlesY);
   }
   async function ratingsCardBlob(data) {
-    const { heavy, semi, regular } = CARD_WEIGHTS;
-    await loadCardFonts([cardFont(heavy, RATINGS_CARD.nameSize, 'display'), cardFont(semi, RATINGS_CARD.lineSize, 'body'), cardFont(regular, RATINGS_CARD.metaSize, 'body')]);
-    const [crest, ...faces] = await loadCardImages([data.crest, ...data.rows.map((row) => row.photo)]);
+    await loadCardFonts([cardPoster(RATINGS_CARD.title.size), cardSmall(RATINGS_CARD.tag.size), cardDisplay(RATINGS_CARD.chip.w)]);
+    const [plate, crest, ...faces] = await loadCardImages([ARENA.plate, data.crest, ...data.rows.map((row) => row.photo)]);
     const canvas = document.createElement('canvas');
-    drawRatingsCard(canvas, data, { crest, faces });
+    drawRatingsCard(canvas, data, { plate, crest, faces });
     return canvasPng(canvas, 'The ratings card');
   }
 
@@ -6685,7 +6688,7 @@ table { border-collapse: collapse; width: 100%; }
     const face = (p) => ({ num: p.num, pos: p.pos, name: p.name, keeper: p.pos === 'POR', photo: p.photo || null });
     const rival = fixture ? fixtureRivalName(fixture.opponent) : draft.rival, away = Boolean(fixture) && !fixture.home;
     return {
-      team: t.name, club: t.club, crest: crestSrc(t), brand: t.brand, brand2: t.brand2, brandInk: t.brandInk, handles: cardHandles(t),
+      team: t.name, club: t.club, crest: crestSrc(t), brand: t.brand, handles: cardHandles(t),
       tag: fixture ? [fixture.competition, `Jornada ${fixture.round}`, homeAwayText(fixture.home)].filter(Boolean).join(' · ') : 'Partido',
       rival, match: (away ? [rival, t.name] : [t.name, rival]).filter(Boolean).join(' vs '),
       day: callupDay(draft.date), venue: (fixture && fixture.venue) || '', meet: meetTime(draft), time: draft.time, shirt: shirtOf(draft, t),

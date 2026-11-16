@@ -2561,19 +2561,14 @@
       const header = new DataView(await blob.slice(0, PNG_HEADER_BYTES).arrayBuffer());
       return [header.getUint32(PNG_WIDTH_OFFSET), header.getUint32(PNG_HEIGHT_OFFSET)];
     };
-    const drawnRatings = (data) => {
-      const canvas = document.createElement('canvas'), ctx = canvas.getContext('2d'), texts = [], fillText = ctx.fillText.bind(ctx);
-      ctx.fillText = (text, ...rest) => { texts.push({ text, font: ctx.font }); fillText(text, ...rest); };
-      drawRatingsCard(canvas, data);
-      return { texts, ctx, canvas };
-    };
+    const drawnRatings = (data, images) => textSpy((c) => drawRatingsCard(c, data, images));
     const fontPx = (font) => Number(/(\d+(?:\.\d+)?)px/.exec(font)[1]);
-    await TA('ratings image: one row per convocado, S/C last', async () => {
+    await TA('ratings image: one row per convocado, S/C last, two columns and the handles', async () => {
       const done = withFinal(playedFew());
       let data, expected;
       try {
         expected = state.players.length;
-        data = ratingsCardData(state, matchRatings(state));
+        data = ratingsCardData(state, matchRatings(state), { ...team, socialHandle: 'triana_balonmano', socialHandle2: null });
         if (data.match !== finalTitle()) throw new Error(`${data.match} ${finalTitle()}`);
       } finally { done(); }
       if (data.rows.length !== expected) throw new Error(`${data.rows.length} rows for ${expected} convocados`);
@@ -2584,35 +2579,41 @@
       const keeperRow = data.rows.find((r) => r.pos === 'POR');
       if (!keeperRow.line.includes('Paradas')) throw new Error('keeper line: ' + keeperRow.line);
       if (data.rows.filter((r) => r.mvp).map((r) => r.name).join() !== 'Diego') throw new Error('mvp marker: ' + data.rows.filter((r) => r.mvp).map((r) => r.name));
-      // Every name is drawn at 36 px or more, whole when it fits and cut with an ellipsis only beyond the floor; nothing leaves the card.
-      const long = 'Maximiliano Fernández Lo', huge = 'Maximiliano '.repeat(12).trim();
-      const rows = data.rows.map((r, i) => (i === 0 ? { ...r, name: long } : i === 1 ? { ...r, name: huge } : r));
-      const { texts, ctx } = drawnRatings({ ...data, rows });
-      rows.forEach((r, i) => {
-        const drawn = texts.find((t) => t.text === r.name || (i === 1 && t.text.startsWith('Maximiliano') && t.text.endsWith('…')));
-        if (!drawn) throw new Error('name not drawn: ' + r.name);
-        if (fontPx(drawn.font) < RATINGS_CARD.nameFloor) throw new Error(`name at ${fontPx(drawn.font)} px`);
+      if (data.handles.join() !== '@TRIANA_BALONMANO') throw new Error('handles: ' + data.handles);
+      // Every name is drawn as «NN. NAME», whole when it fits at its floor and cut with an ellipsis only beyond it, inside its
+      // column (how long a name fits depends on the face the device has).
+      const long = 'Maximiliano Fernández Lo', huge = 'Maximiliano '.repeat(12).trim(), mid = 'Antonio Bokiki';
+      const rows = data.rows.map((r, i) => (i === 0 ? { ...r, name: long } : i === 1 ? { ...r, name: huge } : i === 2 ? { ...r, name: mid } : r));
+      const { texts, ctx, canvas } = drawnRatings({ ...data, rows });
+      if (canvas.width !== RATINGS_CARD.w || canvas.height !== RATINGS_CARD.h) throw new Error(`${canvas.width}×${canvas.height}`);
+      const said = texts.map((x) => x.text), { perColumn, rowH } = ratingsRows(rows.length), colW = (RATINGS_CARD.w - 2 * RATINGS_CARD.pad - RATINGS_CARD.list.colGap) / 2;
+      [RATINGS_TITLE.toUpperCase(), data.match.toUpperCase(), '@TRIANA_BALONMANO', `${rows[2].num}. ${mid.toUpperCase()}`].forEach((w) => { if (!said.includes(w)) throw new Error(`«${w}» not drawn: ${said.join('|')}`); });
+      const names = rows.map((r, i) => texts.find((x) => x.text === `${r.num}. ${r.name.toUpperCase()}` || (i < 2 && x.text.startsWith(`${r.num}. MAXIMILIANO`) && x.text.endsWith(CARD_ELLIPSIS))));
+      if (!names[1].text.endsWith(CARD_ELLIPSIS)) throw new Error('a name beyond any column was not cut');
+      names.forEach((drawn, i) => {
+        if (!drawn) throw new Error('name not drawn: ' + rows[i].name);
+        if (fontPx(drawn.font) < rowH * RATINGS_CARD.list.nameScale * RATINGS_CARD.list.minNameScale - 0.5) throw new Error(`name at ${fontPx(drawn.font)} px`);
+        ctx.font = drawn.font;
+        const column = Math.floor(i / perColumn), right = RATINGS_CARD.pad + column * (colW + RATINGS_CARD.list.colGap) + colW - RATINGS_CARD.chip.w;
+        if (drawn.x + ctx.measureText(drawn.text).width > right) throw new Error('overflow into the chip: ' + drawn.text);
       });
       if (texts.filter((t) => t.text === 'S/C').length !== rows.filter((r) => r.rating === 'S/C').length) throw new Error('S/C chips');
-      rows.forEach((r) => texts.filter((t) => t.text.startsWith(r.name.slice(0, 6))).forEach((t) => { ctx.font = t.font; if (ctx.measureText(t.text).width > ratingsTextColumn().w + 0.5) throw new Error('overflow: ' + t.text); }));
-      texts.forEach((t) => { ctx.font = t.font; if (ctx.measureText(t.text).width > RATINGS_CARD.w) throw new Error('overflow: ' + t.text); });
     });
-    await TA('ratings image: height grows with the squad', async () => {
+    await TA('ratings image: 1080×1350 whatever the squad; a big squad gets shorter rows that stay in the list', async () => {
       const done = withFinal(playedFew());
-      const heights = [];
       try {
-        for (const extra of [0, 4]) {
+        for (const extra of [0, 8]) {
           const s = { ...state, players: [...state.players, ...Array.from({ length: extra }, (_, i) => ({ id: 'x' + i, num: 60 + i, name: 'Extra ' + i, pos: 'EXT' }))] };
-          const data = ratingsCardData(s, matchRatings(s)), expected = RATINGS_CARD.head + s.players.length * RATINGS_CARD.row;
-          const canvas = document.createElement('canvas');
-          drawRatingsCard(canvas, data);
-          if (canvas.height !== expected || canvas.width !== RATINGS_CARD.w) throw new Error(`canvas ${canvas.width}×${canvas.height}, expected ${expected}`);
-          const blob = await ratingsCardBlob(data), [w, h] = await pngSize(blob);
-          if (blob.type !== 'image/png' || w !== RATINGS_CARD.w || h !== expected) throw new Error(`png ${w}×${h}, expected ${expected}`);
-          heights.push(h);
+          const data = ratingsCardData(s, matchRatings(s)), { perColumn, rowH } = ratingsRows(data.rows.length), L = RATINGS_CARD.list;
+          if (rowH > L.maxRow || perColumn * rowH > L.bottom - L.top + 0.01) throw new Error(`rows ${perColumn}×${rowH} out of the list`);
+          const { texts } = drawnRatings(data);
+          const last = texts.filter((x) => /^\d+\. /.test(x.text)).at(-1);
+          if (!last || last.y > L.bottom) throw new Error('a row below the list: ' + (last && last.y));
+          const [w, h] = await pngSize(await ratingsCardBlob(data));
+          if (w !== RATINGS_CARD.w || h !== RATINGS_CARD.h) throw new Error(`png ${w}×${h}`);
         }
+        if (ratingsRows(16).rowH !== RATINGS_CARD.list.maxRow || !(ratingsRows(30).rowH < RATINGS_CARD.list.maxRow) || ratingsRows(1).perColumn !== 1 || ratingsRows(0).perColumn !== 1) throw new Error('row sizes');
       } finally { done(); }
-      if (heights[1] - heights[0] !== 4 * RATINGS_CARD.row) throw new Error(heights.join());
     });
     // ---- The arena style of the three images ----
     const pixelOf = (ctx, x = 1, y = 1) => [...ctx.getImageData(x, y, 1, 1).data.slice(0, 3)];
