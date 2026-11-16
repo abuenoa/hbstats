@@ -476,11 +476,11 @@ button.rex-chip { border: 0; cursor: pointer; position: relative; }
 .ev.fresh { animation: flash 1.4s ease-out; }
 .strip-actions { display: flex; gap: 8px; flex: none; }
 /* ---------- «Completar jugadas»: completion mode, a gold strip on top and the time bar in place of the last plays ---------- */
-/* The score and clock (the strip shows the score), time-outs, notes, alerts, the statistics, the theme and the way out of the
+/* The score and clock (the strip shows the score), notes, alerts, the statistics, the theme and the way out of the
    match are not part of it: «Terminar» is the way back. */
 .app.completion-mode { grid-template-rows: auto auto minmax(0, 1fr) auto; }
 .app.completion-mode .bar .center { visibility: hidden; }
-.app.completion-mode #btn-tm-us, .app.completion-mode #btn-tm-them, .app.completion-mode #btn-stop, .app.completion-mode #btn-finish, .app.completion-mode #btn-sheet,
+.app.completion-mode #btn-stop, .app.completion-mode #btn-finish, .app.completion-mode #btn-sheet,
 .app.completion-mode #btn-theme, .app.completion-mode #btn-home, .app.completion-mode .note-box, .app.completion-mode .alerts { display: none; }
 .completing { display: flex; align-items: center; gap: 12px; min-width: 0; border-radius: var(--radius); padding: 4px 4px 4px 16px; background: var(--gold); color: var(--on-gold); }
 .completing-title { margin: 0; min-width: 0; font-size: 15px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
@@ -2357,6 +2357,7 @@ span.att-foot { visibility: hidden; }
       }
       case 'SCORE_FIX': return `Ajuste ${e.team === 'us' ? s.us : s.them} ${e.delta > 0 ? '+1' : '−1'}`;
       case 'NOTE': return `Nota: ${e.text}`;
+      case 'TIMEOUT': return `Tiempo muerto ${teamName(e.team, s)}`;
       default: return e.kind;
     }
   }
@@ -2368,7 +2369,7 @@ span.att-foot { visibility: hidden; }
       case 'TURNOVER': { const g = CONFIG.turnoverGroups.find((x) => x.types.includes(e.subtype)); return `var(--${g ? g.cls.slice(2) : 'act-bad'})`; }
       case 'SANCTION': case 'RIVAL_SANCTION': return SANCTIONS[e.card].color;
       case 'EXCLUSION_END': return 'var(--dos)';
-      case 'NOTE': return 'var(--gold)';
+      case 'NOTE': case 'TIMEOUT': return 'var(--gold)';
       default: return 'var(--red)';
     }
   }
@@ -2530,6 +2531,7 @@ span.att-foot { visibility: hidden; }
     if (ui.penalty && op.added.some((e) => e.id === ui.penalty.eventId)) cancelPenalty();
     if (op.phase) disarmAction();
     revertOp(op);
+    if (state.timeout && op.added.some((e) => e.id === state.timeout.eventId)) endTimeoutNow();
     if (op.penalty) startPenalty(op.penalty.team, op.penalty.eventId, op.penalty.byId);
     state.future.push(op);
     commit();
@@ -3284,6 +3286,7 @@ span.att-foot { visibility: hidden; }
   function stopsClock(e) {
     if (e.kind === 'ACTION' && PENALTY_TEAM[e.action]) return '7 m';
     if ((e.kind === 'SANCTION' || e.kind === 'RIVAL_SANCTION') && (e.card === '2M' || DISQUALIFYING_CARDS.includes(e.card))) return SANCTIONS[e.card].name;
+    if (e.kind === 'TIMEOUT') return 'tiempo muerto';
     return null;
   }
   function autoStartClock(kind) {
@@ -3324,16 +3327,25 @@ span.att-foot { visibility: hidden; }
     syncMatches();
     openFinal();
   }
+  // A time-out is a play (TIMEOUT { team }), with its minute in the log and undoable; matches from before kept only a
+  // count (TIMEOUT_KEYS), which still adds up. In «Completar jugadas» it is logged like any missed play, without the
+  // live countdown.
   const TIMEOUT_KEYS = { us: 'timeoutsUsed', them: 'timeoutsUsedThem' };
-  const timeoutsUsed = (team) => state[TIMEOUT_KEYS[team]] || 0;
+  const timeoutsUsed = (team, s = state) => (s[TIMEOUT_KEYS[team]] || 0) + s.events.filter((e) => e.kind === 'TIMEOUT' && e.team === team).length;
+  const teamName = (team, s = state) => (team === 'us' ? s.us : s.them);
   function startTimeout(team) {
-    if (timeoutsUsed(team) >= CONFIG.timeoutsPerTeam) { hint(`${team === 'us' ? state.us : state.them}: sin tiempos muertos disponibles.`); return; }
-    state[TIMEOUT_KEYS[team]] = timeoutsUsed(team) + 1;
-    pauseClock();
+    if (timeoutsUsed(team) >= CONFIG.timeoutsPerTeam) { hint(`${teamName(team)}: sin tiempos muertos disponibles.`); return; }
+    addEvent('TIMEOUT', { team });
+    if (ui.completing) { hint(`Tiempo muerto ${teamName(team)} · ↶ deshacer`); return; }
     state.alerts = state.alerts.filter((a) => a.live !== 'timeout');
-    state.timeout = { team, endsAt: Date.now() + CONFIG.timeoutSeconds * 1000 };
-    pushAlert({ id: newId('tm'), kind: 'timeout', title: `Tiempo muerto ${team === 'us' ? state.us : state.them}`, live: 'timeout' });
+    state.timeout = { team, endsAt: Date.now() + CONFIG.timeoutSeconds * 1000, eventId: state.events.at(-1).id };
+    pushAlert({ id: newId('tm'), kind: 'timeout', title: `Tiempo muerto ${teamName(team)}`, live: 'timeout' });
     commit();
+  }
+  // An undone time-out stops its countdown at once.
+  function endTimeoutNow() {
+    state.timeout = null;
+    state.alerts = state.alerts.filter((a) => a.live !== 'timeout');
   }
   function pushAlert(a, sound) { state.alerts.unshift(a); if (sound) alarm(sound); }
   function dismissAlert(id) { state.alerts = state.alerts.filter((a) => a.id !== id); commit(); }

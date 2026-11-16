@@ -351,7 +351,7 @@
   T('armed shooter skips picker', () => { const id = Object.keys(state.lineups.ATK)[1]; armShooter(id); courtShot({ x: 150, y: 120 }); const e = state.events.at(-1); if (e.result !== 'FUERA' || e.playerId !== id) throw new Error('armed'); undo(); setPhase('ATK'); });
   T('defence empty-court shot stays rival', () => { setPhase('DEF'); courtShot({ x: 500, y: 120 }); if (ui.popView.type !== 'rivalShot') throw new Error('not rival'); closePop(); });
   T('our 2 min button picks a player and sanctions', () => { setPhase('DEF'); $('btn-us-2m').click(); if (ui.popView.type !== 'sanctionPick') throw new Error('no picker'); const ids = [...document.querySelectorAll('.picker > div')[0].querySelectorAll('[data-pick]')].map((b) => b.dataset.pick); if (!ids.includes(state.gkId)) throw new Error('gk missing on court'); const id = Object.keys(state.lineups.DEF)[0]; const before = playerStats(id)['2M']; document.querySelector(`[data-pick="${id}"]`).click(); if (playerStats(id)['2M'] !== before + 1 || !$('pop').hidden) throw new Error('not sanctioned'); undo(); });
-  T('rival timeouts counted and capped', () => { state.timeoutsUsedThem = 0; for (let i = 0; i < CONFIG.timeoutsPerTeam + 1; i++) $('btn-tm-them').click(); if (state.timeoutsUsedThem !== CONFIG.timeoutsPerTeam) throw new Error('count ' + state.timeoutsUsedThem); if ($('tm-dots-them').querySelectorAll('.used').length !== CONFIG.timeoutsPerTeam) throw new Error('dots'); state.timeoutsUsedThem = 0; state.timeout = null; state.alerts = []; commit(); });
+  T('rival timeouts counted and capped: a timed play each, undoable, legacy counts still add up', () => { const snap = JSON.stringify(state); try { state.timeoutsUsedThem = 0; state.events = state.events.filter((e) => e.kind !== 'TIMEOUT'); for (let i = 0; i < CONFIG.timeoutsPerTeam + 1; i++) $('btn-tm-them').click(); const logged = state.events.filter((e) => e.kind === 'TIMEOUT' && e.team === 'them'); if (logged.length !== CONFIG.timeoutsPerTeam || timeoutsUsed('them') !== CONFIG.timeoutsPerTeam) throw new Error('count ' + logged.length); if ($('tm-dots-them').querySelectorAll('.used').length !== CONFIG.timeoutsPerTeam) throw new Error('dots'); if (describe(logged[0]) !== `Tiempo muerto ${state.them}` || eventColor(logged[0]) !== 'var(--gold)') throw new Error(describe(logged[0])); if (!state.timeout) throw new Error('no countdown'); undo(); if (state.timeout || state.events.filter((e) => e.kind === 'TIMEOUT').length !== CONFIG.timeoutsPerTeam - 1) throw new Error('undo kept the countdown'); state.events = state.events.filter((e) => e.kind !== 'TIMEOUT'); state.timeoutsUsedThem = 1; addEvent('TIMEOUT', { team: 'them' }); if (timeoutsUsed('them') !== 2) throw new Error('legacy count lost'); } finally { state = JSON.parse(snap); commit(); } });
   T('score and clock centred, team controls on their side', () => { const bar = document.querySelector('.bar').getBoundingClientRect(); const c = document.querySelector('.center').getBoundingClientRect(); const off = Math.abs((c.left + c.right) / 2 - (bar.left + bar.right) / 2); if (off > 2) throw new Error('off centre ' + off); const mid = (bar.left + bar.right) / 2; if ($('btn-tm-us').getBoundingClientRect().right > mid || $('btn-us-2m').getBoundingClientRect().right > c.left) throw new Error('ours not left'); if ($('btn-tm-them').getBoundingClientRect().left < c.right || $('btn-rival-2m').getBoundingClientRect().left < c.right) throw new Error('rival not right'); });
   const onCourtDef = () => Object.keys(state.lineups.DEF).find((id) => !isDisqualified(id));
   T('red card: 2 min short-handed, off both lineups, locked on bench', () => { setPhase('DEF'); const id = onCourtDef(); const inAtk = Boolean(state.lineups.ATK[id]); const exBefore = activeExclusions().length; addSanction(id, 'D'); if (activeExclusions().length !== exBefore + 1) throw new Error('no 2 min'); if (state.lineups.DEF[id] || state.lineups.ATK[id]) throw new Error('still on court'); if (!state.alerts.some((a) => a.kind === 'desc' && a.title.includes('Descalificado'))) throw new Error('no alert'); if (!document.querySelector(`.bench-player.out[data-id="${id}"]`)) throw new Error('bench not locked'); if (playerStats(id)['2M'] !== 0 && !inAtk) throw new Error('2M stat changed'); undo(); if (isDisqualified(id)) throw new Error('undo'); });
@@ -1974,7 +1974,8 @@
     button.click();
     if (!ui.completing || ui.completing.from !== 'final' || !$('final').hidden || !$('plays').hidden) throw new Error('not on the court');
     if (!shown($('completing')) || !inStrip('.completing-title').textContent.includes('Completando jugadas · el reloj no corre') || inStrip('.completing-score').textContent !== '2 – 1') throw new Error('strip: ' + $('completing').textContent);
-    if (['clock-face', 'btn-play', 'score-us', 'btn-finish', 'btn-stop', 'btn-tm-us', 'btn-tm-them', 'btn-home', 'note-text'].some((id) => shown($(id)))) throw new Error('clock, score or match controls offered');
+    if (['clock-face', 'btn-play', 'score-us', 'btn-finish', 'btn-stop', 'btn-home', 'note-text'].some((id) => shown($(id)))) throw new Error('clock, score or match controls offered');
+    if (!['btn-tm-us', 'btn-tm-them'].every((id) => shown($(id)))) throw new Error('time-outs not offered');
     if (!shown($('btn-us-2m')) || !shown($('btn-rival-2m')) || !shown($('btn-undo'))) throw new Error('logging controls hidden');
     inStrip('[data-completing-done]').click();
     if (ui.completing || shown($('completing')) || $('final').hidden || !shown($('clock-face')) || !shown($('btn-finish'))) throw new Error('not back on the final summary');
@@ -2016,6 +2017,15 @@
     hideFinal(); state.finished = false; state.clock = { period: 2, elapsedMs: 0, runningSince: null };
     openClockPop({ x: 10, y: 10 });
     if (inPop('[data-clock="plays"]')) throw new Error('offered on the clock without a saved match');
+  }));
+  T('complete: a time-out is a late play with its time, no countdown, no clock change', withPlays(() => {
+    startCompleting('final');
+    const before = untouched();
+    if (getComputedStyle($('btn-tm-us')).display === 'none') throw new Error('time-out hidden in completion mode');
+    $('btn-tm-us').click();
+    const e = state.events.find((x) => x.kind === 'TIMEOUT' && x.late);
+    if (!e || e.team !== 'us' || state.timeout || untouched() !== before) throw new Error(JSON.stringify(e));
+    if (timeoutsUsed('us') !== 1) throw new Error('not counted');
   }));
   T('complete: our drawn goal is late, sin tiempo, last and unstamped; the pass of goal goes with it', withPlays(() => {
     startCompleting('final');
