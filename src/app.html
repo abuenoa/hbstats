@@ -8443,7 +8443,7 @@ table { border-collapse: collapse; width: 100%; }
   // One head coach and one assistant; everyone else is the staff, with a job of their own (Delegado, Fisioterapeuta…).
   const STAFF_ROLES = { head: 'Entrenador principal', assistant: 'Segundo entrenador', staff: 'Cuerpo técnico' };
   const STAFF_ORDER = Object.keys(STAFF_ROLES), UNIQUE_STAFF_ROLES = ['head', 'assistant'];
-  const STAFF_JOBS = ['Delegado', 'Preparador físico', 'Entrenador de porteros', 'Fisioterapeuta', 'Auxiliar'];
+  const STAFF_JOBS = ['Delegado', 'Oficial', 'Preparador físico', 'Entrenador de porteros', 'Fisioterapeuta', 'Auxiliar'];
   const staffRoleOf = (m) => (m.role in STAFF_ROLES ? m.role : 'staff');
   const staffLabel = (m) => (staffRoleOf(m) === 'staff' && m.job ? m.job : STAFF_ROLES[staffRoleOf(m)]);
   // The head coach first, then the assistant, then the staff in the order they were added.
@@ -8473,7 +8473,7 @@ table { border-collapse: collapse; width: 100%; }
       <div class="row-actions"><button class="btn press" type="button" data-staff-photo="${id}">Subir foto</button>${staffPhoto(m) ? `<button class="btn press" type="button" data-staff-photo-clear="${id}">Quitar foto</button>` : ''}</div>
       <label class="field">Nombre<input class="in" type="text" maxlength="${MAX_NAME_LENGTH}" value="${esc(m.name)}" data-staff-name="${id}"></label>
       <div class="field">Rol<div class="tabs staff-roles" role="group" aria-label="Rol">${roles}</div></div>
-      ${role === 'staff' ? `<label class="field">Cargo<input class="in" type="text" maxlength="${MAX_NAME_LENGTH}" value="${esc(m.job || '')}" list="staff-jobs" placeholder="Delegado, Fisioterapeuta…" data-staff-job="${id}"></label>
+      ${role === 'staff' ? `<label class="field">Cargo<input class="in" type="text" maxlength="${MAX_NAME_LENGTH}" value="${esc(m.job || '')}" list="staff-jobs" placeholder="Delegado, Oficial, Fisioterapeuta…" data-staff-job="${id}"></label>
         <datalist id="staff-jobs">${STAFF_JOBS.map((j) => `<option value="${esc(j)}">`).join('')}</datalist>` : ''}
       ${staffContactHtml(m)}
       <div class="row-actions">${armedButton(`staff-${m.id}`, 'Quitar del cuerpo técnico', `data-staff-del="${id}"`)}</div></section>`;
