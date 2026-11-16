@@ -711,6 +711,7 @@ button.rex-chip { border: 0; cursor: pointer; position: relative; }
 .send-reports-list li { display: flex; align-items: center; gap: var(--space-2); min-width: 0; }
 .send-reports-list .who { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 600; }
 .send-reports-list .btn { min-height: var(--tap); }
+.send-reports-list .who .sent { display: block; font-weight: 400; }
 .send-reports-list .btn.wa { background: var(--act-good); color: #fff; border-color: transparent; }
 .mvp-preview { font: var(--type-caption); color: var(--muted); }
 .summary-mvp .mvp-preview-img { width: min(100%, 320px); }
@@ -6990,7 +6991,8 @@ table { border-collapse: collapse; width: 100%; }
     for (const kind of ['match', 'players']) { const { doc, filename } = await buildPdf(kind); files.push({ filename, blob: doc.output('blob') }); }
     return files;
   }
-  const pdfFiles = (files) => files.map((f) => new File([f.blob], f.filename, { type: 'application/pdf' }));
+  const PDF_TYPE = 'application/pdf';
+  const pdfFiles = (files) => files.map((f) => new File([f.blob], f.filename, { type: PDF_TYPE }));
   // The report PDFs, built as soon as the final screen opens so a share tap needs no wait (the share sheet needs the
   // tap's user activation, which a PDF build can outlast). A failed build leaves `false`, and the share goes without them.
   async function renderReportFiles() {
@@ -7060,20 +7062,27 @@ table { border-collapse: collapse; width: 100%; }
   // ===================== Reports after the final whistle: the whole report to the staff, his own to each player =====================
   // E-mail, sent by the server automatically once right after the final whistle and again on request (say, after
   // «Completar jugadas»): the match PDF and every player's page to the owner and the coaches, and each player his text and
-  // his page. WhatsApp: one tap per player opens his chat with the text ready; the staff chats and the team's groups get
-  // the files through «Compartir». Staff only, with accounts, never for the sample.
+  // his page. WhatsApp: one tap per player or staff member opens his chat with the text ready. A wa.me link carries no
+  // files, so every text (the e-mails' too) carries download links to the PDFs, uploaded to the team's private storage.
+  // Staff only, with accounts, never for the sample.
   const REPORTS_PER_REQUEST = 4;
   const REPORT_TEXT_FIGURES = 6;
-  const canSendReports = () => Boolean(currentMatchId) && !readOnly() && Boolean(backend && backend.sendPlayerReports && backend.sendStaffReport && backend.listStaffContacts);
+  // How long a download link opens: a player reads his report days later, and a coach looks back weeks later.
+  const REPORT_LINK_SECONDS = 90 * 24 * 60 * 60;
+  // Links closer than this to expiring are made again rather than sent: whoever gets one must have time to open it.
+  const REPORT_LINK_MIN_LEFT_MS = 7 * 24 * 60 * 60 * 1000;
+  const REPORT_LINKS_TEXT = { busy: 'Preparando los enlaces a los PDF…', failed: 'Sin enlaces a los PDF, los mensajes van sin ellos' };
+  const canSendReports = () => Boolean(currentMatchId) && !readOnly()
+    && Boolean(backend && backend.sendPlayerReports && backend.sendStaffReport && backend.listStaffContacts && backend.uploadReport && backend.reportLink);
   const appLink = () => `${location.origin}${location.pathname}`;
   const reportPlayers = () => [...fieldPlayers(), ...goalkeepers()];
   // What a player reads about his match: the score, his rating and his figures that are not empty.
-  function playerReportText(p, s = state, ratings = matchRatings(s)) {
+  function playerReportText(p, s = state, ratings = matchRatings(s), link = currentReportLinks(s)?.byPlayer[p.id]) {
     const empty = ['–', 0, '0', '0/0'];
     const figures = playerReport(p, s, ratings).figures.filter(([, value]) => !empty.includes(value)).slice(0, REPORT_TEXT_FIGURES);
     return [`${p.name}, tu partido: *${scoreLine(s, score(s.events))}*`, [matchPlaceText(s), dateText(s.date)].filter(Boolean).join(' · '),
       `Nota: ${ratingText(ratingValue(ratings, p))}`, ...figures.map(([label, value]) => `${label}: ${value}`),
-      `Todo el detalle en Zona6: ${appLink()}`].filter(Boolean).join('\n');
+      link ? `Tu informe (PDF): ${link}` : '', `Todo el detalle en Zona6: ${appLink()}`].filter(Boolean).join('\n');
   }
   const reportSubject = (s = state) => `${scoreLine(s, score(s.events))} · tu informe`;
   const reportsMailed = () => state.reportsMailed || null;
@@ -7081,14 +7090,54 @@ table { border-collapse: collapse; width: 100%; }
   const staffMailed = () => state.staffMailed || null;
   const staffMailedIsStale = () => Boolean(staffMailed()) && staffMailed().log !== sharedLogOf(state);
   const mailedWhen = (iso) => new Date(iso).toLocaleString('es-ES', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' });
+  // The download links of the PDFs while they show the match as it is now and have time left; null otherwise.
+  function currentReportLinks(s = state) {
+    const links = s.reportLinks;
+    return links && links.log === sharedLogOf(s) && Date.parse(links.expiresAt) - Date.now() > REPORT_LINK_MIN_LEFT_MS ? links : null;
+  }
+  // Uploads the match PDF, the all-players PDF and each player's page, and keeps their download links in the match
+  // (state.reportLinks), reused until the match changes or they near expiry. One build at a time; a failure is named on
+  // the card and the texts go without links.
+  function prepareReportLinks() {
+    if (currentReportLinks()) return Promise.resolve(state.reportLinks);
+    if (!ui.reportLinksJob) {
+      ui.reportLinksError = '';
+      ui.reportLinksJob = buildReportLinks().finally(() => { ui.reportLinksJob = null; renderSendReports(); });
+      renderSendReports();
+    }
+    return ui.reportLinksJob;
+  }
+  async function buildReportLinks() {
+    const s = state, log = sharedLogOf(s), teamId = team.id, matchId = currentMatchId;
+    const linkTo = async (filename, blob) => { await backend.uploadReport(teamId, matchId, filename, blob); return backend.reportLink(teamId, matchId, filename); };
+    try {
+      await loadPdfLibs();
+      await ui.reportFilesReady;
+      const shared = ui.reportFiles || pdfFiles(await reportFiles());
+      const pages = reportPlayers().map((p) => ({ id: p.id, ...playerPagesPdf(p.id) }));
+      const [match, players, ...own] = await Promise.all([...shared.map((f) => linkTo(f.name, f)), ...pages.map((pg) => linkTo(pg.filename, pg.doc.output('blob')))]);
+      const at = Date.now();
+      const links = { log, at: new Date(at).toISOString(), expiresAt: new Date(at + REPORT_LINK_SECONDS * 1000).toISOString(), match, players,
+        byPlayer: Object.fromEntries(pages.map((pg, i) => [pg.id, own[i]])) };
+      if (state !== s || currentMatchId !== matchId) return null;
+      state.reportLinks = links;
+      save();
+      return links;
+    } catch (err) {
+      console.error('Report links failed', err);
+      ui.reportLinksError = `${REPORT_LINKS_TEXT.failed}: ${cloudErrorText(err)}`;
+      return null;
+    }
+  }
   const blobBase64 = async (blob) => { let bin = ''; new Uint8Array(await blob.arrayBuffer()).forEach((b) => { bin += String.fromCharCode(b); }); return btoa(bin); };
   // The match report and every player's page, with the share text, to the owner and the coaches.
   async function mailStaffReport() {
     if (ui.staffBusy) return;
     ui.staffBusy = true; ui.staffStatus = ''; renderSendReports();
     try {
+      await prepareReportLinks();
       const files = await Promise.all((await reportFiles()).map(async (f) => ({ filename: f.filename, pdf: await blobBase64(f.blob) })));
-      const { sent } = await backend.sendStaffReport(team.id, { subject: `${scoreLine(state, score(state.events))} · informe del partido`, text: `${shareText(state)}\n\nTodo el detalle en Zona6: ${appLink()}`, files });
+      const { sent } = await backend.sendStaffReport(team.id, { subject: `${scoreLine(state, score(state.events))} · informe del partido`, text: staffReportBody(), files });
       if (sent) { state.staffMailed = { at: new Date().toISOString(), log: sharedLogOf(state), sent }; save(); }
       else ui.staffStatus = 'Nadie del cuerpo técnico tiene correo: añádelo en su ficha o con su cuenta.';
     } catch (err) {
@@ -7107,6 +7156,7 @@ table { border-collapse: collapse; width: 100%; }
     try { [ui.reportContacts, ui.staffContacts] = await Promise.all([loadPlayerContacts(team.id), loadStaffContacts(team.id)]); }
     catch (err) { ui.reportContacts = ui.staffContacts = null; ui.reportsStatus = `Sin contactos: ${cloudErrorText(err)}`; }
     renderSendReports();
+    await prepareReportLinks();
     const withEmail = reportPlayers().filter((p) => ui.reportContacts && ui.reportContacts.get(p.id)?.email);
     const auto = ui.autoMailReports;
     ui.autoMailReports = false;
@@ -7123,22 +7173,22 @@ table { border-collapse: collapse; width: 100%; }
       : mailed ? `Enviados por correo el ${mailedWhen(mailed.at)} a ${plural(mailed.sent, 'jugador', 'jugadores')}${mailedIsStale() ? ' · el partido ha cambiado después' : ''}.`
       : `Se envía a ${plural(withEmail.length, 'jugador con correo', 'jugadores con correo')}.`;
     const row = (p) => {
-      const phone = contacts.get(p.id)?.phone, done = (ui.reportsWhatsApped || []).includes(p.id);
-      const action = !phone ? '<span class="note">sin teléfono</span>'
-        : `<button class="btn press${done ? '' : ' wa'}" type="button" data-reports-wa="${p.id}">${done ? 'Enviado ✓' : 'WhatsApp'}</button>`;
-      return `<li>${discHtml(p)}<span class="who">${esc(p.name)}</span>${action}</li>`;
+      const sent = (ui.reportsWhatsApped || []).includes(p.id);
+      const action = contacts.get(p.id)?.phone ? whatsAppButtonHtml('reports-wa', p.id, sent) : '<span class="note">sin teléfono</span>';
+      return `<li>${discHtml(p)}${whoHtml(p.name, sent)}${action}</li>`;
     };
     const staff = staffMailed();
     const staffNote = staff ? `Informe completo enviado por correo el ${mailedWhen(staff.at)} a ${plural(staff.sent, 'persona', 'personas')}${staffMailedIsStale() ? ' · el partido ha cambiado después' : ''}.`
       : 'El informe del partido y el de todos los jugadores, por correo a cada entrenador y al cuerpo técnico.';
     const staffContacts = ui.staffContacts || new Map();
     const staffRow = (m) => {
-      const phone = staffContacts.get(m.id)?.phone, done = (ui.staffWhatsApped || []).includes(m.id);
-      const action = !phone ? '<span class="note">sin teléfono</span>'
-        : `<button class="btn press${done ? '' : ' wa'}" type="button" data-staff-wa="${esc(m.id)}">${done ? 'Enviado ✓' : 'WhatsApp'}</button>`;
-      return `<li>${staffDiscHtml(m)}<span class="who">${esc(m.name)}</span>${action}</li>`;
+      const sent = (ui.staffWhatsApped || []).includes(m.id);
+      const action = staffContacts.get(m.id)?.phone ? whatsAppButtonHtml('staff-wa', m.id, sent) : '<span class="note">sin teléfono</span>';
+      return `<li>${staffDiscHtml(m)}${whoHtml(m.name, sent)}${action}</li>`;
     };
-    box.innerHTML = `<h3>Entrenadores y cuerpo técnico</h3>
+    const linksNote = ui.reportLinksJob ? REPORT_LINKS_TEXT.busy : ui.reportLinksError;
+    box.innerHTML = `${linksNote ? `<p class="note" role="status">${esc(linksNote)}</p>` : ''}
+      <h3>Entrenadores y cuerpo técnico</h3>
       <div class="send-reports-mail"><p class="note">${esc(staffNote)}</p>
         <button class="btn primary press" type="button" data-staff-mail ${ui.staffBusy ? 'disabled' : ''}>${ui.staffBusy ? 'Enviando…' : staff ? 'Reenviar al cuerpo técnico' : 'Enviar al cuerpo técnico'}</button></div>
       ${ui.staffStatus ? `<p class="note" role="status">${esc(ui.staffStatus)}</p>` : ''}
@@ -7148,7 +7198,15 @@ table { border-collapse: collapse; width: 100%; }
         <button class="btn primary press" type="button" data-reports-mail ${withEmail.length && !ui.reportsBusy ? '' : 'disabled'}>${ui.reportsBusy ? 'Enviando…' : mailed ? 'Reenviar por correo' : `Enviar por correo (${withEmail.length})`}</button></div>
       ${ui.reportsStatus ? `<p class="note" role="status">${esc(ui.reportsStatus)}</p>` : ''}
       <ul class="send-reports-list">${players.map(row).join('')}</ul>
-      <p class="note">Por WhatsApp, a los entrenadores o a los grupos: «Compartir» lleva el informe completo y eliges el chat.</p>`;
+      <p class="note">A los grupos del equipo: «Compartir» lleva el informe completo y eliges el chat.</p>`;
+  }
+  // The name on a row, marked once his WhatsApp went out.
+  const whoHtml = (name, sent) => `<span class="who">${esc(name)}${sent ? '<span class="note sent">enviado</span>' : ''}</span>`;
+  // A WhatsApp button opens the chat inside the tap, so it waits, disabled, while the links are prepared; once sent it
+  // stays to send again.
+  function whatsAppButtonHtml(attr, id, sent) {
+    const busy = Boolean(ui.reportLinksJob);
+    return `<button class="btn press${sent ? '' : ' wa'}" type="button" data-${attr}="${esc(id)}" ${busy ? 'disabled' : ''}>${busy ? 'Preparando…' : sent ? 'Reenviar' : 'WhatsApp'}</button>`;
   }
   // Builds each player's page and sends them in small batches; what failed is named, what was sent is recorded.
   async function mailPlayerReports() {
@@ -7158,6 +7216,7 @@ table { border-collapse: collapse; width: 100%; }
     ui.reportsBusy = true; ui.reportsStatus = ''; renderSendReports();
     const result = { sent: [], skipped: [], failed: [] };
     try {
+      await prepareReportLinks();
       await loadPdfLibs();
       const ratings = matchRatings(state), subject = reportSubject();
       const reports = players.map((p) => {
@@ -7177,18 +7236,23 @@ table { border-collapse: collapse; width: 100%; }
     ui.reportsBusy = false;
     renderSendReports();
   }
-  // A staff member's WhatsApp: the match summary and the link (the PDFs reach WhatsApp through «Compartir»).
-  const staffReportText = (m, s = state) => `${m.name}, informe del partido:\n${shareText(s)}\n\nTodo el detalle en Zona6: ${appLink()}`;
+  // What the staff read, by e-mail and WhatsApp: the match summary, the links to both PDFs and the app's link.
+  function staffReportBody(s = state) {
+    const links = currentReportLinks(s);
+    const pdfs = links ? `\n\nInforme del partido (PDF): ${links.match}\nJugadores (PDF): ${links.players}` : '';
+    return `${shareText(s)}${pdfs}\n\nTodo el detalle en Zona6: ${appLink()}`;
+  }
+  const staffReportText = (m, s = state) => `${m.name}, informe del partido:\n${staffReportBody(s)}`;
   async function whatsAppStaffReport(staffId) {
     const m = staffMember(staffId), phone = ui.staffContacts && ui.staffContacts.get(staffId)?.phone;
-    if (!m || !phone) return;
+    if (!m || !phone || ui.reportLinksJob) return;
     await openWhatsApp(phone, staffReportText(m));
     ui.staffWhatsApped = [...new Set([...(ui.staffWhatsApped || []), staffId])];
     renderSendReports();
   }
   async function whatsAppPlayerReport(playerId) {
     const p = playerById(playerId), phone = ui.reportContacts && ui.reportContacts.get(playerId)?.phone;
-    if (!p || !phone) return;
+    if (!p || !phone || ui.reportLinksJob) return;
     await openWhatsApp(phone, playerReportText(p));
     ui.reportsWhatsApped = [...new Set([...(ui.reportsWhatsApped || []), playerId])];
     renderSendReports();
@@ -7913,6 +7977,8 @@ table { border-collapse: collapse; width: 100%; }
     const toFixture = (r) => ({ id: r.id, season: r.season, competition: r.competition, round: r.round, weekend: r.weekend, home: r.home, opponent: r.opponent, kickoff: r.kickoff, venue: r.venue, matchId: r.match_id });
     const toSession = (r) => ({ id: r.id, date: r.on_date, kind: r.kind, matchId: r.match_id, marks: r.marks || {}, note: r.note || '' });
     const listFixtures = async (teamId) => check(await client.from('fixtures').select(FIXTURE_COLUMNS).eq('team_id', teamId).order('weekend').order('round')).map(toFixture);
+    const REPORTS_BUCKET = 'match-reports';
+    const reportPath = (teamId, matchId, filename) => `${teamId}/${matchId}/${filename}`;
     const toSummary = (r) => ({ id: r.id, date: r.played_on || '', them: r.rival, venue: r.venue, status: r.status, scoreUs: r.score_us, scoreThem: r.score_them });
     return {
       needsLogin: true,
@@ -7952,6 +8018,14 @@ table { border-collapse: collapse; width: 100%; }
         const { data, error } = await client.functions.invoke('send-staff-report', { body: { teamId, ...report } });
         if (error) throw new Error((await error.context?.json?.().catch(() => null))?.error || error.message);
         return data;
+      },
+      // A report PDF in the team's private bucket (staff only), at <team>/<match>/<filename>; a second upload replaces it.
+      async uploadReport(teamId, matchId, filename, blob) {
+        check(await client.storage.from(REPORTS_BUCKET).upload(reportPath(teamId, matchId, filename), blob, { contentType: PDF_TYPE, upsert: true }));
+      },
+      // A signed link to download that PDF, open to anyone who has it for REPORT_LINK_SECONDS.
+      async reportLink(teamId, matchId, filename) {
+        return check(await client.storage.from(REPORTS_BUCKET).createSignedUrl(reportPath(teamId, matchId, filename), REPORT_LINK_SECONDS, { download: filename })).signedUrl;
       },
       // Who has an account in the team (staff only): { userId, role, playerId, email, signedIn, isMe, invitedAt, invitedVia }.
       async listAccounts(teamId) {
