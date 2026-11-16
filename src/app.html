@@ -7152,11 +7152,13 @@ table { border-collapse: collapse; width: 100%; }
   const reportLinkLines = (label, url, icon = REPORT_ICONS.pdf) => (url ? ['', `${icon} *${label}*`, url] : []);
   const reportAppLines = (label) => ['', `${REPORT_ICONS.app} ${label}`, appLink()];
   // What a player reads about his match: the score, his rating and his figures that are not empty, and his PDF.
-  function playerReportText(p, s = state, ratings = matchRatings(s), link = currentReportLinks(s)?.byPlayer[p.id]) {
+  // His own page and the whole match report.
+  function playerReportText(p, s = state, ratings = matchRatings(s), links = currentReportLinks(s)) {
     const empty = ['–', 0, '0', '0/0'];
     const figures = playerReport(p, s, ratings).figures.filter(([, value]) => !empty.includes(value)).slice(0, REPORT_TEXT_FIGURES);
     return [...reportHeadline(s), '', `¡Hola, ${p.name}! Así fue tu partido:`, `${REPORT_ICONS.rating} Nota: *${ratingText(ratingValue(ratings, p))}*`,
-      ...figures.map(([label, value]) => `• ${label}: ${value}`), '', ...matchKeyLines(s, ratings), ...reportLinkLines('Tu informe en PDF', link),
+      ...figures.map(([label, value]) => `• ${label}: ${value}`), '', ...matchKeyLines(s, ratings), ...reportLinkLines('Tu informe en PDF', links?.byPlayer[p.id]),
+      ...reportLinkLines('Informe del partido (PDF)', links?.match),
       ...reportAppLines('Todas tus estadísticas en Zona6:')].join('\n');
   }
   const reportSubject = (s = state) => `${scoreLine(s, score(s.events))} · tu informe`;

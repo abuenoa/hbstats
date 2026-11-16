@@ -3025,7 +3025,7 @@
         $('send-reports').querySelector('[data-reports-wa="p17"]').click();
         $('send-reports').querySelector('[data-staff-wa="st-head"]').click();
         const [p17, staff] = log.opened;
-        if (!p17.includes(`*Tu informe en PDF*\n${own('p17')}`) || p17.includes(own('p8')) || p17.includes(state.reportLinks.match)) throw new Error(p17);
+        if (!p17.includes(`*Tu informe en PDF*\n${own('p17')}`) || p17.includes(own('p8')) || !p17.includes(`*Informe del partido (PDF)*\n${state.reportLinks.match}`) || p17.includes(state.reportLinks.players)) throw new Error(p17);
         if (!staff.startsWith('https://wa.me/34611222333?text=') || !staff.includes('¡Hola, Jorge!') || !staff.includes(state.reportLinks.match) || !staff.includes(state.reportLinks.players)) throw new Error(staff);
       });
     });
