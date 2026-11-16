@@ -42,3 +42,8 @@ export function reportHtml(teamName: string, text: string, footnote: string) {
   <p style="margin:14px 0 0;color:#666;font-size:12px">${escapeHtml(footnote)}</p></div></div>`;
 }
 export const pdfAttachment = (filename: string, pdf: string) => ({ filename, content: pdf, encoding: "base64", contentType: "application/pdf" });
+// A report file the staff e-mail carries: a PDF, or the MVP image as it is shared (PNG).
+export const REPORT_FILENAME_PATTERN = /^[\w.-]{1,120}\.(pdf|png)$/;
+const REPORT_TYPES: Record<string, string> = { pdf: "application/pdf", png: "image/png" };
+export const reportAttachment = (filename: string, data: string) =>
+  ({ filename, content: data, encoding: "base64", contentType: REPORT_TYPES[filename.split(".").pop()!.toLowerCase()] });

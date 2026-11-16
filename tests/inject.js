@@ -3054,7 +3054,7 @@
         if (!staffCalls[0].text.includes('*Informe del partido (PDF)*\nhttps://links.test/informe-a-b.pdf') || !staffCalls[0].text.includes('*Informe de jugadores (PDF)*\nhttps://links.test/jugadores-a-b.pdf')) throw new Error('staff e-mail without links ' + staffCalls[0].text);
         if (!calls[0][0].text.includes(`*Tu informe en PDF*\nhttps://links.test/${calls[0][0].filename}`)) throw new Error('player e-mail without his link ' + calls[0][0].text);
         if (calls.length !== 1 || calls[0].map((r) => r.playerId).join() !== 'p8') throw new Error('mailed ' + JSON.stringify(calls.map((c) => c.map((r) => r.playerId))));
-        if (staffCalls.length !== 1 || staffCalls[0].files.map((f) => `${f.filename}:${f.pdf}`).join() !== 'informe-a-b.pdf:QUJD,jugadores-a-b.pdf:REU=' || !staffCalls[0].subject.includes('informe del partido') || !staffCalls[0].text.includes('Zona6')) throw new Error('staff ' + JSON.stringify(staffCalls));
+        if (staffCalls.length !== 1 || staffCalls[0].files.filter((f) => f.filename.endsWith('.pdf')).map((f) => `${f.filename}:${f.data}`).join() !== 'informe-a-b.pdf:QUJD,jugadores-a-b.pdf:REU=' || !staffCalls[0].subject.includes('informe del partido') || !staffCalls[0].text.includes('Zona6')) throw new Error('staff ' + JSON.stringify(staffCalls));
         if (!state.staffMailed || state.staffMailed.sent !== 2 || !$('send-reports').textContent.includes('Reenviar al cuerpo técnico')) throw new Error('staff mailing not recorded');
         const r = calls[0][0];
         if (r.pdf !== 'QUJD' || !/\.pdf$/.test(r.filename) || !r.subject.includes('tu informe') || !r.text.includes('Nota:') || !r.text.includes(`¡Hola, ${playerById('p8').name}!`) || !r.text.startsWith(`${REPORT_ICONS.match} *`)) throw new Error(JSON.stringify(r));
@@ -3126,23 +3126,24 @@
       await withReportLinks({}, async (log) => {
         openFinal(); await ui.sendReportsReady;
         const players = reportPlayers(), links = state.reportLinks;
-        if (log.uploads.length !== players.length + 2 || !log.uploads.every((u) => u.startsWith(`${team.id}/links-match/`)) || log.links.length !== log.uploads.length) throw new Error(log.uploads.join());
-        if (!links || links.log !== sharedLogOf(state) || !links.match.endsWith('/informe-a-b.pdf') || !links.players.endsWith('/jugadores-a-b.pdf')) throw new Error(JSON.stringify(links));
+        const perMatch = players.length + 3; // the MVP image, both PDFs and each page
+        if (log.uploads.length !== perMatch || !log.uploads.every((u) => u.startsWith(`${team.id}/links-match/`)) || log.links.length !== log.uploads.length) throw new Error(log.uploads.join());
+        if (!links || links.log !== sharedLogOf(state) || !/\/mvp-.+\.png$/.test(links.mvp) || !links.match.endsWith('/informe-a-b.pdf') || !links.players.endsWith('/jugadores-a-b.pdf')) throw new Error(JSON.stringify(links));
         if (Object.keys(links.byPlayer).sort().join() !== players.map((p) => p.id).sort().join() || !links.byPlayer.p8.endsWith(`/${playerPagesPdf('p8').filename}`)) throw new Error(JSON.stringify(links.byPlayer));
         const days = (Date.parse(links.expiresAt) - Date.parse(links.at)) / 1000;
         if (days !== REPORT_LINK_SECONDS) throw new Error('expiry ' + days);
         openFinal(); await ui.sendReportsReady;
-        if (log.uploads.length !== players.length + 2 || state.reportLinks !== links) throw new Error('rebuilt without a change');
+        if (log.uploads.length !== perMatch || state.reportLinks !== links) throw new Error('rebuilt without a change');
         addEvent('ACTION', { playerId: 'p8', action: 'BLOC' }); openFinal(); await ui.sendReportsReady;
-        if (log.uploads.length !== 2 * (players.length + 2) || state.reportLinks.log !== sharedLogOf(state) || state.reportLinks === links) throw new Error('not rebuilt after a change');
+        if (log.uploads.length !== 2 * perMatch || state.reportLinks.log !== sharedLogOf(state) || state.reportLinks === links) throw new Error('not rebuilt after a change');
         state.reportLinks.expiresAt = new Date(Date.now() + REPORT_LINK_MIN_LEFT_MS - 1000).toISOString();
         if (currentReportLinks()) throw new Error('a link about to expire is still used');
         openFinal(); await ui.sendReportsReady;
-        if (log.uploads.length !== 3 * (players.length + 2) || !currentReportLinks()) throw new Error('not rebuilt near expiry');
+        if (log.uploads.length !== 3 * perMatch || !currentReportLinks()) throw new Error('not rebuilt near expiry');
         delete state.reportLinks;
         const twice = [prepareReportLinks(), prepareReportLinks()];
         await twice[0];
-        if (twice[0] !== twice[1] || log.uploads.length !== 4 * (players.length + 2)) throw new Error('two builds at once');
+        if (twice[0] !== twice[1] || log.uploads.length !== 4 * perMatch) throw new Error('two builds at once');
       });
     });
     await TA('report links: each text carries its own links, by e-mail and WhatsApp', async () => {
@@ -3152,7 +3153,7 @@
         const mail = (id) => log.mails.find((m) => m.playerId === id).text;
         if (!mail('p8').includes(`*Tu informe en PDF*\n${own('p8')}`) || mail('p8').includes(own('p17')) || !mail('p17').includes(`*Tu informe en PDF*\n${own('p17')}`)) throw new Error(mail('p8'));
         const staffText = log.staffMails[0].text;
-        if (!staffText.includes(`*Informe del partido (PDF)*\n${state.reportLinks.match}`) || !staffText.includes(`*Informe de jugadores (PDF)*\n${state.reportLinks.players}`) || log.staffMails[0].files.length !== 2) throw new Error(staffText);
+        if (!staffText.includes(`*Informe del partido (PDF)*\n${state.reportLinks.match}`) || !staffText.includes(`*Informe de jugadores (PDF)*\n${state.reportLinks.players}`) || !staffText.includes(`*Imagen del MVP*\n${state.reportLinks.mvp}`) || log.staffMails[0].files.length !== 3 || !/^mvp-.+\.png$/.test(log.staffMails[0].files[0].filename)) throw new Error(staffText);
         $('send-reports').querySelector('[data-reports-wa="p17"]').click();
         $('send-reports').querySelector('[data-staff-wa="st-head"]').click();
         const [p17, staff] = log.opened;
