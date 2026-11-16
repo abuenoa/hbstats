@@ -478,17 +478,29 @@ create policy staff_contacts_staff on public.staff_contacts for all to authentic
 -- The final reports as PDFs in a private bucket, at <team id>/<match id>/<file>.pdf, so the e-mails and the WhatsApp
 -- messages carry download links (a wa.me link cannot attach files). The staff upload them; whoever gets a link opens it
 -- through the signed URL the app makes, never through these policies.
+-- Whether the caller is staff of the team a report object belongs to. Only this bucket's objects are judged, and a
+-- folder that is no team id is refused before any cast, so the policies never fail on other buckets' objects.
+create or replace function private.match_report_staff(bucket text, object_name text) returns boolean
+language sql stable security definer set search_path = public as $$
+  select case
+    when bucket <> 'match-reports' then false
+    when (storage.foldername(object_name))[1] !~ '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$' then false
+    else private.is_team_staff(((storage.foldername(object_name))[1])::uuid)
+  end
+$$;
+revoke all on function private.match_report_staff(text, text) from public, anon;
+grant execute on function private.match_report_staff(text, text) to authenticated;
 insert into storage.buckets (id, name, public) values ('match-reports', 'match-reports', false) on conflict do nothing;
 drop policy if exists match_reports_select on storage.objects;
 create policy match_reports_select on storage.objects for select to authenticated
-  using (bucket_id = 'match-reports' and private.is_team_staff(((storage.foldername(name))[1])::uuid));
+  using (private.match_report_staff(bucket_id, name));
 drop policy if exists match_reports_insert on storage.objects;
 create policy match_reports_insert on storage.objects for insert to authenticated
-  with check (bucket_id = 'match-reports' and private.is_team_staff(((storage.foldername(name))[1])::uuid));
+  with check (private.match_report_staff(bucket_id, name));
 drop policy if exists match_reports_update on storage.objects;
 create policy match_reports_update on storage.objects for update to authenticated
-  using (bucket_id = 'match-reports' and private.is_team_staff(((storage.foldername(name))[1])::uuid))
-  with check (bucket_id = 'match-reports' and private.is_team_staff(((storage.foldername(name))[1])::uuid));
+  using (private.match_report_staff(bucket_id, name))
+  with check (private.match_report_staff(bucket_id, name));
 drop policy if exists match_reports_delete on storage.objects;
 create policy match_reports_delete on storage.objects for delete to authenticated
-  using (bucket_id = 'match-reports' and private.is_team_staff(((storage.foldername(name))[1])::uuid));
+  using (private.match_report_staff(bucket_id, name));
