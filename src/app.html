@@ -6973,11 +6973,14 @@ table { border-collapse: collapse; width: 100%; }
   }
   // The message that goes with the files: «Triana 22–22 BM Gades», place and date, the MVP and our top scorers.
   const SHARE_SCORERS = 5;
-  function shareText(s = state) {
-    const ratings = matchRatings(s), mvp = matchMvp(s, ratings), best = mvp.id ? playerById(mvp.id, s) : null;
+  // The match's top scorers, most goals first: [{ name, goals }].
+  function topScorers(s = state) {
     const goals = (p) => sumOf(Object.values(playerStats(p.id, s.events).goals), (n) => n);
-    const scorers = s.players.map((p) => ({ name: p.name, goals: goals(p) })).filter((p) => p.goals > 0)
+    return s.players.map((p) => ({ name: p.name, goals: goals(p) })).filter((p) => p.goals > 0)
       .sort((a, b) => b.goals - a.goals || a.name.localeCompare(b.name)).slice(0, SHARE_SCORERS);
+  }
+  function shareText(s = state) {
+    const ratings = matchRatings(s), mvp = matchMvp(s, ratings), best = mvp.id ? playerById(mvp.id, s) : null, scorers = topScorers(s);
     return [
       `*${scoreLine(s, score(s.events))}*`,
       [matchPlaceText(s), dateText(s.date)].filter(Boolean).join(' · '),
@@ -7071,18 +7074,37 @@ table { border-collapse: collapse; width: 100%; }
   const REPORT_LINK_SECONDS = 90 * 24 * 60 * 60;
   // Links closer than this to expiring are made again rather than sent: whoever gets one must have time to open it.
   const REPORT_LINK_MIN_LEFT_MS = 7 * 24 * 60 * 60 * 1000;
+  // Version 2: short links (report-pdf?k=…). Links of an older version are made again, never sent.
+  const REPORT_LINKS_VERSION = 2;
+  const REPORT_KEY_LENGTH = 24;
+  const KEY_ALPHABET = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789';
+  // Random letters and digits from the browser's crypto, without modulo bias (bytes past the last whole alphabet are skipped).
+  function randomKey(length) {
+    const limit = Math.floor(256 / KEY_ALPHABET.length) * KEY_ALPHABET.length;
+    let key = '';
+    while (key.length < length) crypto.getRandomValues(new Uint8Array(length)).forEach((b) => { if (b < limit && key.length < length) key += KEY_ALPHABET[b % KEY_ALPHABET.length]; });
+    return key;
+  }
   const REPORT_LINKS_TEXT = { busy: 'Preparando los enlaces a los PDF…', failed: 'Sin enlaces a los PDF, los mensajes van sin ellos' };
   const canSendReports = () => Boolean(currentMatchId) && !readOnly()
     && Boolean(backend && backend.sendPlayerReports && backend.sendStaffReport && backend.listStaffContacts && backend.uploadReport && backend.reportLink);
   const appLink = () => `${location.origin}${location.pathname}`;
   const reportPlayers = () => [...fieldPlayers(), ...goalkeepers()];
-  // What a player reads about his match: the score, his rating and his figures that are not empty.
+  // The messages read the same on WhatsApp and in the e-mails: a headline with the score, the match's place and day,
+  // a short body, the PDF links on their own lines (nothing glued to them) and the app. WhatsApp's *bold* marks are
+  // dropped in the e-mails.
+  const REPORT_ICONS = { match: '🤾', place: '📍', rating: '⭐', mvp: '🏆', goals: '🎯', pdf: '📄', squad: '👥', app: '📲' };
+  const reportHeadline = (s) => [`${REPORT_ICONS.match} *${scoreLine(s, score(s.events))}*`, [matchPlaceText(s), dateText(s.date)].filter(Boolean).join(' · ')]
+    .map((line, i) => (i && line ? `${REPORT_ICONS.place} ${line}` : line)).filter(Boolean);
+  const reportLinkLines = (label, url, icon = REPORT_ICONS.pdf) => (url ? ['', `${icon} *${label}*`, url] : []);
+  const reportAppLines = (label) => ['', `${REPORT_ICONS.app} ${label}`, appLink()];
+  // What a player reads about his match: the score, his rating and his figures that are not empty, and his PDF.
   function playerReportText(p, s = state, ratings = matchRatings(s), link = currentReportLinks(s)?.byPlayer[p.id]) {
     const empty = ['–', 0, '0', '0/0'];
     const figures = playerReport(p, s, ratings).figures.filter(([, value]) => !empty.includes(value)).slice(0, REPORT_TEXT_FIGURES);
-    return [`${p.name}, tu partido: *${scoreLine(s, score(s.events))}*`, [matchPlaceText(s), dateText(s.date)].filter(Boolean).join(' · '),
-      `Nota: ${ratingText(ratingValue(ratings, p))}`, ...figures.map(([label, value]) => `${label}: ${value}`),
-      link ? `Tu informe (PDF): ${link}` : '', `Todo el detalle en Zona6: ${appLink()}`].filter(Boolean).join('\n');
+    return [...reportHeadline(s), '', `¡Hola, ${p.name}! Así fue tu partido:`, `${REPORT_ICONS.rating} Nota: *${ratingText(ratingValue(ratings, p))}*`,
+      ...figures.map(([label, value]) => `• ${label}: ${value}`), ...reportLinkLines('Tu informe en PDF', link),
+      ...reportAppLines('Todas tus estadísticas en Zona6:')].join('\n');
   }
   const reportSubject = (s = state) => `${scoreLine(s, score(s.events))} · tu informe`;
   const reportsMailed = () => state.reportsMailed || null;
@@ -7093,7 +7115,7 @@ table { border-collapse: collapse; width: 100%; }
   // The download links of the PDFs while they show the match as it is now and have time left; null otherwise.
   function currentReportLinks(s = state) {
     const links = s.reportLinks;
-    return links && links.log === sharedLogOf(s) && Date.parse(links.expiresAt) - Date.now() > REPORT_LINK_MIN_LEFT_MS ? links : null;
+    return links && links.version === REPORT_LINKS_VERSION && links.log === sharedLogOf(s) && Date.parse(links.expiresAt) - Date.now() > REPORT_LINK_MIN_LEFT_MS ? links : null;
   }
   // Uploads the match PDF, the all-players PDF and each player's page, and keeps their download links in the match
   // (state.reportLinks), reused until the match changes or they near expiry. One build at a time; a failure is named on
@@ -7117,7 +7139,7 @@ table { border-collapse: collapse; width: 100%; }
       const pages = reportPlayers().map((p) => ({ id: p.id, ...playerPagesPdf(p.id) }));
       const [match, players, ...own] = await Promise.all([...shared.map((f) => linkTo(f.name, f)), ...pages.map((pg) => linkTo(pg.filename, pg.doc.output('blob')))]);
       const at = Date.now();
-      const links = { log, at: new Date(at).toISOString(), expiresAt: new Date(at + REPORT_LINK_SECONDS * 1000).toISOString(), match, players,
+      const links = { version: REPORT_LINKS_VERSION, log, at: new Date(at).toISOString(), expiresAt: new Date(at + REPORT_LINK_SECONDS * 1000).toISOString(), match, players,
         byPlayer: Object.fromEntries(pages.map((pg, i) => [pg.id, own[i]])) };
       if (state !== s || currentMatchId !== matchId) return null;
       state.reportLinks = links;
@@ -7236,13 +7258,15 @@ table { border-collapse: collapse; width: 100%; }
     ui.reportsBusy = false;
     renderSendReports();
   }
-  // What the staff read, by e-mail and WhatsApp: the match summary, the links to both PDFs and the app's link.
-  function staffReportBody(s = state) {
-    const links = currentReportLinks(s);
-    const pdfs = links ? `\n\nInforme del partido (PDF): ${links.match}\nJugadores (PDF): ${links.players}` : '';
-    return `${shareText(s)}${pdfs}\n\nTodo el detalle en Zona6: ${appLink()}`;
+  // What the staff read, by e-mail and WhatsApp: the match, its MVP and scorers, the links to both PDFs and the app.
+  function staffReportBody(s = state, greeting = 'Aquí tienes el informe del partido:') {
+    const ratings = matchRatings(s), mvp = matchMvp(s, ratings), best = mvp.id ? playerById(mvp.id, s) : null, links = currentReportLinks(s), scorers = topScorers(s);
+    return [...reportHeadline(s), '', greeting, best ? `${REPORT_ICONS.mvp} MVP: *${best.name}* (${ratingText(ratingValue(ratings, best))})` : '',
+      scorers.length ? `${REPORT_ICONS.goals} Goles: ${scorers.map((p) => `${p.name} ${p.goals}`).join(', ')}` : '',
+      ...reportLinkLines('Informe del partido (PDF)', links?.match), ...reportLinkLines('Informe de jugadores (PDF)', links?.players, REPORT_ICONS.squad),
+      ...reportAppLines('Todo el detalle en Zona6:')].filter((line, i, all) => line !== '' || (i > 0 && all[i - 1] !== '')).join('\n');
   }
-  const staffReportText = (m, s = state) => `${m.name}, informe del partido:\n${staffReportBody(s)}`;
+  const staffReportText = (m, s = state) => staffReportBody(s, `¡Hola, ${m.name}! Aquí tienes el informe del partido:`);
   async function whatsAppStaffReport(staffId) {
     const m = staffMember(staffId), phone = ui.staffContacts && ui.staffContacts.get(staffId)?.phone;
     if (!m || !phone || ui.reportLinksJob) return;
@@ -7977,7 +8001,7 @@ table { border-collapse: collapse; width: 100%; }
     const toFixture = (r) => ({ id: r.id, season: r.season, competition: r.competition, round: r.round, weekend: r.weekend, home: r.home, opponent: r.opponent, kickoff: r.kickoff, venue: r.venue, matchId: r.match_id });
     const toSession = (r) => ({ id: r.id, date: r.on_date, kind: r.kind, matchId: r.match_id, marks: r.marks || {}, note: r.note || '' });
     const listFixtures = async (teamId) => check(await client.from('fixtures').select(FIXTURE_COLUMNS).eq('team_id', teamId).order('weekend').order('round')).map(toFixture);
-    const REPORTS_BUCKET = 'match-reports';
+    const REPORTS_BUCKET = 'match-reports', REPORT_PDF_FUNCTION = 'report-pdf';
     const reportPath = (teamId, matchId, filename) => `${teamId}/${matchId}/${filename}`;
     const toSummary = (r) => ({ id: r.id, date: r.played_on || '', them: r.rival, venue: r.venue, status: r.status, scoreUs: r.score_us, scoreThem: r.score_them });
     return {
@@ -8023,9 +8047,13 @@ table { border-collapse: collapse; width: 100%; }
       async uploadReport(teamId, matchId, filename, blob) {
         check(await client.storage.from(REPORTS_BUCKET).upload(reportPath(teamId, matchId, filename), blob, { contentType: PDF_TYPE, upsert: true }));
       },
-      // A signed link to download that PDF, open to anyone who has it for REPORT_LINK_SECONDS.
+      // A short link to download that PDF, open to anyone who has it for REPORT_LINK_SECONDS: a random key, letters and
+      // digits only (a long signed URL did not survive WhatsApp), that the report-pdf function turns into a download.
       async reportLink(teamId, matchId, filename) {
-        return check(await client.storage.from(REPORTS_BUCKET).createSignedUrl(reportPath(teamId, matchId, filename), REPORT_LINK_SECONDS, { download: filename })).signedUrl;
+        const key = randomKey(REPORT_KEY_LENGTH);
+        check(await client.from('report_links').insert({ key, team_id: teamId, path: reportPath(teamId, matchId, filename), filename,
+          expires_at: new Date(Date.now() + REPORT_LINK_SECONDS * 1000).toISOString() }));
+        return `${config.url}/functions/v1/${REPORT_PDF_FUNCTION}?k=${key}`;
       },
       // Who has an account in the team (staff only): { userId, role, playerId, email, signedIn, isMe, invitedAt, invitedVia }.
       async listAccounts(teamId) {

@@ -504,3 +504,22 @@ create policy match_reports_update on storage.objects for update to authenticate
 drop policy if exists match_reports_delete on storage.objects;
 create policy match_reports_delete on storage.objects for delete to authenticated
   using (private.match_report_staff(bucket_id, name));
+
+-- ==== Migration: short report links (2026-11) ====
+-- The links in the WhatsApp messages and e-mails are short: /functions/v1/report-pdf?k=<key>. A long signed storage URL
+-- did not survive WhatsApp (its «_» marks italics), so the key, letters and digits only, names the PDF and the function
+-- signs a download on each visit. The staff create keys for their team's PDFs; nobody reads them through the API.
+create table if not exists public.report_links (
+  key text primary key check (key ~ '^[A-Za-z0-9]{20,40}$'),
+  team_id uuid not null references public.teams (id) on delete cascade,
+  path text not null check (char_length(path) <= 300),
+  filename text not null check (filename ~ '^[A-Za-z0-9.-]{1,120}\.pdf$'),
+  expires_at timestamptz not null,
+  created_at timestamptz not null default now()
+);
+create index if not exists report_links_team on public.report_links (team_id);
+alter table public.report_links enable row level security;
+revoke all on table public.report_links from anon;
+drop policy if exists report_links_staff_insert on public.report_links;
+create policy report_links_staff_insert on public.report_links for insert to authenticated
+  with check (private.is_team_staff(team_id) and path like team_id::text || '/%');
