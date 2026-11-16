@@ -3107,8 +3107,13 @@
         const staff = staffReportText({ name: 'Jorge' }).split('\n');
         if (!staff.includes('¡Hola, Jorge! Aquí tienes el informe del partido:') || staff[staff.indexOf(url) - 1] !== `${REPORT_ICONS.pdf} *Informe del partido (PDF)*` || staff[staff.indexOf(url + 'x') - 1] !== `${REPORT_ICONS.squad} *Informe de jugadores (PDF)*`) throw new Error(staff.join(' | '));
         if (staff.some((l, i) => l === '' && staff[i - 1] === '')) throw new Error('two blank lines');
-        const astral = [...playerReportText(playerById('p8')), ...staffReportText({ name: 'Jorge' })].filter((ch) => ch.codePointAt(0) > 0xffff);
-        if (astral.length) throw new Error('symbols WhatsApp web breaks: ' + astral.join(' '));
+        const keys = staffReportText({ name: 'Jorge' });
+        ["Claves del partido", 'MVP: *', 'Tiro: ', 'Portería: ', "Exclusiones 2': ", 'Pérdidas: ', '7 m: ', 'Goleadores: '].forEach((k) => { if (!keys.includes(k)) throw new Error('staff message without ' + k); });
+        if (!playerReportText(playerById('p8')).includes('Claves del partido')) throw new Error('player message without the match keys');
+        if (matchKeyLines().some((l) => l.startsWith(REPORT_ICONS.alert))) throw new Error('warned without many 2\'');
+        ['p5', 'p8', 'p17', 'p18'].forEach((id, i) => state.events.push({ id: `x2-${i}`, abs: 100 + i * 200, kind: 'SANCTION', playerId: id, card: '2M' }));
+        const warn = matchKeyLines().find((l) => l.startsWith(REPORT_ICONS.alert));
+        if (!warn || !warn.includes(`${exclusionEvents().length} exclusiones nuestras`)) throw new Error('no 2\' warning: ' + matchKeyLines().join(' | '));
       } finally { restore(snap); }
     });
     await TA('new version: loads at once on the team pages, waits (with one hint) while a match is open', async () => {
