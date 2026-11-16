@@ -2593,6 +2593,75 @@
       } finally { done(); }
       if (heights[1] - heights[0] !== 4 * RATINGS_CARD.row) throw new Error(heights.join());
     });
+    // ---- The arena style of the three images ----
+    const solidCanvas = (colour, size = 4) => { const c = document.createElement('canvas'); c.width = c.height = size; const x = c.getContext('2d'); x.fillStyle = colour; x.fillRect(0, 0, size, size); return c; };
+    const pixelOf = (ctx, x = 1, y = 1) => [...ctx.getImageData(x, y, 1, 1).data.slice(0, 3)];
+    const lightOf = ([r, g, b]) => 0.3 * r + 0.59 * g + 0.11 * b;
+    await TA('arena: the plate turns to the team colour, keeps its light, is veiled where words sit, and has a fallback', async () => {
+      const plate = solidCanvas('#c01010'), paint = (brand, veil, from = plate) => { const c = solidCanvas('#000000'), ctx = c.getContext('2d'); paintArena(ctx, 4, 4, from, brand, veil); return pixelOf(ctx); };
+      const blue = paint('#1d4ed8', []), red = paint('#d4202a', []), [pr] = pixelOf(plate.getContext('2d'));
+      if (!(blue[2] > blue[0]) || !(red[0] > red[2] * 3)) throw new Error(`tint: blue ${blue} red ${red}`);
+      if (Math.abs(lightOf(blue) - lightOf([pr, 16, 16])) > 20) throw new Error(`the tint changed the light: ${lightOf(blue)} vs ${lightOf([pr, 16, 16])}`);
+      if (lightOf(paint('#1d4ed8', [[0, 0.8], [1, 0.8]])) >= lightOf(blue) * 0.5) throw new Error('the veil does not darken');
+      // A plate wider than the card is cover-fit: centred, no empty edge.
+      const wide = document.createElement('canvas'); wide.width = 12; wide.height = 4; const w = wide.getContext('2d'); w.fillStyle = '#000000'; w.fillRect(0, 0, 12, 4); w.fillStyle = '#c01010'; w.fillRect(4, 0, 4, 4);
+      if (paint('#d4202a', [], wide)[0] < 100) throw new Error('not cover-fit to the centre');
+      const bare = solidCanvas('#000000', 100).getContext('2d');
+      paintArena(bare, 100, 100, null, '#1d4ed8', []);
+      const [top, bottom] = [pixelOf(bare, 50, 0), pixelOf(bare, 50, 99)];
+      if (Math.abs(top[2] - 216) > 12 || bottom.join() !== CARD_PALETTE.base.match(/\w\w/g).map((h) => parseInt(h, 16)).join()) throw new Error(`no fallback to the team colour: ${top} ${bottom}`);
+    });
+    await TA('card fonts: a face that fails or never loads does not hold the image back', async () => {
+      const spec = cardPoster(40);
+      try {
+        document.fonts.load = () => Promise.reject(new Error('offline'));
+        await loadCardFonts([spec]);
+        document.fonts.load = () => new Promise(() => {});
+        const started = Date.now();
+        await loadCardFonts([spec]);
+        if (Date.now() - started < CARD_FONT_WAIT_MS - 50) throw new Error('did not wait for the face');
+      } finally { delete document.fonts.load; }
+      if (!/Pirata One/.test(spec) || !/Barlow Condensed/.test(spec)) throw new Error('the poster face and its fallback: ' + spec);
+    });
+    const textSpy = (draw) => {
+      const canvas = document.createElement('canvas'), ctx = canvas.getContext('2d'), texts = [], fillText = ctx.fillText.bind(ctx);
+      ctx.fillText = (text, x, y) => { texts.push({ text, x, y, font: ctx.font }); fillText(text, x, y); };
+      draw(canvas, ctx);
+      return { texts, ctx, canvas };
+    };
+    const callupPlayers = (n) => Array.from({ length: n }, (_, i) => ({ id: 'c' + i, num: i + 2, name: i === 3 ? 'Antonio Bokiki' : 'Jugador ' + i, pos: i === 5 ? 'POR' : 'LAT', photo: null }));
+    await TA('convocatoria image: the match, day, times and hall, the players in two columns, the staff and both handles', async () => {
+      const keep = home.fixtures, day = todayIso();
+      const t = { ...team, name: 'Triana', socialHandle: 'triana_balonmano', socialHandle2: 'vivero.triana_of', staff: [{ id: 's1', name: 'Paco Ruiz', role: 'head' }] };
+      try {
+        home.fixtures = [{ id: 'f1', season: '2026/2027', competition: 'Liga', round: 4, weekend: day, home: true, opponent: 'BM Gades', kickoff: `${day}T18:30:00`, venue: 'Pabellón Vista Alegre', matchId: null }];
+        const data = callupCardData({ fixtureId: 'f1', date: day, time: '18:30', meet: '', ids: new Set() }, callupPlayers(16), t);
+        if (data.match !== 'Triana - BM Gades' || data.venue !== 'Pabellón Vista Alegre' || data.time !== '18:30' || data.meet !== '17:45' || data.day !== callupDay(day) || data.tag !== 'Liga · Jornada 4 · Casa') throw new Error(JSON.stringify({ ...data, crest: '' }));
+        if (data.handles.join() !== '@TRIANA_BALONMANO,@VIVERO.TRIANA_OF' || data.players[0].name !== 'Jugador 5' || !data.players[0].keeper || data.players[1].keeper || data.staff[0].name !== 'Paco Ruiz') throw new Error(JSON.stringify(data.handles) + data.players[0].name);
+        if (callupCardData({ fixtureId: null, date: day, time: '', rival: 'CB Este', ids: new Set() }, [], { ...t, socialHandle: null }).handles.join() !== '@VIVERO.TRIANA_OF') throw new Error('a second handle alone takes the main place');
+        const loose = callupCardData({ fixtureId: null, date: day, time: '', rival: '', ids: new Set() }, [], { ...t, socialHandle: null, socialHandle2: null });
+        if (loose.match !== 'Triana' || loose.tag !== 'Partido' || loose.venue !== '' || loose.handles.length) throw new Error(JSON.stringify({ ...loose, crest: '' }));
+        const { texts, canvas } = textSpy((c) => drawCallupCard(c, data));
+        const said = texts.map((x) => x.text);
+        if (canvas.width !== CALLUP_CARD.w || canvas.height !== CALLUP_CARD.h) throw new Error(`${canvas.width}×${canvas.height}`);
+        ['CONVOCATORIA', 'TRIANA - BM GADES', `${callupDay(day)} · 18:30`.toUpperCase(), 'CITACIÓN 17:45 · PABELLÓN VISTA ALEGRE', '5. ANTONIO BOKIKI', 'PACO RUIZ', 'Entrenador principal', '@TRIANA_BALONMANO', '@VIVERO.TRIANA_OF'].forEach((w) => { if (!said.includes(w)) throw new Error(`«${w}» not drawn: ${said.join('|')}`); });
+        // Two columns of eight, keepers first, every row inside the list box; the main handle sits over the second one, bottom right.
+        const rows = texts.filter((x) => /^\d+\. /.test(x.text));
+        if (rows.length !== 16 || !rows[0].text.startsWith('7. JUGADOR 5') || new Set(rows.map((x) => Math.round(x.x))).size !== 2 || rows.some((x) => x.y > CALLUP_CARD.list.bottom || x.y < CALLUP_CARD.list.top)) throw new Error(rows.map((x) => `${x.text}@${x.x | 0},${x.y | 0}`).join(' '));
+        const [main, second] = ['@TRIANA_BALONMANO', '@VIVERO.TRIANA_OF'].map((h) => texts.find((x) => x.text === h));
+        if (!(main.y < second.y) || main.x !== CALLUP_CARD.w - CALLUP_CARD.pad || second.y !== CALLUP_CARD.handlesY) throw new Error(JSON.stringify([main, second]));
+        if (said.some((x) => x.includes(CARD_ELLIPSIS))) throw new Error('cut: ' + said.filter((x) => x.includes(CARD_ELLIPSIS)));
+        // No time and no hall: the time is «hora por confirmar» and the second line is left out; a long name is cut inside its column.
+        const bare = textSpy((c) => drawCallupCard(c, { ...data, time: '', meet: '', venue: '', players: [{ num: 99, pos: 'LAT', name: 'Maximiliano Fernández de la Santísima Trinidad', photo: null }] }));
+        const bareSaid = bare.texts.map((x) => x.text);
+        if (!bareSaid.includes(`${callupDay(day)} · hora por confirmar`.toUpperCase()) || bareSaid.some((x) => x.startsWith('CITACIÓN') || x.includes('VISTA ALEGRE'))) throw new Error(bareSaid.join('|'));
+        const long = bare.texts.find((x) => x.text.startsWith('99. '));
+        bare.ctx.font = long.font;
+        if (long.x + bare.ctx.measureText(long.text).width > CALLUP_CARD.w / 2) throw new Error('a long name leaves its column: ' + long.text);
+        const [w, h] = await pngSize(await callupCardBlob(data));
+        if (w !== CALLUP_CARD.w || h !== CALLUP_CARD.h) throw new Error(`png ${w}×${h}`);
+      } finally { home.fixtures = keep; }
+    });
     // ---- The MVP card at the end of the match, and the share sheet (M3) ----
     await TA('final: finishing a match shows the MVP preview', async () => {
       const done = withFinal({ ...playedFew(), finished: false });
@@ -6393,7 +6462,7 @@
         const called = document.querySelector(`[data-callup-pick="${home.roster[0].id}"]`);
         if (called.getAttribute('aria-pressed') !== 'true' || flatText(called.querySelector('.att-badge')) !== 'Convocado' || flatText(document.querySelector('.callup .att-stat.att-C')) !== '2 convocados de 16' || flatText(document.querySelector('.callup .att-stat.att-NC')) !== '1 no convocado') throw new Error('pick ' + flatText(called));
         const data = callupCardData(callupDraft(), calledPlayers(callupDraft()));
-        if (data.players.map((p) => p.name).join() !== 'Portero Uno (P),Lateral Siete' || 'left' in data || data.shirt !== team.brand || data.phrase !== callupPhrase(callupDraft().date, team.name) || data.rival !== 'BALONMANO GADES - ASISA' || data.tag !== 'Liga · Jornada 2 · Fuera' || data.venue !== 'Pabellón Centro' || data.time !== '18:30' || data.meet !== '17:45') throw new Error(JSON.stringify({ ...data, crest: '', logo: '' }));
+        if (data.players.map((p) => `${p.name}:${p.keeper}`).join() !== 'Portero Uno:true,Lateral Siete:false' || 'left' in data || data.shirt !== team.brand || data.rival !== 'BALONMANO GADES - ASISA' || data.match !== `BALONMANO GADES - ASISA - ${team.name}` || data.tag !== 'Liga · Jornada 2 · Fuera' || data.venue !== 'Pabellón Centro' || data.time !== '18:30' || data.meet !== '17:45' || data.handles.length) throw new Error(JSON.stringify({ ...data, crest: '' }));
         $('callup-meet').value = '17:30'; $('callup-meet').dispatchEvent(new Event('change', { bubbles: true }));
         if (meetTime(callupDraft()) !== '17:30' || $('callup-meet').value !== '17:30') throw new Error('meeting time');
         const chips = [...document.querySelectorAll('[data-callup-shirt]')];

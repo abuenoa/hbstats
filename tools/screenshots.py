@@ -87,6 +87,22 @@ RATINGS_CARD_SNIPPET = (
     " const canvas = document.createElement('canvas'); document.body.replaceChildren(canvas); document.body.style.margin = '0';"
     " drawRatingsCard(canvas, data, { crest: await loadImage(data.crest), faces: await Promise.all(data.rows.map((r) => (r.photo ? loadImage(r.photo) : null))) }); })();"
 )
+# The convocatoria of the sample squad for a home round, with two coaches, both Instagram accounts and three photos.
+CALLUP_CARD_SIZE = "1080,1350"
+CALLUP_CARD_SNIPPET = (
+    f"{SAMPLE} (async () => {{ await document.fonts.ready;"
+    " applyTeam({ ...team, socialHandle: 'triana_balonmano', socialHandle2: 'vivero.triana_of',"
+    " staff: [{ id: 's1', name: 'Jorge Caro', role: 'head' }, { id: 's2', name: 'Antonio Bueno', role: 'assistant' }] });"
+    " home.fixtures = [{ id: 'f1', season: '2026/2027', competition: 'Liga', round: 7, weekend: '2026-11-21', home: true,"
+    " opponent: 'BM Gades', kickoff: '2026-11-21T18:30:00', venue: 'Pabellón Vista Alegre', matchId: null }];"
+    " const data = callupCardData({ fixtureId: 'f1', date: '2026-11-21', time: '18:30', meet: '', ids: new Set() }, state.players);"
+    f" {MVP_SAMPLE_PHOTO} data.players[1].photo = data.players[4].photo = data.staff[0].photo = data.photo;"
+    " await loadCardFonts([cardPoster(CALLUP_CARD.title.size), cardSmall(CALLUP_CARD.info.subSize)]);"
+    " const load = (src) => (src ? loadImage(src).catch(() => null) : null);"
+    " const canvas = document.createElement('canvas'); document.body.replaceChildren(canvas); document.body.style.margin = '0';"
+    " drawCallupCard(canvas, data, { plate: await load(ARENA.plate), crest: await load(data.crest),"
+    " faces: await Promise.all(data.players.map((p) => load(p.photo))), staffFaces: await Promise.all(data.staff.map((m) => load(m.photo))) }); })();"
+)
 # Card scenes: one scene name writes several files, each a card with its own snippet and window size.
 CARD_SCENES = {
     "mvp-image": {
@@ -94,6 +110,7 @@ CARD_SCENES = {
         "mvp-keeper": (MVP_CARD_SNIPPET % ("p1", MVP_KEEPER_NAME, ""), MVP_CARD_SIZE),
     },
     "ratings-image": {"ratings-card": (RATINGS_CARD_SNIPPET, RATINGS_CARD_SIZE)},
+    "callup-image": {"callup-card": (CALLUP_CARD_SNIPPET, CALLUP_CARD_SIZE)},
 }
 # Matrix-only scenes: the season fixture (tools/scenes/season.js) puts the app in the team pages of a club with four matches.
 SHEET_STATS = f"{SAMPLE} commit(); ui.sheetMode = 'sheet'; ui.sheetTab = 'stats'; renderSheet(); $('sheet').hidden = false;"
