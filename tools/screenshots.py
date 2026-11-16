@@ -57,12 +57,16 @@ SCENES = {
 MVP_CARD_SIZE = "1080,1350"
 MVP_FIELD_NAME = "Maximiliano Fernández Lo"
 MVP_KEEPER_NAME = "Wolfeschlegelsteinhausen"
+# The club's two Instagram accounts, as the coach set them in Editar equipo.
+SAMPLE_HANDLES = "applyTeam({ ...team, socialHandle: 'triana_balonmano', socialHandle2: 'vivero.triana_of' });"
 MVP_CARD_SNIPPET = (
-    f"{SAMPLE} commit(); (async () => {{ await document.fonts.ready;"
+    f"{SAMPLE} {SAMPLE_HANDLES} commit(); (async () => {{ await document.fonts.ready;"
+    " await loadCardFonts([cardPoster(MVP_CARD.title.size), cardSmall(MVP_CARD.subSize)]);"
     " const data = mvpCardData(state, '%s', matchRatings(state)); data.name = '%s';"
     " %s"
     " const canvas = document.createElement('canvas'); document.body.replaceChildren(canvas); document.body.style.margin = '0';"
-    " drawMvpCard(canvas, data, { photo: data.photo ? await loadImage(data.photo) : null, crest: await loadImage(data.crest) }); })();"
+    " drawMvpCard(canvas, data, { plate: await loadImage(ARENA.plate), photo: data.photo ? await loadImage(data.photo) : null,"
+    " crest: await loadImage(data.crest) }); })();"
 )
 MVP_SAMPLE_PHOTO = (
     "const face = document.createElement('canvas'); face.width = face.height = 160; const f = face.getContext('2d');"
@@ -72,20 +76,36 @@ MVP_SAMPLE_PHOTO = (
 # The sample match logs no court, so its minutes are unknown: the field card gets a 4th tile, the keeper card keeps three.
 MVP_SAMPLE_MINUTES = " data.kpis.push(['Min', '52']);"
 # The ratings card of the 16-player sample squad: eleven played (the other five are «S/C»), two photos, two long names.
-RATINGS_CARD_WIDTH, RATINGS_CARD_HEAD, RATINGS_CARD_ROW, SAMPLE_SQUAD = 1080, 300, 120, 16
-RATINGS_CARD_SIZE = f"{RATINGS_CARD_WIDTH},{RATINGS_CARD_HEAD + SAMPLE_SQUAD * RATINGS_CARD_ROW}"
+RATINGS_CARD_SIZE = "1080,1350"
 # The sample match with a court log (eleven on court the whole match) and a full-time clock, so minutes and +/− are known.
 COURT_LOGGED = (
     "state.courtSets = [state.players.slice(0, 11).map((p) => p.id)]; state.court = [{ abs: 0, set: 0 }];"
     " state.clock = { period: 2, elapsedMs: CONFIG.halfSeconds * 1000, runningSince: null };"
 )
 RATINGS_CARD_SNIPPET = (
-    f"{SAMPLE} {COURT_LOGGED} commit(); (async () => {{ await document.fonts.ready;"
+    f"{SAMPLE} {SAMPLE_HANDLES} {COURT_LOGGED} commit(); (async () => {{ await document.fonts.ready;"
+    " await loadCardFonts([cardPoster(RATINGS_CARD.title.size), cardSmall(RATINGS_CARD.tag.size), cardDisplay(RATINGS_CARD.chip.w)]);"
     " const data = ratingsCardData(state, matchRatings(state));"
     f" {MVP_SAMPLE_PHOTO} data.rows[0].photo = data.rows[3].photo = data.photo;"
     f" data.rows[0].name = '{MVP_FIELD_NAME}'; data.rows[2].name = '{MVP_KEEPER_NAME}';"
     " const canvas = document.createElement('canvas'); document.body.replaceChildren(canvas); document.body.style.margin = '0';"
-    " drawRatingsCard(canvas, data, { crest: await loadImage(data.crest), faces: await Promise.all(data.rows.map((r) => (r.photo ? loadImage(r.photo) : null))) }); })();"
+    " drawRatingsCard(canvas, data, { plate: await loadImage(ARENA.plate), crest: await loadImage(data.crest),"
+    " faces: await Promise.all(data.rows.map((r) => (r.photo ? loadImage(r.photo) : null))) }); })();"
+)
+# The convocatoria of the sample squad for a home round, with two coaches, both Instagram accounts and three photos.
+CALLUP_CARD_SIZE = "1080,1350"
+CALLUP_CARD_SNIPPET = (
+    f"{SAMPLE} {SAMPLE_HANDLES} (async () => {{ await document.fonts.ready;"
+    " applyTeam({ ...team, staff: [{ id: 's1', name: 'Jorge Caro', role: 'head' }, { id: 's2', name: 'Antonio Bueno', role: 'assistant' }] });"
+    " home.fixtures = [{ id: 'f1', season: '2026/2027', competition: 'Liga', round: 7, weekend: '2026-11-21', home: true,"
+    " opponent: 'BM Gades', kickoff: '2026-11-21T18:30:00', venue: 'Pabellón Vista Alegre', matchId: null }];"
+    " const data = callupCardData({ fixtureId: 'f1', date: '2026-11-21', time: '18:30', meet: '', ids: new Set() }, state.players);"
+    f" {MVP_SAMPLE_PHOTO} data.players[1].photo = data.players[4].photo = data.staff[0].photo = data.photo;"
+    " await loadCardFonts([cardPoster(CALLUP_CARD.title.size), cardSmall(CALLUP_CARD.info.subSize)]);"
+    " const load = (src) => (src ? loadImage(src).catch(() => null) : null);"
+    " const canvas = document.createElement('canvas'); document.body.replaceChildren(canvas); document.body.style.margin = '0';"
+    " drawCallupCard(canvas, data, { plate: await load(ARENA.plate), crest: await load(data.crest),"
+    " faces: await Promise.all(data.players.map((p) => load(p.photo))), staffFaces: await Promise.all(data.staff.map((m) => load(m.photo))) }); })();"
 )
 # Card scenes: one scene name writes several files, each a card with its own snippet and window size.
 CARD_SCENES = {
@@ -94,6 +114,7 @@ CARD_SCENES = {
         "mvp-keeper": (MVP_CARD_SNIPPET % ("p1", MVP_KEEPER_NAME, ""), MVP_CARD_SIZE),
     },
     "ratings-image": {"ratings-card": (RATINGS_CARD_SNIPPET, RATINGS_CARD_SIZE)},
+    "callup-image": {"callup-card": (CALLUP_CARD_SNIPPET, CALLUP_CARD_SIZE)},
 }
 # Matrix-only scenes: the season fixture (tools/scenes/season.js) puts the app in the team pages of a club with four matches.
 SHEET_STATS = f"{SAMPLE} commit(); ui.sheetMode = 'sheet'; ui.sheetTab = 'stats'; renderSheet(); $('sheet').hidden = false;"

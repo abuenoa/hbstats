@@ -2444,6 +2444,13 @@
       drawMvpCard(canvas, data, images);
       return { texts, ctx, canvas };
     };
+    const solidCanvas = (colour, size = 4) => { const c = document.createElement('canvas'); c.width = c.height = size; const x = c.getContext('2d'); x.fillStyle = colour; x.fillRect(0, 0, size, size); return c; };
+    const textSpy = (draw) => {
+      const canvas = document.createElement('canvas'), ctx = canvas.getContext('2d'), texts = [], fillText = ctx.fillText.bind(ctx);
+      ctx.fillText = (text, x, y) => { texts.push({ text, x, y, font: ctx.font }); fillText(text, x, y); };
+      draw(canvas, ctx);
+      return { texts, ctx, canvas };
+    };
     const cardFace = () => { const c = document.createElement('canvas'); c.width = c.height = 64; c.getContext('2d').fillRect(0, 0, 64, 64); return c; };
     await TA('mvp image: field and keeper KPIs', async () => {
       const goals = state.events.filter((e) => e.kind === 'SHOT' && e.playerId === 'p17' && e.result === 'GOL').length;
@@ -2486,6 +2493,22 @@
       const size = `${header.getUint32(PNG_WIDTH_OFFSET)}×${header.getUint32(PNG_HEIGHT_OFFSET)}`;
       if (size !== '1080×1350') throw new Error(size);
     });
+    await TA('mvp image: the arena poster with «MVP», the name, dorsal, figures, score line and both handles', async () => {
+      const t = { ...team, socialHandle: 'triana_balonmano', socialHandle2: 'vivero.triana_of' }, picked = state.mvpId;
+      state.mvpId = 'p17';
+      let data;
+      try { data = mvpCardData(state, 'p17', cardRatings(), t, new Map([['p17', 25 * 60]])); } finally { state.mvpId = picked; }
+      if (data.handles.join() !== '@TRIANA_BALONMANO,@VIVERO.TRIANA_OF' || data.match !== finalTitle()) throw new Error(JSON.stringify([data.handles, data.match]));
+      const { texts, canvas } = textSpy((c) => drawMvpCard(c, data, { plate: solidCanvas('#c01010', 8), photo: cardFace(), crest: cardFace() }));
+      const said = texts.map((x) => x.text), player = state.players.find((p) => p.id === 'p17');
+      [MVP_TITLE, player.name.toUpperCase(), `DORSAL ${player.num} · ${posOf(player).label.toUpperCase()}`, data.rating, 'GOLES', '25', data.match.toUpperCase(), ...data.handles].forEach((w) => { if (!said.includes(w)) throw new Error(`«${w}» not drawn: ${said.join('|')}`); });
+      if (said.some((x) => x.startsWith(MVP_PROVISIONAL_TAG.toUpperCase()))) throw new Error('a coach pick marked provisional');
+      if (canvas.width !== MVP_CARD.w || canvas.height !== MVP_CARD.h) throw new Error(`${canvas.width}×${canvas.height}`);
+      const second = texts.find((x) => x.text === '@VIVERO.TRIANA_OF');
+      if (second.y !== MVP_CARD.handlesY || second.x !== MVP_CARD.w - MVP_CARD.pad) throw new Error('handles not bottom right');
+      const provisional = drawnTexts({ ...data, provisional: true, handles: [] }, { photo: null, crest: null }).texts.map((x) => x.text);
+      if (!provisional[0].startsWith(`${MVP_PROVISIONAL_TAG} · `.toUpperCase()) || provisional.some((x) => x.startsWith(SOCIAL_PREFIX))) throw new Error(provisional.join('|'));
+    });
     await TA('mvp image: no photo draws initials', async () => {
       const data = { ...mvpCardData(state, 'p17', cardRatings()), name: 'Ana Pérez', photo: null };
       if (!drawnTexts(data, { photo: null, crest: null }).texts.some((t) => t.text === 'AP')) throw new Error('no initials');
@@ -2500,13 +2523,13 @@
       const lines = drawn.texts.filter((t) => spaced.toUpperCase().includes(t.text) && t.text.length > 3).map((t) => t.text);
       if (lines.join(' ') !== spaced.toUpperCase()) throw new Error('name not whole: ' + lines);
       inBox(drawn.texts, drawn.ctx);
-      // A 24-character rival fits the «us vs rival» line by shrinking.
-      const rival = 'Club Deportivo Balonmano', vs = drawnTexts({ ...base, teams: `${base.teams.split(' vs ')[0]} vs ${rival}` }, noImages).texts.find((t) => t.text.includes(rival));
+      // A 24-character rival fits the score line by shrinking.
+      const rival = 'Club Deportivo Balonmano', vs = drawnTexts({ ...base, match: `${base.match} ${rival}` }, noImages).texts.find((t) => t.text.includes(rival.toUpperCase()));
       if (!vs || vs.text.includes('…')) throw new Error('rival cut: ' + (vs && vs.text));
       // A name with no space shrinks to the floor before any ellipsis; beyond the floor it is cut and still fits.
       const solid = drawnTexts({ ...base, name: 'X'.repeat(MAX_NAME_LENGTH) }, noImages);
       if (solid.texts.some((t) => t.text.includes('…'))) throw new Error('24 characters without a space were cut');
-      const huge = 'Maximiliano '.repeat(12).trim(), cut = drawnTexts({ ...base, name: huge, teams: huge, venue: huge }, noImages);
+      const huge = 'Maximiliano '.repeat(12).trim(), cut = drawnTexts({ ...base, name: huge, match: huge, venue: huge }, noImages);
       if (!cut.texts.some((t) => t.text.endsWith('…'))) throw new Error('nothing was cut');
       inBox(cut.texts, cut.ctx);
       if (fitText(cut.ctx, 'Jose', MVP_CARD.w) !== 'Jose') throw new Error('short text changed');
@@ -2520,11 +2543,9 @@
       if (fromCentre < M.faceR - M.ringWidth - 1 || fromCentre > M.faceR) throw new Error('band bottom-centre off the rim: ' + fromCentre);
       const points = [...CROWN.pearls.flatMap(([x, y]) => [[x - CROWN.pearlR, y - CROWN.pearlR], [x + CROWN.pearlR, y - CROWN.pearlR]]), [4, 22], [116, 22]].map(at);
       const ctx = document.createElement('canvas').getContext('2d');
-      [MVP_TITLE, MVP_PROVISIONAL_TITLE].forEach((title) => {
-        ctx.font = cardFont(M.weights.heavy, M.headerSize, 'display');
-        const half = ctx.measureText(title).width / 2;
-        points.forEach(([x, y]) => { if (x >= cx - half && x <= cx + half && y >= M.headerY - M.headerSize && y <= M.headerY) throw new Error(`crown point (${x | 0}, ${y | 0}) in the «${title}» box`); });
-      });
+      ctx.font = cardPoster(M.title.size);
+      const box = ctx.measureText(MVP_TITLE), half = box.width / 2;
+      points.forEach(([x, y]) => { if (x >= cx - half && x <= cx + half && y >= M.title.y - box.actualBoundingBoxAscent && y <= M.title.y + box.actualBoundingBoxDescent) throw new Error(`crown point (${x | 0}, ${y | 0}) in the «${MVP_TITLE}» box`); });
       points.forEach(([x, y]) => { if (x < 0 || y < 0 || x > M.w) throw new Error(`crown point off the card: ${x | 0}, ${y | 0}`); });
     });
     await TA('mvp image: a broken photo still gives an image', async () => {
@@ -2540,19 +2561,14 @@
       const header = new DataView(await blob.slice(0, PNG_HEADER_BYTES).arrayBuffer());
       return [header.getUint32(PNG_WIDTH_OFFSET), header.getUint32(PNG_HEIGHT_OFFSET)];
     };
-    const drawnRatings = (data) => {
-      const canvas = document.createElement('canvas'), ctx = canvas.getContext('2d'), texts = [], fillText = ctx.fillText.bind(ctx);
-      ctx.fillText = (text, ...rest) => { texts.push({ text, font: ctx.font }); fillText(text, ...rest); };
-      drawRatingsCard(canvas, data);
-      return { texts, ctx, canvas };
-    };
+    const drawnRatings = (data, images) => textSpy((c) => drawRatingsCard(c, data, images));
     const fontPx = (font) => Number(/(\d+(?:\.\d+)?)px/.exec(font)[1]);
-    await TA('ratings image: one row per convocado, S/C last', async () => {
+    await TA('ratings image: one row per convocado, S/C last, two columns and the handles', async () => {
       const done = withFinal(playedFew());
       let data, expected;
       try {
         expected = state.players.length;
-        data = ratingsCardData(state, matchRatings(state));
+        data = ratingsCardData(state, matchRatings(state), { ...team, socialHandle: 'triana_balonmano', socialHandle2: null });
         if (data.match !== finalTitle()) throw new Error(`${data.match} ${finalTitle()}`);
       } finally { done(); }
       if (data.rows.length !== expected) throw new Error(`${data.rows.length} rows for ${expected} convocados`);
@@ -2563,35 +2579,103 @@
       const keeperRow = data.rows.find((r) => r.pos === 'POR');
       if (!keeperRow.line.includes('Paradas')) throw new Error('keeper line: ' + keeperRow.line);
       if (data.rows.filter((r) => r.mvp).map((r) => r.name).join() !== 'Diego') throw new Error('mvp marker: ' + data.rows.filter((r) => r.mvp).map((r) => r.name));
-      // Every name is drawn at 36 px or more, whole when it fits and cut with an ellipsis only beyond the floor; nothing leaves the card.
-      const long = 'Maximiliano Fernández Lo', huge = 'Maximiliano '.repeat(12).trim();
-      const rows = data.rows.map((r, i) => (i === 0 ? { ...r, name: long } : i === 1 ? { ...r, name: huge } : r));
-      const { texts, ctx } = drawnRatings({ ...data, rows });
-      rows.forEach((r, i) => {
-        const drawn = texts.find((t) => t.text === r.name || (i === 1 && t.text.startsWith('Maximiliano') && t.text.endsWith('…')));
-        if (!drawn) throw new Error('name not drawn: ' + r.name);
-        if (fontPx(drawn.font) < RATINGS_CARD.nameFloor) throw new Error(`name at ${fontPx(drawn.font)} px`);
+      if (data.handles.join() !== '@TRIANA_BALONMANO') throw new Error('handles: ' + data.handles);
+      // Every name is drawn as «NN. NAME», whole when it fits at its floor and cut with an ellipsis only beyond it, inside its
+      // column (how long a name fits depends on the face the device has).
+      const long = 'Maximiliano Fernández Lo', huge = 'Maximiliano '.repeat(12).trim(), mid = 'Antonio Bokiki';
+      const rows = data.rows.map((r, i) => (i === 0 ? { ...r, name: long } : i === 1 ? { ...r, name: huge } : i === 2 ? { ...r, name: mid } : r));
+      const { texts, ctx, canvas } = drawnRatings({ ...data, rows });
+      if (canvas.width !== RATINGS_CARD.w || canvas.height !== RATINGS_CARD.h) throw new Error(`${canvas.width}×${canvas.height}`);
+      const said = texts.map((x) => x.text), { perColumn, rowH } = ratingsRows(rows.length), colW = (RATINGS_CARD.w - 2 * RATINGS_CARD.pad - RATINGS_CARD.list.colGap) / 2;
+      [RATINGS_TITLE.toUpperCase(), data.match.toUpperCase(), '@TRIANA_BALONMANO', `${rows[2].num}. ${mid.toUpperCase()}`].forEach((w) => { if (!said.includes(w)) throw new Error(`«${w}» not drawn: ${said.join('|')}`); });
+      const names = rows.map((r, i) => texts.find((x) => x.text === `${r.num}. ${r.name.toUpperCase()}` || (i < 2 && x.text.startsWith(`${r.num}. MAXIMILIANO`) && x.text.endsWith(CARD_ELLIPSIS))));
+      if (!names[1].text.endsWith(CARD_ELLIPSIS)) throw new Error('a name beyond any column was not cut');
+      names.forEach((drawn, i) => {
+        if (!drawn) throw new Error('name not drawn: ' + rows[i].name);
+        if (fontPx(drawn.font) < rowH * RATINGS_CARD.list.nameScale * RATINGS_CARD.list.minNameScale - 0.5) throw new Error(`name at ${fontPx(drawn.font)} px`);
+        ctx.font = drawn.font;
+        const column = Math.floor(i / perColumn), right = RATINGS_CARD.pad + column * (colW + RATINGS_CARD.list.colGap) + colW - RATINGS_CARD.chip.w;
+        if (drawn.x + ctx.measureText(drawn.text).width > right) throw new Error('overflow into the chip: ' + drawn.text);
       });
       if (texts.filter((t) => t.text === 'S/C').length !== rows.filter((r) => r.rating === 'S/C').length) throw new Error('S/C chips');
-      rows.forEach((r) => texts.filter((t) => t.text.startsWith(r.name.slice(0, 6))).forEach((t) => { ctx.font = t.font; if (ctx.measureText(t.text).width > ratingsTextColumn().w + 0.5) throw new Error('overflow: ' + t.text); }));
-      texts.forEach((t) => { ctx.font = t.font; if (ctx.measureText(t.text).width > RATINGS_CARD.w) throw new Error('overflow: ' + t.text); });
     });
-    await TA('ratings image: height grows with the squad', async () => {
+    await TA('ratings image: 1080×1350 whatever the squad; a big squad gets shorter rows that stay in the list', async () => {
       const done = withFinal(playedFew());
-      const heights = [];
       try {
-        for (const extra of [0, 4]) {
+        for (const extra of [0, 8]) {
           const s = { ...state, players: [...state.players, ...Array.from({ length: extra }, (_, i) => ({ id: 'x' + i, num: 60 + i, name: 'Extra ' + i, pos: 'EXT' }))] };
-          const data = ratingsCardData(s, matchRatings(s)), expected = RATINGS_CARD.head + s.players.length * RATINGS_CARD.row;
-          const canvas = document.createElement('canvas');
-          drawRatingsCard(canvas, data);
-          if (canvas.height !== expected || canvas.width !== RATINGS_CARD.w) throw new Error(`canvas ${canvas.width}×${canvas.height}, expected ${expected}`);
-          const blob = await ratingsCardBlob(data), [w, h] = await pngSize(blob);
-          if (blob.type !== 'image/png' || w !== RATINGS_CARD.w || h !== expected) throw new Error(`png ${w}×${h}, expected ${expected}`);
-          heights.push(h);
+          const data = ratingsCardData(s, matchRatings(s)), { perColumn, rowH } = ratingsRows(data.rows.length), L = RATINGS_CARD.list;
+          if (rowH > L.maxRow || perColumn * rowH > L.bottom - L.top + 0.01) throw new Error(`rows ${perColumn}×${rowH} out of the list`);
+          const { texts } = drawnRatings(data);
+          const last = texts.filter((x) => /^\d+\. /.test(x.text)).at(-1);
+          if (!last || last.y > L.bottom) throw new Error('a row below the list: ' + (last && last.y));
+          const [w, h] = await pngSize(await ratingsCardBlob(data));
+          if (w !== RATINGS_CARD.w || h !== RATINGS_CARD.h) throw new Error(`png ${w}×${h}`);
         }
+        if (ratingsRows(16).rowH !== RATINGS_CARD.list.maxRow || !(ratingsRows(30).rowH < RATINGS_CARD.list.maxRow) || ratingsRows(1).perColumn !== 1 || ratingsRows(0).perColumn !== 1) throw new Error('row sizes');
       } finally { done(); }
-      if (heights[1] - heights[0] !== 4 * RATINGS_CARD.row) throw new Error(heights.join());
+    });
+    // ---- The arena style of the three images ----
+    const pixelOf = (ctx, x = 1, y = 1) => [...ctx.getImageData(x, y, 1, 1).data.slice(0, 3)];
+    const lightOf = ([r, g, b]) => 0.3 * r + 0.59 * g + 0.11 * b;
+    await TA('arena: the plate turns to the team colour, keeps its light, is veiled where words sit, and has a fallback', async () => {
+      const plate = solidCanvas('#c01010'), paint = (brand, veil, from = plate) => { const c = solidCanvas('#000000'), ctx = c.getContext('2d'); paintArena(ctx, 4, 4, from, brand, veil); return pixelOf(ctx); };
+      const blue = paint('#1d4ed8', []), red = paint('#d4202a', []), [pr] = pixelOf(plate.getContext('2d'));
+      if (!(blue[2] > blue[0]) || !(red[0] > red[2] * 3)) throw new Error(`tint: blue ${blue} red ${red}`);
+      if (Math.abs(lightOf(blue) - lightOf([pr, 16, 16])) > 20) throw new Error(`the tint changed the light: ${lightOf(blue)} vs ${lightOf([pr, 16, 16])}`);
+      if (lightOf(paint('#1d4ed8', [[0, 0.8], [1, 0.8]])) >= lightOf(blue) * 0.5) throw new Error('the veil does not darken');
+      // A plate wider than the card is cover-fit: centred, no empty edge.
+      const wide = document.createElement('canvas'); wide.width = 12; wide.height = 4; const w = wide.getContext('2d'); w.fillStyle = '#000000'; w.fillRect(0, 0, 12, 4); w.fillStyle = '#c01010'; w.fillRect(4, 0, 4, 4);
+      if (paint('#d4202a', [], wide)[0] < 100) throw new Error('not cover-fit to the centre');
+      const bare = solidCanvas('#000000', 100).getContext('2d');
+      paintArena(bare, 100, 100, null, '#1d4ed8', []);
+      const [top, bottom] = [pixelOf(bare, 50, 0), pixelOf(bare, 50, 99)];
+      if (Math.abs(top[2] - 216) > 12 || bottom.join() !== CARD_PALETTE.base.match(/\w\w/g).map((h) => parseInt(h, 16)).join()) throw new Error(`no fallback to the team colour: ${top} ${bottom}`);
+    });
+    await TA('card fonts: a face that fails or never loads does not hold the image back', async () => {
+      const spec = cardPoster(40);
+      try {
+        document.fonts.load = () => Promise.reject(new Error('offline'));
+        await loadCardFonts([spec]);
+        document.fonts.load = () => new Promise(() => {});
+        const started = Date.now();
+        await loadCardFonts([spec]);
+        if (Date.now() - started < CARD_FONT_WAIT_MS - 50) throw new Error('did not wait for the face');
+      } finally { delete document.fonts.load; }
+      if (!/Vina Sans/.test(spec) || !/Barlow Condensed/.test(spec)) throw new Error('the poster face and its fallback: ' + spec);
+    });
+    const callupPlayers = (n) => Array.from({ length: n }, (_, i) => ({ id: 'c' + i, num: i + 2, name: i === 3 ? 'Antonio Bokiki' : 'Jugador ' + i, pos: i === 5 ? 'POR' : 'LAT', photo: null }));
+    await TA('convocatoria image: the match, day, times and hall, the players in two columns, the staff and both handles', async () => {
+      const keep = home.fixtures, day = todayIso();
+      const t = { ...team, name: 'Triana', socialHandle: 'triana_balonmano', socialHandle2: 'vivero.triana_of', staff: [{ id: 's1', name: 'Paco Ruiz', role: 'head' }] };
+      try {
+        home.fixtures = [{ id: 'f1', season: '2026/2027', competition: 'Liga', round: 4, weekend: day, home: true, opponent: 'BM Gades', kickoff: `${day}T18:30:00`, venue: 'Pabellón Vista Alegre', matchId: null }];
+        const data = callupCardData({ fixtureId: 'f1', date: day, time: '18:30', meet: '', ids: new Set() }, callupPlayers(16), t);
+        if (data.match !== 'Triana vs BM Gades' || data.venue !== 'Pabellón Vista Alegre' || data.time !== '18:30' || data.meet !== '17:45' || data.day !== callupDay(day) || data.tag !== 'Liga · Jornada 4 · Casa') throw new Error(JSON.stringify({ ...data, crest: '' }));
+        if (data.handles.join() !== '@TRIANA_BALONMANO,@VIVERO.TRIANA_OF' || data.players[0].name !== 'Jugador 5' || !data.players[0].keeper || data.players[1].keeper || data.staff[0].name !== 'Paco Ruiz') throw new Error(JSON.stringify(data.handles) + data.players[0].name);
+        if (callupCardData({ fixtureId: null, date: day, time: '', rival: 'CB Este', ids: new Set() }, [], { ...t, socialHandle: null }).handles.join() !== '@VIVERO.TRIANA_OF') throw new Error('a second handle alone takes the main place');
+        const loose = callupCardData({ fixtureId: null, date: day, time: '', rival: '', ids: new Set() }, [], { ...t, socialHandle: null, socialHandle2: null });
+        if (loose.match !== 'Triana' || loose.tag !== 'Partido' || loose.venue !== '' || loose.handles.length) throw new Error(JSON.stringify({ ...loose, crest: '' }));
+        const { texts, canvas } = textSpy((c) => drawCallupCard(c, data));
+        const said = texts.map((x) => x.text);
+        if (canvas.width !== CALLUP_CARD.w || canvas.height !== CALLUP_CARD.h) throw new Error(`${canvas.width}×${canvas.height}`);
+        ['CONVOCATORIA', 'TRIANA VS BM GADES', `${callupDay(day)} · 18:30`.toUpperCase(), 'CITACIÓN 17:45 · PABELLÓN VISTA ALEGRE', '5. ANTONIO BOKIKI', 'PACO RUIZ', 'Entrenador principal', '@TRIANA_BALONMANO', '@VIVERO.TRIANA_OF'].forEach((w) => { if (!said.includes(w)) throw new Error(`«${w}» not drawn: ${said.join('|')}`); });
+        // Two columns of eight, keepers first, every row inside the list box; the main handle sits over the second one, bottom right.
+        const rows = texts.filter((x) => /^\d+\. /.test(x.text));
+        if (rows.length !== 16 || !rows[0].text.startsWith('7. JUGADOR 5') || new Set(rows.map((x) => Math.round(x.x))).size !== 2 || rows.some((x) => x.y > CALLUP_CARD.list.bottom || x.y < CALLUP_CARD.list.top)) throw new Error(rows.map((x) => `${x.text}@${x.x | 0},${x.y | 0}`).join(' '));
+        const [main, second] = ['@TRIANA_BALONMANO', '@VIVERO.TRIANA_OF'].map((h) => texts.find((x) => x.text === h));
+        if (!(main.y < second.y) || main.x !== CALLUP_CARD.w - CALLUP_CARD.pad || second.y !== CALLUP_CARD.handlesY) throw new Error(JSON.stringify([main, second]));
+        if (said.some((x) => x.includes(CARD_ELLIPSIS))) throw new Error('cut: ' + said.filter((x) => x.includes(CARD_ELLIPSIS)));
+        // No time and no hall: the time is «hora por confirmar» and the second line is left out; a long name is cut inside its column.
+        const bare = textSpy((c) => drawCallupCard(c, { ...data, time: '', meet: '', venue: '', players: [{ num: 99, pos: 'LAT', name: 'Maximiliano Fernández de la Santísima Trinidad', photo: null }] }));
+        const bareSaid = bare.texts.map((x) => x.text);
+        if (!bareSaid.includes(`${callupDay(day)} · hora por confirmar`.toUpperCase()) || bareSaid.some((x) => x.startsWith('CITACIÓN') || x.includes('VISTA ALEGRE'))) throw new Error(bareSaid.join('|'));
+        const long = bare.texts.find((x) => x.text.startsWith('99. '));
+        bare.ctx.font = long.font;
+        if (long.x + bare.ctx.measureText(long.text).width > CALLUP_CARD.w / 2) throw new Error('a long name leaves its column: ' + long.text);
+        const [w, h] = await pngSize(await callupCardBlob(data));
+        if (w !== CALLUP_CARD.w || h !== CALLUP_CARD.h) throw new Error(`png ${w}×${h}`);
+      } finally { home.fixtures = keep; }
     });
     // ---- The MVP card at the end of the match, and the share sheet (M3) ----
     await TA('final: finishing a match shows the MVP preview', async () => {
@@ -2852,6 +2936,49 @@
         if (getComputedStyle(document.documentElement).getPropertyValue('--brand').trim().toLowerCase() === '#2255aa') throw new Error('the third kit dressed the app');
       } finally { applyTeam(saved); showHomeView('team'); }
     });
+    await TA('instagram: two optional handles in the team form, kept lowercase without the @', async () => {
+      if (socialHandleOf('@Vivero.Triana_OF', 'Instagram') !== 'vivero.triana_of' || socialHandleOf('triana_balonmano', 'x') !== 'triana_balonmano') throw new Error('normalised');
+      if (socialHandleOf('', 'x') !== null || socialHandleOf('   ', 'x') !== null || socialHandleOf('@', 'x') !== null || socialHandleOf(null, 'x') !== null) throw new Error('empty is none');
+      if (socialHandleOf('a'.repeat(SOCIAL_HANDLE_MAX), 'x') !== 'a'.repeat(SOCIAL_HANDLE_MAX)) throw new Error('30 characters');
+      ['a'.repeat(SOCIAL_HANDLE_MAX + 1), 'club triana', '@@club', 'club-triana', 'clüb', 'https://instagram.com/club'].forEach((bad) => throws(() => socialHandleOf(bad, 'Instagram secundario'), /Instagram secundario: solo letras/));
+      const saved = { ...team };
+      try {
+        showHomeView('team-edit');
+        const form = document.querySelector('[data-form="team"]');
+        if ($('team-social').value || $('team-social2').value) throw new Error('a team without accounts shows one');
+        $('team-social').value = ' @Triana_Balonmano '; $('team-social2').value = '@vivero.triana_of';
+        await submitTeam(form, false);
+        if (team.socialHandle !== 'triana_balonmano' || team.socialHandle2 !== 'vivero.triana_of') throw new Error(JSON.stringify([team.socialHandle, team.socialHandle2]));
+        if ((await backend.listTeams()).find((t) => t.id === team.id).socialHandle !== 'triana_balonmano') throw new Error('not kept by the backend');
+        if ($('team-social').value !== '@triana_balonmano' || $('team-social2').value !== '@vivero.triana_of') throw new Error('form shows ' + $('team-social').value);
+        $('team-social2').value = 'vivero triana';
+        await submitTeam(document.querySelector('[data-form="team"]'), false);
+        if (team.socialHandle2 !== 'vivero.triana_of' || !$('home-status').textContent.includes('Instagram secundario')) throw new Error('a bad handle was saved: ' + $('home-status').textContent);
+        $('team-social').value = ''; $('team-social2').value = '';
+        await submitTeam(document.querySelector('[data-form="team"]'), false);
+        if (team.socialHandle !== null || team.socialHandle2 !== null) throw new Error('cleared handles kept');
+      } finally { applyTeam(saved); showHomeView('team'); }
+    });
+    await TA('instagram: Supabase maps both handles and leaves them out of edits that do not touch them', async () => {
+      const calls = []; let next = { data: null, error: null };
+      const query = () => new Proxy({}, { get: (t, k) => (k === 'then' ? (ok) => ok(next) : (...a) => { calls.push([k, ...a]); return query(); }) });
+      const savedLib = window.supabase; window.supabase = { createClient: () => ({ from: (tbl) => { calls.push(['from', tbl]); return query(); }, rpc: (fn, args) => { calls.push(['rpc', fn, args]); return query(); } }) };
+      try {
+        const cloud = await supabaseBackend({ url: 'https://x.supabase.co', anonKey: 'k' });
+        const row = { id: 't1', club: 'C', name: 'N', brand: '#000000', brand2: '#ffffff', brand_ink: '#ffffff', crest: null };
+        next = { data: { ...row, social_handle: 'triana_balonmano', social_handle_2: null }, error: null };
+        const saved = await cloud.updateTeam('t1', { socialHandle: 'triana_balonmano', socialHandle2: null });
+        const sent = calls.find((c) => c[0] === 'update')[1];
+        if (sent.social_handle !== 'triana_balonmano' || sent.social_handle_2 !== null || saved.socialHandle !== 'triana_balonmano' || saved.socialHandle2 !== null) throw new Error(JSON.stringify([sent, saved]));
+        calls.length = 0; await cloud.updateTeam('t1', { staff: [] });
+        const staffOnly = calls.find((c) => c[0] === 'update')[1];
+        if ('social_handle' in staffOnly || 'social_handle_2' in staffOnly) throw new Error('a staff edit must not touch the handles');
+        // create_team knows nothing of the handles: they follow in an update.
+        calls.length = 0; next = { data: row, error: null };
+        await cloud.createTeam({ ...DEFAULT_TEAM, socialHandle: 'triana_balonmano' });
+        if (!calls.some((c) => c[0] === 'rpc' && c[1] === 'create_team') || calls.find((c) => c[0] === 'update')?.[1].social_handle !== 'triana_balonmano') throw new Error(JSON.stringify(calls));
+      } finally { window.supabase = savedLib; }
+    });
     await TA('team form refuses empty names', async () => { showHomeView('team-edit'); $('team-name').value = '  '; await submitTeam(document.querySelector('[data-form="team"]'), false); if (team.name !== 'Ejemplo Sur' || !$('home-status').textContent.includes('vacíos')) throw new Error($('home-status').textContent); });
     await TA('team roster: add, position, duplicate dorsal refused, retire', async () => { showHomeView('team-edit'); await addTeamPlayer(); await addTeamPlayer(); await addTeamPlayer(); const [a, b, c] = home.roster; await saveTeamPlayer(a, { pos: 'POR', name: 'Ana' }); if (rosterPlayer(a.id).pos !== 'POR') throw new Error('pos'); await saveTeamPlayer(rosterPlayer(b.id), { num: a.num }); if (rosterPlayer(b.id).num === a.num || !$('home-status').textContent.includes('ya está')) throw new Error('dup'); document.querySelector(`[data-team-del="${c.id}"]`).click(); if (!rosterPlayer(c.id)) throw new Error('retired on first tap'); document.querySelector(`[data-team-del="${c.id}"]`).click(); await tick0(); await tick0(); if (rosterPlayer(c.id)) throw new Error('not retired'); const listed = await backend.listPlayers(team.id); if (listed.length !== 2) throw new Error('backend ' + listed.length); });
     await TA('roster file adds new dorsals and updates existing ones', async () => { const a = home.roster.find((p) => p.pos === 'POR'); const file = new File([JSON.stringify({ format: ROSTER_FORMAT, players: [{ num: a.num, name: 'Ana Ruiz', pos: 'POR' }, { num: 9, name: 'Lola', pos: 'CEN' }, { num: 11, name: 'Marta', pos: 'EXT' }, { num: 12, name: 'Sara', pos: 'POR' }] })], 'p.json', { type: 'application/json' }); await importTeamRoster(file); if (home.roster.length !== 5 || rosterPlayer(a.id).name !== 'Ana Ruiz') throw new Error(home.roster.map((p) => p.num + p.name).join()); });
@@ -3046,6 +3173,67 @@
         await new Promise((res) => setTimeout(res, 0));
         if (button().textContent !== 'Reenviar' || button().disabled) throw new Error('not re-sendable');
       });
+    });
+    await TA('compartir: the MVP image first, and under it the summary with the links to both PDFs', async () => {
+      await withReportLinks({}, async () => {
+        const shared = [], unstub = sheetStubs(() => true, async (data) => { shared.push(data); });
+        try {
+          openFinal(); await ui.sendReportsReady; await allReady();
+          const links = currentReportLinks();
+          if (!links) throw new Error('no links');
+          $('final').querySelector('[data-final-share]').click();
+          if (shared.length !== 1) throw new Error('shared ' + shared.length + ' ' + $('final-status').textContent);
+          const names = shared[0].files.map((f) => f.name);
+          if (!/^mvp-.+\.png$/.test(names[0]) || !/^puntuaciones-.+\.png$/.test(names[1]) || names.slice(2).join() !== (ui.reportFiles || []).map((f) => f.name).join()) throw new Error(names.join());
+          const text = shared[0].text;
+          if (!text.startsWith(`*${finalTitle()}*`) || !text.includes(`*Informe del partido (PDF)*\n${links.match}`) || !text.includes(`*Informe de jugadores (PDF)*\n${links.players}`)) throw new Error(text);
+          if (text.indexOf(links.match) > text.indexOf(links.players) || text.includes(links.byPlayer.p8)) throw new Error('order or a player link: ' + text);
+          if (shareText(state) !== text) throw new Error('the share text is not the summary');
+        } finally { unstub(); }
+      });
+    });
+    await TA('compartir: waits while the PDF links are prepared, then shares them inside the tap; failed links do not block it', async () => {
+      let release;
+      const held = new Promise((res) => { release = res; });
+      await withReportLinks({ uploadReport: () => held }, async () => {
+        const shared = [], unstub = sheetStubs(() => true, async (data) => { shared.push(data); });
+        const tap = () => $('final').querySelector('[data-final-share]').click();
+        try {
+          openFinal(); await allReady();
+          while (!ui.reportLinksJob) await new Promise((res) => setTimeout(res, 5));
+          tap();
+          if (shared.length || !$('final-status').textContent.includes('enlaces se están preparando')) throw new Error('shared before the links: ' + $('final-status').textContent);
+          release(); await ui.sendReportsReady;
+          tap();
+          if (shared.length !== 1 || !shared[0].text.includes('(PDF)*\nhttps://links.test/')) throw new Error('not shared with the links: ' + (shared[0] && shared[0].text));
+        } finally { unstub(); }
+      });
+      await withReportLinks({ uploadReport: async () => { throw new Error('Bucket not found'); } }, async () => {
+        const shared = [], unstub = sheetStubs(() => true, async (data) => { shared.push(data); });
+        try {
+          openFinal(); await ui.sendReportsReady; await allReady();
+          $('final').querySelector('[data-final-share]').click();
+          if (shared.length !== 1 || shared[0].text.includes('(PDF)') || !shared[0].files[0].name.startsWith('mvp-')) throw new Error('failed links blocked the share: ' + $('final-status').textContent);
+        } finally { unstub(); }
+      });
+    });
+    await TA('compartir: links outdated by a change are rebuilt on the tap, and the next tap shares the new ones', async () => {
+      await withReportLinks({}, async (log) => {
+        const shared = [], unstub = sheetStubs(() => true, async (data) => { shared.push(data); });
+        try {
+          openFinal(); await ui.sendReportsReady; await allReady();
+          const before = log.uploads.length;
+          addEvent('ACTION', { playerId: 'p8', action: 'BLOC' });
+          $('final').querySelector('[data-final-share]').click();
+          if (shared.length || !ui.reportLinksJob) throw new Error('shared stale links or did not rebuild them');
+          await ui.reportLinksJob;
+          $('final').querySelector('[data-final-share]').click();
+          if (shared.length !== 1 || log.uploads.length <= before || !shared[0].text.includes(currentReportLinks().match)) throw new Error('not shared with the new links');
+        } finally { unstub(); }
+      });
+    });
+    await TA('staff: «Community manager» is a job to pick', async () => {
+      if (!STAFF_JOBS.includes('Community manager')) throw new Error(STAFF_JOBS.join());
     });
     await TA('report links: a failed upload is named on the card and nothing waits for it; texts go without links', async () => {
       await withReportLinks({ uploadReport: async () => { throw new Error('Bucket not found'); } }, async (log) => {
@@ -6350,7 +6538,7 @@
         const called = document.querySelector(`[data-callup-pick="${home.roster[0].id}"]`);
         if (called.getAttribute('aria-pressed') !== 'true' || flatText(called.querySelector('.att-badge')) !== 'Convocado' || flatText(document.querySelector('.callup .att-stat.att-C')) !== '2 convocados de 16' || flatText(document.querySelector('.callup .att-stat.att-NC')) !== '1 no convocado') throw new Error('pick ' + flatText(called));
         const data = callupCardData(callupDraft(), calledPlayers(callupDraft()));
-        if (data.players.map((p) => p.name).join() !== 'Portero Uno (P),Lateral Siete' || 'left' in data || data.shirt !== team.brand || data.phrase !== callupPhrase(callupDraft().date, team.name) || data.rival !== 'BALONMANO GADES - ASISA' || data.tag !== 'Liga · Jornada 2 · Fuera' || data.venue !== 'Pabellón Centro' || data.time !== '18:30' || data.meet !== '17:45') throw new Error(JSON.stringify({ ...data, crest: '', logo: '' }));
+        if (data.players.map((p) => `${p.name}:${p.keeper}`).join() !== 'Portero Uno:true,Lateral Siete:false' || 'left' in data || data.shirt !== team.brand || data.rival !== 'BALONMANO GADES - ASISA' || data.match !== `BALONMANO GADES - ASISA vs ${team.name}` || data.tag !== 'Liga · Jornada 2 · Fuera' || data.venue !== 'Pabellón Centro' || data.time !== '18:30' || data.meet !== '17:45' || data.handles.length) throw new Error(JSON.stringify({ ...data, crest: '' }));
         $('callup-meet').value = '17:30'; $('callup-meet').dispatchEvent(new Event('change', { bubbles: true }));
         if (meetTime(callupDraft()) !== '17:30' || $('callup-meet').value !== '17:30') throw new Error('meeting time');
         const chips = [...document.querySelectorAll('[data-callup-shirt]')];

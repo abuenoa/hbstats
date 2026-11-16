@@ -9,7 +9,7 @@
  * tools/build_site.py stamps BUILD (a hash of the page, so every release replaces the old shell cache) and
  * SUPABASE_JS (the library URL the page loads).
  */
-const BUILD = 'e2852bf49367';
+const BUILD = '18610cf50f5f';
 const SHELL_PREFIX = 'hbstats-app-shell-';
 const SHELL_CACHE = `${SHELL_PREFIX}${BUILD}`;
 const RUNTIME_CACHE = 'hbstats-app-cdn-v1';
@@ -24,9 +24,7 @@ const SHELL_ASSETS = [
   './icons/apple-touch-icon.png',
   './icons/favicon-32.png',
   './sounds/splash.mp3',
-  './cards/callup-texture.webp',
-  './cards/brush.webp',
-  './cards/ball.webp'
+  './cards/arena.webp'
 ];
 
 // Must match, character for character, the URLs the page requests.
@@ -34,7 +32,7 @@ const PRECACHED_THIRD_PARTY = [
   'https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js',
   'https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.5.31/jspdf.plugin.autotable.min.js',
   'https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js',
-  'https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@600;700;800&display=swap',
+  'https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@600;700;800&family=Vina+Sans&display=swap',
   'https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.js'
 ];
 const THIRD_PARTY_HOSTS = ['cdnjs.cloudflare.com', 'cdn.jsdelivr.net', 'fonts.googleapis.com', 'fonts.gstatic.com'];

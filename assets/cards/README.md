@@ -1,7 +1,6 @@
-# Card textures
+# Card plates
 
-Textures of the shared images, made with Higgsfield (Recraft V4.1) on 2026-11-01 and re-encoded as WebP:
+Backgrounds of the shared images, made with Higgsfield and re-encoded as WebP:
 
-- `callup-texture.webp`: grunge splatters on white, laid multiplied over the club colour of the convocatoria.
-- `brush.webp`: a black dry-brush stroke, laid multiplied behind the words.
-- `ball.webp`: an inked handball, background removed.
+- `arena.webp` (896×1120): an empty handball arena lit in red with spotlights and smoke, without words, made on
+  2026-11-16 from the club's poster template. The images draw it cover-fit and turn its red to the team colour.

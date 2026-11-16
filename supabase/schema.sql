@@ -523,3 +523,15 @@ revoke all on table public.report_links from anon;
 drop policy if exists report_links_staff_insert on public.report_links;
 create policy report_links_staff_insert on public.report_links for insert to authenticated
   with check (private.is_team_staff(team_id) and path like team_id::text || '/%');
+
+-- ==== Migration: social handle (2026-11) ====
+-- The club's Instagram accounts, printed bottom right on the shared images: the main one and an optional second one.
+-- Kept as Instagram spells a username (lowercase letters, digits, «.» and «_», up to 30), without the «@».
+alter table public.teams add column if not exists social_handle text;
+alter table public.teams add column if not exists social_handle_2 text;
+alter table public.teams drop constraint if exists teams_social_handle_check;
+alter table public.teams add constraint teams_social_handle_check
+  check (social_handle is null or social_handle ~ '^[a-z0-9._]{1,30}$');
+alter table public.teams drop constraint if exists teams_social_handle_2_check;
+alter table public.teams add constraint teams_social_handle_2_check
+  check (social_handle_2 is null or social_handle_2 ~ '^[a-z0-9._]{1,30}$');
