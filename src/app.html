@@ -9407,7 +9407,39 @@ table { border-collapse: collapse; width: 100%; }
     fitFillLists($('home'));
     $('home').hidden = false;
   }
+  // ---- New versions: an app left open for days (the tablet's installed app) asks for one when it comes back to the
+  // front and every UPDATE_CHECK_MS. A new service worker taking over means a newer page is published: it loads at once on
+  // the team pages, and waits while a match or its summary is open (it loads on the next team page) ----
+  const UPDATE_CHECK_MS = 30 * 60 * 1000;
+  const UPDATE_WAITING_HINT = 'Hay una versión nueva de Zona6: se cargará al volver al equipo.';
+  let reloadPage = () => location.reload();
+  const updateSafeNow = () => !$('home').hidden;
+  function reloadIfUpdated() {
+    if (!ui.updateReady) return false;
+    if (!updateSafeNow()) {
+      if (!ui.updateHinted) { ui.updateHinted = true; hint(UPDATE_WAITING_HINT); }
+      return false;
+    }
+    reloadPage();
+    return true;
+  }
+  function watchForUpdates() {
+    if (!('serviceWorker' in navigator)) return;
+    const check = () => navigator.serviceWorker.getRegistration()
+      .then((r) => r && r.update())
+      .catch((err) => console.warn(`Update check failed: ${err.message}`));
+    let controlled = Boolean(navigator.serviceWorker.controller);
+    navigator.serviceWorker.addEventListener('controllerchange', () => {
+      // The first worker taking over a fresh install is no update.
+      if (!controlled) { controlled = true; return; }
+      ui.updateReady = true;
+      reloadIfUpdated();
+    });
+    document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') check(); });
+    setInterval(check, UPDATE_CHECK_MS);
+  }
   function showHomeView(view) {
+    if (reloadIfUpdated()) return;
     const moved = home.view !== view;
     home.view = view;
     home.armed = null;
@@ -11714,6 +11746,7 @@ table { border-collapse: collapse; width: 100%; }
   window.addEventListener('pagehide', save);
   document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'hidden') save(); else refreshSeasonIfStale(); });
   setInterval(refreshSeasonIfStale, SEASON_REFRESH_MS);
+  watchForUpdates();
   initTheme();
   $('court-floor').innerHTML = courtFloorSvg('court-clip');
   $('goal-net').innerHTML = GOAL_NET_SVG;
