@@ -1183,6 +1183,9 @@ a:focus-visible, input:focus-visible, select:focus-visible, summary:focus-visibl
 .team-delete { display: grid; gap: var(--space-2); margin-top: var(--space-6); padding-top: var(--space-4); border-top: 1px solid var(--line); justify-items: start; }
 .crest-preview { width: 88px; height: 88px; border-radius: 50%; object-fit: cover; background: var(--soft); }
 .in.colour { padding: 4px; }
+.third-kit { display: grid; gap: var(--space-1); align-content: start; }
+.third-kit #team-kit3[aria-pressed="true"] { background: var(--fg); color: var(--bg); }
+.third-kit .in.colour:disabled { opacity: .4; }
 .squad-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(160px, 1fr)); gap: var(--space-2); }
 .home input { -webkit-user-select: text; user-select: text; }
 /* Team page: season card, leaders, squad */
@@ -1789,7 +1792,9 @@ span.att-foot { visibility: hidden; }
   // Where the demo sends coaches who want to use their own account.
   const APP_URL = '../';
   // The team the app wears (name, colours, crest): the signed-in coach's team once the home screen loads it.
-  const DEFAULT_TEAM = { id: null, club: 'Mi club', name: 'Mi equipo', brand: '#d4202a', brand2: '#f5c400', brandInk: '#ffffff', crest: null };
+  // brand and brand2 dress the app and the first two kits; brand3 (null = none) is only a third kit to pick.
+  const DEFAULT_TEAM = { id: null, club: 'Mi club', name: 'Mi equipo', brand: '#d4202a', brand2: '#f5c400', brand3: null, brandInk: '#ffffff', crest: null };
+  const DEFAULT_THIRD_KIT = '#ffffff';
   let team = DEFAULT_TEAM;
   // A player's or a guest's account reads everything of the team and changes nothing; the database refuses their writes too.
   const PLAYER_ROLE = 'player', VIEWER_ROLE = 'viewer', STAFF_ROLE = 'owner';
@@ -6586,9 +6591,9 @@ table { border-collapse: collapse; width: 100%; }
   const callupPhrase = (date, teamName) => CALLUP_PHRASES[[...date].reduce((n, c) => n + c.charCodeAt(0), 0) % CALLUP_PHRASES.length].replace('{team}', teamName);
   const CALLUP_BRING_TITLE = ['Se ruega puntualidad', 'y recordad:'];
   const CALLUP_BRING = ['Equipación completa', 'Zapatillas de pista', 'Bolsa de balones'];
-  // The kit: the shirt in the team's first or second colour; the shorts are always black.
+  // The kit: the shirt in the team's first, second or (when it has one) third colour; the shorts are always black.
   const SHORTS_COLOUR = '#151515';
-  const shirtChoices = (t = team) => [['Primera', t.brand], ['Segunda', t.brand2]];
+  const shirtChoices = (t = team) => [['Primera', t.brand], ['Segunda', t.brand2], ...(t.brand3 ? [['Tercera', t.brand3]] : [])];
   const shirtOf = (draft, t = team) => (shirtChoices(t).some(([, c]) => sameName(c, draft.shirt || '')) ? draft.shirt : t.brand);
   // The meeting time: CONFIG.callup.meetLeadMin before the kickoff unless the coach set another.
   function meetTime(draft) {
@@ -8057,8 +8062,8 @@ table { border-collapse: collapse; width: 100%; }
     const check = (result) => { if (result.error) throw new Error(result.error.message); return result.data; };
     // A team the user creates or edits is theirs to run, so its role is the owner's unless listTeams says otherwise.
     // `playerId`: the roster player a player's account is, in that team.
-    const toTeam = (r, role = STAFF_ROLE, playerId = null) => ({ id: r.id, club: r.club, name: r.name, brand: r.brand, brand2: r.brand2, brandInk: r.brand_ink, crest: r.crest, ratingWeights: r.rating_weights, staff: r.staff || [], inviteMessage: r.invite_message || null, role, playerId });
-    const teamRow = (t) => ({ club: t.club, name: t.name, brand: t.brand, brand2: t.brand2, brand_ink: t.brandInk, crest: t.crest,
+    const toTeam = (r, role = STAFF_ROLE, playerId = null) => ({ id: r.id, club: r.club, name: r.name, brand: r.brand, brand2: r.brand2, brand3: r.brand3 || null, brandInk: r.brand_ink, crest: r.crest, ratingWeights: r.rating_weights, staff: r.staff || [], inviteMessage: r.invite_message || null, role, playerId });
+    const teamRow = (t) => ({ club: t.club, name: t.name, brand: t.brand, brand2: t.brand2, brand3: t.brand3 || null, brand_ink: t.brandInk, crest: t.crest,
       ...(t.ratingWeights === undefined ? {} : { rating_weights: t.ratingWeights }), ...(t.staff === undefined ? {} : { staff: t.staff }),
       ...(t.inviteMessage === undefined ? {} : { invite_message: t.inviteMessage }) });
     const PLAYER_COLUMNS = 'id,num,name,pos,full_name,photo';
@@ -8122,7 +8127,9 @@ table { border-collapse: collapse; width: 100%; }
       // Takes the account off the team; an invite never used is cancelled and its link stops working.
       async removeAccount(teamId, userId) { check(await client.rpc('remove_team_account', { p_team: teamId, p_user: userId })); },
       async createTeam(t) {
-        return toTeam(check(await client.rpc('create_team', { p_club: t.club, p_name: t.name, p_brand: t.brand, p_brand2: t.brand2, p_brand_ink: t.brandInk, p_crest: t.crest })));
+        const created = toTeam(check(await client.rpc('create_team', { p_club: t.club, p_name: t.name, p_brand: t.brand, p_brand2: t.brand2, p_brand_ink: t.brandInk, p_crest: t.crest })));
+        // create_team takes the two app colours; a third kit is set right after.
+        return t.brand3 ? this.updateTeam(created.id, { ...created, brand3: t.brand3 }) : created;
       },
       async updateTeam(id, t) { return toTeam(check(await client.from('teams').update(teamRow(t)).eq('id', id).select().single())); },
       async listPlayers(teamId) { return check(await client.from('players').select(PLAYER_COLUMNS).eq('team_id', teamId).eq('active', true).order('num')).map(toPlayer); },
@@ -8506,7 +8513,10 @@ table { border-collapse: collapse; width: 100%; }
         <label>Nombre en el marcador<input class="in" type="text" name="name" id="team-name" maxlength="${MAX_NAME_LENGTH}" value="${esc(t.name)}" required></label>
         ${colour('Color principal', 'brand')}
         ${colour('Color secundario', 'brand2')}
+        <div class="third-kit"><button class="btn press" type="button" id="team-kit3" aria-pressed="${Boolean(t.brand3)}">3ª equipación</button>
+          <input class="in colour" type="color" name="brand3" id="team-brand3" aria-label="Color de la 3ª equipación" value="${t.brand3 || DEFAULT_THIRD_KIT}"${t.brand3 ? '' : ' disabled'}></div>
       </div>
+      <p class="note">La app usa el color principal y el secundario; la 3ª equipación solo se elige en la convocatoria.</p>
       ${creating ? '' : '<div class="row-actions"><button class="btn primary press" type="submit">Guardar cambios</button></div>'}
       ${statusHtml()}
     </form>`;
@@ -10686,7 +10696,7 @@ table { border-collapse: collapse; width: 100%; }
       <div class="row-actions"><button class="btn primary press" type="button" data-callup-save${!players.length || over || saved ? ' disabled' : ''}>${saved ? 'Convocatoria guardada' : 'Guardar convocatoria'}</button></div>
       ${home.callupBusy ? '<p class="note">Generando la imagen…</p>' : ''}${image}</section>`;
   }
-  // The shirt for the image: the first or the second kit (the shorts are always black).
+  // The shirt for the image: one of the team's kits (the shorts are always black).
   function callupKitHtml(draft) {
     const shirt = shirtOf(draft);
     const chips = shirtChoices().map(([label, c]) => `<button class="chip press kit-chip" type="button" data-callup-shirt="${esc(c)}" aria-pressed="${sameName(c, shirt)}"><span class="kit-swatch" style="background:${esc(c)}"></span>${label}</button>`).join('');
@@ -11243,9 +11253,11 @@ table { border-collapse: collapse; width: 100%; }
     const name = String(data.get('name')).trim().slice(0, MAX_NAME_LENGTH);
     const brand = String(data.get('brand'));
     const brand2 = String(data.get('brand2'));
+    const brand3 = form.querySelector('#team-kit3').getAttribute('aria-pressed') === 'true' ? String(form.elements.brand3.value) : null;
     if (!club || !name) throw new Error('el club y el nombre no pueden quedar vacíos');
     if (!HEX_COLOUR.test(brand) || !HEX_COLOUR.test(brand2)) throw new Error('elige los dos colores');
-    return { club, name, brand, brand2, brandInk: inkFor(brand), crest: home.crestDraft === undefined ? current.crest : home.crestDraft };
+    if (brand3 !== null && !HEX_COLOUR.test(brand3)) throw new Error('elige el color de la 3ª equipación');
+    return { club, name, brand, brand2, brand3, brandInk: inkFor(brand), crest: home.crestDraft === undefined ? current.crest : home.crestDraft };
   }
   // The team as the backend returned it after an edit: in the list, in the device copy and worn by the app.
   function keepUpdatedTeam(updated) {
@@ -11603,6 +11615,7 @@ table { border-collapse: collapse; width: 100%; }
     if (b.hasAttribute('data-squad-none')) { home.squad = new Set(); renderHome(); return; }
     if (b.hasAttribute('data-squad-next')) { createMatch(); return; }
     if (b.hasAttribute('data-crest-pick')) { $('crest-file').click(); return; }
+    if (b.id === 'team-kit3') { const on = b.getAttribute('aria-pressed') !== 'true'; b.setAttribute('aria-pressed', String(on)); $('team-brand3').disabled = !on; return; }
     if (b.hasAttribute('data-crest-clear')) { home.crestDraft = null; $('crest-preview').src = crestSrc({ ...(home.view === 'team-new' ? home.draft : team), crest: null }); b.remove(); return; }
     if (b.hasAttribute('data-team-add')) { addTeamPlayer(); return; }
     if (b.hasAttribute('data-staff-add')) { addStaff(); return; }

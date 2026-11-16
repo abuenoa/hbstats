@@ -451,3 +451,8 @@ end;
 $$;
 revoke all on function public.team_accounts(uuid) from public, anon;
 grant execute on function public.team_accounts(uuid) to authenticated;
+
+-- ==== Migration: third kit (2026-11) ====
+-- A third kit colour to pick for a match (the convocatoria's shirt); null = the team has two. The app is still dressed
+-- in brand and brand2 only.
+alter table public.teams add column if not exists brand3 text check (brand3 is null or brand3 ~ '^#[0-9a-fA-F]{6}$');

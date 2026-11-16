@@ -69,7 +69,7 @@ the e-mail is not set up and nothing is sent; WhatsApp and «Compartir» work re
 
 | Table | What it holds |
 |---|---|
-| `teams` | Club and scoreboard names, brand colours, crest (a small image as a data URL), coaching staff (name, job and photo, up to 6), the invitation message (`{nombre}` and `{equipo}` filled in per player; null is the app's default). |
+| `teams` | Club and scoreboard names, brand colours (the app wears the first two; an optional third is one more kit), crest (a small image as a data URL), coaching staff (name, job and photo, up to 6), the invitation message (`{nombre}` and `{equipo}` filled in per player; null is the app's default). |
 | `team_members` | Which users belong to which team (`owner` creates it, `coach` is added, `player` and `viewer` read only), and when and how (`email` or `link`) the last invite went out. |
 | `player_contacts` | Staff only: each roster player's e-mail and phone (`+` and the country code), kept before and after an invite. Players and guests never read them. |
 | `players` | The team roster. Players who leave are kept as inactive so past matches still make sense. |
