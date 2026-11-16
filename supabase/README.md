@@ -66,6 +66,16 @@ one e-mail each, through the Edge Function `send-staff-report`, and each player 
 `SMTP_PASS` (a Gmail app password, never the account password) and optionally `SMTP_FROM`. Without them the app says
 the e-mail is not set up and nothing is sent; WhatsApp and «Compartir» work regardless.
 
+### Download links to the PDFs
+
+A WhatsApp message cannot carry files, so when the final screen opens the app uploads the match PDF, the all-players
+PDF and each player's page to the private Storage bucket `match-reports` (path `<team id>/<match id>/<file>.pdf`) and
+puts signed download links in every text: each player's (WhatsApp and e-mail) has his own page, the staff's have both
+PDFs. The e-mails keep their attachments too. The links open for 90 days (`REPORT_LINK_SECONDS` in the app) and are
+made again when the match changes. The bucket and its policies (the team's owner and coaches read and write their
+team's folder; nobody else) come with the «report links» migration in `schema.sql`. Without them the app says the links
+could not be made and sends the texts without them.
+
 ## Data
 
 | Table | What it holds |

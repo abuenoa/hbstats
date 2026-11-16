@@ -2886,10 +2886,13 @@
           listPlayerContacts: async () => [{ playerId: 'p8', email: 'p8@club.es', phone: '+34600000000' }, { playerId: 'p17', email: '', phone: '' }],
           sendPlayerReports: async (teamId, reports) => { calls.push(reports); return { sent: reports.map((r) => r.playerId), skipped: [], failed: [] }; },
           sendStaffReport: async (teamId, report) => { staffCalls.push(report); return { sent: 2 }; },
-          listStaffContacts: async () => [{ staffId: 'st-head', email: 'head@club.es', phone: '+34611222333' }]
+          listStaffContacts: async () => [{ staffId: 'st-head', email: 'head@club.es', phone: '+34611222333' }],
+          uploadReport: async () => {}, reportLink: async (teamId, matchId, filename) => `https://links.test/${filename}`
         };
         team.staff = [{ id: 'st-head', name: 'Jorge', role: 'head' }, { id: 'st-del', name: 'Ana', role: 'staff', job: 'Delegada' }];
         ui.autoMailReports = true; openFinal(); await ui.sendReportsReady;
+        if (!staffCalls[0].text.includes('Informe del partido (PDF): https://links.test/informe-a-b.pdf') || !staffCalls[0].text.includes('Jugadores (PDF): https://links.test/jugadores-a-b.pdf')) throw new Error('staff e-mail without links ' + staffCalls[0].text);
+        if (!calls[0][0].text.includes(`Tu informe (PDF): https://links.test/${calls[0][0].filename}`)) throw new Error('player e-mail without his link ' + calls[0][0].text);
         if (calls.length !== 1 || calls[0].map((r) => r.playerId).join() !== 'p8') throw new Error('mailed ' + JSON.stringify(calls.map((c) => c.map((r) => r.playerId))));
         if (staffCalls.length !== 1 || staffCalls[0].files.map((f) => `${f.filename}:${f.pdf}`).join() !== 'informe-a-b.pdf:QUJD,jugadores-a-b.pdf:REU=' || !staffCalls[0].subject.includes('informe del partido') || !staffCalls[0].text.includes('Zona6')) throw new Error('staff ' + JSON.stringify(staffCalls));
         if (!state.staffMailed || state.staffMailed.sent !== 2 || !$('send-reports').textContent.includes('Reenviar al cuerpo técnico')) throw new Error('staff mailing not recorded');
@@ -2908,12 +2911,15 @@
         if ($('send-reports').querySelector('[data-reports-wa="p17"]')) throw new Error('WhatsApp without a phone');
         $('send-reports').querySelector('[data-reports-wa="p8"]').click(); await new Promise((res) => setTimeout(res, 0));
         if (!opened[0] || !opened[0].startsWith('https://wa.me/34600000000?text=') || !decodeURIComponent(opened[0]).includes('Nota:')) throw new Error(opened[0]);
-        if (!$('send-reports').querySelector('[data-reports-wa="p8"]').textContent.includes('Enviado')) throw new Error('not marked');
+        const p8 = $('send-reports').querySelector('[data-reports-wa="p8"]');
+        if (p8.textContent !== 'Reenviar' || p8.disabled || !p8.closest('li').textContent.includes('enviado')) throw new Error('not marked ' + p8.closest('li').textContent);
+        p8.click(); await new Promise((res) => setTimeout(res, 0));
+        if (opened.length !== 2 || opened[1] !== opened[0]) throw new Error('not re-sent by WhatsApp');
         if ($('send-reports').querySelector('[data-staff-wa="st-del"]')) throw new Error('staff WhatsApp without a phone');
         $('send-reports').querySelector('[data-staff-wa="st-head"]').click(); await new Promise((res) => setTimeout(res, 0));
         const staffUrl = decodeURIComponent(opened.at(-1));
         if (!opened.at(-1).startsWith('https://wa.me/34611222333?text=') || !staffUrl.startsWith('https://wa.me/34611222333?text=Jorge, informe del partido') || !staffUrl.includes('Zona6')) throw new Error(staffUrl);
-        if (!$('send-reports').querySelector('[data-staff-wa="st-head"]').textContent.includes('Enviado')) throw new Error('staff not marked');
+        if ($('send-reports').querySelector('[data-staff-wa="st-head"]').textContent !== 'Reenviar') throw new Error('staff not marked');
         backend.sendPlayerReports = async () => { throw new Error('el correo de Zona6 no está configurado todavía'); };
         const before = state.reportsMailed.at;
         await mailPlayerReports();
@@ -2924,15 +2930,126 @@
       } finally {
         delete team.staff;
         backend = real; ({ loadPdfLibs, pdfNewDoc, reportFiles } = saved); window.open = saved.open; currentMatchId = keepId;
-        ui.autoMailReports = false; ui.reportsStatus = ''; ui.staffStatus = ''; ui.reportsWhatsApped = []; ui.reportContacts = null; hideFinal(); restore(snap);
+        ui.autoMailReports = false; ui.reportsStatus = ''; ui.staffStatus = ''; ui.reportsWhatsApped = []; ui.staffWhatsApped = []; ui.reportContacts = null; hideFinal(); restore(snap);
       }
     });
+    // The final screen of a finished match with the reports card, the backend and the PDF builders stubbed; `run` gets
+    // the uploads, the links made and the WhatsApp chats opened.
+    const withReportLinks = async (overrides, run) => {
+      const real = backend, saved = { loadPdfLibs, pdfNewDoc, reportFiles, open: window.open }, snap = snapshot(), keepId = currentMatchId;
+      const log = { uploads: [], links: [], opened: [], mails: [], staffMails: [] };
+      try {
+        state = sampleState(); state.sample = false; currentMatchId = 'links-match';
+        loadPdfLibs = async () => {};
+        pdfNewDoc = () => fakeDrawingDoc({ output: () => 'data:application/pdf;filename=x;base64,QUJD' });
+        reportFiles = async () => [{ filename: 'informe-a-b.pdf', blob: new Blob(['ABC']) }, { filename: 'jugadores-a-b.pdf', blob: new Blob(['DE']) }];
+        window.open = (url) => { log.opened.push(decodeURIComponent(url)); return null; };
+        team.staff = [{ id: 'st-head', name: 'Jorge', role: 'head' }];
+        backend = {
+          listPlayerContacts: async () => [{ playerId: 'p8', email: 'p8@club.es', phone: '+34600000000' }, { playerId: 'p17', email: 'p17@club.es', phone: '+34600000017' }],
+          listStaffContacts: async () => [{ staffId: 'st-head', email: 'head@club.es', phone: '+34611222333' }],
+          sendPlayerReports: async (teamId, reports) => { log.mails.push(...reports); return { sent: reports.map((r) => r.playerId), skipped: [], failed: [] }; },
+          sendStaffReport: async (teamId, report) => { log.staffMails.push(report); return { sent: 1 }; },
+          uploadReport: async (teamId, matchId, filename) => { log.uploads.push(`${teamId}/${matchId}/${filename}`); },
+          reportLink: async (teamId, matchId, filename) => { log.links.push(filename); return `https://links.test/${log.links.length}/${filename}`; },
+          ...overrides
+        };
+        await run(log);
+      } finally {
+        delete team.staff;
+        backend = real; ({ loadPdfLibs, pdfNewDoc, reportFiles } = saved); window.open = saved.open; currentMatchId = keepId;
+        ui.autoMailReports = false; ui.reportsStatus = ''; ui.staffStatus = ''; ui.reportsWhatsApped = []; ui.staffWhatsApped = []; ui.reportContacts = ui.staffContacts = null;
+        ui.reportLinksError = ''; hideFinal(); restore(snap);
+      }
+    };
+    await TA('report links: uploaded once per match and reused; rebuilt when the match changes or the links near expiry', async () => {
+      await withReportLinks({}, async (log) => {
+        openFinal(); await ui.sendReportsReady;
+        const players = reportPlayers(), links = state.reportLinks;
+        if (log.uploads.length !== players.length + 2 || !log.uploads.every((u) => u.startsWith(`${team.id}/links-match/`)) || log.links.length !== log.uploads.length) throw new Error(log.uploads.join());
+        if (!links || links.log !== sharedLogOf(state) || !links.match.endsWith('/informe-a-b.pdf') || !links.players.endsWith('/jugadores-a-b.pdf')) throw new Error(JSON.stringify(links));
+        if (Object.keys(links.byPlayer).sort().join() !== players.map((p) => p.id).sort().join() || !links.byPlayer.p8.endsWith(`/${playerPagesPdf('p8').filename}`)) throw new Error(JSON.stringify(links.byPlayer));
+        const days = (Date.parse(links.expiresAt) - Date.parse(links.at)) / 1000;
+        if (days !== REPORT_LINK_SECONDS) throw new Error('expiry ' + days);
+        openFinal(); await ui.sendReportsReady;
+        if (log.uploads.length !== players.length + 2 || state.reportLinks !== links) throw new Error('rebuilt without a change');
+        addEvent('ACTION', { playerId: 'p8', action: 'BLOC' }); openFinal(); await ui.sendReportsReady;
+        if (log.uploads.length !== 2 * (players.length + 2) || state.reportLinks.log !== sharedLogOf(state) || state.reportLinks === links) throw new Error('not rebuilt after a change');
+        state.reportLinks.expiresAt = new Date(Date.now() + REPORT_LINK_MIN_LEFT_MS - 1000).toISOString();
+        if (currentReportLinks()) throw new Error('a link about to expire is still used');
+        openFinal(); await ui.sendReportsReady;
+        if (log.uploads.length !== 3 * (players.length + 2) || !currentReportLinks()) throw new Error('not rebuilt near expiry');
+        delete state.reportLinks;
+        const twice = [prepareReportLinks(), prepareReportLinks()];
+        await twice[0];
+        if (twice[0] !== twice[1] || log.uploads.length !== 4 * (players.length + 2)) throw new Error('two builds at once');
+      });
+    });
+    await TA('report links: each text carries its own links, by e-mail and WhatsApp', async () => {
+      await withReportLinks({}, async (log) => {
+        ui.autoMailReports = true; openFinal(); await ui.sendReportsReady;
+        const own = (id) => state.reportLinks.byPlayer[id];
+        const mail = (id) => log.mails.find((m) => m.playerId === id).text;
+        if (!mail('p8').includes(`Tu informe (PDF): ${own('p8')}`) || mail('p8').includes(own('p17')) || !mail('p17').includes(`Tu informe (PDF): ${own('p17')}`)) throw new Error(mail('p8'));
+        const staffText = log.staffMails[0].text;
+        if (!staffText.includes(`Informe del partido (PDF): ${state.reportLinks.match}`) || !staffText.includes(`Jugadores (PDF): ${state.reportLinks.players}`) || log.staffMails[0].files.length !== 2) throw new Error(staffText);
+        $('send-reports').querySelector('[data-reports-wa="p17"]').click();
+        $('send-reports').querySelector('[data-staff-wa="st-head"]').click();
+        const [p17, staff] = log.opened;
+        if (!p17.includes(`Tu informe (PDF): ${own('p17')}`) || p17.includes(own('p8')) || p17.includes(state.reportLinks.match)) throw new Error(p17);
+        if (!staff.startsWith('https://wa.me/34611222333?text=Jorge') || !staff.includes(state.reportLinks.match) || !staff.includes(state.reportLinks.players)) throw new Error(staff);
+      });
+    });
+    await TA('report links: WhatsApp waits, disabled, while they are prepared; then sends, then «Reenviar»', async () => {
+      let release;
+      const held = new Promise((res) => { release = res; });
+      await withReportLinks({ uploadReport: () => held }, async (log) => {
+        openFinal(); while (!$('send-reports').querySelector('[data-reports-wa="p8"]')) await new Promise((res) => setTimeout(res, 5));
+        const button = () => $('send-reports').querySelector('[data-reports-wa="p8"]');
+        if (!button().disabled || button().textContent !== 'Preparando…' || !$('send-reports').textContent.includes(REPORT_LINKS_TEXT.busy)) throw new Error($('send-reports').textContent);
+        if (!$('send-reports').querySelector('[data-staff-wa="st-head"]').disabled) throw new Error('staff WhatsApp enabled while preparing');
+        await whatsAppPlayerReport('p8');
+        if (log.opened.length) throw new Error('opened before the links were ready');
+        release(); await ui.sendReportsReady;
+        if (button().disabled || button().textContent !== 'WhatsApp' || $('send-reports').textContent.includes(REPORT_LINKS_TEXT.busy)) throw new Error('not enabled once ready');
+        button().click();
+        if (log.opened.length !== 1 || !log.opened[0].includes('Tu informe (PDF): https://links.test/')) throw new Error('not opened inside the tap ' + log.opened.join());
+        await new Promise((res) => setTimeout(res, 0));
+        if (button().textContent !== 'Reenviar' || button().disabled) throw new Error('not re-sendable');
+      });
+    });
+    await TA('report links: a failed upload is named on the card and nothing waits for it; texts go without links', async () => {
+      await withReportLinks({ uploadReport: async () => { throw new Error('Bucket not found'); } }, async (log) => {
+        ui.autoMailReports = true; openFinal(); await ui.sendReportsReady;
+        if (state.reportLinks || !$('send-reports').textContent.includes(`${REPORT_LINKS_TEXT.failed}: Bucket not found`)) throw new Error($('send-reports').textContent);
+        if (log.mails.length !== 2 || log.staffMails.length !== 1 || log.mails.some((m) => m.text.includes('(PDF)')) || log.staffMails[0].text.includes('(PDF)')) throw new Error('e-mails blocked or with links');
+        const button = $('send-reports').querySelector('[data-reports-wa="p8"]');
+        if (button.disabled || button.textContent !== 'WhatsApp') throw new Error('WhatsApp blocked by the failure');
+        button.click();
+        if (!log.opened[0] || log.opened[0].includes('(PDF)') || !log.opened[0].includes('Nota:')) throw new Error(log.opened[0]);
+        backend.uploadReport = async () => {};
+        await mailStaffReport();
+        if (!state.reportLinks || $('send-reports').textContent.includes(REPORT_LINKS_TEXT.failed) || !log.staffMails[1].text.includes(state.reportLinks.match)) throw new Error('a retry did not make the links');
+      });
+    });
+    await TA('report links: a link that fails to sign fails the build; links of another match state are not used', async () => {
+      await withReportLinks({ reportLink: async () => { throw new Error('Object not found'); } }, async () => {
+        openFinal(); await ui.sendReportsReady;
+        if (state.reportLinks || !$('send-reports').textContent.includes('Object not found')) throw new Error($('send-reports').textContent);
+        state.reportLinks = { log: '[]', at: new Date().toISOString(), expiresAt: new Date(Date.now() + REPORT_LINK_SECONDS * 1000).toISOString(), match: 'https://old', players: 'https://old', byPlayer: { p8: 'https://old' } };
+        if (currentReportLinks() || playerReportText(playerById('p8')).includes('https://old') || staffReportText({ name: 'Jorge' }).includes('https://old')) throw new Error('stale links used');
+      });
+    });
     await TA('reports: no card for read-only accounts, without accounts, or for the sample', async () => {
-      const real = backend, keepId = currentMatchId;
+      const real = backend, keepId = currentMatchId, keepRole = team.role;
       try {
         backend = null; currentMatchId = 'x'; if (sendReportsCardHtml()) throw new Error('without accounts');
-        backend = { sendPlayerReports: async () => ({}), sendStaffReport: async () => ({}), listStaffContacts: async () => [] }; currentMatchId = null; if (sendReportsCardHtml()) throw new Error('sample');
-      } finally { backend = real; currentMatchId = keepId; }
+        const cloud = { sendPlayerReports: async () => ({}), sendStaffReport: async () => ({}), listStaffContacts: async () => [], uploadReport: async () => {}, reportLink: async () => '' };
+        backend = cloud; currentMatchId = null; if (sendReportsCardHtml()) throw new Error('sample');
+        currentMatchId = 'x'; team.role = VIEWER_ROLE; if (sendReportsCardHtml()) throw new Error('read-only');
+        team.role = STAFF_ROLE; if (!sendReportsCardHtml()) throw new Error('staff with accounts');
+        const { uploadReport, ...noStorage } = cloud; backend = noStorage; if (sendReportsCardHtml()) throw new Error('without report storage');
+      } finally { backend = real; currentMatchId = keepId; team.role = keepRole; }
     });
     await TA('staff contacts: e-mail and phone on the profile, checked, saved staff-only, gone with the member', async () => {
       const real = backend, savedStaff = team.staff, saves = [], deletes = [];
