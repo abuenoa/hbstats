@@ -3099,6 +3099,22 @@
         if (staff.some((l, i) => l === '' && staff[i - 1] === '')) throw new Error('two blank lines');
       } finally { restore(snap); }
     });
+    await TA('new version: loads at once on the team pages, waits (with one hint) while a match is open', async () => {
+      const saved = reloadPage, homeHidden = $('home').hidden, view = home.view;
+      let reloads = 0;
+      try {
+        reloadPage = () => { reloads += 1; };
+        ui.updateReady = false;
+        if (reloadIfUpdated() || reloads) throw new Error('reloaded without an update');
+        ui.updateReady = true; ui.updateHinted = false; $('home').hidden = true;
+        if (reloadIfUpdated() || reloads || $('hint').textContent !== UPDATE_WAITING_HINT) throw new Error('reloaded during a match');
+        $('hint').textContent = ''; reloadIfUpdated();
+        if ($('hint').textContent) throw new Error('hinted twice');
+        $('home').hidden = false;
+        showHomeView('team');
+        if (reloads !== 1) throw new Error('not loaded on the team page: ' + reloads);
+      } finally { reloadPage = saved; ui.updateReady = false; ui.updateHinted = false; $('home').hidden = homeHidden; home.view = view; }
+    });
     await TA('season: reloads when stale on a team page, never while fresh, in a match or hidden', async () => {
       const real = backend, savedId = team.id, savedView = home.view, homeHidden = $('home').hidden;
       team.id = 'season-refresh-team';
