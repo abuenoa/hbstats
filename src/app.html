@@ -1720,8 +1720,6 @@ span.att-foot { visibility: hidden; }
     // cut at noteMax characters; changes reach the cloud after syncDelayMs without further taps.
     // trainingDays: the team's weekdays (0 = Sunday), for the date the attendance opens on.
     attendance: { warnPct: 75, excludeFromRate: ['L'], noteMax: 60, syncDelayMs: 2000, trainingDays: [2, 4, 5] },
-    // The convocatoria: the players meet this many minutes before the kickoff unless the coach sets the time.
-    callup: { meetLeadMin: 45 },
     // Rating v5 «goles aportados» (see the rating section): values in goals, shown as points (pointsPerGoal).
     // pOn: league share of on-target shots that go in, by zone (a keeper saving 40% from 6 m is average); onTargetRate:
     // share of shots that reach the goal. possession: goals of an average possession; shortHanded / superiority: the
@@ -6648,52 +6646,51 @@ table { border-collapse: collapse; width: 100%; }
     return canvasPng(canvas, 'The ratings card');
   }
 
-  // The convocatoria for the team's group, as the club's poster: over the arena, the club and the round, a huge
-  // «CONVOCATORIA», the match with our crest, the day, the times and the hall, the players called up in two columns
-  // («NN. NAME» with their faces, keepers first), the coaching staff, the kit, what to bring and the club's accounts.
+  // The convocatoria for the team's group, as the club's poster (it can be published): over the arena, the phase and
+  // the round, a huge «CONVOCATORIA», the match with our crest, the day, the kickoff and the hall, the players called up
+  // in two columns («NN. NAME» with their faces, keepers first) with the kit upright on their right, the coaching staff
+  // and the club's accounts.
   const CALLUP_CARD = {
     w: 1080, h: 1350, pad: 56,
-    veil: [[0, 0.55], [0.3, 0.3], [0.42, 0.45], [0.82, 0.5], [1, 0.9]],
-    tag: { y: 76, size: 30 },
-    title: { y: 300, size: 236, minSize: 90 },
-    match: { y: 344, h: 88, crestR: 44, gap: 20, size: 64, minSize: 36 },
-    info: { y: 488, size: 52, minSize: 30, subY: 534, subSize: 30, subMinSize: 20 },
-    list: { top: 570, bottom: 1110, colGap: 40, maxRow: 72, face: 0.76, nameScale: 0.62, minNameScale: 0.6, ring: 3 },
-    // The staff share the width left of the kit: one coach gets it all, three a third each.
-    staff: { y: 1136, r: 32, nameSize: 30, jobSize: 22, jobMinSize: 16, gap: 12, max: 3 },
-    kit: { x: 820, y: 1128, shirt: 72, piece: 56, gap: 20, labelSize: 20 },
-    bring: { y: 1290, lead: 30, titleSize: 28, size: 24, minSize: 14, w: 540 },
+    veil: [[0, 0.55], [0.28, 0.3], [0.38, 0.45], [0.85, 0.5], [1, 0.9]],
+    tag: { y: 76, size: 32 },
+    title: { y: 270, size: 208, minSize: 90 },
+    match: { y: 306, h: 88, crestR: 44, gap: 20, size: 64, minSize: 36 },
+    info: { y: 446, size: 52, minSize: 30, subY: 490, subSize: 30, subMinSize: 20 },
+    // The list ends at `right`; the kit stands in the strip between it and the margin.
+    list: { top: 520, bottom: 1196, right: 868, colGap: 32, maxRow: 104, face: 0.84, gap: 14, nameScale: 0.56, minNameScale: 0.6, ring: 3 },
+    kit: { shirt: 128, piece: 104, gap: 24, labelGap: 14, labelSize: 24, labelMinSize: 16 },
+    // The staff share the width left of the club's accounts: one coach gets it all, three a third each.
+    staff: { y: 1222, r: 40, right: 600, nameSize: 32, jobSize: 24, jobMinSize: 16, gap: 12, max: 3 },
     handlesY: 1318
   };
   const CALLUP_TITLE = 'Convocatoria', CALLUP_KEEPER_MARK = ' (P)';
-  const CALLUP_BRING_TITLE = 'Se ruega puntualidad';
-  const CALLUP_BRING = ['Equipación completa', 'Zapatillas de pista', 'Bolsa de balones'];
   const CALLUP_TBC = 'hora por confirmar';
+  // A competition is named «League · Phase · Group»; the poster keeps the phase and the group.
+  const COMPETITION_PARTS = ' · ';
+  function competitionStage(name) {
+    const parts = (name || '').split(COMPETITION_PARTS);
+    return parts.length > 1 ? parts.slice(1).join(COMPETITION_PARTS) : parts[0];
+  }
   // The kit: the shirt in the team's first, second or (when it has one) third colour; the shorts are always black.
   const SHORTS_COLOUR = '#151515';
   const shirtChoices = (t = team) => [['Primera', t.brand], ['Segunda', t.brand2], ...(t.brand3 ? [['Tercera', t.brand3]] : [])];
   const shirtOf = (draft, t = team) => (shirtChoices(t).some(([, c]) => sameName(c, draft.shirt || '')) ? draft.shirt : t.brand);
-  // The meeting time: CONFIG.callup.meetLeadMin before the kickoff unless the coach set another.
-  function meetTime(draft) {
-    if (draft.meet || !draft.time) return draft.meet || '';
-    const [h, m] = draft.time.split(':').map(Number), at = (h * 60 + m - CONFIG.callup.meetLeadMin + 24 * 60) % (24 * 60);
-    return `${pad2(Math.floor(at / 60))}:${pad2(at % 60)}`;
-  }
   // The kickoff as the group reads it: «sábado, 7 nov».
   const callupDay = (date) => new Date(`${date}T12:00:00`).toLocaleDateString('es-ES', { weekday: 'long', day: 'numeric', month: 'short' });
   // What the poster shows: the convocatoria's match (its calendar round, or the rival typed in; the home team first), the
-  // kit, the players called up (keepers first), the staff and the club's accounts.
+  // kit, the players called up (keepers first), the staff left on it and the club's accounts.
   function callupCardData(draft, players, t = team) {
     const fixture = (home.fixtures || []).find((f) => f.id === draft.fixtureId) || null;
     const face = (p) => ({ num: p.num, pos: p.pos, name: p.name, keeper: p.pos === 'POR', photo: p.photo || null });
     const rival = fixture ? fixtureRivalName(fixture.opponent) : draft.rival, away = Boolean(fixture) && !fixture.home;
     return {
-      team: t.name, club: t.club, crest: crestSrc(t), brand: t.brand, handles: cardHandles(t),
-      tag: fixture ? [fixture.competition, `Jornada ${fixture.round}`, homeAwayText(fixture.home)].filter(Boolean).join(' · ') : 'Partido',
+      team: t.name, crest: crestSrc(t), brand: t.brand, handles: cardHandles(t),
+      tag: fixture ? [competitionStage(fixture.competition), `Jornada ${fixture.round}`].filter(Boolean).join(' · ') : 'Partido',
       rival, match: (away ? [rival, t.name] : [t.name, rival]).filter(Boolean).join(' vs '),
-      day: callupDay(draft.date), venue: (fixture && fixture.venue) || '', meet: meetTime(draft), time: draft.time, shirt: shirtOf(draft, t),
+      day: callupDay(draft.date), venue: (fixture && fixture.venue) || '', time: draft.time, shirt: shirtOf(draft, t),
       players: players.slice().sort(benchOrder).map(face),
-      staff: teamStaff(t).slice(0, CALLUP_CARD.staff.max).map((m) => ({ name: m.name, job: staffLabel(m), photo: staffPhoto(m) }))
+      staff: callupStaff(draft, t).slice(0, CALLUP_CARD.staff.max).map((m) => ({ name: m.name, job: staffLabel(m), photo: staffPhoto(m) }))
     };
   }
   // The garments in their colours, outlined in white on the dark arena: a shirt and shorts.
@@ -6702,6 +6699,7 @@ table { border-collapse: collapse; width: 100%; }
     shorts: [[0.05, 0], [0.95, 0], [1, 0.8], [0.58, 0.85], [0.5, 0.35], [0.42, 0.85], [0, 0.8]]
   };
   const GARMENT_EDGE = 4;
+  const garmentHeight = (piece, s) => s * Math.max(...GARMENTS[piece].map(([, y]) => y));
   function drawGarment(ctx, piece, x, y, s, colour) {
     ctx.beginPath(); GARMENTS[piece].forEach(([px, py], i) => ctx[i ? 'lineTo' : 'moveTo'](x + px * s, y + py * s)); ctx.closePath();
     ctx.lineJoin = 'round'; ctx.lineWidth = GARMENT_EDGE; ctx.strokeStyle = CARD_PALETTE.ink; ctx.stroke();
@@ -6712,8 +6710,8 @@ table { border-collapse: collapse; width: 100%; }
     const C = CALLUP_CARD, P = CARD_PALETTE, ctx = canvas.getContext('2d'), faces = images.faces || [], inner = C.w - 2 * C.pad;
     canvas.width = C.w; canvas.height = C.h;
     paintArena(ctx, C.w, C.h, images.plate, data.brand, C.veil);
-    // The club and the round over the title, the title as wide as the card.
-    posterText(ctx, [data.club, data.tag].filter(Boolean).join(' · ').toUpperCase(), C.w / 2, C.tag.y, { align: 'center', ink: P.inkSoft, size: C.tag.size, width: inner, specOf: cardSmall });
+    // The phase and the round over the title, the title as wide as the card.
+    posterText(ctx, data.tag.toUpperCase(), C.w / 2, C.tag.y, { align: 'center', ink: P.inkSoft, size: C.tag.size, width: inner, specOf: cardSmall });
     posterText(ctx, CALLUP_TITLE.toUpperCase(), C.w / 2, C.title.y, { align: 'center', size: C.title.size, width: inner, minSize: C.title.minSize });
     // The match, our crest before it, centred as one group.
     const M = C.match, crest = images.crest ? 2 * M.crestR + M.gap : 0;
@@ -6721,35 +6719,32 @@ table { border-collapse: collapse; width: 100%; }
     const matchW = Math.min(inner - crest, ctx.measureText(label).width), left = (C.w - crest - matchW) / 2, mid = M.y + M.h / 2;
     if (images.crest) ringedFace(ctx, { name: data.team, pos: 'CEN' }, images.crest, left + M.crestR, mid, M.crestR, P.ink, C.list.ring);
     posterText(ctx, label, left + crest, mid + size * 0.36, { size, width: inner - crest, minSize: M.minSize });
-    // The day and the kickoff; under them the meeting time and the hall.
-    const I = C.info, where = [data.meet && `Citación ${data.meet}`, data.venue].filter(Boolean).join(' · ');
+    // The day and the kickoff; under them the hall.
+    const I = C.info;
     posterText(ctx, `${data.day} · ${data.time || CALLUP_TBC}`.toUpperCase(), C.w / 2, I.y, { align: 'center', size: I.size, width: inner, minSize: I.minSize });
-    if (where) posterText(ctx, where.toUpperCase(), C.w / 2, I.subY, { align: 'center', ink: P.inkSoft, size: I.subSize, width: inner, minSize: I.subMinSize, specOf: cardSmall });
+    if (data.venue) posterText(ctx, data.venue.toUpperCase(), C.w / 2, I.subY, { align: 'center', ink: P.inkSoft, size: I.subSize, width: inner, minSize: I.subMinSize, specOf: cardSmall });
     // The players called up: two columns of «NN. NAME», each after the face in a ring of the shirt colour.
     const L = C.list, perColumn = Math.max(1, Math.ceil(data.players.length / 2)), rowH = Math.min(L.maxRow, (L.bottom - L.top) / perColumn);
-    const colW = (inner - L.colGap) / 2, r = rowH * L.face / 2, nameSize = rowH * L.nameScale;
+    const colW = (L.right - C.pad - L.colGap) / 2, r = rowH * L.face / 2, nameSize = rowH * L.nameScale;
     data.players.forEach((p, i) => {
       const x = C.pad + Math.floor(i / perColumn) * (colW + L.colGap), cy = L.top + (i % perColumn) * rowH + rowH / 2;
       ringedFace(ctx, p, faces[i], x + r, cy, r, data.shirt, L.ring);
-      posterText(ctx, `${p.num}. ${p.name.toUpperCase()}${p.keeper ? CALLUP_KEEPER_MARK : ''}`, x + 2 * r + L.colGap / 2, cy + nameSize * 0.36, { size: nameSize, width: colW - 2 * r - L.colGap / 2, minSize: nameSize * L.minNameScale });
+      posterText(ctx, `${p.num}. ${p.name.toUpperCase()}${p.keeper ? CALLUP_KEEPER_MARK : ''}`, x + 2 * r + L.gap, cy + nameSize * 0.36, { size: nameSize, width: colW - 2 * r - L.gap, minSize: nameSize * L.minNameScale });
     });
+    // The kit upright beside the list: the shirt in its colour over the black shorts, named under them.
+    const K = C.kit, kitX = (L.right + C.w - C.pad) / 2, shortsH = garmentHeight('shorts', K.piece);
+    const kitY = (L.top + L.bottom - (K.shirt + K.gap + shortsH + K.labelGap + K.labelSize)) / 2;
+    drawGarment(ctx, 'shirt', kitX - K.shirt / 2, kitY, K.shirt, data.shirt);
+    drawGarment(ctx, 'shorts', kitX - K.piece / 2, kitY + K.shirt + K.gap, K.piece, SHORTS_COLOUR);
+    posterText(ctx, 'EQUIPACIÓN', kitX, kitY + K.shirt + K.gap + shortsH + K.labelGap + K.labelSize, { align: 'center', ink: P.inkSoft, size: K.labelSize, width: C.w - C.pad - L.right, minSize: K.labelMinSize, specOf: cardSmall });
     // The coaching staff, face and name with the job under it.
-    const S = C.staff, staff = data.staff || [], slotW = (C.kit.x - S.gap - C.pad) / Math.max(1, staff.length);
+    const S = C.staff, staff = data.staff || [], slotW = (S.right - C.pad) / Math.max(1, staff.length);
     staff.forEach((m, i) => {
       const x = C.pad + i * slotW, cy = S.y + S.r, textX = x + 2 * S.r + S.gap, textW = slotW - 2 * S.r - 2 * S.gap;
       ringedFace(ctx, { name: m.name, pos: 'CEN' }, (images.staffFaces || [])[i], x + S.r, cy, S.r, P.ink, L.ring);
       posterText(ctx, m.name.toUpperCase(), textX, cy, { size: S.nameSize, width: textW, minSize: S.jobSize });
       posterText(ctx, m.job, textX, cy + S.jobSize + 6, { ink: P.inkSoft, size: S.jobSize, width: textW, minSize: S.jobMinSize, specOf: cardSmall });
     });
-    // The kit: the shirt in its colour beside the black shorts, named under them.
-    const K = C.kit;
-    drawGarment(ctx, 'shirt', K.x, K.y, K.shirt, data.shirt);
-    drawGarment(ctx, 'shorts', K.x + K.shirt + K.gap, K.y + (K.shirt - K.piece) / 2, K.piece, SHORTS_COLOUR);
-    posterText(ctx, 'EQUIPACIÓN', K.x + (K.shirt + K.gap + K.piece) / 2, K.y + K.shirt + K.labelSize + 8, { align: 'center', ink: P.inkSoft, size: K.labelSize, width: C.w - C.pad - K.x, specOf: cardSmall });
-    // What to bring, bottom left; the club's accounts bottom right.
-    const B = C.bring;
-    posterText(ctx, CALLUP_BRING_TITLE.toUpperCase(), C.pad, B.y, { size: B.titleSize, width: B.w, specOf: cardSmall });
-    posterText(ctx, CALLUP_BRING.join(' · '), C.pad, B.y + B.lead, { ink: P.inkSoft, size: B.size, width: B.w, minSize: B.minSize, specOf: cardSmall });
     drawHandles(ctx, data.handles, C.w - C.pad, C.handlesY);
   }
   async function callupCardBlob(data) {
@@ -10759,18 +10754,21 @@ table { border-collapse: collapse; width: 100%; }
   }
   function fixtureCallupFields(fixture) {
     return fixture
-      ? { fixtureId: fixture.id, rival: fixtureRivalName(fixture.opponent), date: fixtureIso(fixture), time: fixture.kickoff ? timeText(new Date(fixture.kickoff)) : '', meet: '' }
-      : { fixtureId: null, rival: '', date: todayIso(), time: '', meet: '' };
+      ? { fixtureId: fixture.id, rival: fixtureRivalName(fixture.opponent), date: fixtureIso(fixture), time: fixture.kickoff ? timeText(new Date(fixture.kickoff)) : '' }
+      : { fixtureId: null, rival: '', date: todayIso(), time: '' };
   }
-  // The convocatoria saved for that match comes back as it was; another match starts from the last squad.
+  // The convocatoria saved for that match comes back as it was; another match starts from the last squad, keeping the
+  // staff left off the image.
   function callupDraftFor(fixture) {
-    const saved = readJson(CALLUP_KEY_PREFIX + team.id);
-    if (saved && fixture && saved.fixtureId === fixture.id) return { meet: '', ...saved, shirt: shirtOf(saved), ids: new Set(saved.ids) };
-    return { ...fixtureCallupFields(fixture), shirt: team.brand, ids: lastSquadIds() };
+    const saved = readJson(CALLUP_KEY_PREFIX + team.id), staffOut = (saved && saved.staffOut) || [];
+    if (saved && fixture && saved.fixtureId === fixture.id) return { ...saved, staffOut, shirt: shirtOf(saved), ids: new Set(saved.ids) };
+    return { ...fixtureCallupFields(fixture), staffOut, shirt: team.brand, ids: lastSquadIds() };
   }
+  // The team's staff shown on the image: all but those the coach left off.
+  const callupStaff = (draft, t = team) => teamStaff(t).filter((m) => !(draft.staffOut || []).includes(m.id));
   const callupDraft = () => (home.callupDraft ??= callupDraftFor(openFixtures()[0] || null));
   const calledPlayers = (draft) => home.roster.filter((p) => draft.ids.has(p.id));
-  const callupKey = (draft, players) => JSON.stringify([draft.fixtureId, draft.rival, draft.date, draft.time, draft.meet, draft.shirt, players.map((p) => p.id)]);
+  const callupKey = (draft, players) => JSON.stringify([draft.fixtureId, draft.rival, draft.date, draft.time, draft.shirt, draft.staffOut, players.map((p) => p.id)]);
   function callupFaceHtml(p, called) {
     const { code, label } = CALLUP_STATES[called];
     return `<div class="att-cell"><button class="face press" type="button" data-callup-pick="${esc(p.id)}" aria-pressed="${called}" style="--pos:${posOf(p).color}" aria-label="#${p.num} ${esc(p.name)}: ${label}">${discHtml(p)}<span>${esc(p.name)}</span>
@@ -10788,9 +10786,8 @@ table { border-collapse: collapse; width: 100%; }
     return `<section class="sheet-card squad att callup">${attendanceHeadHtml(ATTENDANCE_MODES.CALLUP)}
       <div class="att-bar"><label class="field">Partido<select class="in" id="callup-fixture">${options}</select></label>${rival}
         <label class="field">Fecha<input class="in" type="date" id="callup-date" value="${esc(draft.date)}"></label>
-        <label class="field">Hora<input class="in" type="time" id="callup-time" value="${esc(draft.time)}"></label>
-        <label class="field">Citación<input class="in" type="time" id="callup-meet" value="${esc(meetTime(draft))}"></label></div>
-      ${callupKitHtml(draft)}
+        <label class="field">Hora<input class="in" type="time" id="callup-time" value="${esc(draft.time)}"></label></div>
+      ${callupKitHtml(draft)}${callupStaffHtml(draft)}
       <div class="att-bar"><div class="att-stats">${attendanceStatHtml(called.code, players.length, [`convocado de ${MAX_ROSTER}`, `convocados de ${MAX_ROSTER}`])}${attendanceStatHtml(left.code, home.roster.length - players.length, ['no convocado', 'no convocados'])}</div></div>
       ${attendanceHowHtml('Toca a cada jugador para convocarlo o quitarlo:', [[left.code, left.label], [called.code, called.label]], '⇄')}
       ${over ? `<p class="note att-over" role="alert">Sobran ${players.length - MAX_ROSTER}: el acta admite ${MAX_ROSTER}.</p>` : ''}
@@ -10803,6 +10800,20 @@ table { border-collapse: collapse; width: 100%; }
     const shirt = shirtOf(draft);
     const chips = shirtChoices().map(([label, c]) => `<button class="chip press kit-chip" type="button" data-callup-shirt="${esc(c)}" aria-pressed="${sameName(c, shirt)}"><span class="kit-swatch" style="background:${esc(c)}"></span>${label}</button>`).join('');
     return `<div class="callup-kit"><span class="field-label">Camiseta</span><div class="chips" role="group" aria-label="Camiseta">${chips}</div></div>`;
+  }
+  // Who of the coaching staff goes on the image: a tap leaves a member off or puts them back.
+  function callupStaffHtml(draft) {
+    const staff = teamStaff();
+    if (!staff.length) return '';
+    const shown = new Set(callupStaff(draft).map((m) => m.id));
+    const chips = staff.map((m) => `<button class="chip press" type="button" data-callup-staff="${esc(m.id)}" aria-pressed="${shown.has(m.id)}">${esc(m.name)}</button>`).join('');
+    return `<div class="callup-kit"><span class="field-label">Cuerpo técnico en la imagen</span><div class="chips" role="group" aria-label="Cuerpo técnico en la imagen">${chips}</div></div>`;
+  }
+  function toggleCallupStaff(staffId) {
+    const draft = callupDraft(), out = draft.staffOut || [];
+    if (!teamStaff().some((m) => m.id === staffId)) return;
+    draft.staffOut = out.includes(staffId) ? out.filter((id) => id !== staffId) : [...out, staffId];
+    renderHome();
   }
   function toggleCallupPick(playerId) {
     const draft = callupDraft();
@@ -11677,6 +11688,7 @@ table { border-collapse: collapse; width: 100%; }
     if (b.hasAttribute('data-callup-save')) { saveCallup(); return; }
     if (b.dataset.attMode) { switchAttendanceMode(b.dataset.attMode); return; }
     if (b.dataset.callupShirt) { editCallupShirt(b.dataset.callupShirt); return; }
+    if (b.dataset.callupStaff) { toggleCallupStaff(b.dataset.callupStaff); return; }
     if (b.dataset.attNote) { home.attendanceNoteFor = b.dataset.attNote; renderHome(); document.querySelector(`[data-att-note-input="${b.dataset.attNote}"]`).focus(); return; }
     if (b.hasAttribute('data-att-note-save')) { home.attendanceNoteFor = null; renderHome(); return; }
     if (b.dataset.homeView === 'attendance') { showAttendance(); return; }
@@ -11747,7 +11759,7 @@ table { border-collapse: collapse; width: 100%; }
     if (el.dataset.knob) { homeStatus(Number.isFinite(parseKnobText(el.value)) || el.type === 'range' ? '' : KNOB_NUMBER_HINT); setKnobControl(el, home.weightsDraft[el.dataset.knob]); return; }
     if (el.id === 'att-date') { openAttendanceDay(el.value); return; }
     if (el.id === 'callup-fixture') { chooseCallupFixture(el.value); return; }
-    if (['callup-date', 'callup-time', 'callup-rival', 'callup-meet'].includes(el.id)) { editCallup(el.id.slice('callup-'.length), el.value); return; }
+    if (['callup-date', 'callup-time', 'callup-rival'].includes(el.id)) { editCallup(el.id.slice('callup-'.length), el.value); return; }
     if (el.dataset.tplNum) { editDraftRival(draftRival(el.dataset.tplNum), { num: Number(el.value) }); return; }
     if (el.dataset.tplName) { editDraftRival(draftRival(el.dataset.tplName), { name: el.value.trim().slice(0, MAX_NAME_LENGTH) }); return; }
     if (el.dataset.staffName) { const name = el.value.trim().slice(0, MAX_NAME_LENGTH); if (name) editStaff(el.dataset.staffName, { name }); else renderHome(); return; }
