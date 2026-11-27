@@ -2645,13 +2645,16 @@
       if (!/Vina Sans/.test(spec) || !/Barlow Condensed/.test(spec)) throw new Error('the poster face and its fallback: ' + spec);
     });
     const callupPlayers = (n) => Array.from({ length: n }, (_, i) => ({ id: 'c' + i, num: i + 2, name: i === 3 ? 'Antonio Bokiki' : 'Jugador ' + i, pos: i === 5 ? 'POR' : 'LAT', photo: null }));
-    await TA('convocatoria image: the match, day, times and hall, the players in two columns, the staff and both handles', async () => {
+    await TA('convocatoria image: the phase and round, the match, day, kickoff and hall, the players beside the kit, the staff and both handles', async () => {
       const keep = home.fixtures, day = todayIso();
       const t = { ...team, name: 'Triana', socialHandle: 'triana_balonmano', socialHandle2: 'vivero.triana_of', staff: [{ id: 's1', name: 'Paco Ruiz', role: 'head' }] };
       try {
-        home.fixtures = [{ id: 'f1', season: '2026/2027', competition: 'Liga', round: 4, weekend: day, home: true, opponent: 'BM Gades', kickoff: `${day}T18:30:00`, venue: 'Pabellón Vista Alegre', matchId: null }];
-        const data = callupCardData({ fixtureId: 'f1', date: day, time: '18:30', meet: '', ids: new Set() }, callupPlayers(16), t);
-        if (data.match !== 'Triana vs BM Gades' || data.venue !== 'Pabellón Vista Alegre' || data.time !== '18:30' || data.meet !== '17:45' || data.day !== callupDay(day) || data.tag !== 'Liga · Jornada 4 · Casa') throw new Error(JSON.stringify({ ...data, crest: '' }));
+        home.fixtures = [{ id: 'f1', season: '2026/2027', competition: 'Primera Andaluza Senior Masculina · Primera fase · Grupo B', round: 4, weekend: day, home: true, opponent: 'BM Gades', kickoff: `${day}T18:30:00`, venue: 'Pabellón Vista Alegre', matchId: null }];
+        const data = callupCardData({ fixtureId: 'f1', date: day, time: '18:30', ids: new Set() }, callupPlayers(16), t);
+        if (data.match !== 'Triana vs BM Gades' || data.venue !== 'Pabellón Vista Alegre' || data.time !== '18:30' || 'meet' in data || data.day !== callupDay(day) || data.tag !== 'Primera fase · Grupo B · Jornada 4') throw new Error(JSON.stringify({ ...data, crest: '' }));
+        if (competitionStage('Liga') !== 'Liga' || competitionStage('') !== '' || competitionStage(null) !== '') throw new Error('a competition without phase is kept whole');
+        // A member of the staff left off the image is not on it.
+        if (callupCardData({ fixtureId: 'f1', date: day, time: '18:30', staffOut: ['s1'], ids: new Set() }, [], t).staff.length) throw new Error('the staff left off is drawn');
         if (data.handles.join() !== '@TRIANA_BALONMANO,@VIVERO.TRIANA_OF' || data.players[0].name !== 'Jugador 5' || !data.players[0].keeper || data.players[1].keeper || data.staff[0].name !== 'Paco Ruiz') throw new Error(JSON.stringify(data.handles) + data.players[0].name);
         if (callupCardData({ fixtureId: null, date: day, time: '', rival: 'CB Este', ids: new Set() }, [], { ...t, socialHandle: null }).handles.join() !== '@VIVERO.TRIANA_OF') throw new Error('a second handle alone takes the main place');
         const loose = callupCardData({ fixtureId: null, date: day, time: '', rival: '', ids: new Set() }, [], { ...t, socialHandle: null, socialHandle2: null });
@@ -2659,20 +2662,25 @@
         const { texts, canvas } = textSpy((c) => drawCallupCard(c, data));
         const said = texts.map((x) => x.text);
         if (canvas.width !== CALLUP_CARD.w || canvas.height !== CALLUP_CARD.h) throw new Error(`${canvas.width}×${canvas.height}`);
-        ['CONVOCATORIA', 'TRIANA VS BM GADES', `${callupDay(day)} · 18:30`.toUpperCase(), 'CITACIÓN 17:45 · PABELLÓN VISTA ALEGRE', '5. ANTONIO BOKIKI', 'PACO RUIZ', 'Entrenador principal', '@TRIANA_BALONMANO', '@VIVERO.TRIANA_OF'].forEach((w) => { if (!said.includes(w)) throw new Error(`«${w}» not drawn: ${said.join('|')}`); });
+        ['PRIMERA FASE · GRUPO B · JORNADA 4', 'CONVOCATORIA', 'TRIANA VS BM GADES', `${callupDay(day)} · 18:30`.toUpperCase(), 'PABELLÓN VISTA ALEGRE', '5. ANTONIO BOKIKI', 'PACO RUIZ', 'Entrenador principal', 'EQUIPACIÓN', '@TRIANA_BALONMANO', '@VIVERO.TRIANA_OF'].forEach((w) => { if (!said.includes(w)) throw new Error(`«${w}» not drawn: ${said.join('|')}`); });
+        // Published as it is: no meeting time and nothing asked of the players.
+        if (said.some((x) => /CITACIÓN|PUNTUALIDAD|Zapatillas/i.test(x))) throw new Error('team-only text on the poster: ' + said.join('|'));
         // Two columns of eight, keepers first, every row inside the list box; the main handle sits over the second one, bottom right.
         const rows = texts.filter((x) => /^\d+\. /.test(x.text));
         if (rows.length !== 16 || !rows[0].text.startsWith('7. JUGADOR 5') || new Set(rows.map((x) => Math.round(x.x))).size !== 2 || rows.some((x) => x.y > CALLUP_CARD.list.bottom || x.y < CALLUP_CARD.list.top)) throw new Error(rows.map((x) => `${x.text}@${x.x | 0},${x.y | 0}`).join(' '));
+        // The kit label stands in the strip right of the list, inside the list's height.
+        const kit = texts.find((x) => x.text === 'EQUIPACIÓN');
+        if (kit.x <= CALLUP_CARD.list.right || kit.x >= CALLUP_CARD.w - CALLUP_CARD.pad || kit.y > CALLUP_CARD.list.bottom) throw new Error(`kit label @${kit.x | 0},${kit.y | 0}`);
         const [main, second] = ['@TRIANA_BALONMANO', '@VIVERO.TRIANA_OF'].map((h) => texts.find((x) => x.text === h));
         if (!(main.y < second.y) || main.x !== CALLUP_CARD.w - CALLUP_CARD.pad || second.y !== CALLUP_CARD.handlesY) throw new Error(JSON.stringify([main, second]));
         if (said.some((x) => x.includes(CARD_ELLIPSIS))) throw new Error('cut: ' + said.filter((x) => x.includes(CARD_ELLIPSIS)));
         // No time and no hall: the time is «hora por confirmar» and the second line is left out; a long name is cut inside its column.
-        const bare = textSpy((c) => drawCallupCard(c, { ...data, time: '', meet: '', venue: '', players: [{ num: 99, pos: 'LAT', name: 'Maximiliano Fernández de la Santísima Trinidad', photo: null }] }));
+        const bare = textSpy((c) => drawCallupCard(c, { ...data, time: '', venue: '', players: [{ num: 99, pos: 'LAT', name: 'Maximiliano Fernández de la Santísima Trinidad', photo: null }] }));
         const bareSaid = bare.texts.map((x) => x.text);
         if (!bareSaid.includes(`${callupDay(day)} · hora por confirmar`.toUpperCase()) || bareSaid.some((x) => x.startsWith('CITACIÓN') || x.includes('VISTA ALEGRE'))) throw new Error(bareSaid.join('|'));
         const long = bare.texts.find((x) => x.text.startsWith('99. '));
         bare.ctx.font = long.font;
-        if (long.x + bare.ctx.measureText(long.text).width > CALLUP_CARD.w / 2) throw new Error('a long name leaves its column: ' + long.text);
+        if (long.x + bare.ctx.measureText(long.text).width > CALLUP_CARD.pad + (CALLUP_CARD.list.right - CALLUP_CARD.pad) / 2) throw new Error('a long name leaves its column: ' + long.text);
         const [w, h] = await pngSize(await callupCardBlob(data));
         if (w !== CALLUP_CARD.w || h !== CALLUP_CARD.h) throw new Error(`png ${w}×${h}`);
       } finally { home.fixtures = keep; }
@@ -2887,6 +2895,12 @@
       const data = callupCardData({ date: todayIso(), time: '', rival: 'CB Este', ids: new Set() }, []);
       if (data.staff.map((m) => m.job).join() !== 'Entrenador principal,Segundo entrenador,Cuerpo técnico' || data.staff[2].photo !== staffMember(head).photo) throw new Error(JSON.stringify(data.staff.map((m) => m.job)));
       if (!((await callupCardBlob(data)) instanceof Blob)) throw new Error('the poster with the staff did not draw');
+      // The convocatoria offers every member for the image; one left off is not drawn and comes back with a tap.
+      const box = document.createElement('div'), draft = { date: todayIso(), time: '', rival: 'CB Este', staffOut: [head], ids: new Set() };
+      box.innerHTML = callupStaffHtml(draft);
+      const pressed = [...box.querySelectorAll('[data-callup-staff]')].map((b) => `${b.dataset.callupStaff}:${b.getAttribute('aria-pressed')}`).join();
+      if (pressed !== [`${third}:true`, `${second}:true`, `${head}:false`].join()) throw new Error('staff chips: ' + pressed);
+      if (callupCardData(draft, []).staff.some((m) => m.name === staffMember(head).name)) throw new Error('the member left off is on the poster');
       showHomeView('team');
       const faces = [...document.querySelectorAll('.staff-face')];
       if (faces.length !== 3 || !faces[2].textContent.includes('Paco Ruiz')) throw new Error('team page: ' + faces.map((f) => f.textContent).join('|'));
@@ -6543,9 +6557,8 @@
         const called = document.querySelector(`[data-callup-pick="${home.roster[0].id}"]`);
         if (called.getAttribute('aria-pressed') !== 'true' || flatText(called.querySelector('.att-badge')) !== 'Convocado' || flatText(document.querySelector('.callup .att-stat.att-C')) !== '2 convocados de 16' || flatText(document.querySelector('.callup .att-stat.att-NC')) !== '1 no convocado') throw new Error('pick ' + flatText(called));
         const data = callupCardData(callupDraft(), calledPlayers(callupDraft()));
-        if (data.players.map((p) => `${p.name}:${p.keeper}`).join() !== 'Portero Uno:true,Lateral Siete:false' || 'left' in data || data.shirt !== team.brand || data.rival !== 'BALONMANO GADES - ASISA' || data.match !== `BALONMANO GADES - ASISA vs ${team.name}` || data.tag !== 'Liga · Jornada 2 · Fuera' || data.venue !== 'Pabellón Centro' || data.time !== '18:30' || data.meet !== '17:45' || data.handles.length) throw new Error(JSON.stringify({ ...data, crest: '' }));
-        $('callup-meet').value = '17:30'; $('callup-meet').dispatchEvent(new Event('change', { bubbles: true }));
-        if (meetTime(callupDraft()) !== '17:30' || $('callup-meet').value !== '17:30') throw new Error('meeting time');
+        if (data.players.map((p) => `${p.name}:${p.keeper}`).join() !== 'Portero Uno:true,Lateral Siete:false' || 'left' in data || data.shirt !== team.brand || data.rival !== 'BALONMANO GADES - ASISA' || data.match !== `BALONMANO GADES - ASISA vs ${team.name}` || data.tag !== 'Liga · Jornada 2' || data.venue !== 'Pabellón Centro' || data.time !== '18:30' || data.handles.length) throw new Error(JSON.stringify({ ...data, crest: '' }));
+        if ($('callup-meet')) throw new Error('the poster has no meeting time to ask for');
         const chips = [...document.querySelectorAll('[data-callup-shirt]')];
         if (chips.map((b) => b.textContent.trim()).join() !== 'Primera,Segunda' || document.querySelector('input[type="color"], [data-kit-piece]')) throw new Error('only the first and second shirts');
         chips[1].click();
